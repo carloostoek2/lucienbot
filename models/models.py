@@ -529,3 +529,123 @@ class UserRewardHistory(Base):
     # Detalles de la entrega
     delivered_at = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(Text, nullable=True)  # JSON con detalles de la entrega
+
+
+# ============================================================
+# FASE 4: TIENDA
+# ============================================================
+
+class StoreProduct(Base):
+    """Productos disponibles en la tienda"""
+    __tablename__ = "store_products"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Relacion con paquete
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=False)
+    
+    # Precio en besitos
+    price = Column(Integer, nullable=False)
+    
+    # Stock (-1 = ilimitado, 0+ = stock limitado)
+    stock = Column(Integer, default=-1)
+    
+    # Estado
+    is_active = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relaciones
+    package = relationship("Package")
+    cart_items = relationship("CartItem", back_populates="product", cascade="all, delete-orphan")
+    order_items = relationship("OrderItem", back_populates="product")
+    
+    @property
+    def is_available(self) -> bool:
+        """Verifica si el producto esta disponible"""
+        if not self.is_active:
+            return False
+        if self.stock == 0:
+            return False
+        return True
+    
+    @property
+    def stock_display(self) -> str:
+        """Retorna texto legible del stock"""
+        if self.stock == -1:
+            return "Ilimitado"
+        return str(self.stock)
+    
+    def decrement_stock(self, amount: int = 1) -> bool:
+        """Decrementa el stock. Retorna True si tuvo exito."""
+        if self.stock == -1:  # Ilimitado
+            return True
+        if self.stock >= amount:
+            self.stock -= amount
+            return True
+        return False
+
+
+class CartItem(Base):
+    """Items en el carrito de compras de un usuario"""
+    __tablename__ = "cart_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
+    quantity = Column(Integer, default=1, nullable=False)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    product = relationship("StoreProduct", back_populates="cart_items")
+
+
+class OrderStatus(str, enum.Enum):
+    """Estados de una orden"""
+    PENDING = "pending"      # Pendiente de pago/confirmacion
+    COMPLETED = "completed"  # Completada y entregada
+    CANCELLED = "cancelled"  # Cancelada
+
+
+class Order(Base):
+    """Ordenes de compra en la tienda"""
+    __tablename__ = "orders"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    
+    # Totales
+    total_items = Column(Integer, default=0)
+    total_price = Column(Integer, default=0)
+    
+    # Estado
+    status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
+    
+    # Fechas
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relaciones
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    """Items dentro de una orden"""
+    __tablename__ = "order_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
+    
+    # Detalles al momento de la compra
+    product_name = Column(String(200), nullable=False)
+    quantity = Column(Integer, default=1)
+    unit_price = Column(Integer, nullable=False)
+    total_price = Column(Integer, nullable=False)
+    
+    # Relaciones
+    order = relationship("Order", back_populates="items")
+    product = relationship("StoreProduct", back_populates="order_items")

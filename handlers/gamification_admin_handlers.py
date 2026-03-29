@@ -61,6 +61,10 @@ async def admin_gamification_menu(callback: CallbackQuery):
             callback_data="admin_missions"
         )],
         [InlineKeyboardButton(
+            text="🛒 Gestionar tienda",
+            callback_data="admin_store"
+        )],
+        [InlineKeyboardButton(
             text="📊 Estadisticas",
             callback_data="gamification_stats"
         )],

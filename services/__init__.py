@@ -11,6 +11,8 @@ from .package_service import PackageService
 # Fase 3 - Misiones y Recompensas
 from .mission_service import MissionService
 from .reward_service import RewardService
+# Fase 4 - Tienda
+from .store_service import StoreService
 
 __all__ = [
     'ChannelService', 'VIPService', 'UserService', 'SchedulerService',
@@ -19,5 +21,7 @@ __all__ = [
     # Fase 2 - Paquetes
     'PackageService',
     # Fase 3 - Misiones y Recompensas
-    'MissionService', 'RewardService'
+    'MissionService', 'RewardService',
+    # Fase 4 - Tienda
+    'StoreService'
 ]

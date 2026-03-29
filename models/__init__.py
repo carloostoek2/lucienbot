@@ -9,7 +9,9 @@ from .models import (
     Package, PackageFile,
     # Fase 3 - Misiones y Recompensas
     Mission, MissionType, MissionFrequency, UserMissionProgress,
-    Reward, RewardType, UserRewardHistory
+    Reward, RewardType, UserRewardHistory,
+    # Fase 4 - Tienda
+    StoreProduct, CartItem, Order, OrderItem, OrderStatus
 )
 
 __all__ = [
@@ -23,5 +25,7 @@ __all__ = [
     'Package', 'PackageFile',
     # Fase 3 - Misiones y Recompensas
     'Mission', 'MissionType', 'MissionFrequency', 'UserMissionProgress',
-    'Reward', 'RewardType', 'UserRewardHistory'
+    'Reward', 'RewardType', 'UserRewardHistory',
+    # Fase 4 - Tienda
+    'StoreProduct', 'CartItem', 'Order', 'OrderItem', 'OrderStatus'
 ]
