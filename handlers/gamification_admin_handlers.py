@@ -1,9 +1,9 @@
 """
-Handlers de Gamificación para Administradores - Lucien Bot
+Handlers de Gamificacion para Administradores - Lucien Bot
 
-Handlers para configuración de gamificación desde el panel de admin.
+Handlers para configuracion de gamificacion desde el panel de admin.
 """
-from aiogram import Router, F, Bot
+from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -11,10 +11,7 @@ from config.settings import bot_config
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
 from services.channel_service import ChannelService
-from keyboards.inline_keyboards import (
-    back_keyboard, confirmation_keyboard, cancel_keyboard,
-    admin_menu_keyboard
-)
+from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, cancel_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -22,22 +19,7 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-# Función helper para verificar admin
-def is_admin(user_id: int) -> bool:
-    return user_id in bot_config.ADMIN_IDS
-
-
 # Estados para FSM
-class BroadcastStates(StatesGroup):
-    waiting_text = State()
-    waiting_attachment_decision = State()
-    waiting_attachment = State()
-    waiting_reaction_decision = State()
-    selecting_reactions = State()
-    waiting_protection_decision = State()
-    confirming = State()
-
-
 class EmojiConfigStates(StatesGroup):
     waiting_emoji = State()
     waiting_name = State()
@@ -48,11 +30,15 @@ class DailyGiftConfigStates(StatesGroup):
     waiting_amount = State()
 
 
-# ==================== MENÚ DE GAMIFICACIÓN ADMIN ====================
+def is_admin(user_id: int) -> bool:
+    return user_id in bot_config.ADMIN_IDS
+
+
+# ==================== MENU DE GAMIFICACION ADMIN ====================
 
 @router.callback_query(F.data == "admin_gamification", lambda cb: is_admin(cb.from_user.id))
 async def admin_gamification_menu(callback: CallbackQuery):
-    """Menú principal de gamificación para admins"""
+    """Menu principal de gamificacion para admins"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="💋 Configurar besitos",
@@ -67,7 +53,15 @@ async def admin_gamification_menu(callback: CallbackQuery):
             callback_data="config_daily_gift"
         )],
         [InlineKeyboardButton(
-            text="📊 Estadísticas",
+            text="📦 Gestionar paquetes",
+            callback_data="manage_packages"
+        )],
+        [InlineKeyboardButton(
+            text="🎮 Gestionar misiones",
+            callback_data="admin_missions"
+        )],
+        [InlineKeyboardButton(
+            text="📊 Estadisticas",
             callback_data="gamification_stats"
         )],
         [InlineKeyboardButton(
@@ -77,13 +71,10 @@ async def admin_gamification_menu(callback: CallbackQuery):
     ])
     
     await callback.message.edit_text(
-        f"""🎩 <b>Lucien:</b>
-
-<i>El sistema de recompensas que cultiva devoción...</i>
-
-¿Qué aspecto de la gamificación desea calibrar?""",
-        reply_markup=keyboard,
-        parse_mode="HTML"
+        "🎩 Lucien:\n\n"
+        "El sistema de recompensas que cultiva devocion...\n\n"
+        "Que aspecto de la gamificacion desea calibrar?",
+        reply_markup=keyboard
     )
     await callback.answer()
 
@@ -92,17 +83,13 @@ async def admin_gamification_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "config_besitos", lambda cb: is_admin(cb.from_user.id))
 async def config_besitos_menu(callback: CallbackQuery):
-    """Menú de configuración de besitos y emojis"""
+    """Menu de configuracion de besitos y emojis"""
     broadcast_service = BroadcastService()
     emojis = broadcast_service.get_all_emojis(active_only=False)
     
-    text = f"""🎩 <b>Lucien:</b>
-
-<i>Los fragmentos de atención que Diana otorga...</i>
-
-📋 <b>Emojis configurados:</b>
-
-"""
+    text = "🎩 Lucien:\n\n" \
+           "Los fragmentos de atencion que Diana otorga...\n\n" \
+           "Emojis configurados:\n\n"
     
     keyboard_buttons = []
     
@@ -131,7 +118,7 @@ async def config_besitos_menu(callback: CallbackQuery):
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -139,15 +126,11 @@ async def config_besitos_menu(callback: CallbackQuery):
 async def add_emoji_start(callback: CallbackQuery, state: FSMContext):
     """Inicia el flujo de agregar emoji"""
     await callback.message.edit_text(
-        f"""🎩 <b>Lucien:</b>
-
-<i>Vamos a configurar un nuevo emoji de reacción...</i>
-
-📋 <b>Paso 1 de 3:</b> Envíe el emoji que desea agregar.
-
-Ejemplos: 💋 ❤️ 🔥 👍""",
-        reply_markup=cancel_keyboard(),
-        parse_mode="HTML"
+        "🎩 Lucien:\n\n"
+        "Vamos a configurar un nuevo emoji de reaccion...\n\n"
+        "Paso 1 de 3: Envie el emoji que desea agregar.\n\n"
+        "Ejemplos: 💋 ❤️ 🔥 👍",
+        reply_markup=cancel_keyboard()
     )
     await state.set_state(EmojiConfigStates.waiting_emoji)
     await callback.answer()
@@ -161,25 +144,20 @@ async def process_emoji(message: Message, state: FSMContext):
     # Validar que sea un solo emoji (aproximado)
     if len(emoji_char) > 2:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Por favor, envíe solo un emoji...</i>",
-            reply_markup=cancel_keyboard(),
-            parse_mode="HTML"
+            "🎩 Lucien:\n\n"
+            "Por favor, envie solo un emoji...",
+            reply_markup=cancel_keyboard()
         )
         return
     
     await state.update_data(emoji=emoji_char)
-
+    
     await message.answer(
-        f"""🎩 <b>Lucien:</b>
-
-<i>Excelente. Ahora un nombre descriptivo...</i>
-
-📋 <b>Paso 2 de 3:</b> Nombre del emoji
-
-Ejemplo: 'Beso', 'Corazón', 'Fuego'""",
-        reply_markup=cancel_keyboard(),
-        parse_mode="HTML"
+        "🎩 Lucien:\n\n"
+        "Excelente. Ahora un nombre descriptivo...\n\n"
+        "Paso 2 de 3: Nombre del emoji\n\n"
+        "Ejemplo: Beso, Corazon, Fuego",
+        reply_markup=cancel_keyboard()
     )
     await state.set_state(EmojiConfigStates.waiting_name)
 
@@ -191,15 +169,11 @@ async def process_emoji_name(message: Message, state: FSMContext):
     await state.update_data(name=name)
     
     await message.answer(
-        f"""🎩 <b>Lucien:</b>
-
-<i>Finalmente, el valor en besitos...</i>
-
-📋 <b>Paso 3 de 3:</b> Valor de besitos
-
-Ejemplo: <code>5</code> para 5 besitos""",
-        reply_markup=cancel_keyboard(),
-        parse_mode="HTML"
+        "🎩 Lucien:\n\n"
+        "Finalmente, el valor en besitos...\n\n"
+        "Paso 3 de 3: Valor de besitos\n\n"
+        "Ejemplo: 5 para 5 besitos",
+        reply_markup=cancel_keyboard()
     )
     await state.set_state(EmojiConfigStates.waiting_value)
 
@@ -213,10 +187,9 @@ async def process_emoji_value(message: Message, state: FSMContext):
             raise ValueError("Valor debe ser positivo")
     except ValueError:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Por favor, indique un número válido mayor a cero...</i>",
-            reply_markup=cancel_keyboard(),
-            parse_mode="HTML"
+            "🎩 Lucien:\n\n"
+            "Por favor, indique un numero valido mayor a cero...",
+            reply_markup=cancel_keyboard()
         )
         return
     
@@ -232,26 +205,21 @@ async def process_emoji_value(message: Message, state: FSMContext):
         )
         
         await message.answer(
-            f"""🎩 <b>Lucien:</b>
-
-<i>El emoji ha sido registrado en los archivos de Diana...</i>
-
-✅ <b>Emoji configurado:</b>
-   • Emoji: {emoji.emoji}
-   • Nombre: {emoji.name}
-   • Valor: {emoji.besito_value} besitos
-
-<i>Los visitantes podrán usarlo en las reacciones.</i>""",
-            reply_markup=back_keyboard("config_besitos"),
-            parse_mode="HTML"
+            f"🎩 Lucien:\n\n"
+            f"El emoji ha sido registrado en los archivos de Diana...\n\n"
+            f"✅ Emoji configurado:\n"
+            f"   • Emoji: {emoji.emoji}\n"
+            f"   • Nombre: {emoji.name}\n"
+            f"   • Valor: {emoji.besito_value} besitos\n\n"
+            f"Los visitantes podran usarlo en las reacciones.",
+            reply_markup=back_keyboard("config_besitos")
         )
         
     except Exception as e:
         logger.error(f"Error creando emoji: {e}")
         await message.answer(
-            LucienVoice.error_message("la configuración del emoji"),
-            reply_markup=back_keyboard("config_besitos"),
-            parse_mode="HTML"
+            LucienVoice.error_message("la configuracion del emoji"),
+            reply_markup=back_keyboard("config_besitos")
         )
     
     await state.clear()
@@ -291,17 +259,13 @@ async def edit_emoji(callback: CallbackQuery):
     status = "✅ Activo" if emoji.is_active else "❌ Inactivo"
     
     await callback.message.edit_text(
-        f"""🎩 <b>Lucien:</b>
-
-<i>Editando emoji...</i>
-
-{emoji.emoji} <b>{emoji.name or 'Sin nombre'}</b>
-   • Valor: {emoji.besito_value} besitos
-   • Estado: {status}
-
-<i>¿Qué desea modificar?</i>""",
-        reply_markup=keyboard,
-        parse_mode="HTML"
+        f"🎩 Lucien:\n\n"
+        f"Editando emoji...\n\n"
+        f"{emoji.emoji} {emoji.name or 'Sin nombre'}\n"
+        f"   • Valor: {emoji.besito_value} besitos\n"
+        f"   • Estado: {status}\n\n"
+        f"Que desea modificar?",
+        reply_markup=keyboard
     )
     await callback.answer()
 
@@ -325,7 +289,7 @@ async def toggle_emoji(callback: CallbackQuery):
 
 @router.callback_query(F.data == "config_daily_gift", lambda cb: is_admin(cb.from_user.id))
 async def config_daily_gift(callback: CallbackQuery):
-    """Configuración del regalo diario"""
+    """Configuracion del regalo diario"""
     gift_service = DailyGiftService()
     config = gift_service.get_config()
     
@@ -347,17 +311,13 @@ async def config_daily_gift(callback: CallbackQuery):
     ])
     
     await callback.message.edit_text(
-        f"""🎩 <b>Lucien:</b>
-
-<i>La generosidad diaria de Diana...</i>
-
-🎁 <b>Configuración del Regalo Diario:</b>
-   • Cantidad: {config.besito_amount} besitos
-   • Estado: {status}
-
-<i>Los visitantes pueden reclamar esto una vez cada 24 horas.</i>""",
-        reply_markup=keyboard,
-        parse_mode="HTML"
+        f"🎩 Lucien:\n\n"
+        f"La generosidad diaria de Diana...\n\n"
+        f"🎁 Configuracion del Regalo Diario:\n"
+        f"   • Cantidad: {config.besito_amount} besitos\n"
+        f"   • Estado: {status}\n\n"
+        f"Los visitantes pueden reclamar esto una vez cada 24 horas.",
+        reply_markup=keyboard
     )
     await callback.answer()
 
@@ -366,15 +326,11 @@ async def config_daily_gift(callback: CallbackQuery):
 async def change_gift_amount_start(callback: CallbackQuery, state: FSMContext):
     """Inicia cambio de cantidad del regalo"""
     await callback.message.edit_text(
-        f"""🎩 <b>Lucien:</b>
-
-<i>¿Cuántos besitos otorgará Diana cada día?</i>
-
-📋 Indique la cantidad de besitos para el regalo diario:
-
-Ejemplo: <code>15</code>""",
-        reply_markup=cancel_keyboard(),
-        parse_mode="HTML"
+        "🎩 Lucien:\n\n"
+        "Cuantos besitos otorgara Diana cada dia?\n\n"
+        "Indique la cantidad de besitos para el regalo diario:\n\n"
+        "Ejemplo: 15",
+        reply_markup=cancel_keyboard()
     )
     await state.set_state(DailyGiftConfigStates.waiting_amount)
     await callback.answer()
@@ -389,10 +345,9 @@ async def process_gift_amount(message: Message, state: FSMContext):
             raise ValueError("Cantidad debe ser positiva")
     except ValueError:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Por favor, indique un número válido mayor a cero...</i>",
-            reply_markup=cancel_keyboard(),
-            parse_mode="HTML"
+            "🎩 Lucien:\n\n"
+            "Por favor, indique un numero valido mayor a cero...",
+            reply_markup=cancel_keyboard()
         )
         return
     
@@ -400,15 +355,11 @@ async def process_gift_amount(message: Message, state: FSMContext):
     gift_service.update_config(amount, admin_id=message.from_user.id)
     
     await message.answer(
-        f"""🎩 <b>Lucien:</b>
-
-<i>La generosidad de Diana ha sido ajustada...</i>
-
-✅ <b>Regalo diario actualizado:</b> {amount} besitos
-
-<i>Los visitantes recibirán esta cantidad al reclamar.</i>""",
-        reply_markup=back_keyboard("config_daily_gift"),
-        parse_mode="HTML"
+        f"🎩 Lucien:\n\n"
+        f"La generosidad de Diana ha sido ajustada...\n\n"
+        f"✅ Regalo diario actualizado: {amount} besitos\n\n"
+        f"Los visitantes recibiran esta cantidad al reclamar.",
+        reply_markup=back_keyboard("config_daily_gift")
     )
     await state.clear()
 
@@ -428,11 +379,11 @@ async def toggle_daily_gift(callback: CallbackQuery):
     await config_daily_gift(callback)
 
 
-# ==================== ESTADÍSTICAS ====================
+# ==================== ESTADISTICAS ====================
 
 @router.callback_query(F.data == "gamification_stats", lambda cb: is_admin(cb.from_user.id))
 async def gamification_stats(callback: CallbackQuery):
-    """Estadísticas de gamificación"""
+    """Estadisticas de gamificacion"""
     from services.besito_service import BesitoService
     from services.daily_gift_service import DailyGiftService
     
@@ -444,27 +395,20 @@ async def gamification_stats(callback: CallbackQuery):
     claims_today = gift_service.get_total_claims_today()
     besitos_given_today = gift_service.get_total_besitos_given_today()
     
-    text = f"""🎩 <b>Lucien:</b>
-
-<i>Los patrones de la devoción acumulada...</i>
-
-📊 <b>Estadísticas de Gamificación:</b>
-
-💋 <b>Besitos en circulación:</b> {total_besitos}
-
-🎁 <b>Regalos hoy:</b>
-   • Reclamos: {claims_today}
-   • Besitos entregados: {besitos_given_today}
-
-🏆 <b>Top visitantes:</b>
-"""
+    text = "🎩 Lucien:\n\n" \
+           "Los patrones de la devocion acumulada...\n\n" \
+           "📊 Estadisticas de Gamificacion:\n\n" \
+           f"💋 Besitos en circulacion: {total_besitos}\n\n" \
+           f"🎁 Regalos hoy:\n" \
+           f"   • Reclamos: {claims_today}\n" \
+           f"   • Besitos entregados: {besitos_given_today}\n\n" \
+           f"🏆 Top visitantes:\n"
     
     for i, user in enumerate(top_users, 1):
         text += f"   {i}. ID:{user.user_id} - {user.balance} besitos\n"
     
     await callback.message.edit_text(
         text,
-        reply_markup=back_keyboard("admin_gamification"),
-        parse_mode="HTML"
+        reply_markup=back_keyboard("admin_gamification")
     )
     await callback.answer()

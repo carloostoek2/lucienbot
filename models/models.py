@@ -281,3 +281,251 @@ class DailyGiftClaim(Base):
     __table_args__ = (
         # Índice compuesto para consultas eficientes
     )
+
+
+# ============================================================
+# FASE 2: PAQUETES (COMPONENTE COMPARTIDO)
+# ============================================================
+
+class Package(Base):
+    """Paquetes de contenido (fotos/archivos) para tienda o recompensas"""
+    __tablename__ = "packages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Stock independiente para tienda y recompensas
+    # -2 = no disponible, -1 = ilimitado, 0+ = stock limitado
+    store_stock = Column(Integer, default=-1)
+    reward_stock = Column(Integer, default=-1)
+    
+    is_active = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)  # Admin que creó el paquete
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relaciones
+    files = relationship("PackageFile", back_populates="package", cascade="all, delete-orphan")
+    
+    @property
+    def is_available_in_store(self) -> bool:
+        """Verifica si está disponible en tienda"""
+        if not self.is_active:
+            return False
+        if self.store_stock == -2:  # No disponible
+            return False
+        return self.store_stock == -1 or self.store_stock > 0
+    
+    @property
+    def is_available_for_reward(self) -> bool:
+        """Verifica si está disponible para recompensas"""
+        if not self.is_active:
+            return False
+        if self.reward_stock == -2:  # No disponible
+            return False
+        return self.reward_stock == -1 or self.reward_stock > 0
+    
+    @property
+    def store_stock_display(self) -> str:
+        """Retorna texto legible del stock de tienda"""
+        if self.store_stock == -2:
+            return "No disponible"
+        elif self.store_stock == -1:
+            return "Ilimitado"
+        else:
+            return str(self.store_stock)
+    
+    @property
+    def reward_stock_display(self) -> str:
+        """Retorna texto legible del stock de recompensas"""
+        if self.reward_stock == -2:
+            return "No disponible"
+        elif self.reward_stock == -1:
+            return "Ilimitado"
+        else:
+            return str(self.reward_stock)
+    
+    @property
+    def file_count(self) -> int:
+        """Retorna la cantidad de archivos en el paquete"""
+        return len(self.files) if self.files else 0
+    
+    def decrement_store_stock(self) -> bool:
+        """Decrementa el stock de tienda. Retorna True si tuvo éxito."""
+        if self.store_stock == -2:  # No disponible
+            return False
+        if self.store_stock == -1:  # Ilimitado
+            return True
+        if self.store_stock > 0:
+            self.store_stock -= 1
+            return True
+        return False
+    
+    def decrement_reward_stock(self) -> bool:
+        """Decrementa el stock de recompensas. Retorna True si tuvo éxito."""
+        if self.reward_stock == -2:  # No disponible
+            return False
+        if self.reward_stock == -1:  # Ilimitado
+            return True
+        if self.reward_stock > 0:
+            self.reward_stock -= 1
+            return True
+        return False
+
+
+class PackageFile(Base):
+    """Archivos individuales dentro de un paquete"""
+    __tablename__ = "package_files"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=False, index=True)
+    
+    # Información del archivo en Telegram
+    file_id = Column(String(500), nullable=False)  # ID del archivo en Telegram
+    file_type = Column(String(50), nullable=False)  # photo, video, document, animation
+    file_name = Column(String(255), nullable=True)  # Nombre original del archivo
+    file_size = Column(Integer, nullable=True)  # Tamaño en bytes
+    
+    # Orden para mantener secuencia
+    order_index = Column(Integer, default=0)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    package = relationship("Package", back_populates="files")
+
+
+# ============================================================
+# FASE 3: MISIONES Y RECOMPENSAS
+# ============================================================
+
+class MissionType(str, enum.Enum):
+    """Tipos de misiones soportados"""
+    REACTION_COUNT = "reaction_count"           # Reaccionar N veces
+    DAILY_GIFT_STREAK = "daily_gift_streak"     # Reclamar regalo N dias (consecutivos)
+    DAILY_GIFT_TOTAL = "daily_gift_total"       # Reclamar regalo N dias (acumulados)
+    STORE_PURCHASE = "store_purchase"           # Comprar en tienda
+    VIP_ACTIVE = "vip_active"                   # Tener suscripcion VIP activa
+
+
+class MissionFrequency(str, enum.Enum):
+    """Frecuencia de la mision"""
+    ONE_TIME = "one_time"       # Se completa una sola vez
+    RECURRING = "recurring"     # Se reinicia al completarse
+
+
+class Mission(Base):
+    """Misiones configuradas por el administrador"""
+    __tablename__ = "missions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Tipo y configuracion
+    mission_type = Column(Enum(MissionType), nullable=False)
+    target_value = Column(Integer, default=1, nullable=False)  # Meta numerica
+    
+    # Frecuencia y vigencia
+    frequency = Column(Enum(MissionFrequency), default=MissionFrequency.ONE_TIME)
+    start_date = Column(DateTime(timezone=True), nullable=True)  # None = sin fecha inicio
+    end_date = Column(DateTime(timezone=True), nullable=True)    # None = sin fecha fin
+    
+    # Estado
+    is_active = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Recompensa asociada
+    reward_id = Column(Integer, ForeignKey("rewards.id"), nullable=True)
+    
+    # Relaciones
+    reward = relationship("Reward", back_populates="missions")
+    user_progress = relationship("UserMissionProgress", back_populates="mission", cascade="all, delete-orphan")
+    
+    @property
+    def is_available(self) -> bool:
+        """Verifica si la mision esta disponible actualmente"""
+        if not self.is_active:
+            return False
+        
+        from datetime import datetime
+        now = datetime.utcnow()
+        
+        if self.start_date and now < self.start_date:
+            return False
+        if self.end_date and now > self.end_date:
+            return False
+        
+        return True
+
+
+class UserMissionProgress(Base):
+    """Progreso de cada usuario en las misiones"""
+    __tablename__ = "user_mission_progress"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id"), nullable=False, index=True)
+    
+    # Progreso
+    current_value = Column(Integer, default=0, nullable=False)
+    target_value = Column(Integer, nullable=False)
+    is_completed = Column(Boolean, default=False)
+    
+    # Fechas
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    last_updated = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relaciones
+    mission = relationship("Mission", back_populates="user_progress")
+
+
+class RewardType(str, enum.Enum):
+    """Tipos de recompensas"""
+    BESITOS = "besitos"         # Cantidad de besitos
+    PACKAGE = "package"         # Paquete de contenido
+    VIP_ACCESS = "vip_access"   # Acceso VIP
+
+
+class Reward(Base):
+    """Recompensas configuradas por el administrador"""
+    __tablename__ = "rewards"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Tipo y contenido
+    reward_type = Column(Enum(RewardType), nullable=False)
+    
+    # Configuracion segun tipo
+    besito_amount = Column(Integer, nullable=True)      # Para tipo BESITOS
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=True)  # Para tipo PACKAGE
+    tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=True)    # Para tipo VIP_ACCESS
+    
+    # Estado
+    is_active = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    missions = relationship("Mission", back_populates="reward")
+    package = relationship("Package")
+    tariff = relationship("Tariff")
+
+
+class UserRewardHistory(Base):
+    """Historial de recompensas entregadas a usuarios"""
+    __tablename__ = "user_reward_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    reward_id = Column(Integer, ForeignKey("rewards.id"), nullable=False)
+    mission_id = Column(Integer, ForeignKey("missions.id"), nullable=True)  # None si fue de tienda
+    
+    # Detalles de la entrega
+    delivered_at = Column(DateTime(timezone=True), server_default=func.now())
+    details = Column(Text, nullable=True)  # JSON con detalles de la entrega

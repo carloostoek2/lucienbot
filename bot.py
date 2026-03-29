@@ -7,8 +7,8 @@ import asyncio
 import logging
 import sys
 from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import bot_config
@@ -20,10 +20,16 @@ from handlers import (
     channel_router,
     vip_router,
     free_channel_router,
-    # Fase 1 - Gamificación
+    # Fase 1 - Gamificacion
     gamification_user_router,
     gamification_admin_router,
-    broadcast_router
+    broadcast_router,
+    # Fase 2 - Paquetes
+    package_router,
+    # Fase 3 - Misiones y Recompensas
+    mission_user_router,
+    mission_admin_router,
+    reward_admin_router
 )
 
 # Configurar logging
@@ -103,10 +109,7 @@ async def main():
         logger.warning("ADMIN_IDS no configurado. El panel de administración no estará disponible.")
     
     # Crear bot y dispatcher
-    bot = Bot(
-        token=bot_config.TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-    )
+    bot = Bot(token=bot_config.TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
@@ -116,10 +119,16 @@ async def main():
     dp.include_router(channel_router)
     dp.include_router(vip_router)
     dp.include_router(free_channel_router)
-    # Fase 1 - Gamificación
+    # Fase 1 - Gamificacion
     dp.include_router(gamification_user_router)
     dp.include_router(gamification_admin_router)
     dp.include_router(broadcast_router)
+    # Fase 2 - Paquetes
+    dp.include_router(package_router)
+    # Fase 3 - Misiones y Recompensas
+    dp.include_router(mission_user_router)
+    dp.include_router(mission_admin_router)
+    dp.include_router(reward_admin_router)
     
     # Configurar eventos de startup/shutdown
     dp.startup.register(on_startup)

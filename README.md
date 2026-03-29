@@ -278,4 +278,3 @@ Este proyecto está bajo la licencia MIT.
 <p align="center">
   <i>"Diana observa... y Lucien sirve."</i>
 </p>
-# promptmind.
