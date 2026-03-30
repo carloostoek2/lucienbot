@@ -28,17 +28,21 @@ def main_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
             callback_data="shop"
         )],
         [InlineKeyboardButton(
+            text="✨ Ofertas especiales",
+            callback_data="offers"
+        )],
+        [InlineKeyboardButton(
             text="📖 Fragmentos de la historia",
             callback_data="narrative"
         )]
     ]
-    
+
     if is_vip:
         buttons.insert(0, [InlineKeyboardButton(
             text="💎 El círculo exclusivo",
             callback_data="vip_area"
         )])
-    
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -56,6 +60,14 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="🎮 Las recompensas que cultivan devoción",
             callback_data="admin_gamification"
+        )],
+        [InlineKeyboardButton(
+            text="✨ Promociones comerciales",
+            callback_data="admin_promotions"
+        )],
+        [InlineKeyboardButton(
+            text="📖 Los hilos de la historia",
+            callback_data="admin_narrative"
         )],
         [InlineKeyboardButton(
             text="👥 Los visitantes bajo observación",

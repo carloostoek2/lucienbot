@@ -1,14 +1,41 @@
 # 🎩 Lucien Bot - Dependencias
+# Instalar con: pip install -r requirements.txt
 
-# Framework del Bot
+# ==================== FRAMEWORK DEL BOT ====================
+# aiogram v3 - Framework moderno para bots de Telegram
 aiogram==3.4.1
 
-# Base de Datos
+# ==================== BASE DE DATOS ====================
+# SQLAlchemy ORM para base de datos
 SQLAlchemy==2.0.28
 
-# Utilidades
+# PostgreSQL (para producción en Railway)
+# Descomentar si se usa PostgreSQL:
+# psycopg2-binary==2.9.9
+# asyncpg==0.29.0
+
+# ==================== UTILIDADES ====================
+# Variables de entorno
 python-dotenv==1.0.1
+
+# Zonas horarias
 pytz==2024.1
 
-# Logging (incluido en stdlib, no requiere instalación)
-# asyncio (incluido en Python 3.7+)
+# Fechas y tiempos
+python-dateutil==2.9.0
+
+# ==================== SEGURIDAD ====================
+# Hashing de contraseñas (si se implementa auth)
+# bcrypt==4.1.2
+
+# ==================== MONITOREO (OPCIONAL) ====================
+# Logging avanzado
+# structlog==24.1.0
+
+# ==================== DESARROLLO ====================
+# Recarga automática en desarrollo
+# watchdog==4.0.0
+
+# ==================== TESTING (OPCIONAL) ====================
+# pytest==8.1.1
+# pytest-asyncio==0.23.5

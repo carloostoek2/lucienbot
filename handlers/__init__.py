@@ -16,6 +16,12 @@ from .reward_admin_handlers import router as reward_admin_router
 # Fase 4 - Tienda
 from .store_user_handlers import router as store_user_router
 from .store_admin_handlers import router as store_admin_router
+# Fase 5 - Promociones
+from .promotion_user_handlers import router as promotion_user_router
+from .promotion_admin_handlers import router as promotion_admin_router
+# Fase 6 - Narrativa
+from .story_user_handlers import router as story_user_router
+from .story_admin_handlers import router as story_admin_router
 
 __all__ = [
     'common_router',
@@ -35,5 +41,11 @@ __all__ = [
     'reward_admin_router',
     # Fase 4 - Tienda
     'store_user_router',
-    'store_admin_router'
+    'store_admin_router',
+    # Fase 5 - Promociones
+    'promotion_user_router',
+    'promotion_admin_router',
+    # Fase 6 - Narrativa
+    'story_user_router',
+    'story_admin_router'
 ]

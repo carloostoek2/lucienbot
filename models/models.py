@@ -1,7 +1,7 @@
 """
 Modelos de datos - Lucien Bot
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, BigInteger, Text, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, BigInteger, Text, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from models.database import Base
@@ -450,9 +450,9 @@ class Mission(Base):
         if not self.is_active:
             return False
         
-        from datetime import datetime
-        now = datetime.utcnow()
-        
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
         if self.start_date and now < self.start_date:
             return False
         if self.end_date and now > self.end_date:
@@ -635,17 +635,343 @@ class Order(Base):
 class OrderItem(Base):
     """Items dentro de una orden"""
     __tablename__ = "order_items"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
-    
+
     # Detalles al momento de la compra
     product_name = Column(String(200), nullable=False)
     quantity = Column(Integer, default=1)
     unit_price = Column(Integer, nullable=False)
     total_price = Column(Integer, nullable=False)
-    
+
     # Relaciones
     order = relationship("Order", back_populates="items")
     product = relationship("StoreProduct", back_populates="order_items")
+
+
+# ============================================================
+# FASE 5: PROMOCIONES Y SISTEMA "ME INTERESA"
+# ============================================================
+
+class PromotionStatus(str, enum.Enum):
+    """Estados de una promoción"""
+    ACTIVE = "active"       # Activa y visible
+    PAUSED = "paused"       # Pausada temporalmente
+    EXPIRED = "expired"     # Expirada
+
+
+class Promotion(Base):
+    """Promociones comerciales con precio en dinero real (MXN)"""
+    __tablename__ = "promotions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Relación con paquete (reutiliza el sistema de paquetes)
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=False)
+
+    # Precio en pesos mexicanos (dinero real)
+    price_mxn = Column(Integer, nullable=False)  # Precio en centavos para evitar decimales
+
+    # Estado y vigencia
+    status = Column(Enum(PromotionStatus), default=PromotionStatus.ACTIVE)
+    start_date = Column(DateTime(timezone=True), nullable=True)  # None = inmediato
+    end_date = Column(DateTime(timezone=True), nullable=True)    # None = sin expiración
+
+    # Estado
+    is_active = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)  # Admin que creó la promoción
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relaciones
+    package = relationship("Package")
+    interests = relationship("PromotionInterest", back_populates="promotion", cascade="all, delete-orphan")
+
+    @property
+    def price_display(self) -> str:
+        """Retorna el precio formateado en MXN"""
+        pesos = self.price_mxn // 100
+        centavos = self.price_mxn % 100
+        return f"${pesos:,}.{centavos:02d} MXN"
+
+    @property
+    def is_available(self) -> bool:
+        """Verifica si la promoción está disponible actualmente"""
+        if not self.is_active:
+            return False
+        if self.status != PromotionStatus.ACTIVE:
+            return False
+
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        if self.start_date and now < self.start_date:
+            return False
+        if self.end_date and now > self.end_date:
+            return False
+
+        return True
+
+    @property
+    def file_count(self) -> int:
+        """Retorna la cantidad de archivos en el paquete asociado"""
+        return self.package.file_count if self.package else 0
+
+
+class InterestStatus(str, enum.Enum):
+    """Estados de un interés en promoción"""
+    PENDING = "pending"       # Pendiente de atención
+    ATTENDED = "attended"     # Atendido por admin
+    BLOCKED = "blocked"       # Usuario bloqueado
+
+
+class PromotionInterest(Base):
+    """Registro de intereses de usuarios en promociones"""
+    __tablename__ = "promotion_interests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    username = Column(String(100), nullable=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+
+    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=False)
+
+    # Estado del interés
+    status = Column(Enum(InterestStatus), default=InterestStatus.PENDING)
+
+    # Fechas
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    attended_at = Column(DateTime(timezone=True), nullable=True)
+    attended_by = Column(BigInteger, nullable=True)  # Admin que atendió
+
+    # Relaciones
+    promotion = relationship("Promotion", back_populates="interests")
+
+    # Constraint único: un usuario solo puede expresar interés una vez por promoción
+    __table_args__ = (
+        UniqueConstraint('user_id', 'promotion_id', name='uq_user_promotion_interest'),
+    )
+
+
+class BlockedPromotionUser(Base):
+    """Usuarios bloqueados del sistema de promociones"""
+    __tablename__ = "blocked_promotion_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    username = Column(String(100), nullable=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+
+    # Razón del bloqueo
+    reason = Column(Text, nullable=True)
+
+    # Quién bloqueó
+    blocked_by = Column(BigInteger, nullable=True)
+    blocked_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # ¿Es permanente?
+    is_permanent = Column(Boolean, default=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)  # None = permanente
+
+
+# ============================================================
+# FASE 6: SISTEMA DE NARRATIVA CON ARQUETIPOS
+# ============================================================
+
+class NodeType(str, enum.Enum):
+    """Tipos de nodos de historia"""
+    NARRATIVE = "narrative"     # Nodo narrativo (solo texto)
+    DECISION = "decision"       # Nodo con decisiones
+    ENDING = "ending"           # Nodo final
+    QUIZ = "quiz"               # Nodo de cuestionario para arquetipo
+
+
+class ArchetypeType(str, enum.Enum):
+    """Arquetipos disponibles para los usuarios"""
+    SEDUCTOR = "seductor"           # El Seductor - busca el placer y la conquista
+    OBSERVER = "observer"           # El Observador - analiza y contempla
+    DEVOTO = "devoto"               # El Devoto - leal y dedicado
+    EXPLORADOR = "explorador"       # El Explorador - curioso y aventurero
+    MISTERIOSO = "misterioso"       # El Misterioso - enigmático y reservado
+    INTREPIDO = "intrepido"         # El Intrépido - audaz y sin miedo
+
+
+class StoryNode(Base):
+    """Nodos de la historia narrativa"""
+    __tablename__ = "story_nodes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)  # Contenido del nodo
+
+    # Tipo de nodo
+    node_type = Column(Enum(NodeType), default=NodeType.NARRATIVE)
+
+    # Requisitos para acceder
+    required_archetype = Column(Enum(ArchetypeType), nullable=True)  # None = cualquier arquetipo
+    required_vip = Column(Boolean, default=False)  # Requiere ser VIP
+    cost_besitos = Column(Integer, default=0)  # Costo en besitos para acceder
+
+    # Capítulo/Sección
+    chapter = Column(Integer, default=1)
+    order_in_chapter = Column(Integer, default=0)
+
+    # Estado
+    is_active = Column(Boolean, default=True)
+    is_starting_node = Column(Boolean, default=False)  # Nodo inicial de la historia
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relaciones
+    choices = relationship("StoryChoice", back_populates="node", cascade="all, delete-orphan",
+                          foreign_keys="StoryChoice.node_id")
+
+    @property
+    def has_choices(self) -> bool:
+        """Verifica si el nodo tiene opciones de decision"""
+        return len(self.choices) > 0 if self.choices else False
+
+
+class StoryChoice(Base):
+    """Opciones de decision desde un nodo"""
+    __tablename__ = "story_choices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=False)
+
+    # Texto de la opción
+    text = Column(String(500), nullable=False)
+
+    # Nodo al que lleva esta elección
+    next_node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=True)  # None = fin
+
+    # Efecto en el arquetipo
+    choice_archetype = Column(Enum(ArchetypeType), nullable=True)  # Arquetipo al que suman los puntos
+    archetype_points = Column(Integer, default=0)  # Puntos que suma al arquetipo
+
+    # Costo adicional
+    additional_cost = Column(Integer, default=0)  # Costo extra en besitos
+
+    # Relaciones
+    node = relationship("StoryNode", back_populates="choices", foreign_keys=[node_id])
+    next_node = relationship("StoryNode", foreign_keys=[next_node_id])
+
+
+class UserStoryProgress(Base):
+    """Progreso de cada usuario en la narrativa"""
+    __tablename__ = "user_story_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+
+    # Nodo actual
+    current_node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=True)
+
+    # Arquetipo asignado
+    archetype = Column(Enum(ArchetypeType), nullable=True)  # None = aún no asignado
+
+    # Puntos acumulados por arquetipo (para calcular el definitivo)
+    seductor_points = Column(Integer, default=0)
+    observer_points = Column(Integer, default=0)
+    devoto_points = Column(Integer, default=0)
+    explorador_points = Column(Integer, default=0)
+    misterioso_points = Column(Integer, default=0)
+    intrepido_points = Column(Integer, default=0)
+
+    # Historial de nodos visitados (JSON)
+    visited_nodes = Column(Text, default="[]")  # Lista de IDs de nodos
+
+    # Fechas
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_interaction = Column(DateTime(timezone=True), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Capítulo actual
+    current_chapter = Column(Integer, default=1)
+
+    def get_archetype_scores(self) -> dict:
+        """Retorna los puntajes por arquetipo"""
+        return {
+            ArchetypeType.SEDUCTOR: self.seductor_points,
+            ArchetypeType.OBSERVER: self.observer_points,
+            ArchetypeType.DEVOTO: self.devoto_points,
+            ArchetypeType.EXPLORADOR: self.explorador_points,
+            ArchetypeType.MISTERIOSO: self.misterioso_points,
+            ArchetypeType.INTREPIDO: self.intrepido_points
+        }
+
+    def get_dominant_archetype(self) -> ArchetypeType:
+        """Retorna el arquetipo con mayor puntuación"""
+        scores = self.get_archetype_scores()
+        return max(scores, key=scores.get)
+
+
+class Archetype(Base):
+    """Información sobre cada arquetipo"""
+    __tablename__ = "archetypes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    archetype_type = Column(Enum(ArchetypeType), unique=True, nullable=False)
+
+    # Nombre y descripción
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=False)
+
+    # Características
+    traits = Column(Text, nullable=True)  # Rasgos del arquetipo (JSON)
+
+    # Desbloqueo
+    unlock_description = Column(Text, nullable=True)  # Cómo se desbloquea
+
+    # Mensaje especial cuando se asigna
+    welcome_message = Column(Text, nullable=True)
+
+    # Creado por
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StoryAchievement(Base):
+    """Logros de narrativa desbloqueables"""
+    __tablename__ = "story_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    icon = Column(String(10), default="🏆")
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=False)
+
+    # Requisitos
+    required_node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=True)  # Completar este nodo
+    required_archetype = Column(Enum(ArchetypeType), nullable=True)  # Tener este arquetipo
+    required_chapter = Column(Integer, nullable=True)  # Llegar a este capítulo
+
+    # Recompensa
+    reward_besitos = Column(Integer, default=0)
+    reward_package_id = Column(Integer, ForeignKey("packages.id"), nullable=True)
+
+    # Estado
+    is_active = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserStoryAchievement(Base):
+    """Logros desbloqueados por cada usuario"""
+    __tablename__ = "user_story_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    achievement_id = Column(Integer, ForeignKey("story_achievements.id"), nullable=False)
+
+    # Fecha de desbloqueo
+    unlocked_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Recompensa entregada
+    reward_delivered = Column(Boolean, default=False)
+    reward_delivered_at = Column(DateTime(timezone=True), nullable=True)

@@ -1,0 +1,27 @@
+# 🎩 Lucien Bot - Configuración para Railway
+# https://railway.app
+
+[build]
+# Usar builder de Python
+builder = "nixpacks"
+
+# Variables de entorno durante build
+[build.env]
+NIXPACKS_PYTHON_VERSION = "3.11"
+NIXPACKS_PYTHON_PKGS = "python3 python3-pip"
+
+[deploy]
+# Comando de inicio
+startCommand = "python bot.py"
+
+# Healthcheck (opcional)
+# healthcheckPath = "/health"
+# healthcheckTimeout = 100
+
+# Reinicio automático
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Recursos (ajustar según necesidad)
+# cpus = 0.5
+# memory = 512

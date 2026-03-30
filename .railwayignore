@@ -1,0 +1,41 @@
+# 🎩 Lucien Bot - Archivos ignorados en Railway
+
+# Base de datos local (no subir a producción)
+*.db
+*.sqlite
+*.sqlite3
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv/
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Archivos de prueba
+ tests/
+test/
+
+# Documentación no necesaria en producción
+# (descomentar si es necesario)
+# AGENTS.md
+# README.md
