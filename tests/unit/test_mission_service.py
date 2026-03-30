@@ -71,11 +71,11 @@ class TestMissionService:
         """Test obtener misiones por tipo"""
         service = MissionService(db_session)
 
-        missions = service.get_missions_by_type(MissionType.SEND_BESITOS)
+        missions = service.get_missions_by_type(MissionType.REACTION_COUNT)
 
         assert len(missions) >= 1
         for mission in missions:
-            assert mission.mission_type == MissionType.SEND_BESITOS
+            assert mission.mission_type == MissionType.REACTION_COUNT
 
     def test_update_mission(self, db_session, sample_mission):
         """Test actualizar misión"""
@@ -188,7 +188,7 @@ class TestMissionIncrement:
         # Incrementar progreso
         completed = service.increment_progress(
             sample_user.id,
-            MissionType.SEND_BESITOS,
+            MissionType.REACTION_COUNT,
             amount=1
         )
 

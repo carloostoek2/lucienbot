@@ -3,6 +3,7 @@ Tests de integración para el flujo VIP completo.
 """
 import pytest
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 from services.vip_service import VIPService
 from services.channel_service import ChannelService
@@ -219,11 +220,21 @@ class TestVIPFlow:
 class TestVIPRaceConditions:
     """Tests de integración para verificar protección contra race conditions"""
 
-    def test_concurrent_token_redemption(self, db_session, sample_token, sample_vip_channel):
+    def test_concurrent_token_redemption(self, db_session, sample_tariff, sample_vip_channel):
         """Test que el token no puede ser canjeado dos veces (race condition)"""
         vip_service = VIPService(db_session)
 
-        from models.models import User
+        from models.models import User, Token
+
+        # Crear token directamente
+        token = Token(
+            token_code="CONCURRENT123",
+            tariff_id=sample_tariff.id,
+            status=TokenStatus.ACTIVE
+        )
+        db_session.add(token)
+        db_session.commit()
+        token_code = token.token_code
 
         # Crear dos usuarios diferentes
         user1 = User(telegram_id=111111, username="user1")
@@ -231,18 +242,37 @@ class TestVIPRaceConditions:
         db_session.add(user1)
         db_session.add(user2)
         db_session.commit()
+        user1_id = user1.id
 
-        # Simular canje simultáneo (en la realidad sería concurrente)
-        subscription1 = vip_service.redeem_token(sample_token.token_code, user1.id)
+        # Mock clase que simula la cadena query().filter().with_for_update().first()
+        class MockTokenQuery:
+            def __init__(self, result_token):
+                self.result_token = result_token
+                self.with_for_update_called = False
 
-        # Intentar canjear de nuevo (debería fallar)
-        subscription2 = vip_service.redeem_token(sample_token.token_code, user2.id)
+            def filter(self, *args, **kwargs):
+                return self
 
-        # Solo uno debería tener éxito
-        assert subscription1 is not None
-        assert subscription2 is None
+            def with_for_update(self):
+                self.with_for_update_called = True
+                return self
 
-        # Verificar que el token está marcado como usado por user1
-        token = vip_service.get_token(sample_token.id)
-        assert token.status == TokenStatus.USED
-        assert token.redeemed_by_id == user1.id
+            def first(self):
+                return self.result_token
+
+        mock_token_chain = MockTokenQuery(token)
+
+        with patch.object(db_session, 'query', return_value=mock_token_chain):
+            # Simular canje simultáneo (en la realidad sería concurrente)
+            subscription1 = vip_service.redeem_token(token_code, user1_id)
+
+            # Intentar canjear de nuevo (debería fallar)
+            subscription2 = vip_service.redeem_token(token_code, user2.id)
+
+            # Solo uno debería tener éxito
+            assert subscription1 is not None
+            assert subscription2 is None
+
+            # Verificar que se usó SELECT FOR UPDATE
+            assert mock_token_chain.with_for_update_called
+

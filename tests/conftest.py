@@ -208,7 +208,7 @@ def sample_expired_subscription(db_session: Session, sample_user, sample_vip_cha
 
 @pytest.fixture
 def sample_balance(db_session: Session, sample_user):
-    """Crea un balance de besitos de prueba."""
+    """Crea un balance de besitos de prueba con valores específicos."""
     balance = BesitoBalance(
         user_id=sample_user.id,
         balance=1000,
@@ -217,7 +217,6 @@ def sample_balance(db_session: Session, sample_user):
     )
     db_session.add(balance)
     db_session.commit()
-    db_session.refresh(balance)
     return balance
 
 
@@ -227,7 +226,7 @@ def sample_mission(db_session: Session):
     mission = Mission(
         name="Test Mission",
         description="A test mission",
-        mission_type=MissionType.SEND_BESITOS,
+        mission_type=MissionType.REACTION_COUNT,
         target_value=10,
         frequency=MissionFrequency.ONE_TIME,
         is_active=True

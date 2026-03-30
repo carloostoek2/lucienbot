@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 from services.vip_service import VIPService
-from models.models import TokenStatus, Subscription
+from models.models import TokenStatus, Subscription, Token
 
 
 @pytest.mark.unit
@@ -299,17 +299,32 @@ class TestVIPServiceRaceCondition:
         """Test que redeem_token usa SELECT FOR UPDATE"""
         service = VIPService(db_session)
 
-        # Mock para verificar que se usa with_for_update
-        with patch.object(db_session.query(Token), 'with_for_update') as mock_lock:
-            mock_lock.return_value = MagicMock()
-            mock_lock.return_value.first = MagicMock(return_value=sample_token)
+        # Simular que el token está activo
+        sample_token.status = TokenStatus.ACTIVE
+        sample_token.expires_at = None
+        token_code = sample_token.token_code
 
-            # Simular que el token está activo
-            sample_token.status = TokenStatus.ACTIVE
-            sample_token.expires_at = None
+        # Clase mock que simula la cadena query().filter().with_for_update().first()
+        class MockQueryChain:
+            def __init__(self, result_token):
+                self.result_token = result_token
+                self.with_for_update_called = False
 
+            def filter(self, *args, **kwargs):
+                return self
+
+            def with_for_update(self):
+                self.with_for_update_called = True
+                return self
+
+            def first(self):
+                return self.result_token
+
+        mock_chain = MockQueryChain(sample_token)
+
+        with patch.object(db_session, 'query', return_value=mock_chain):
             # Llamar al método
-            service.redeem_token(sample_token.token_code, sample_user.id)
+            service.redeem_token(token_code, sample_user.id)
 
             # Verificar que se llamó with_for_update
-            mock_lock.assert_called_once()
+            assert mock_chain.with_for_update_called
