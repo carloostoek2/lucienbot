@@ -35,7 +35,7 @@ Usuario → Nodo actual → Ver opciones → Elegir
 ```
 
 ## Arquetipos
-- Determinant contenido disponible por usuario
+- Determina el contenido disponible por usuario
 - Calculado basándose en decisiones tomadas
 - Afecta recomendaciones de contenido
 
