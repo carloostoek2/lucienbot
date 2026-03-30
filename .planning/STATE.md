@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to plan
-last_updated: "2026-03-30T15:23:27.382Z"
+last_updated: "2026-03-30T15:52:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 1
@@ -65,6 +65,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260330-bpj | Agregar columna invite_link a Channel via migración Alembic | 2026-03-30 | d66b8b7 | [260330-bpj-agregar-columna-invite-link-a-channel-vi](./quick/260330-bpj-agregar-columna-invite-link-a-channel-vi/) |
+| 260330-reg | Regenerar migración inicial limpia de Alembic | 2026-03-30 | 2d68422 | — |
 
 ## Decision Log
 
