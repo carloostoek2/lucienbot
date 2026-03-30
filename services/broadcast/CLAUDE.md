@@ -12,11 +12,17 @@ Difusión masiva de mensajes a usuarios.
 - `User` - Destinatarios
 
 ## BroadcastService API
-```python
-- broadcast_message(text, admin_id)    # Enviar a todos
-- broadcast_to_vip(text, admin_id)    # Enviar solo a VIP
-- get_broadcast_stats(broadcast_id)  # Estadísticas
-```
+def broadcast_message(text: str, admin_id: int) -> None:
+    """Enviar a todos"""
+    ...
+
+def broadcast_to_vip(text: str, admin_id: int) -> None:
+    """Enviar solo a VIP"""
+    ...
+
+def get_broadcast_stats(broadcast_id: int) -> dict:
+    """Estadísticas"""
+    ...
 
 ## Flujo de Broadcast
 ```
