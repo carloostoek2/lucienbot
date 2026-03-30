@@ -26,11 +26,9 @@ Tareas, progreso y completado de misiones.
 ```
 
 ## RewardService API
-```python
-- create_reward(...)           # Crear recompensa
-- claim_reward(user_id, reward_id)  # Reclamar
-- get_available_rewards(user_id)    # Disponibles
-```
+def create_reward(...) -> 'Reward': ...
+def claim_reward(user_id: int, reward_id: int) -> None: ...
+def get_available_rewards(user_id: int) -> list['Reward']: ...
 
 ## Reglas de Negocio
 - Una misión por usuario a la vez (opcional según diseño)
