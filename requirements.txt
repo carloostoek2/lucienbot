@@ -37,6 +37,7 @@ python-dateutil==2.9.0
 # Recarga automática en desarrollo
 # watchdog==4.0.0
 
-# ==================== TESTING (OPCIONAL) ====================
-# pytest==8.1.1
-# pytest-asyncio==0.23.5
+# ==================== TESTING ====================
+pytest==8.1.1
+pytest-asyncio==0.23.5
+pytest-cov==5.0.0

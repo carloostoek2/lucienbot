@@ -53,14 +53,73 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+from services.vip_service import VIPService
+
+
+async def check_expired_subscriptions_on_startup(bot: Bot):
+    """
+    Verifica y procesa suscripciones expiradas al iniciar el bot.
+    Esto maneja casos donde el bot estuvo offline y no procesó expiraciones.
+    """
+    logger.info("Verificando suscripciones expiradas...")
+    vip_service = VIPService()
+
+    try:
+        expired_subscriptions = vip_service.get_expired_subscriptions()
+
+        if not expired_subscriptions:
+            logger.info("No hay suscripciones expiradas pendientes")
+            return
+
+        logger.info(f"Encontradas {len(expired_subscriptions)} suscripciones expiradas")
+
+        for subscription in expired_subscriptions:
+            try:
+                # Desactivar la suscripción
+                vip_service.expire_subscription(subscription.id)
+
+                # Obtener información del usuario
+                user = subscription.user
+                channel = subscription.channel
+
+                if user and channel:
+                    # Intentar remover al usuario del canal VIP
+                    try:
+                        await bot.ban_chat_member(
+                            chat_id=channel.channel_id,
+                            user_id=user.telegram_id
+                        )
+                        # Desbanear inmediatamente para permitir que vuelva con un nuevo token
+                        await bot.unban_chat_member(
+                            chat_id=channel.channel_id,
+                            user_id=user.telegram_id
+                        )
+                        logger.info(f"Usuario {user.telegram_id} removido del canal VIP {channel.channel_id}")
+                    except Exception as e:
+                        logger.error(f"Error removiendo usuario {user.telegram_id} del canal: {e}")
+
+            except Exception as e:
+                logger.error(f"Error procesando suscripción expirada {subscription.id}: {e}")
+
+        logger.info("Procesamiento de suscripciones expiradas completado")
+
+    except Exception as e:
+        logger.error(f"Error verificando suscripciones expiradas: {e}")
+    finally:
+        vip_service.close()
+
+
 async def on_startup(bot: Bot):
     """Acciones al iniciar el bot"""
     logger.info("Iniciando Lucien Bot...")
-    
+
     # Inicializar base de datos
     init_db()
     logger.info("Base de datos inicializada")
-    
+
+    # Verificar suscripciones expiradas (maneja casos donde bot estuvo offline)
+    await check_expired_subscriptions_on_startup(bot)
+
     # Iniciar scheduler
     scheduler = get_scheduler(bot)
     await scheduler.start()

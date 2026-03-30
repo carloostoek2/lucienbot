@@ -1,0 +1,901 @@
+: "TEST-01, TEST-02, TEST-03, SCHED-02, SEC-03"
+
+must_haves:
+  truths:
+    - Tests unitarios pasan para VIPService, ChannelService, BesitoService, MissionService
+    - Tests de integración pasan para flujos VIP y canales
+    - Ruff linting pasa sin errores
+    - Cobertura de tests ≥70% en services/
+    - No quedan métodos __del__ en services (usar context managers)
+    - Token redemption usa SELECT FOR UPDATE (protección race condition)
+    - Startup handler verifica suscripciones expiradas
+  artifacts:
+    - path: "requirements.txt"
+      provides: "Dependencias de testing (pytest, pytest-asyncio, pytest-cov, ruff, aiosqlite)"
+      min_lines: 10
+    - path: "pyproject.toml"
+      provides: "Configuración pytest y ruff"
+      min_lines: 80
+    - path: "tests/conftest.py"
+      provides: "Fixtures compartidas (db_session, mock_message, mock_bot)"
+      min_lines: 100
+    - path: "tests/unit/test_vip_service.py"
+      provides: "Tests unitarios VIPService"
+      min_lines: 200
+    - path: "tests/unit/test_channel_service.py"
+      provides: "Tests unitarios ChannelService"
+      min_lines: 150
+    - path: "tests/unit/test_besito_service.py"
+      provides: "Tests unitarios BesitoService"
+      min_lines: 150
+    - path: "tests/unit/test_mission_service.py"
+      provides: "Tests unitarios MissionService"
+      min_lines: 150
+    - path: "tests/integration/test_vip_flow.py"
+      provides: "Tests integración flujo VIP"
+      min_lines: 100
+    - path: "models/database.py"
+      provides: "Context manager session_scope() async"
+      contains: "@asynccontextmanager"
+    - path: "services/vip_service.py"
+      provides: "SELECT FOR UPDATE en redeem_token"
+      contains: "with_for_update"
+    - path: "bot.py"
+      provides: "Startup check suscripciones expiradas"
+      contains: "check_expired_subscriptions"
+  key_links:
+    - from: "tests/conftest.py"
+      to: "tests/unit/test_*.py"
+      via: "pytest fixtures"
+      pattern: "@pytest.fixture"
+    - from: "models/database.py"
+      to: "services/*.py"
+      via: "session_scope() import"
+      pattern: "from models.database import session_scope"
+    - from: "services/vip_service.py"
+      to: "models/models.py"
+      via: "SELECT FOR UPDATE query"
+      pattern: ".with_for_update()"
+    - from: "bot.py"
+      to: "services/vip_service.py"
+      via: "startup check llamada"
+      pattern: "check_expired_subscriptions"
+
+user_setup:
+  - service: pip
+    why: "Instalar dependencias de testing"
+    action: "pip install -r requirements.txt"
+---
+
+# Phase 8: Testing & Technical Debt - Execution Plan
+
+## Phase Goal
+
+Establecer infraestructura de testing automatizado con pytest, eliminar deuda técnica crítica (session management, race conditions), y configurar linting con ruff para mantener calidad de código.
+
+## Success Criteria (from CONTEXT.md)
+
+1. **TEST-01:** Tests unitarios para VIPService, ChannelService, BesitoService, MissionService
+2. **TEST-02:** Tests de integración para flujos VIP y canales
+3. **TEST-03:** Configuración de ruff/black/isort integrada
+4. **SCHED-02:** Sesiones DB con context managers (eliminar `__del__`)
+5. **SCHED-02:** Startup check para suscripciones expiradas
+6. **SEC-03:** SELECT FOR UPDATE en token redemption (resolver race condition)
+
+## Execution Plan
+
+### Wave 1: Infrastructure Setup
+
+**Tasks 1-3:** Configuración inicial de testing y linting
+
+---
+
+#### Task 1: Add Testing Dependencies to requirements.txt
+
+**Complexity:** S (Small)
+**Estimated Time:** 10 minutes
+**Files to Read:**
+- @requirements.txt
+
+**Files to Modify:**
+- `requirements.txt`
+
+**Action:**
+Añadir las siguientes dependencias en la sección "TESTING":
+```
+# ==================== TESTING ====================
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+ruff>=0.3.0
+aiosqlite>=0.20.0
+```
+
+Descomentar las líneas existentes de pytest y pytest-asyncio, y añadir pytest-cov, ruff, y aiosqlite.
+
+**Expected Outcome:**
+- requirements.txt contiene todas las dependencias de testing
+- Versiones compatibles con Python 3.12 y SQLAlchemy 2.0
+
+**Verify:**
+```bash
+pip install -r requirements.txt
+pytest --version  # Should show 8.x
+ruff --version    # Should show 0.3.x+
+```
+
+---
+
+#### Task 2: Configure pytest and ruff in pyproject.toml
+
+**Complexity:** M (Medium)
+**Estimated Time:** 30 minutes
+**Files to Create:**
+- `pyproject.toml`
+
+**Action:**
+Crear archivo pyproject.toml con configuración completa:
+
+1. **Sección [tool.pytest.ini_options]:**
+   - testpaths = ["tests"]
+   - asyncio_mode = "auto"
+   - asyncio_default_fixture_loop_scope = "function"
+   - addopts con coverage: --cov=services --cov=models --cov-fail-under=70
+   - Marcadores personalizados: unit, integration, slow
+
+2. **Sección [tool.ruff]:**
+   - target-version = "py312"
+   - line-length = 100
+   - select: E, F, I, N, W, UP, B, C4, SIM, ASYNC
+   - ignore: E501, SIM117
+   - per-file-ignores para tests y __init__.py
+
+3. **Sección [tool.ruff.format]:**
+   - quote-style = "double"
+   - indent-style = "space"
+
+**Expected Outcome:**
+- pyproject.toml existe con configuración válida
+- pytest reconoce la configuración
+- ruff tiene reglas estrictas configuradas
+
+**Verify:**
+```bash
+pytest --collect-only  # Should work without errors
+ruff check . --select E,W,F --quiet  # Should run without config errors
+```
+
+---
+
+#### Task 3: Create Test Directory Structure
+
+**Complexity:** S (Small)
+**Estimated Time:** 15 minutes
+**Files to Create:**
+- `tests/__init__.py`
+- `tests/unit/__init__.py`
+- `tests/integration/__init__.py`
+- `tests/.gitkeep` (placeholder until tests created)
+
+**Action:**
+Crear estructura de directorios:
+```
+tests/
+├── __init__.py
+├── conftest.py          (Task 4)
+├── unit/
+│   ├── __init__.py
+│   ├── test_vip_service.py      (Task 5)
+│   ├── test_channel_service.py  (Task 6)
+│   ├── test_besito_service.py   (Task 7)
+│   └── test_mission_service.py  (Task 8)
+└── integration/
+    ├── __init__.py
+    ├── test_vip_flow.py
+    └── test_channel_flow.py
+```
+
+**Expected Outcome:**
+- Estructura de directorios tests/ creada
+- Archivos __init__.py presentes en cada subdirectorio
+- Python puede importar desde tests/
+
+**Verify:**
+```bash
+python -c "import tests; print('OK')"
+python -c "from tests.unit import test_vip_service; print('OK')"  # Will fail until Task 5
+```
+
+---
+
+### Wave 2: Test Fixtures and Infrastructure
+
+**Task 4:** Crear fixtures compartidas
+
+---
+
+#### Task 4: Create Test Fixtures (db session, mocked bot)
+
+**Complexity:** M (Medium)
+**Estimated Time:** 45 minutes
+**Files to Read:**
+- @models/database.py
+- @models/models.py (primeras 50 líneas para ver Base)
+
+**Files to Create:**
+- `tests/conftest.py`
+
+**Action:**
+Crear fixtures en tests/conftest.py:
+
+1. **async_engine fixture:**
+   - Crear engine async con SQLite in-memory
+   - Usar StaticPool para evitar problemas de threading
+   - Crear todas las tablas con Base.metadata.create_all
+   - Cleanup: drop_all al finalizar
+
+2. **db_session fixture:**
+   - Crear sesión con transaction rollback
+   - Usar nested transaction para aislamiento
+   - Rollback automático después de cada test
+
+3. **mock_message fixture:**
+   - Crear MagicMock(spec=Message)
+   - Configurar from_user, chat, message_id
+   - Métodos async: answer, reply, delete, edit_text como AsyncMock
+
+4. **mock_callback_query fixture:**
+   - Similar a mock_message
+   - Incluir data y answer()
+
+5. **mock_bot fixture:**
+   - MagicMock(spec=Bot)
+   - Métodos async: send_message, ban_chat_member, etc.
+
+**Expected Outcome:**
+- Fixtures funcionan correctamente
+- Tests pueden usar db_session inyectada
+- Mocks tienen la estructura correcta de aiogram 3.x
+
+**Verify:**
+```bash
+pytest tests/ --collect-only  # Debe listar fixtures disponibles
+pytest tests/conftest.py -v  # Si hay tests de fixtures
+```
+
+---
+
+### Wave 3: Unit Tests for Services
+
+**Tasks 5-8:** Tests unitarios para cada servicio principal
+
+---
+
+#### Task 5: Write Unit Tests for VIPService
+
+**Complexity:** L (Large)
+**Estimated Time:** 90 minutes
+**Files to Read:**
+- @services/vip_service.py
+- @models/models.py (clases Tariff, Token, Subscription, TokenStatus)
+
+**Files to Create:**
+- `tests/unit/test_vip_service.py`
+
+**Action:**
+Crear tests unitarios organizados en clases:
+
+**Clase TestTariffManagement:**
+- test_create_tariff: Crear tarifa y verificar atributos
+- test_get_tariff_by_id: Recuperar tarifa existente
+- test_get_tariff_not_found: Retornar None si no existe
+- test_get_all_tariffs: Listar solo activas o todas
+- test_update_tariff: Modificar atributos
+- test_deactivate_tariff: Desactivar tarifa
+
+**Clase TestTokenOperations:**
+- test_generate_token: Generar token para tarifa
+- test_validate_token_valid: Token válido retorna (token, None)
+- test_validate_token_invalid: Token inexistente retorna (None, "invalid")
+- test_validate_token_expired: Token expirado retorna (None, "expired")
+- test_validate_token_used: Token usado retorna (None, "used")
+
+**Clase TestTokenRedemption:**
+- test_redeem_token_success: Canje exitoso crea suscripción
+- test_redeem_token_already_used: Segundo canje falla
+- test_redeem_token_invalid: Token inválido retorna None
+- test_redeem_token_no_vip_channel: Sin canal VIP configurado falla
+
+**Clase TestSubscriptionManagement:**
+- test_get_subscription: Obtener suscripción activa
+- test_is_user_vip: Verificar estado VIP
+- test_expire_subscription: Marcar suscripción como expirada
+
+**Expected Outcome:**
+- Cobertura ≥70% de vip_service.py
+- Todos los tests pasan
+- Tests son independientes (usando db_session)
+
+**Verify:**
+```bash
+pytest tests/unit/test_vip_service.py -v --cov=services.vip_service --cov-report=term-missing
+```
+
+---
+
+#### Task 6: Write Unit Tests for ChannelService
+
+**Complexity:** M (Medium)
+**Estimated Time:** 60 minutes
+**Files to Read:**
+- @services/channel_service.py
+- @models/models.py (clases Channel, ChannelType, ChannelMembership)
+
+**Files to Create:**
+- `tests/unit/test_channel_service.py`
+
+**Action:**
+Crear tests unitarios:
+
+**Clase TestChannelManagement:**
+- test_create_channel: Crear canal con atributos
+- test_get_channel_by_id: Recuperar canal
+- test_get_channel_by_channel_id: Buscar por channel_id de Telegram
+- test_update_channel: Modificar nombre/descripción
+- test_delete_channel: Eliminar canal
+
+**Clase TestChannelMembership:**
+- test_add_member: Agregar miembro al canal
+- test_remove_member: Remover miembro
+- test_is_member: Verificar membresía
+- test_get_channel_members: Listar miembros
+
+**Clase TestChannelAccess:**
+- test_can_access_free_channel: Verificar acceso canal free
+- test_can_access_vip_channel: Verificar acceso canal VIP
+- test_get_user_channels: Listar canales del usuario
+
+**Expected Outcome:**
+- Cobertura ≥70% de channel_service.py
+- Tests de acceso VIP funcionan correctamente
+
+**Verify:**
+```bash
+pytest tests/unit/test_channel_service.py -v --cov=services.channel_service
+```
+
+---
+
+#### Task 7: Write Unit Tests for BesitoService
+
+**Complexity:** M (Medium)
+**Estimated Time:** 60 minutes
+**Files to Read:**
+- @services/besito_service.py
+- @models/models.py (clases BesitoBalance, BesitoTransaction, TransactionType)
+
+**Files to Create:**
+- `tests/unit/test_besito_service.py`
+
+**Action:**
+Crear tests unitarios:
+
+**Clase TestBalanceManagement:**
+- test_get_or_create_balance: Crear balance nuevo
+- test_get_balance: Obtener saldo existente
+- test_get_balance_zero: Retornar 0 si no existe
+
+**Clase TestTransactions:**
+- test_add_besitos: Agregar besitos al balance
+- test_spend_besitos: Gastar besitos
+- test_spend_insufficient_funds: Fallar si saldo insuficiente
+- test_transfer_besitos: Transferir entre usuarios
+- test_get_transaction_history: Obtener historial
+
+**Clase TestDailyGifts:**
+- test_can_claim_daily_gift: Verificar si puede reclamar
+- test_claim_daily_gift: Reclamar regalo diario
+- test_cannot_claim_twice: No reclamar dos veces mismo día
+
+**Expected Outcome:**
+- Cobertura ≥70% de besito_service.py
+- Tests de transacciones verifican atomicidad
+
+**Verify:**
+```bash
+pytest tests/unit/test_besito_service.py -v --cov=services.besito_service
+```
+
+---
+
+#### Task 8: Write Unit Tests for MissionService
+
+**Complexity:** M (Medium)
+**Estimated Time:** 60 minutes
+**Files to Read:**
+- @services/mission_service.py
+- @models/models.py (clases Mission, MissionProgress, MissionType)
+
+**Files to Create:**
+- `tests/unit/test_mission_service.py`
+
+**Action:**
+Crear tests unitarios:
+
+**Clase TestMissionManagement:**
+- test_create_mission: Crear misión
+- test_get_mission_by_id: Obtener misión
+- test_get_active_missions: Listar misiones activas
+- test_update_mission: Modificar misión
+- test_deactivate_mission: Desactivar
+
+**Clase TestMissionProgress:**
+- test_start_mission: Iniciar progreso
+- test_update_progress: Actualizar progreso
+- test_complete_mission: Completar y verificar recompensa
+- test_get_user_progress: Obtener progreso del usuario
+- test_get_available_missions: Misiones disponibles (no iniciadas)
+
+**Clase TestMissionCompletion:**
+- test_check_completion_criteria: Verificar criterios
+- test_auto_complete: Completar automáticamente
+- test_reward_distribution: Entregar recompensas
+
+**Expected Outcome:**
+- Cobertura ≥70% de mission_service.py
+- Tests de progreso verifican correctamente
+
+**Verify:**
+```bash
+pytest tests/unit/test_mission_service.py -v --cov=services.mission_service
+```
+
+---
+
+### Wave 4: Technical Debt Fixes
+
+**Tasks 9-11:** Refactor de deuda técnica crítica
+
+---
+
+#### Task 9: Implement Context Manager for DB Sessions (Replace __del__)
+
+**Complexity:** L (Large)
+**Estimated Time:** 90 minutes
+**Files to Read:**
+- @models/database.py
+- @services/vip_service.py (verificar uso de __del__)
+- @services/besito_service.py (verificar uso de __del__)
+- @services/channel_service.py (verificar uso de __del__)
+- @services/mission_service.py (verificar uso de __del__)
+
+**Files to Modify:**
+- `models/database.py`
+- `services/vip_service.py`
+- `services/besito_service.py`
+- `services/channel_service.py`
+- `services/mission_service.py`
+- Otros services que usen __del__
+
+**Action:**
+
+**Paso 1: Agregar context manager en models/database.py**
+```python
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+@asynccontextmanager
+async def session_scope():
+    """Context manager para sesiones de base de datos."""
+    session = SessionLocal()
+    try:
+        yield session
+        await session.commit()
+    except:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+```
+
+**Paso 2: Modificar VIPService (y otros services)**
+- Eliminar método `__del__` si existe
+- Modificar `__init__` para aceptar db opcional
+- Agregar soporte para async context manager:
+```python
+class VIPService:
+    def __init__(self, db: Session = None):
+        self.db = db
+        self._owns_session = db is None
+        if self._owns_session:
+            self.db = SessionLocal()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._owns_session and self.db:
+            if exc_type:
+                await self.db.rollback()
+            else:
+                await self.db.commit()
+            await self.db.close()
+```
+
+**Paso 3: Actualizar todos los services**
+- Aplicar mismo patrón a BesitoService, ChannelService, MissionService
+- Buscar todos los services con `__del__` usando grep
+
+**Expected Outcome:**
+- No quedan métodos `__del__` en ningún service
+- Todos los services soportan async context manager
+- Tests pasan con nuevo patrón
+
+**Verify:**
+```bash
+grep -r "__del__" services/  # Debe retornar vacío
+pytest tests/unit/ -v  # Todos los tests pasan
+```
+
+---
+
+#### Task 10: Add SELECT FOR UPDATE to Token Redemption (Fix Race Condition)
+
+**Complexity:** M (Medium)
+**Estimated Time:** 45 minutes
+**Files to Read:**
+- @services/vip_service.py (método redeem_token)
+- @models/models.py (clase Token)
+
+**Files to Modify:**
+- `services/vip_service.py`
+
+**Action:**
+Modificar el método `redeem_token` para usar SELECT FOR UPDATE:
+
+1. **Localizar la query del token:**
+   - Actual: `self.db.query(Token).filter(...).first()`
+   - Nueva: Usar `with_for_update()`
+
+2. **Implementar cambio:**
+```python
+from sqlalchemy import select
+
+async def redeem_token(self, token_code: str, user_id: int) -> Optional[Subscription]:
+    """Canjea un token con protección contra race conditions."""
+    # SELECT FOR UPDATE - bloquea el row hasta completar transacción
+    result = await self.db.execute(
+        select(Token)
+        .where(Token.token_code == token_code)
+        .where(Token.status == TokenStatus.ACTIVE)
+        .with_for_update()  # CRITICAL: Previene race conditions
+    )
+    token = result.scalar_one_or_none()
+
+    if not token:
+        return None
+
+    # ... resto del proceso de canje
+```
+
+3. **Verificar compatibilidad:**
+   - SQLite: soporta FOR UPDATE (aunque menos efectivo que PostgreSQL)
+   - PostgreSQL: soporte completo
+
+4. **Crear test específico:**
+   - test_redeem_token_race_condition: Verificar que no se puede canjear dos veces
+
+**Expected Outcome:**
+- redeem_token usa with_for_update()
+- Test de race condition pasa
+- No hay regresiones en otros tests
+
+**Verify:**
+```bash
+grep -n "with_for_update" services/vip_service.py
+pytest tests/unit/test_vip_service.py::TestTokenRedemption -v
+```
+
+---
+
+#### Task 11: Add Startup Check for Expired Subscriptions
+
+**Complexity:** M (Medium)
+**Estimated Time:** 45 minutes
+**Files to Read:**
+- @bot.py (función on_startup)
+- @services/vip_service.py (métodos de suscripción)
+- @models/models.py (clase Subscription)
+
+**Files to Modify:**
+- `bot.py`
+- `services/vip_service.py` (agregar método)
+
+**Action:**
+
+**Paso 1: Agregar método en VIPService:**
+```python
+async def check_and_expire_subscriptions(self) -> int:
+    """
+    Verifica suscripciones expiradas y las marca como inactivas.
+    Retorna cantidad de suscripciones expiradas.
+    """
+    from datetime import datetime
+    from sqlalchemy import select, update
+
+    now = datetime.utcnow()
+
+    # Buscar suscripciones activas que ya expiraron
+    result = await self.db.execute(
+        select(Subscription)
+        .where(Subscription.is_active == True)
+        .where(Subscription.expires_at < now)
+    )
+    expired = result.scalars().all()
+
+    # Marcar como inactivas
+    for sub in expired:
+        sub.is_active = False
+        # Opcional: Remover del canal VIP
+        # await self.remove_user_from_vip_channel(sub.user_id)
+
+    if expired:
+        await self.db.commit()
+
+    return len(expired)
+```
+
+**Paso 2: Modificar on_startup en bot.py:**
+```python
+async def on_startup(bot: Bot):
+    """Acciones al iniciar el bot"""
+    logger.info("Iniciando Lucien Bot...")
+
+    # ... código existente ...
+
+    # Verificar suscripciones expiradas (SCHED-02)
+    from services.vip_service import VIPService
+    async with VIPService() as vip_service:
+        expired_count = await vip_service.check_and_expire_subscriptions()
+        if expired_count > 0:
+            logger.info(f"Marcadas {expired_count} suscripciones como expiradas")
+
+    # ... resto del código ...
+```
+
+**Paso 3: Crear test:**
+- test_check_expired_subscriptions: Verificar que marca suscripciones vencidas
+
+**Expected Outcome:**
+- Método check_and_expire_subscriptions existe
+- on_startup lo llama al iniciar
+- Suscripciones expiradas se marcan correctamente
+
+**Verify:**
+```bash
+grep -n "check_and_expire_subscriptions" services/vip_service.py bot.py
+pytest tests/unit/test_vip_service.py -k "expire" -v
+```
+
+---
+
+### Wave 5: Integration Tests and Final Verification
+
+**Tasks 12-13:** Tests de integración y verificación final
+
+---
+
+#### Task 12: Run Full Test Suite and Verify Coverage ≥70%
+
+**Complexity:** M (Medium)
+**Estimated Time:** 30 minutes
+**Files to Create:**
+- `tests/integration/test_vip_flow.py`
+- `tests/integration/test_channel_flow.py`
+
+**Action:**
+
+**Paso 1: Crear tests de integración VIP:**
+```python
+# tests/integration/test_vip_flow.py
+@pytest.mark.integration
+class TestVIPFlow:
+    """Flujo completo: Crear tarifa → Generar token → Canjear → Verificar acceso"""
+
+    @pytest.mark.asyncio
+    async def test_complete_vip_activation_flow(self, db_session):
+        """Test end-to-end del flujo VIP"""
+        # Crear tarifa
+        # Generar token
+        # Crear canal VIP
+        # Canjear token
+        # Verificar suscripción activa
+        # Verificar acceso VIP
+```
+
+**Paso 2: Crear tests de integración Canales:**
+```python
+# tests/integration/test_channel_flow.py
+@pytest.mark.integration
+class TestChannelFlow:
+    """Flujo completo de canales"""
+```
+
+**Paso 3: Ejecutar suite completa:**
+```bash
+pytest tests/ --cov=services --cov=models --cov-report=term-missing --cov-report=html
+```
+
+**Paso 4: Verificar métricas:**
+- Cobertura services/ ≥70%
+- Cobertura models/ ≥50%
+- Todos los tests unitarios pasan
+- Todos los tests de integración pasan
+
+**Expected Outcome:**
+- Coverage total ≥70% en services/
+- Reporte HTML generado en htmlcov/
+- Todos los tests pasan
+
+**Verify:**
+```bash
+pytest tests/ --cov=services --cov-fail-under=70 --cov-report=term
+```
+
+---
+
+#### Task 13: Run Ruff Linting and Fix Any Issues
+
+**Complexity:** M (Medium)
+**Estimated Time:** 45 minutes
+**Files to Modify:**
+- Múltiples archivos según errores de linting
+
+**Action:**
+
+**Paso 1: Ejecutar ruff check:**
+```bash
+ruff check . --output-format=full > ruff_report.txt
+```
+
+**Paso 2: Categorizar errores:**
+- Errores de formato (E, W): Auto-fix con `ruff check . --fix`
+- Errores de imports (I): Auto-fix con `ruff check . --select I --fix`
+- Errores complejos (F, B): Revisar manualmente
+
+**Paso 3: Aplicar fixes automáticos:**
+```bash
+ruff check . --fix
+ruff format .
+```
+
+**Paso 4: Revisar errores restantes manualmente:**
+- F401: Imports no usados (verificar antes de eliminar)
+- F841: Variables no usadas
+- B007: Loop control variables no usadas
+- Errores en tests: Considerar añadir a per-file-ignores
+
+**Paso 5: Verificar formato:**
+```bash
+ruff format --check .
+```
+
+**Expected Outcome:**
+- `ruff check .` pasa sin errores
+- `ruff format --check .` pasa sin cambios pendientes
+- Código formateado consistentemente
+
+**Verify:**
+```bash
+ruff check . --quiet && echo "Linting OK"
+ruff format --check . --quiet && echo "Format OK"
+```
+
+---
+
+## Verification Steps
+
+### Criterio 1: Tests unitarios para services principales
+```bash
+pytest tests/unit/test_vip_service.py tests/unit/test_channel_service.py \
+       tests/unit/test_besito_service.py tests/unit/test_mission_service.py -v
+```
+**Éxito:** Todos los tests pasan (status PASSED)
+
+### Criterio 2: Tests de integración
+```bash
+pytest tests/integration/ -v -m integration
+```
+**Éxito:** Flujos VIP y canales funcionan correctamente
+
+### Criterio 3: Configuración ruff
+```bash
+ruff check . --quiet
+ruff format --check . --quiet
+```
+**Éxito:** Sin errores de linting ni formato
+
+### Criterio 4: Context managers (sin __del__)
+```bash
+grep -r "__del__" services/ || echo "No __del__ found - OK"
+```
+**Éxito:** No quedan métodos __del__
+
+### Criterio 5: Startup check suscripciones
+```bash
+grep -n "check_and_expire_subscriptions" bot.py services/vip_service.py
+```
+**Éxito:** Método existe y es llamado en on_startup
+
+### Criterio 6: SELECT FOR UPDATE
+```bash
+grep -n "with_for_update" services/vip_service.py
+```
+**Éxito:** redeem_token usa with_for_update()
+
+### Criterio 7: Cobertura ≥70%
+```bash
+pytest tests/ --cov=services --cov-fail-under=70 --cov-report=term
+```
+**Éxito:** Coverage report muestra ≥70% y comando retorna 0
+
+---
+
+## Rollback Plan
+
+### Si hay problemas con los tests:
+1. Revisir a versión anterior de requirements.txt (sin dependencias de testing)
+2. Eliminar directorio tests/
+3. Continuar sin tests (no crítico para operación)
+
+### Si hay problemas con el refactor de sessions:
+1. Restaurar services/ desde git
+2. Mantener tests usando patrón sync existente
+3. Deferir migración async a fase posterior
+
+### Si hay problemas con SELECT FOR UPDATE:
+1. Revertir cambio en vip_service.py
+2. Documentar race condition conocida
+3. Implementar bloqueo a nivel aplicación (mutex) como alternativa
+
+### Si ruff introduce demasiados cambios:
+1. Ajustar reglas en pyproject.toml (más permisivas)
+2. Ejecutar solo en archivos nuevos/modificados
+3. Deferir linting completo a fase de cleanup
+
+---
+
+## Dependencies Between Tasks
+
+```
+Wave 1 (Infra):
+  Task 1 → Task 2 → Task 3
+
+Wave 2 (Fixtures):
+  Task 4 (depends on Task 3)
+
+Wave 3 (Unit Tests):
+  Task 5 → Task 6 → Task 7 → Task 8
+  (all depend on Task 4)
+
+Wave 4 (Tech Debt):
+  Task 9 (modifica services, puede afectar tests)
+  Task 10 (depends on Task 9 para async session)
+  Task 11 (depends on Task 9)
+
+Wave 5 (Verification):
+  Task 12 (depends on Tasks 5-8, 10-11)
+  Task 13 (depends on all code changes)
+```
+
+**Nota:** Task 9 (context managers) es el más riesgoso. Si falla, se puede:
+1. Saltear y mantener __del__ (deuda técnica permanece)
+2. O hacer rollback completo de la fase
+
+---
+
+## Output
+
+After completion, create `.planning/phases/08-testing-and-technical-debt/08-SUMMARY.md`
