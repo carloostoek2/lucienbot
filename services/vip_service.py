@@ -6,7 +6,7 @@ Gestiona la lógica de tokens, tarifas y suscripciones VIP.
 from datetime import datetime, timedelta
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from models.models import Tariff, Token, TokenStatus, Subscription, Channel, User
+from models.models import Tariff, Token, TokenStatus, Subscription, Channel, ChannelType, User
 from models.database import SessionLocal
 
 
@@ -238,6 +238,13 @@ class VIPService:
         """Verifica si un usuario tiene suscripción VIP activa"""
         subscription = self.get_user_subscription(user_id, channel_id)
         return subscription is not None
+
+    def get_vip_channel(self) -> Optional[Channel]:
+        """Obtiene el canal VIP activo"""
+        return self.db.query(Channel).filter(
+            Channel.channel_type == ChannelType.VIP,
+            Channel.is_active == True
+        ).first()
     
     def __del__(self):
         """Cierra la sesión de base de datos"""

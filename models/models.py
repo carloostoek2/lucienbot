@@ -63,7 +63,10 @@ class Channel(Base):
     wait_time_minutes = Column(Integer, default=3)  # Tiempo de espera en minutos
     welcome_message = Column(Text, nullable=True)
     approval_message = Column(Text, nullable=True)
-    
+
+    # Link de invitación del canal (para VIP, se generan links de un solo uso)
+    invite_link = Column(String(500), nullable=True)
+
     # Relaciones
     subscriptions = relationship("Subscription", back_populates="channel")
     pending_requests = relationship("PendingRequest", back_populates="channel", cascade="all, delete-orphan")

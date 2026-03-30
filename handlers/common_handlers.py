@@ -37,7 +37,7 @@ async def cmd_start(message: Message):
     if args:
         vip_service = VIPService()
         subscription = vip_service.redeem_token(args, user.id)
-        
+
         if subscription:
             # Token válido - activar VIP
             await message.answer(
@@ -47,12 +47,34 @@ async def cmd_start(message: Message):
                 ),
                 parse_mode="HTML"
             )
-            # Enviar enlace del canal VIP
-            await message.answer(
-                f"🔗 <b>Su enlace de acceso exclusivo:</b>\n"
-                f"<i>Diana le espera en el círculo íntimo...</i>",
-                parse_mode="HTML"
-            )
+
+            # Generar enlace de un solo uso para el canal VIP
+            vip_channel = vip_service.get_vip_channel()
+            if vip_channel:
+                try:
+                    # Crear link de invitación de un solo uso
+                    invite_link = await message.bot.create_chat_invite_link(
+                        chat_id=vip_channel.channel_id,
+                        name=f"VIP {user.id}",
+                        creates_join_request=False,
+                        member_limit=1  # Link de un solo uso
+                    )
+                    await message.answer(
+                        f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
+                        f"{invite_link.invite_link}\n\n"
+                        f"<i>Diana le espera en el círculo íntimo...</i>",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Error creando invite link: {e}")
+                    # Si falla, usar el link guardado del canal
+                    if vip_channel.invite_link:
+                        await message.answer(
+                            f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
+                            f"{vip_channel.invite_link}\n\n"
+                            f"<i>Diana le espera en el círculo íntimo...</i>",
+                            parse_mode="HTML"
+                        )
             return
         else:
             # Validar token para mensaje específico
