@@ -1,7 +1,7 @@
 # Roadmap: Lucien Bot
 
 **Created:** 2026-03-30
-**Phases completed:** 7 of 9
+**Phases completed:** 8 of 10
 **Milestone:** v1.0 — Core bot functionality
 
 ## Summary
@@ -15,6 +15,7 @@
 | 5 | Misiones | Misiones, progreso, recompensas | MISS-01, MISS-02, MISS-03, MISS-04, ADMIN-03 | Visitantes completan misiones y reciben recompensas |
 | 6 | Tienda + Promociones + Narrativa | Compra de paquetes, códigos, historias interactivas | STOR-01–04, PROM-01–03, NARR-01–04, ADMIN-04, ADMIN-05 | Store, promociones y narrativa funcionando |
 | 7 | **VIP Invite Links Dinámicos** ✓ | Links de invitación de un solo uso para canal VIP | VIP-07 | Un token = un link de un solo uso generado dinámicamente |
+| 07.1 | **Integrar Alembic** ✓ | Sistema de migraciones Alembic reemplazar create_all() | — | Alembic gestiona esquema, Railway ejecuta upgrade |
 | 8 | Testing & Technical Debt | Tests, linting, manejo de sessiones, refactor handlers | TEST-01–03, SCHED-02, SEC-03 | Cobertura de tests y código más mantenible |
 | 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | SEC-01, SEC-02, BACK-01, SCHED-01, ANLY-01–02 | Bot listo para producción a escala |
 
@@ -93,6 +94,24 @@
 3. Fallback a link estático si la API de Telegram falla
 4. Campo invite_link en modelo Channel populado con link default
 5. Invites sin usar no generan conflictos (cada token = link único)
+
+### Phase 07.1: Integrar completamente sistema de migraciones alembic ✓
+
+**Goal:** Replace `Base.metadata.create_all()` startup schema creation with proper Alembic migration system
+**Requirements**: Alembic integration
+**Depends on:** Phase 7
+**Status:** Complete (07.1-01 committed: 3 commits)
+**Success criteria:**
+1. `alembic.ini` and `alembic/` directory configured with `env.py` pointing to `models.database.Base`
+2. Baseline migration capturing all 32 existing tables + sync migration for schema drift
+3. SQLite dev DB stamped to HEAD (c25b0020dcc5 -> 53f8f3496f23)
+4. `alembic==1.12.1` in `requirements.txt`
+5. `init_db()` in `models/database.py` updated to DEPRECATED no-op
+6. Standalone migration archived to `migrations/archive/`
+7. `railway.toml` updated to run `alembic upgrade head && python bot.py`
+8. `migrations/README.txt` created
+
+**Deviation:** 2 revisions generated instead of 1 (DB had 3 missing columns/constraints from models)
 
 ### Phase 8: Testing & Technical Debt
 **Goal:** Tests automatizados, configuración de linting y refactor de deuda técnica
