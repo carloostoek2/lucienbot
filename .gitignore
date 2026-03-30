@@ -35,6 +35,8 @@ ENV/
 # Configuración local
 .env
 .env.local
+.claude/*.local.md
+.claude/worktrees/
 
 # Base de datos
 *.db

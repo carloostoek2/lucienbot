@@ -25,6 +25,12 @@ class PromotionService:
         self._owns_session = db is None
         self.db = db or SessionLocal()
 
+    def _get_db(self) -> Session:
+        """Obtiene la sesión de base de datos activa."""
+        if self.db is None:
+            self.db = SessionLocal()
+        return self.db
+
     def close(self):
         """Cierra la sesion si fue creada por este servicio"""
         if self._owns_session and self.db:
@@ -48,6 +54,7 @@ class PromotionService:
             start_date: Fecha de inicio (None = inmediato)
             end_date: Fecha de expiracion (None = sin expiracion)
         """
+        db = self._get_db()
         promotion = Promotion(
             name=name,
             description=description,
@@ -59,27 +66,30 @@ class PromotionService:
             status=PromotionStatus.ACTIVE,
             is_active=True
         )
-        self.db.add(promotion)
-        self.db.commit()
-        self.db.refresh(promotion)
+        db.add(promotion)
+        db.commit()
+        db.refresh(promotion)
         logger.info(f"Promocion creada: {name} (ID: {promotion.id}) - Precio: {promotion.price_display}")
         return promotion
 
     def get_promotion(self, promotion_id: int) -> Optional[Promotion]:
         """Obtiene una promocion por ID"""
-        return self.db.query(Promotion).filter(Promotion.id == promotion_id).first()
+        db = self._get_db()
+        return db.query(Promotion).filter(Promotion.id == promotion_id).first()
 
     def get_all_promotions(self, active_only: bool = False) -> List[Promotion]:
         """Obtiene todas las promociones"""
-        query = self.db.query(Promotion)
+        db = self._get_db()
+        query = db.query(Promotion)
         if active_only:
             query = query.filter(Promotion.is_active == True)
         return query.order_by(desc(Promotion.created_at)).all()
 
     def get_available_promotions(self) -> List[Promotion]:
         """Obtiene promociones disponibles para los usuarios"""
+        db = self._get_db()
         now = datetime.now(timezone.utc)
-        return self.db.query(Promotion).filter(
+        return db.query(Promotion).filter(
             Promotion.is_active == True,
             Promotion.status == PromotionStatus.ACTIVE,
             and_(
@@ -92,6 +102,7 @@ class PromotionService:
 
     def update_promotion(self, promotion_id: int, **kwargs) -> bool:
         """Actualiza una promocion"""
+        db = self._get_db()
         promotion = self.get_promotion(promotion_id)
         if not promotion:
             return False
@@ -102,7 +113,7 @@ class PromotionService:
             if field in allowed_fields and hasattr(promotion, field):
                 setattr(promotion, field, value)
 
-        self.db.commit()
+        db.commit()
         logger.info(f"Promocion {promotion_id} actualizada")
         return True
 
@@ -122,7 +133,8 @@ class PromotionService:
 
     def is_user_blocked(self, user_id: int) -> bool:
         """Verifica si un usuario esta bloqueado del sistema de promociones"""
-        blocked = self.db.query(BlockedPromotionUser).filter(
+        db = self._get_db()
+        blocked = db.query(BlockedPromotionUser).filter(
             BlockedPromotionUser.user_id == user_id
         ).first()
 
@@ -133,21 +145,23 @@ class PromotionService:
         if not blocked.is_permanent and blocked.expires_at:
             if datetime.now(timezone.utc) > blocked.expires_at:
                 # Desbloquear automaticamente
-                self.db.delete(blocked)
-                self.db.commit()
+                db.delete(blocked)
+                db.commit()
                 return False
 
         return True
 
     def get_blocked_user_info(self, user_id: int) -> Optional[BlockedPromotionUser]:
         """Obtiene informacion de un usuario bloqueado"""
-        return self.db.query(BlockedPromotionUser).filter(
+        db = self._get_db()
+        return db.query(BlockedPromotionUser).filter(
             BlockedPromotionUser.user_id == user_id
         ).first()
 
     def has_user_expressed_interest(self, user_id: int, promotion_id: int) -> bool:
         """Verifica si un usuario ya expreso interes en una promocion"""
-        existing = self.db.query(PromotionInterest).filter(
+        db = self._get_db()
+        existing = db.query(PromotionInterest).filter(
             PromotionInterest.user_id == user_id,
             PromotionInterest.promotion_id == promotion_id
         ).first()
@@ -155,7 +169,8 @@ class PromotionService:
 
     def get_user_interest(self, user_id: int, promotion_id: int) -> Optional[PromotionInterest]:
         """Obtiene el registro de interes de un usuario en una promocion"""
-        return self.db.query(PromotionInterest).filter(
+        db = self._get_db()
+        return db.query(PromotionInterest).filter(
             PromotionInterest.user_id == user_id,
             PromotionInterest.promotion_id == promotion_id
         ).first()
@@ -168,6 +183,7 @@ class PromotionService:
 
         Retorna: (exito: bool, mensaje: str, interest: PromotionInterest)
         """
+        db = self._get_db()
         # Verificar si el usuario esta bloqueado
         if self.is_user_blocked(user_id):
             blocked_info = self.get_blocked_user_info(user_id)
@@ -195,22 +211,24 @@ class PromotionService:
             promotion_id=promotion_id,
             status=InterestStatus.PENDING
         )
-        self.db.add(interest)
-        self.db.commit()
-        self.db.refresh(interest)
+        db.add(interest)
+        db.commit()
+        db.refresh(interest)
 
         logger.info(f"Usuario {user_id} expreso interes en promocion {promotion_id}")
         return True, "Interes registrado correctamente", interest
 
     def get_interest(self, interest_id: int) -> Optional[PromotionInterest]:
         """Obtiene un registro de interes por ID"""
-        return self.db.query(PromotionInterest).filter(
+        db = self._get_db()
+        return db.query(PromotionInterest).filter(
             PromotionInterest.id == interest_id
         ).first()
 
     def get_pending_interests(self, promotion_id: int = None) -> List[PromotionInterest]:
         """Obtiene intereses pendientes, opcionalmente filtrados por promocion"""
-        query = self.db.query(PromotionInterest).filter(
+        db = self._get_db()
+        query = db.query(PromotionInterest).filter(
             PromotionInterest.status == InterestStatus.PENDING
         )
         if promotion_id:
@@ -219,7 +237,8 @@ class PromotionService:
 
     def get_all_interests(self, user_id: int = None, status: InterestStatus = None) -> List[PromotionInterest]:
         """Obtiene todos los intereses con filtros opcionales"""
-        query = self.db.query(PromotionInterest)
+        db = self._get_db()
+        query = db.query(PromotionInterest)
         if user_id:
             query = query.filter(PromotionInterest.user_id == user_id)
         if status:
@@ -228,6 +247,7 @@ class PromotionService:
 
     def mark_interest_attended(self, interest_id: int, admin_id: int) -> bool:
         """Marca un interes como atendido"""
+        db = self._get_db()
         interest = self.get_interest(interest_id)
         if not interest:
             return False
@@ -235,7 +255,7 @@ class PromotionService:
         interest.status = InterestStatus.ATTENDED
         interest.attended_at = datetime.now(timezone.utc)
         interest.attended_by = admin_id
-        self.db.commit()
+        db.commit()
 
         logger.info(f"Interes {interest_id} marcado como atendido por admin {admin_id}")
         return True
@@ -257,8 +277,9 @@ class PromotionService:
             is_permanent: Si el bloqueo es permanente
             expires_at: Fecha de expiracion del bloqueo (si no es permanente)
         """
+        db = self._get_db()
         # Verificar si ya esta bloqueado
-        existing = self.db.query(BlockedPromotionUser).filter(
+        existing = db.query(BlockedPromotionUser).filter(
             BlockedPromotionUser.user_id == user_id
         ).first()
 
@@ -269,7 +290,7 @@ class PromotionService:
             existing.expires_at = expires_at
             existing.blocked_by = blocked_by
             existing.blocked_at = datetime.now(timezone.utc)
-            self.db.commit()
+            db.commit()
             logger.info(f"Bloqueo actualizado para usuario {user_id}")
             return existing
 
@@ -284,10 +305,10 @@ class PromotionService:
             is_permanent=is_permanent,
             expires_at=expires_at
         )
-        self.db.add(blocked)
+        db.add(blocked)
 
         # Tambien actualizar intereses pendientes del usuario a bloqueados
-        pending_interests = self.db.query(PromotionInterest).filter(
+        pending_interests = db.query(PromotionInterest).filter(
             PromotionInterest.user_id == user_id,
             PromotionInterest.status == InterestStatus.PENDING
         ).all()
@@ -295,26 +316,28 @@ class PromotionService:
         for interest in pending_interests:
             interest.status = InterestStatus.BLOCKED
 
-        self.db.commit()
+        db.commit()
         logger.info(f"Usuario {user_id} bloqueado del sistema de promociones")
         return blocked
 
     def unblock_user(self, user_id: int) -> bool:
         """Desbloquea a un usuario"""
-        blocked = self.db.query(BlockedPromotionUser).filter(
+        db = self._get_db()
+        blocked = db.query(BlockedPromotionUser).filter(
             BlockedPromotionUser.user_id == user_id
         ).first()
 
         if blocked:
-            self.db.delete(blocked)
-            self.db.commit()
+            db.delete(blocked)
+            db.commit()
             logger.info(f"Usuario {user_id} desbloqueado")
             return True
         return False
 
     def get_blocked_users(self) -> List[BlockedPromotionUser]:
         """Obtiene todos los usuarios bloqueados"""
-        return self.db.query(BlockedPromotionUser).order_by(
+        db = self._get_db()
+        return db.query(BlockedPromotionUser).order_by(
             desc(BlockedPromotionUser.blocked_at)
         ).all()
 
@@ -322,15 +345,16 @@ class PromotionService:
 
     def get_promotion_stats(self, promotion_id: int = None) -> dict:
         """Obtiene estadisticas de promociones"""
+        db = self._get_db()
         # Estadisticas generales
-        total_promotions = self.db.query(Promotion).filter(
+        total_promotions = db.query(Promotion).filter(
             Promotion.is_active == True
         ).count()
 
         active_promotions = len(self.get_available_promotions())
 
         # Estadisticas de intereses
-        query_interests = self.db.query(PromotionInterest)
+        query_interests = db.query(PromotionInterest)
         if promotion_id:
             query_interests = query_interests.filter(
                 PromotionInterest.promotion_id == promotion_id
@@ -345,7 +369,7 @@ class PromotionService:
         ).count()
 
         # Usuarios bloqueados
-        blocked_count = self.db.query(BlockedPromotionUser).count()
+        blocked_count = db.query(BlockedPromotionUser).count()
 
         return {
             'total_promotions': total_promotions,
@@ -358,10 +382,7 @@ class PromotionService:
 
     def get_user_interest_history(self, user_id: int) -> List[PromotionInterest]:
         """Obtiene el historial de intereses de un usuario"""
-        return self.db.query(PromotionInterest).filter(
+        db = self._get_db()
+        return db.query(PromotionInterest).filter(
             PromotionInterest.user_id == user_id
         ).order_by(desc(PromotionInterest.created_at)).all()
-
-    def __del__(self):
-        """Cierra la sesion de base de datos (fallback)"""
-        self.close()
