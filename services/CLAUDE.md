@@ -4,21 +4,22 @@ Lógica de negocio por dominio. Un service = un dominio (no fragmentar).
 
 ## Servicios Disponibles
 
-| Service | Dominio | Responsabilidad |
-|---------|---------|----------------|
-| [besito_service.py](besito_service.py) | Gamificación | Puntos, transacciones, historial |
-| [daily_gift_service.py](daily_gift_service.py) | Gamificación | Regalo diario |
-| [mission_service.py](mission_service.py) | Missions | Tareas, progreso, completado |
-| [reward_service.py](reward_service.py) | Missions | Recompensas |
-| [store_service.py](store_service.py) | Store | Productos, compras |
-| [package_service.py](package_service.py) | Store | Paquetes de contenido |
-| [promotion_service.py](promotion_service.py) | Promotions | Promociones, intereses |
-| [vip_service.py](vip_service.py) | VIP | Membresías exclusivas |
-| [story_service.py](story_service.py) | Narrative | Nodos, arquetipos, elección |
-| [user_service.py](user_service.py) | Users | Perfiles de usuario |
-| [channel_service.py](channel_service.py) | Channels | Gestión de canales |
-| [broadcast_service.py](broadcast_service.py) | Broadcast | Difusión masiva |
-| [scheduler_service.py](scheduler_service.py) | System | Tareas programadas |
+<!-- AUTO:SERVICES -->
+| Service | Dominio | Archivo | Métodos |
+|---------|---------|---------|--------|
+| `ChannelService` | Channels | `channel_service.py` | close, create_channel, get_channel_by_id, get_channel_by_db_id, get_all_channels, +13 más |
+| `VIPService` | VIP | `vip_service.py` | close, create_tariff, get_tariff, get_all_tariffs, update_tariff, +18 más |
+| `UserService` | Users | `user_service.py` | create_user, get_user, get_or_create_user, get_all_users, get_admins, +4 más |
+| `SchedulerService` | System | `scheduler_service.py` | start, stop |
+| `BesitoService` | Gamificación | `besito_service.py` | close, get_or_create_balance, get_balance, get_balance_with_stats, credit_besitos, +6 más |
+| `BroadcastService` | Broadcast | `broadcast_service.py` | create_reaction_emoji, get_reaction_emoji, get_reaction_emoji_by_emoji, get_all_emojis, update_emoji_value, +12 más |
+| `DailyGiftService` | Gamificación | `daily_gift_service.py` | get_config, update_config, is_active, get_gift_amount, get_last_claim, +5 más |
+| `PackageService` | Store | `package_service.py` | create_package, add_file_to_package, get_package, get_all_packages, get_available_packages_for_store, +11 más |
+| `MissionService` | Missions | `mission_service.py` | close, create_mission, get_mission, get_all_missions, get_available_missions, +10 más |
+| `RewardService` | Missions | `reward_service.py` | create_reward_besitos, create_reward_package, create_reward_vip, get_reward, get_all_rewards, +7 más |
+| `StoreService` | Store | `store_service.py` | close, create_product, get_product, get_all_products, get_available_products, +15 más |
+
+
 
 ## Reglas de Services
 
@@ -33,11 +34,9 @@ Lógica de negocio por dominio. Un service = un dominio (no fragmentar).
 
 Los services NO acceden a DB directamente. Usan models:
 
-```python
-from models import User, BesitoTransaction
+`from models import User, BesitoTransaction
 
 # Correcto
 user = await session.get(User, user_id)
 # Incorrecto
-await session.execute(text("SELECT * FROM users"))
-```
+await session.execute(text("SELECT * FROM users"))`

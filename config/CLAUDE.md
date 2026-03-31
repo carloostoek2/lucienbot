@@ -3,46 +3,51 @@
 Configuración global del bot.
 
 ## Archivos
-- [settings.py](settings.py) - Configuración y variables de entorno
+- `settings.py` — Tres dataclasses: `BotConfig`, `MessagesConfig`, `RateLimitConfig`
 
-## Variables de Entorno
-
-```bash
-# Token del Bot de Telegram
-BOT_TOKEN=your_bot_token_here
-
-# IDs de administradores (separados por comas)
-ADMIN_IDS=123456789,987654321
-
-# Base de datos
-DATABASE_URL=sqlite:///lucien_bot.db
-# PostgreSQL para producción:
-# DATABASE_URL=postgresql://user:pass@host:5432/dbname
-
-# Zona horaria
-TIMEZONE=America/Mexico_City
-
-# Username de la creadora
-CREATOR_USERNAME=dianita
-
-# Canales
-VIP_CHANNEL_ID=@divan_de_diana
-FREE_CHANNEL_ID=@senorita_kinky_free
+## BotConfig
+```python
+TOKEN: str                      # Bot token de @BotFather
+ADMIN_IDS: list[int]            # IDs de Custodios (parseados de CSV env var)
+DATABASE_URL: str               # sqlite:///... (dev) o postgresql://... (prod)
+TIMEZONE: str                   # America/Mexico_City
+CREATOR_USERNAME: str            # Username de Diana (sin @) para botón de contacto
 ```
+
+## RateLimitConfig
+```python
+RATE_LIMIT_RATE: int = 5        # Requests por ventana
+RATE_LIMIT_PERIOD: float = 10.0  # Ventana en segundos
+ADMIN_BYPASS: bool = True      # Custodios ignoran rate limiting
+```
+
+## FSM Storage — Dev vs Prod
+
+```python
+# bot.py
+if os.getenv("REDIS_URL"):
+    storage = RedisStorage(Redis.from_url(os.getenv("REDIS_URL")),
+                           key_builder=DefaultKeyBuilder(with_bot_id=True))
+else:
+    storage = MemoryStorage()
+```
+
+| Variable | Storage | Uso |
+|----------|---------|-----|
+| Sin `REDIS_URL` | `MemoryStorage` | Desarrollo local |
+| Con `REDIS_URL` | `RedisStorage` | Producción (FSM persistente) |
 
 ## Acceso a Config
 ```python
-from config.settings import settings
+from config.settings import bot_config, rate_limit_config, messages_config
 
-# Uso
-bot_token = settings.BOT_TOKEN
-admin_ids = settings.ADMIN_IDS
+bot_config.TOKEN
+bot_config.ADMIN_IDS
+rate_limit_config.RATE_LIMIT_RATE
+messages_config.WELCOME_FREE
 ```
 
 ## Reglas
 - **NUNCA** hardcodear tokens o IDs
 - Usar variables de entorno siempre
-- No subir .env a git
-
-## railway.toml
-Configuración de despliegue en Railway.
+- No subir `.env` a git

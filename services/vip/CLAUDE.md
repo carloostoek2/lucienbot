@@ -1,38 +1,71 @@
 # VIP Domain
 
-Membresías exclusivas y acceso a contenido VIP.
+Membresías exclusivas y acceso a contenido VIP via tokens de un solo uso.
 
 ## Services
-- [vip_service.py](../vip_service.py) - Gestión de membresías
+- `vip_service.py` — Gestión de membresías
 
 ## Handlers
-- [vip_handlers.py](../../handlers/vip_handlers.py) - Gestión VIP
+- `vip_handlers.py` — Admin: creación de tarifas y tokens
 
-## Modelos
-- `User.vip_expiry` - Fecha de expiración VIP
-- `VIPSubscriber` - Suscriptores VIP (si existe tabla separada)
+## Modelos clave
+- `Tariff` — Plan de precio/duración (ej: "1 mes VIP", $299, 30 días)
+- `Token` — Código único, un solo uso, expira. Estados: ACTIVE / USED / EXPIRED
+- `Subscription` — Suscripción activa de un usuario. Vinculada a un Token y un Channel
+
+## Flujo VIP (Token-based)
+
+```
+Admin crea Tarifa
+    → Admin genera Token
+    → Admin comparte Token con visitante
+    → Visitante usa /start → introduce Token
+    → VIPService.validate_token() + redeem_token()
+    → Se crea Subscription activa
+    → Se envía invite link al canal VIP
+    → Se banpea al canal VIP
+```
 
 ## VIPService API
 ```python
-- add_vip_user(user_id, duration_days)  # Agregar VIP
-- remove_vip_user(user_id)              # Remover VIP
-- is_user_vip(user_id)                   # Verificar VIP
-- get_vip_users()                        # Listar VIPs
-- extend_vip(user_id, days)              # Extender VIP
+# Tarifas
+create_tariff(name, duration_days, price) -> Tariff
+get_tariff(tariff_id) -> Tariff
+get_all_tariffs(active_only=True) -> list[Tariff]
+update_tariff(tariff_id, **kwargs) -> bool
+deactivate_tariff(tariff_id) -> bool
+
+# Tokens
+generate_token(tariff_id, expires_in_days) -> Token
+get_token_by_code(token_code) -> Token
+get_all_tokens(status=None) -> list[Token]
+validate_token(token_code) -> tuple  # (success, error_message)
+redeem_token(token_code, user_id) -> Subscription
+revoke_token(token_id) -> bool
+
+# Suscripciones
+get_user_subscription(user_id, channel_id=None) -> Subscription
+get_active_subscriptions(channel_id=None) -> list[Subscription]
+get_expiring_subscriptions(hours=24) -> list[Subscription]
+expire_subscription(subscription_id) -> bool
+is_user_vip(user_id, channel_id=None) -> bool
+get_vip_channel() -> Channel
 ```
 
 ## Reglas de Negocio
-- **Solo admins** pueden asignar/quitar VIP
--VIP = acceso a contenido exclusivo
-- Verificar VIP al acceder a contenido restringido
-- Fecha de expiración para renovaciones automáticas
+- Token = un solo uso, no reutilizable
+- Subscription tiene fecha de expiración → scheduler la renueva o expira
+- Expiración: scheduler bans/unbans del canal VIP
+- Recordatorio 24h antes de expirar
+- **Solo admins** crean tarifas y tokens
 
-## Canales
-- VIP_CHANNEL_ID - Canal exclusivo VIP
-- FREE_CHANNEL_ID - Canal gratuito
+## Notas técnicas
+- Canales VIP se gestionan via `ChannelService`, NO son env vars
+- No existe "agregar/quitar VIP directo" — siempre via Token → Subscription
+- `is_user_vip()` verifica suscripción activa contra el canal
 
 ## Antes de Implementar
 1. Lee [@architecture.md](../../architecture.md)
 2. Lee [@rules.md](../../rules.md)
-3. Verifica métodos existentes en vip_service.py
-4. Usar middleware para verificar VIP en contenido restringido
+3. Verifica métodos en `vip_service.py` antes de asumir que existen
+4. Si necesitas dar VIP directo a un usuario → generar y redimir un token

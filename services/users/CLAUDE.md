@@ -11,10 +11,11 @@ Gestión de perfiles de usuarios.
 
 ## Modelos
 - `User` - Usuario completo
-  - `id`, `telegram_id`
-  - `username`, `full_name`
-  - `besitos_balance`
-  - `vip_expiry`
+  - `id`, `telegram_id`, `username`, `full_name`
+  - `role` (ADMIN/USER)
+  - `is_active`
+  - `besitos_balance` — relación con `BesitoBalance` (saldo real está ahí, no en User)
+  - `vip_expiry` — legacy (VIP real ahora via `Subscription`)
   - `created_at`, `updated_at`
 
 ## UserService API

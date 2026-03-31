@@ -11,8 +11,8 @@ Sistema de puntos (besitos), niveles y recompensas.
 - [gamification_admin_handlers.py](../../handlers/gamification_admin_handlers.py) - Admin
 
 ## Modelos
-- `User.besitos_balance` - Saldo de besitos
-- `BesitoTransaction` - Historial de transacciones
+- `BesitoBalance` - Saldo por usuario (NO `User.besitos_balance`)
+- `BesitoTransaction` - Historial de transacciones (inmutable)
 
 ## BesitoService API
 ```python
