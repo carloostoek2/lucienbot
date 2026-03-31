@@ -78,7 +78,7 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ### Infrastructure
 
-- **BACK-01**: Sistema de backup automático de base de datos
+- [x] **BACK-01**: Sistema de backup automático de base de datos
 - **BACK-02**: Restauración desde backup funcional
 - **SCHED-01**: Job queue persistente para scheduler (取代 polling 30s)
 - **SCHED-02**: Verificación de suscripciones expiradas al iniciar bot
