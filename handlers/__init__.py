@@ -22,6 +22,8 @@ from .promotion_admin_handlers import router as promotion_admin_router
 # Fase 6 - Narrativa
 from .story_user_handlers import router as story_user_router
 from .story_admin_handlers import router as story_admin_router
+# Phase 9 - Analytics
+from .analytics_handlers import router as analytics_router
 
 __all__ = [
     'common_router',
@@ -47,5 +49,7 @@ __all__ = [
     'promotion_admin_router',
     # Fase 6 - Narrativa
     'story_user_router',
-    'story_admin_router'
+    'story_admin_router',
+    # Phase 9 - Analytics
+    'analytics_router'
 ]

@@ -5,11 +5,15 @@ Bot de Telegram para gestión de canales Free y VIP.
 """
 import asyncio
 import logging
+import os
 import sys
+from datetime import timedelta
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
+from redis.asyncio import Redis
 
 from config.settings import bot_config
 from models.database import init_db
@@ -38,7 +42,9 @@ from handlers import (
     promotion_admin_router,
     # Fase 6 - Narrativa
     story_user_router,
-    story_admin_router
+    story_admin_router,
+    # Phase 9 - Analytics
+    analytics_router,
 )
 
 # Configurar logging
@@ -51,6 +57,32 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+def create_storage():
+    """
+    Create FSM storage based on environment.
+
+    Uses RedisStorage when REDIS_URL is set (production/Redis available).
+    Falls back to MemoryStorage for local dev without Redis.
+    """
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        try:
+            redis_client = Redis.from_url(redis_url)
+            storage = RedisStorage(
+                redis=redis_client,
+                key_builder=DefaultKeyBuilder(with_bot_id=True),
+                state_ttl=timedelta(days=1),
+                data_ttl=timedelta(days=1),
+            )
+            logger.info("FSM storage: RedisStorage (state will persist across restarts)")
+            return storage
+        except Exception as e:
+            logger.warning(f"Redis connection failed ({e}) -- falling back to MemoryStorage")
+    else:
+        logger.warning("REDIS_URL not set -- FSM state will not persist across restarts (using MemoryStorage)")
+    return MemoryStorage()
 
 
 from services.vip_service import VIPService
@@ -178,9 +210,14 @@ async def main():
     
     # Crear bot y dispatcher
     bot = Bot(token=bot_config.TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    storage = MemoryStorage()
+    storage = create_storage()
     dp = Dispatcher(storage=storage)
-    
+
+    # Rate limiting middleware - applied globally before routers
+    from handlers.rate_limit_middleware import ThrottlingMiddleware
+    dp.message.middleware(ThrottlingMiddleware())
+    dp.callback_query.middleware(ThrottlingMiddleware())
+
     # Registrar routers
     dp.include_router(common_router)
     dp.include_router(admin_router)
@@ -206,6 +243,8 @@ async def main():
     # Fase 6 - Narrativa
     dp.include_router(story_user_router)
     dp.include_router(story_admin_router)
+    # Phase 9 - Analytics
+    dp.include_router(analytics_router)
     
     # Configurar eventos de startup/shutdown
     dp.startup.register(on_startup)

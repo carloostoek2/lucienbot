@@ -28,19 +28,28 @@ class MessagesConfig:
     # Canal Free
     WELCOME_FREE: str = "Bienvenido al vestíbulo. Su solicitud ha sido registrada..."
     ACCESS_APPROVED_FREE: str = "Su acceso ha sido concedido. Diana lo espera."
-    
+
     # Canal VIP
     WELCOME_VIP: str = "Bienvenido al círculo exclusivo."
     VIP_ACTIVATED: str = "Su membresía ha sido activada."
     RENEWAL_REMINDER: str = "Su acceso exclusivo vence mañana..."
     VIP_EXPIRED: str = "Su tiempo en el círculo íntimo ha concluido."
-    
+
     # Errores
     TOKEN_INVALID: str = "El enlace proporcionado no es válido."
     TOKEN_USED: str = "Este enlace ya ha sido utilizado."
     TOKEN_EXPIRED: str = "Este enlace ha expirado."
 
 
+@dataclass
+class RateLimitConfig:
+    """Configuración de rate limiting"""
+    RATE_LIMIT_RATE: int = 5        # max requests per window
+    RATE_LIMIT_PERIOD: float = 10.0 # seconds window
+    ADMIN_BYPASS: bool = True       # skip throttling for Custodios
+
+
 # Instancias globales
 bot_config = BotConfig()
 messages_config = MessagesConfig()
+rate_limit_config = RateLimitConfig()

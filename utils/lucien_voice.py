@@ -344,6 +344,54 @@ que aguardaban en los vestíbulos.</i>
 <i>Los nuevos visitantes experimentarán esta espera
 antes de acceder a los dominios de Diana.</i>"""
     
+    # ==================== ANALYTICS ====================
+
+    @staticmethod
+    def analytics_dashboard(stats: dict) -> str:
+        """Dashboard de metricas para Custodios."""
+        return f"""🎩 <b>Estadisticas del Reino</b>
+
+<i>Estos son los secretos que Diana guarda...</i>
+
+👥 <b>Visitantes totales:</b> {stats.get('total_users', 0)}
+💎 <b>VIP activos:</b> {stats.get('active_vip', 0)}
+💋 <b>Besitos en circulacion:</b> {stats.get('total_besitos', 0)}
+⏰ <b>VIP por expirar (48h):</b> {stats.get('expiring_soon', 0)}
+🆕 <b>Nuevos hoy:</b> {stats.get('new_today', 0)}
+
+<i>El reino de Diana observa con atencion...</i>"""
+
+    @staticmethod
+    def export_ready(filename: str) -> str:
+        """Confirmacion de exportacion."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Los archivos del reino han sido compilados.</i>
+
+📎 <b>Archivo:</b> <code>{filename}</code>
+
+<i>Diana ha preparado este documento para usted.</i>"""
+
+    @staticmethod
+    def export_no_data() -> str:
+        """No hay datos para exportar."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>No hay registros en el reino que exportar...</i>
+
+<i>Aun no hay visitantes registrados.</i>"""
+
+    @staticmethod
+    def analytics_access_denied() -> str:
+        """Acceso denegado a estadisticas."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Estos numeros son solo para los custodios del reino.</i>
+
+⚠️ <b>Acceso denegado</b>
+
+<i>Solicite acceso a Diana si cree que esto es un error.</i>"""
+
     # ==================== ERRORES ====================
     
     @staticmethod

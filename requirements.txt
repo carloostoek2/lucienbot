@@ -3,7 +3,7 @@
 
 # ==================== FRAMEWORK DEL BOT ====================
 # aiogram v3 - Framework moderno para bots de Telegram
-aiogram==3.4.1
+aiogram==3.24.0
 
 # ==================== BASE DE DATOS ====================
 # SQLAlchemy ORM para base de datos
@@ -25,9 +25,19 @@ pytz==2024.1
 # Fechas y tiempos
 python-dateutil==2.9.0
 
+# Rate limiting
+aiolimiter==1.2.1
+
+# Programador de tareas (background jobs)
+APScheduler==3.10.4
+
 # ==================== SEGURIDAD ====================
 # Hashing de contraseñas (si se implementa auth)
 # bcrypt==4.1.2
+
+# ==================== FSM STORAGE ====================
+# Redis async client for RedisStorage (aiogram FSM persistence)
+redis==5.0.1
 
 # ==================== MONITOREO (OPCIONAL) ====================
 # Logging avanzado
