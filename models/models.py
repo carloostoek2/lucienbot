@@ -42,7 +42,11 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
+    # VIP entry flow tracking (Phase 10)
+    vip_entry_status = Column(String(20), nullable=True)  # values: "pending_entry", "active"
+    vip_entry_stage = Column(Integer, nullable=True)      # values: 1, 2, 3
+
     # Relaciones
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
     tokens_redeemed = relationship("Token", back_populates="redeemed_by")
