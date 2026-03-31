@@ -25,7 +25,6 @@ class SchedulerService:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
         from apscheduler.executors.asyncio import AsyncIOExecutor
-        from apscheduler.jobdefaults import JobDefaults
         from config.settings import bot_config
 
         self.bot = bot
@@ -39,11 +38,11 @@ class SchedulerService:
         executors = {
             "default": AsyncIOExecutor()
         }
-        job_defaults = JobDefaults(
-            coalesce=True,
-            max_instances=1,
-            replace_existing=True,
-        )
+        job_defaults = {
+            "coalesce": True,
+            "max_instances": 1,
+            "replace_existing": True,
+        }
 
         self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
