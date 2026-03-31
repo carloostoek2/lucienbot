@@ -29,6 +29,10 @@ python-dateutil==2.9.0
 # Hashing de contraseñas (si se implementa auth)
 # bcrypt==4.1.2
 
+# ==================== FSM STORAGE ====================
+# Redis async client for RedisStorage (aiogram FSM persistence)
+redis==5.0.1
+
 # ==================== MONITOREO (OPCIONAL) ====================
 # Logging avanzado
 # structlog==24.1.0
