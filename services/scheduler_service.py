@@ -10,9 +10,11 @@ de serialización con APScheduler + SQLAlchemyJobStore:
   2. Funciones de módulo (no bound methods) para evitar que APScheduler
      detecte ciclos de serialización en self._scheduler
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram import Bot
 from aiogram.types import BotCommandScopeAllPrivateChats
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.date import DateTrigger
 from models.database import SessionLocal
 from models.models import ChannelType
 from services.backup_service import BackupService
@@ -20,6 +22,7 @@ from services.channel_service import ChannelService
 from services.vip_service import VIPService
 from services.user_service import UserService
 from utils.lucien_voice import LucienVoice
+from keyboards.inline_keyboards import social_links_keyboard
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,6 +63,37 @@ async def _run_backup_job():
         logger.error(f"Error running backup: {e}")
 
 
+async def _send_free_welcome_job(user_id: int, channel_id: int):
+    """Envía el mensaje ritual de entrada al canal Free tras 30s de espera.
+
+    Job handler de módulo para evitar errores de serialización con APScheduler.
+    """
+    db = SessionLocal()
+    try:
+        channel_service = ChannelService(db)
+        channel = channel_service.get_channel_by_id(channel_id)
+
+        if not channel or not channel.is_active:
+            logger.warning(f"Canal {channel_id} no encontrado o inactivo para welcome job")
+            return
+
+        bot = _get_bot()
+
+        await bot.send_message(
+            chat_id=user_id,
+            text=LucienVoice.free_entry_ritual(),
+            parse_mode="HTML",
+            reply_markup=social_links_keyboard()
+        )
+
+        logger.info(f"Mensaje ritual enviado: user={user_id}, channel={channel_id}")
+
+    except Exception as e:
+        logger.error(f"Error enviando mensaje ritual a user={user_id}: {e}")
+    finally:
+        db.close()
+
+
 async def _process_pending_requests():
     """Procesa solicitudes pendientes listas para aprobar (llamado por APScheduler)."""
     db = SessionLocal()
@@ -85,9 +119,16 @@ async def _process_pending_requests():
 
                 await bot.send_message(
                     chat_id=request.user_id,
-                    text=LucienVoice.free_access_approved(channel.channel_name),
+                    text=LucienVoice.free_entry_welcome(channel.channel_name),
                     parse_mode="HTML"
                 )
+
+                # Enviar enlace de invitación si está disponible
+                if channel.invite_link:
+                    await bot.send_message(
+                        chat_id=request.user_id,
+                        text=channel.invite_link
+                    )
 
                 logger.info(f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}")
 
@@ -215,8 +256,7 @@ class SchedulerService:
 
         self._scheduler.add_job(
             _process_pending_requests,
-            trigger="cron",
-            hour=9, minute=0,
+            trigger=IntervalTrigger(seconds=30),
             id="approve_join_requests",
             name="Approve pending join requests",
             replace_existing=True,
@@ -249,6 +289,23 @@ class SchedulerService:
         self._scheduler.start()
         self.running = True
         logger.info("Scheduler started (APScheduler + SQLAlchemyJobStore)")
+
+    def schedule_free_welcome(self, user_id: int, channel_id: int):
+        """Programa el mensaje ritual de entrada con 30s de delay.
+
+        Usa DateTrigger para un job one-shot que se ejecuta 30 segundos
+        después de la solicitud de unión al canal Free.
+        """
+        job_id = f"free_welcome_{user_id}_{channel_id}"
+        run_date = datetime.utcnow() + timedelta(seconds=30)
+        self._scheduler.add_job(
+            _send_free_welcome_job,
+            trigger=DateTrigger(run_date=run_date),
+            id=job_id,
+            replace_existing=True,
+            kwargs={"user_id": user_id, "channel_id": channel_id},
+        )
+        logger.info(f"Scheduled free welcome job: user={user_id}, channel={channel_id}, run_at={run_date}")
 
     async def stop(self):
         """Detiene el scheduler."""
