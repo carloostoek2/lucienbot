@@ -43,11 +43,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 7: VIP Invite Links Dinámicos | ✓ Complete | d66b8b7 |
 | 07.1: Integrar completamente sistema de migraciones alembic | ✓ Complete | 3 commits, 2 revisions |
 | 8: Testing & Technical Debt | ✓ Complete | 2266d56 |
-| 9: Polish & Hardening | ✓ Complete | All 6 plans done (09-01 through 09-05) |
+| 9: Polish & Hardening | ✓ Complete | All 5 plans done (09-01 through 09-05) — SCHED-01 fulfilled |
 
 ## Current Phase
 
-**Phase 9: Polish & Hardening** — All 6 plans complete
+**Phase 9: Polish & Hardening** — All 5 plans complete
 
 ## Execution Log
 
@@ -60,6 +60,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-03-31 | 9-01 | Rate limiting middleware — ThrottlingMiddleware, RateLimitConfig — commits c339ada, 3f07b6b, e5eb4c6, 4fa6280 |
 | 2026-03-31 | 9-02 | RedisStorage FSM persistence — create_storage() factory, redis==5.0.1 — commits 32036a7, e2000a1 |
 | 2026-03-31 | 9-03 | BackupService with daily_backup for PostgreSQL/SQLite, integrated into SchedulerService — commits e37de1b, 48887b2 |
+| 2026-03-31 | 9-04 | APScheduler AsyncIOScheduler + SQLAlchemyJobStore replacing asyncio.sleep polling — commit a63e5e6 |
 | 2026-03-31 | 9-05 | AnalyticsService + analytics_handlers (/stats, /export) — commits 1b4c10c, b577bc2, 3adc069, ae33e37, 963f96f |
 
 ## What's Next
