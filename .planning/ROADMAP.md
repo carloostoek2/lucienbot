@@ -17,7 +17,7 @@
 | 7 | **VIP Invite Links Dinamicos** ✓ | Links de invitacion de un solo uso para canal VIP | VIP-07 | Un token = un link de un solo uso generado dinamicamente |
 | 07.1 | **Integrar Alembic** ✓ | Sistema de migraciones Alembic reemplazar create_all() | Complete    | 2026-03-30 |
 | 8 | Testing & Technical Debt | Tests, linting, manejo de sessiones, refactor handlers | TEST-01-03, SCHED-02, SEC-03 | Cobertura de tests y codigo mas mantenible |
-| 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | SEC-01, SEC-02, BACK-01, SCHED-01, ANLY-01-02 | Bot listo para produccion a escala |
+| 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | SEC-01, SEC-02, BACK-01, SCHED-01, ANLY-01-02 | 3/5 plans done (09-01, 09-02, 09-03) |
 
 ## Phase Details
 
@@ -128,14 +128,14 @@
 ### Phase 9: Polish & Hardening
 **Goal:** Rate limiting, FSM persistente, backups y analytics
 **Requirements:** SEC-01, SEC-02, BACK-01, SCHED-01, ANLY-01, ANLY-02
-**Status:** In progress
+**Status:** In progress (4/5 plans complete)
 **Plans:** 5 plans
 Plans:
-- [ ] 09-01-PLAN.md -- Rate limiting via ThrottlingMiddleware (SEC-01)
+- [x] 09-01-PLAN.md -- Rate limiting via ThrottlingMiddleware (SEC-01) ✓
 - [x] 09-02-PLAN.md -- FSM persistence via RedisStorage factory (SEC-02) ✓
-- [x] 09-03-PLAN.md -- Database backup service with pg_dump/sqlite3 (BACK-01)
+- [x] 09-03-PLAN.md -- Database backup service with pg_dump/sqlite3 (BACK-01) ✓
 - [ ] 09-04-PLAN.md -- APScheduler persistent job queue replacing polling (SCHED-01)
-- [ ] 09-05-PLAN.md -- Analytics dashboard + CSV export commands (ANLY-01, ANLY-02)
+- [x] 09-05-PLAN.md -- Analytics dashboard + CSV export commands (ANLY-01, ANLY-02) ✓
 **Success criteria:**
 1. Rate limiting por usuario en handlers principales
 2. FSM con RedisStorage (estado persiste en reinicios)
