@@ -1,8 +1,9 @@
 # Phase 9: Polish & Hardening - Research
 
-**Researched:** 2026-03-30
+**Researched:** 2026-03-30 (original)
+**Re-verified:** 2026-03-30 (clean branch from main)
 **Domain:** Production hardening -- rate limiting, FSM persistence, backups, job scheduling, analytics
-**Confidence:** MEDIUM-HIGH (verified via live package introspection; web search unavailable due to API errors)
+**Confidence:** HIGH (verified via live package introspection on clean main branch)
 
 ## Summary
 
@@ -11,6 +12,11 @@ Phase 9 hardens Lucien Bot for production scale by adding five cross-cutting inf
 The installed aiogram version is **3.24.0** (not 3.4.1 as in requirements.txt -- a significant gap). All aiogram.contrib modules were removed in 3.x; FSM Redis support lives in `aiogram.fsm.storage.redis.RedisStorage`. Redis 5.0.1 (with native asyncio) and APScheduler 3.10.4 are already installed.
 
 **Primary recommendation:** Add Redis as the FSM backend (via Railway Redis add-on) and use `aiogram.fsm.storage.redis.RedisStorage`. Replace the fixed polling scheduler with APScheduler `SQLAlchemyJobStore` backed by the existing Railway PostgreSQL. Build rate limiting as a custom `BaseMiddleware` using an in-memory dict for dev and Redis for production.
+
+**CRITICAL — PREVIOUS ATTEMPT FAILED DUE TO THESE ERRORS:**
+1. `IsSenderContact` — does NOT exist in aiogram.filters in 3.24.0. **Do not use.** Replace with manual admin check: `if user_id not in bot_config.ADMIN_IDS: return`
+2. `RedisStorage(url=...)` — the `url=` kwarg does NOT exist in aiogram 3.24.0. **Do not use.** The first positional arg must be a `redis.asyncio.Redis` client instance: `RedisStorage(redis=Redis.from_url(url), ...)`
+3. `aiogram.contrib` — **does NOT exist** in aiogram 3.24.0. All contrib modules were removed. Use `aiogram.fsm.storage.redis`, `aiogram.dispatcher.middlewares.base`, etc.
 
 ---
 
