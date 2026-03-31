@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Phase 09 shipped — PR #11"
-last_updated: "2026-03-31T04:11:40.083Z"
+status: "Phase 10 Wave 1 — Plan 10-01 Complete"
+last_updated: "2026-03-31T15:20:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 7
+  total_plans: 7
+  completed_plans: 8
   percent: 100
 ---
 
 # State: Lucien Bot
 
-**Updated:** 2026-03-30
+**Updated:** 2026-03-31
 **Mode:** yolo | **Granularity:** coarse | **Parallelization:** true
 
 ## Project Reference
@@ -22,7 +22,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Crear una experiencia premium y gamificada que incentiva el compromiso de la comunidad con Diana a través de un sistema de recompensas, acceso exclusivo VIP y narrativa inmersiva.
-**Current focus:** Phase 9 — polish-hardening
+**Current focus:** Phase 10 — Flujos de entrada (Plan 10-01 Complete)
 
 ## Milestone
 
@@ -44,10 +44,24 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 07.1: Integrar completamente sistema de migraciones alembic | ✓ Complete | 3 commits, 2 revisions |
 | 8: Testing & Technical Debt | ✓ Complete | 2266d56 |
 | 9: Polish & Hardening | ✓ Complete | All 5 plans done (09-01 through 09-05) — SCHED-01 fulfilled |
+| 10: Flujos de entrada @docs/req_fase10.md | 🔄 In Progress | Plan 10-01 Complete — Foundation for ritualized entry flows |
 
 ## Current Phase
 
-**Phase 9: Polish & Hardening** — All 5 plans complete
+**Phase 10: Flujos de entrada @docs/req_fase10.md** — Plan 10-01 Complete
+
+### Plan 10-01: Foundation for Ritualized Entry Flows ✓
+
+**Status:** Complete
+**Commits:** d7cecda, 6c0ec07, 29dfcc5
+
+**Deliverables:**
+- Database columns: `vip_entry_status`, `vip_entry_stage` on User model
+- Alembic migration: `9fab8787057e_add_vip_entry_status_and_stage_to_users.py`
+- LucienVoice methods: `free_entry_ritual()`, `free_entry_impatient()`, `free_entry_welcome()`, `free_entry_expired()`, `vip_entry_stage_1()`, `vip_entry_stage_2()`, `vip_entry_stage_3()`
+- Inline keyboards: `social_links_keyboard()`, `vip_entry_continue_keyboard()`, `vip_entry_ready_keyboard()`
+
+**Tests:** 49/49 passed
 
 ## Execution Log
 
@@ -62,10 +76,12 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-03-31 | 9-03 | BackupService with daily_backup for PostgreSQL/SQLite, integrated into SchedulerService — commits e37de1b, 48887b2 |
 | 2026-03-31 | 9-04 | APScheduler AsyncIOScheduler + SQLAlchemyJobStore replacing asyncio.sleep polling — commit a63e5e6 |
 | 2026-03-31 | 9-05 | AnalyticsService + analytics_handlers (/stats, /export) — commits 1b4c10c, b577bc2, 3adc069, ae33e37, 963f96f |
+| 2026-03-31 | 10-01 | Foundation for ritualized entry flows — DB columns, LucienVoice messages, keyboards — commits d7cecda, 6c0ec07, 29dfcc5 |
 
 ## What's Next
 
-→ `/gsd:discuss-phase 9` — Polish & Hardening — Ready to plan
+→ Continue with Plan 10-02 (Wave 1) — Implement 30s delay mechanism for Free channel
+→ Continue with Plan 10-03 (Wave 1) — Implement VIP entry flow handlers
 
 ### Quick Tasks Completed
 
@@ -78,6 +94,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-03-31 | vip_entry_status as String(20) | Allows "pending_entry" and "active" values without enum complexity |
+| 2026-03-31 | vip_entry_stage as Integer | Simple 1, 2, 3 tracking for VIP ritual phases |
+| 2026-03-31 | Social links use url buttons | Per PRD requirement — direct links, not callbacks |
+| 2026-03-31 | free_entry_expired() added | Needed for subscription expiration during VIP ritual |
 | 2026-03-29 | Invites dinámicos con member_limit=1 | Prevenir uso compartido de links |
 | 2026-03-29 | Fallback a link estático | Resiliencia si API de Telegram falla |
 | ~2025 | aiogram 3.x | v4 en desarrollo, no migrar aún |
@@ -91,6 +111,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 |------|-------|--------|
 | 2026-03-30 | — | GSD new-project inicializado (map-codebase completado, docs generados) |
 | 2026-03-30 | 7 | VIP invite links completados — commit d66b8b7 |
+| 2026-03-31 | 10-01 | Foundation for ritualized entry flows — DB columns, LucienVoice messages, keyboards |
 
 ## Workflow Config
 
@@ -110,6 +131,8 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ### Roadmap Evolution
 
 - Phase 07.1 inserted after Phase 7: Integrar completamente sistema de migraciones alembic (URGENT)
+- Phase 10 added: Flujos de entrada @docs/req_fase10.md
+- Plan 10-01 complete: Foundation for ritualized entry flows
 
 ## Notes
 
@@ -117,3 +140,4 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 - Evolución desde bot simple hasta plataforma gamificada completa
 - Deployado en Railway con PostgreSQL
 - GSD inicializado el 2026-03-30 para trazabilidad de fases
+- Plan 10-01 establishes foundation for Phase 10 entry flow rituals
