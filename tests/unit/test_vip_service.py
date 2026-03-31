@@ -328,3 +328,111 @@ class TestVIPServiceRaceCondition:
 
             # Verificar que se llamó with_for_update
             assert mock_chain.with_for_update_called
+
+
+@pytest.mark.unit
+class TestVIPEntryState:
+    """Tests para VIP entry state management (Phase 10)"""
+
+    def test_redeem_token_sets_pending_entry(self, db_session, sample_token, sample_user, sample_vip_channel):
+        """Test que redeem_token establece pending_entry en el usuario"""
+        service = VIPService(db_session)
+
+        subscription = service.redeem_token(sample_token.token_code, sample_user.telegram_id)
+
+        assert subscription is not None
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_status == "pending_entry"
+        assert sample_user.vip_entry_stage == 1
+
+    def test_get_vip_entry_state(self, db_session, sample_user):
+        """Test obtener estado de entrada VIP"""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 2
+        db_session.commit()
+
+        service = VIPService(db_session)
+        status, stage = service.get_vip_entry_state(sample_user.telegram_id)
+
+        assert status == "pending_entry"
+        assert stage == 2
+
+    def test_advance_vip_entry_stage(self, db_session, sample_user):
+        """Test avanzar etapa de entrada VIP"""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 1
+        db_session.commit()
+
+        service = VIPService(db_session)
+        new_stage = service.advance_vip_entry_stage(sample_user.telegram_id)
+
+        assert new_stage == 2
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_stage == 2
+
+    def test_advance_vip_entry_stage_bounds(self, db_session, sample_user):
+        """Test que advance no supera el maximo de etapa 3"""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 3
+        db_session.commit()
+
+        service = VIPService(db_session)
+        new_stage = service.advance_vip_entry_stage(sample_user.telegram_id)
+
+        assert new_stage == 3
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_stage == 3
+
+    def test_clear_vip_entry_state(self, db_session, sample_user):
+        """Test limpiar estado de entrada VIP"""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 2
+        db_session.commit()
+
+        service = VIPService(db_session)
+        result = service.clear_vip_entry_state(sample_user.telegram_id)
+
+        assert result is True
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_status is None
+        assert sample_user.vip_entry_stage is None
+
+    def test_get_active_subscription_for_entry(self, db_session, sample_subscription, sample_user):
+        """Test obtener suscripcion activa para entrada VIP"""
+        service = VIPService(db_session)
+        sub = service.get_active_subscription_for_entry(sample_user.id)
+
+        assert sub is not None
+        assert sub.id == sample_subscription.id
+
+    def test_get_active_subscription_for_entry_expired(self, db_session, sample_user, sample_vip_channel, sample_token):
+        """Test que no retorna suscripcion expirada"""
+        from models.models import Subscription
+        expired_sub = Subscription(
+            user_id=sample_user.id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=datetime.utcnow() - timedelta(days=1),
+            is_active=True
+        )
+        db_session.add(expired_sub)
+        db_session.commit()
+
+        service = VIPService(db_session)
+        sub = service.get_active_subscription_for_entry(sample_user.id)
+
+        assert sub is None
+
+    def test_complete_vip_entry(self, db_session, sample_user):
+        """Test completar entrada VIP"""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 3
+        db_session.commit()
+
+        service = VIPService(db_session)
+        result = service.complete_vip_entry(sample_user.telegram_id)
+
+        assert result is True
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_status == "active"
+        assert sample_user.vip_entry_stage is None

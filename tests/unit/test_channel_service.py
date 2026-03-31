@@ -273,3 +273,14 @@ class TestPendingRequests:
         count = service.count_pending_requests(sample_pending_request.channel_id)
 
         assert count >= 1
+
+    def test_get_pending_request_returns_none_after_approval(self, db_session, sample_user, sample_free_channel):
+        """Regression: after approval, get_pending_request should return None."""
+        service = ChannelService(db_session)
+        request = service.create_pending_request(
+            user_id=sample_user.id,
+            channel_id=sample_free_channel.id
+        )
+        service.approve_request(request.id)
+        pending = service.get_pending_request(sample_user.id, sample_free_channel.id)
+        assert pending is None
