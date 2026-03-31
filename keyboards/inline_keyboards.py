@@ -321,3 +321,33 @@ def token_actions_keyboard(token_id: int) -> InlineKeyboardMarkup:
         )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# ==================== RITUALES DE ENTRADA (PHASE 10) ====================
+
+def social_links_keyboard() -> InlineKeyboardMarkup:
+    """Teclado con enlaces a redes sociales de Diana"""
+    buttons = [
+        [
+            InlineKeyboardButton(text="Instagram", url="https://www.instagram.com/srta.kinky"),
+            InlineKeyboardButton(text="TikTok", url="https://www.tiktok.com/@srtakinky"),
+            InlineKeyboardButton(text="X", url="https://x.com/srtakinky")
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def vip_entry_continue_keyboard() -> InlineKeyboardMarkup:
+    """Botón Continuar para Fase 1 del ritual VIP"""
+    buttons = [
+        [InlineKeyboardButton(text="Continuar", callback_data="vip_entry_continue")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def vip_entry_ready_keyboard() -> InlineKeyboardMarkup:
+    """Botón Estoy listo para Fase 2 del ritual VIP"""
+    buttons = [
+        [InlineKeyboardButton(text="Estoy listo", callback_data="vip_entry_ready")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
