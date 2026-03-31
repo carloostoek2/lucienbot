@@ -10,7 +10,7 @@ from aiogram.enums import ChatType
 from config.settings import bot_config
 from services.user_service import UserService
 from services.vip_service import VIPService
-from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard
+from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, vip_entry_continue_keyboard, vip_entry_ready_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -23,7 +23,7 @@ async def cmd_start(message: Message):
     """Handler para el comando /start"""
     user = message.from_user
     args = message.text.split()[1] if len(message.text.split()) > 1 else None
-    
+
     # Registrar/actualizar usuario
     user_service = UserService()
     db_user = user_service.get_or_create_user(
@@ -32,49 +32,65 @@ async def cmd_start(message: Message):
         first_name=user.first_name,
         last_name=user.last_name
     )
-    
-    # Verificar si es token de acceso VIP
-    if args:
-        vip_service = VIPService()
-        subscription = vip_service.redeem_token(args, user.id)
 
-        if subscription:
-            # Token válido - activar VIP
+    # Check for pending VIP entry ritual BEFORE token processing
+    vip_service = VIPService()
+    status, stage = vip_service.get_vip_entry_state(user.id)
+    if status == "pending_entry":
+        subscription = vip_service.get_active_subscription_for_entry(user.id)
+        if not subscription:
+            vip_service.clear_vip_entry_state(user.id)
             await message.answer(
-                LucienVoice.vip_activated(
-                    subscription.token.tariff.name,
-                    subscription.end_date
-                ),
+                LucienVoice.free_entry_expired(),
                 parse_mode="HTML"
             )
-
-            # Generar enlace de un solo uso para el canal VIP
+            return
+        if stage == 1:
+            await message.answer(
+                LucienVoice.vip_entry_stage_1(),
+                reply_markup=vip_entry_continue_keyboard(),
+                parse_mode="HTML"
+            )
+        elif stage == 2:
+            await message.answer(
+                LucienVoice.vip_entry_stage_2(),
+                reply_markup=vip_entry_ready_keyboard(),
+                parse_mode="HTML"
+            )
+        elif stage == 3:
+            await message.answer(
+                LucienVoice.vip_entry_stage_3(),
+                parse_mode="HTML"
+            )
+            # Generate invite link for Stage 3
             vip_channel = vip_service.get_vip_channel()
             if vip_channel:
                 try:
-                    # Crear link de invitación de un solo uso
                     invite_link = await message.bot.create_chat_invite_link(
                         chat_id=vip_channel.channel_id,
                         name=f"VIP {user.id}",
                         creates_join_request=False,
-                        member_limit=1  # Link de un solo uso
+                        member_limit=1
                     )
-                    await message.answer(
-                        f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
-                        f"{invite_link.invite_link}\n\n"
-                        f"<i>Diana le espera en el círculo íntimo...</i>",
-                        parse_mode="HTML"
-                    )
+                    await message.answer(invite_link.invite_link, parse_mode="HTML")
                 except Exception as e:
                     logger.error(f"Error creando invite link: {e}")
-                    # Si falla, usar el link guardado del canal
                     if vip_channel.invite_link:
-                        await message.answer(
-                            f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
-                            f"{vip_channel.invite_link}\n\n"
-                            f"<i>Diana le espera en el círculo íntimo...</i>",
-                            parse_mode="HTML"
-                        )
+                        await message.answer(vip_channel.invite_link, parse_mode="HTML")
+            vip_service.complete_vip_entry(user.id)
+        return
+
+    # Verificar si es token de acceso VIP
+    if args:
+        subscription = vip_service.redeem_token(args, user.id)
+
+        if subscription:
+            # Token válido - start VIP entry ritual (Stage 1)
+            await message.answer(
+                LucienVoice.vip_entry_stage_1(),
+                reply_markup=vip_entry_continue_keyboard(),
+                parse_mode="HTML"
+            )
             return
         else:
             # Validar token para mensaje específico
@@ -86,10 +102,10 @@ async def cmd_start(message: Message):
             elif error == "invalid":
                 await message.answer(LucienVoice.token_invalid(), parse_mode="HTML")
             return
-    
+
     # Verificar si es administrador
     is_admin = user.id in bot_config.ADMIN_IDS or db_user.role.value == "admin"
-    
+
     if is_admin:
         await message.answer(
             LucienVoice.admin_greeting(),
@@ -98,9 +114,8 @@ async def cmd_start(message: Message):
         )
     else:
         # Verificar si es VIP
-        vip_service = VIPService()
         is_vip = vip_service.is_user_vip(user.id)
-        
+
         await message.answer(
             LucienVoice.greeting(user.first_name),
             reply_markup=main_menu_keyboard(is_vip),
