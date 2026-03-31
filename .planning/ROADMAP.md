@@ -132,8 +132,8 @@
 **Plans:** 5 plans
 Plans:
 - [ ] 09-01-PLAN.md -- Rate limiting via ThrottlingMiddleware (SEC-01)
-- [ ] 09-02-PLAN.md -- FSM persistence via RedisStorage factory (SEC-02)
-- [ ] 09-03-PLAN.md -- Database backup service with pg_dump/sqlite3 (BACK-01)
+- [x] 09-02-PLAN.md -- FSM persistence via RedisStorage factory (SEC-02) ✓
+- [x] 09-03-PLAN.md -- Database backup service with pg_dump/sqlite3 (BACK-01)
 - [ ] 09-04-PLAN.md -- APScheduler persistent job queue replacing polling (SCHED-01)
 - [ ] 09-05-PLAN.md -- Analytics dashboard + CSV export commands (ANLY-01, ANLY-02)
 **Success criteria:**
