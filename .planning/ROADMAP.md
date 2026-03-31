@@ -151,5 +151,15 @@ Plans:
 - [ ] Phase 8: Cobertura de tests >= 70%, deuda tecnica reducida
 - [x] Phase 9: Bot hardened para produccion a escala (completed 2026-03-31)
 
+### Phase 10: Flujos de entrada @docs/req_fase10.md
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 9
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] TBD (run /gsd:plan-phase 10 to break down) (completed 2026-03-31)
+
 ---
 *Roadmap created: 2026-03-30 from codebase analysis and git history*
