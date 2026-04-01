@@ -118,11 +118,9 @@ Cuando llegue el momento, no tendrá que buscar la puerta.
 La puerta se abrirá."""
 
     @staticmethod
-    def free_entry_welcome(channel_name: Optional[str] = None) -> str:
+    def free_entry_welcome() -> str:
         """Mensaje 3: Bienvenida al ser aprobado en el canal Free"""
-        return """🎩 <b>Lucien:</b>
-
-Listo.
+        return """Listo.
 Diana ha permitido su entrada.
 Bienvenido a Los Kinkys.
 Este no es el lugar donde ella se entrega.

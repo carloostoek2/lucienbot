@@ -141,21 +141,16 @@ async def handle_member_join(event: ChatMemberUpdated):
 
         logger.info(f"Solicitud marcada como aprobada: id={pending.id}")
 
-        # Enviar mensaje de bienvenida ritual
+        # Enviar mensaje de bienvenida ritual con enlace
         try:
+            message = LucienVoice.free_entry_welcome()
+            if channel.invite_link:
+                message += f"\n{channel.invite_link}"
             await event.bot.send_message(
                 chat_id=user.id,
-                text=LucienVoice.free_entry_welcome(channel.channel_name),
+                text=message,
                 parse_mode="HTML"
             )
-
-            # Enviar enlace de invitación si está disponible
-            if channel.invite_link:
-                await event.bot.send_message(
-                    chat_id=user.id,
-                    text=f"🔗 <b>Su enlace de acceso:</b>\n\n{channel.invite_link}",
-                    parse_mode="HTML"
-                )
 
             logger.info(f"Mensaje de bienvenida enviado a user={user.id}")
         except Exception as e:
