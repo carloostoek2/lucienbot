@@ -327,10 +327,25 @@ class VIPService:
             return user.vip_entry_status, user.vip_entry_stage
         return None, None
 
+    def get_vip_entry_state_for_update(self, user_id: int) -> tuple:
+        """
+        Returns (status, stage) with SELECT FOR UPDATE to prevent race conditions.
+        Use this before operations that modify state (e.g., advance_vip_entry_stage).
+        """
+        db = self._get_db()
+        user = db.query(User).filter(
+            User.telegram_id == user_id
+        ).with_for_update().first()
+        if user:
+            return user.vip_entry_status, user.vip_entry_stage
+        return None, None
+
     def advance_vip_entry_stage(self, user_id: int) -> int:
         """Advances vip_entry_stage by 1 (max 3). Returns new stage or None."""
         db = self._get_db()
-        user = db.query(User).filter(User.telegram_id == user_id).first()
+        user = db.query(User).filter(
+            User.telegram_id == user_id
+        ).with_for_update().first()
         if not user or user.vip_entry_status != "pending_entry" or user.vip_entry_stage is None:
             return None
         new_stage = min(user.vip_entry_stage + 1, 3)

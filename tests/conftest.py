@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, AsyncMock
 
 # Importar modelos
 import sys
-sys.path.insert(0, '/data/data/com.termux/files/home/repos/lucien_bot/.claude/worktrees/agent-a3b85150')
+sys.path.insert(0, '/data/data/com.termux/files/home/repos/lucien_bot')
 
 from models.database import Base
 from models.models import (

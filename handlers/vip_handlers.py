@@ -392,8 +392,9 @@ async def vip_entry_ready(callback: CallbackQuery):
     user = callback.from_user
     vip_service = VIPService()
     try:
-        # Guard against repeat clicks
-        status, _ = vip_service.get_vip_entry_state(user.id)
+        # Guard against repeat clicks — use FOR UPDATE to prevent race condition
+        # where two rapid clicks both see "pending_entry" and both create invite links
+        status, _ = vip_service.get_vip_entry_state_for_update(user.id)
         if status != "pending_entry":
             await callback.answer("El ritual ya ha sido completado.")
             return
@@ -409,7 +410,7 @@ async def vip_entry_ready(callback: CallbackQuery):
             await callback.answer()
             return
 
-        # Advance to stage 3
+        # Advance to stage 3 (reuses the same db session with FOR UPDATE lock held)
         vip_service.advance_vip_entry_stage(user.id)
 
         # Send stage 3 message

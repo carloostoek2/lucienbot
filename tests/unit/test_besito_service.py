@@ -295,3 +295,60 @@ class TestBesitoServiceRaceCondition:
 
             # Verificar que se llamó with_for_update
             mock_filtered.with_for_update.assert_called()
+
+
+@pytest.mark.unit
+class TestBesitoServiceCommitParam:
+    """Tests para el parametro commit=False de debit_besitos (atomicity fix)."""
+
+    def test_debit_besitos_commit_true_commits(self, db_session, sample_balance):
+        """Test que debit_besitos con commit=True hace commit."""
+        service = BesitoService(db_session)
+        initial_balance = sample_balance.balance
+        amount = 50
+
+        result = service.debit_besitos(
+            user_id=sample_balance.user_id,
+            amount=amount,
+            source=TransactionSource.PURCHASE,
+            commit=True
+        )
+
+        assert result is True
+        # Commit=True commits immediately; a new session query sees the new value
+        db_session.expire_all()
+        balance = service.get_balance(sample_balance.user_id)
+        assert balance == initial_balance - amount
+
+    def test_debit_besitos_accepts_commit_false_param(self, db_session, sample_balance):
+        """Test que debit_besitos acepta el parametro commit=False sin error."""
+        service = BesitoService(db_session)
+        amount = 50
+
+        # Calling with commit=False should not raise
+        result = service.debit_besitos(
+            user_id=sample_balance.user_id,
+            amount=amount,
+            source=TransactionSource.PURCHASE,
+            commit=False
+        )
+
+        assert result is True
+
+    def test_debit_besitos_default_commit_is_true(self, db_session, sample_balance):
+        """Test que el default de commit=True mantiene el comportamiento original."""
+        service = BesitoService(db_session)
+        initial_balance = sample_balance.balance
+        amount = 50
+
+        # Llamar sin parametro commit (default True)
+        result = service.debit_besitos(
+            user_id=sample_balance.user_id,
+            amount=amount,
+            source=TransactionSource.PURCHASE
+        )
+
+        assert result is True
+        db_session.expire_all()
+        balance = service.get_balance(sample_balance.user_id)
+        assert balance == initial_balance - amount  # Committed change

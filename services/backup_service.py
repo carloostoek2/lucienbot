@@ -6,8 +6,10 @@ Soporta SQLite (desarrollo) y PostgreSQL (produccion en Railway).
 """
 import subprocess
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from config.settings import bot_config
 
 logger = logging.getLogger(__name__)
@@ -43,16 +45,38 @@ class BackupService:
             return None
 
     async def _backup_postgresql(self, db_url: str, timestamp: str) -> str | None:
-        """Backup para PostgreSQL usando pg_dump."""
+        """Backup para PostgreSQL usando pg_dump.
+
+        Credenciales se pasan via PGPASSWORD env var (no CLI) para evitar
+        que aparezcan en ps aux / /proc.
+        """
         try:
-            db_name = db_url.rsplit("/", 1)[-1].split("?")[0]
+            parsed = urlparse(db_url)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or 5432
+            user = parsed.username or "postgres"
+            db_name = parsed.path.lstrip("/") or parsed.hostname
+
             backup_file = self.backup_dir / f"lucien_{timestamp}.sql"
 
+            # Construir env sin credenciales en CLI
+            env = os.environ.copy()
+            if parsed.password:
+                env["PGPASSWORD"] = parsed.password
+
             result = subprocess.run(
-                ["pg_dump", db_url, "-f", str(backup_file)],
+                [
+                    "pg_dump",
+                    "-h", host,
+                    "-p", str(port),
+                    "-U", user,
+                    "-d", db_name,
+                    "-f", str(backup_file),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=300,
+                env=env,
             )
 
             if result.returncode == 0:

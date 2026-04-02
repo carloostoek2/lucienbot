@@ -235,14 +235,15 @@ class StoryService:
         if not progress:
             progress = self.create_user_progress(user_id, node_id)
 
-        # Cobrar besitos si aplica
+        # Cobrar besitos si aplica — sin commit para mantener atomicidad con el progreso
         if node.cost_besitos > 0:
             success = self.besito_service.debit_besitos(
                 user_id=user_id,
                 amount=node.cost_besitos,
                 source=TransactionSource.PURCHASE,
                 description=f"Acceso a fragmento: {node.title}",
-                reference_id=node.id
+                reference_id=node.id,
+                commit=False
             )
             if not success:
                 return False, "No se pudo procesar el pago", None
@@ -271,6 +272,7 @@ class StoryService:
             if not progress.archetype:
                 progress.archetype = progress.get_dominant_archetype()
 
+        # Commit atomico: besitos + progreso + arquetipos juntos
         self.db.commit()
         self.db.refresh(progress)
 
@@ -280,7 +282,7 @@ class StoryService:
         return True, None, progress
 
     def _add_archetype_points(self, progress: UserStoryProgress, choice: StoryChoice):
-        """Agrega puntos al arquetipo correspondiente de la eleccion"""
+        """Agrega puntos al arquetipo correspondiente de la eleccion (sin commit — se delega al llamador)."""
         if not choice.choice_archetype:
             # Si la opcion no define arquetipo, no sumar puntos
             return
@@ -289,7 +291,6 @@ class StoryService:
         if hasattr(progress, archetype_field):
             current = getattr(progress, archetype_field)
             setattr(progress, archetype_field, current + choice.archetype_points)
-            self.db.commit()
 
     def _check_achievements(self, user_id: int, progress: UserStoryProgress):
         """Verifica y otorga logros al usuario"""

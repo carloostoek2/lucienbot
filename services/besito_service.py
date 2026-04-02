@@ -129,7 +129,8 @@ class BesitoService:
             return False
 
     def debit_besitos(self, user_id: int, amount: int, source: TransactionSource,
-                      description: str = None, reference_id: int = None) -> bool:
+                      description: str = None, reference_id: int = None,
+                      commit: bool = True) -> bool:
         """
         Debita besitos de un usuario. Usa SELECT FOR UPDATE para prevenir race conditions.
 
@@ -139,6 +140,8 @@ class BesitoService:
             source: Fuente de la transacción
             description: Descripción opcional
             reference_id: ID de referencia
+            commit: Si True, hace commit al final. Si False, deja la transacción
+                   pendiente para que el llamador haga commit atómico con otras operaciones.
 
         Returns:
             True si se debitó correctamente
@@ -172,7 +175,8 @@ class BesitoService:
                 reference_id=reference_id
             )
             db.add(transaction)
-            db.commit()
+            if commit:
+                db.commit()
 
             logger.info(f"Debitados {amount} besitos de usuario {user_id} - {source.value}")
             return True

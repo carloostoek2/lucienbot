@@ -426,6 +426,55 @@ class TestVIPEntryState:
     def test_complete_vip_entry(self, db_session, sample_user):
         """Test completar entrada VIP"""
         sample_user.vip_entry_status = "pending_entry"
+
+
+@pytest.mark.unit
+class TestVIPEntryRaceConditionFix:
+    """Tests para el fix de race condition en VIP entry (Finding #4)."""
+
+    def test_get_vip_entry_state_for_update_uses_select_for_update(self, db_session, sample_user):
+        """Test que get_vip_entry_state_for_update usa SELECT FOR UPDATE."""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 1
+        db_session.commit()
+
+        service = VIPService(db_session)
+
+        # Mock la cadena query().filter().with_for_update().first()
+        mock_query = MagicMock()
+        mock_filtered = MagicMock()
+        mock_with_lock = MagicMock()
+        mock_first = MagicMock(return_value=sample_user)
+
+        mock_query.filter.return_value = mock_filtered
+        mock_filtered.with_for_update.return_value = mock_with_lock
+        mock_with_lock.first.return_value = sample_user
+
+        with patch.object(db_session, 'query', return_value=mock_query):
+            service.get_vip_entry_state_for_update(sample_user.telegram_id)
+            mock_filtered.with_for_update.assert_called()
+
+    def test_advance_vip_entry_stage_uses_select_for_update(self, db_session, sample_user):
+        """Test que advance_vip_entry_stage usa SELECT FOR UPDATE."""
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 1
+        db_session.commit()
+
+        service = VIPService(db_session)
+
+        # Mock la cadena query().filter().with_for_update().first()
+        mock_query = MagicMock()
+        mock_filtered = MagicMock()
+        mock_with_lock = MagicMock()
+        mock_first = MagicMock(return_value=sample_user)
+
+        mock_query.filter.return_value = mock_filtered
+        mock_filtered.with_for_update.return_value = mock_with_lock
+        mock_with_lock.first.return_value = sample_user
+
+        with patch.object(db_session, 'query', return_value=mock_query):
+            service.advance_vip_entry_stage(sample_user.telegram_id)
+            mock_filtered.with_for_update.assert_called()
         sample_user.vip_entry_stage = 3
         db_session.commit()
 

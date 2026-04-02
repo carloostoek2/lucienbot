@@ -176,15 +176,15 @@ class TransactionSource(str, enum.Enum):
 class BesitoBalance(Base):
     """Saldo de besitos por usuario"""
     __tablename__ = "besito_balances"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, unique=True, index=True, nullable=False)
-    balance = Column(Integer, default=0, nullable=False)
-    total_earned = Column(Integer, default=0, nullable=False)  # Total acumulado histórico
-    total_spent = Column(Integer, default=0, nullable=False)   # Total gastado histórico
+    balance = Column(BigInteger, default=0, nullable=False)
+    total_earned = Column(BigInteger, default=0, nullable=False)  # Total acumulado histórico
+    total_spent = Column(BigInteger, default=0, nullable=False)  # Total gastado histórico
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     transactions = relationship("BesitoTransaction", back_populates="balance", cascade="all, delete-orphan")
 
@@ -192,10 +192,10 @@ class BesitoBalance(Base):
 class BesitoTransaction(Base):
     """Historial de transacciones de besitos"""
     __tablename__ = "besito_transactions"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("besito_balances.user_id"), nullable=False, index=True)
-    amount = Column(Integer, nullable=False)  # Positivo para crédito, negativo para débito
+    amount = Column(BigInteger, nullable=False)  # Positivo para crédito, negativo para débito
     type = Column(Enum(TransactionType), nullable=False)
     source = Column(Enum(TransactionSource), nullable=False)
     description = Column(String(255), nullable=True)  # Descripción del movimiento
@@ -250,7 +250,7 @@ class BroadcastReaction(Base):
     user_id = Column(BigInteger, nullable=False, index=True)
     username = Column(String(100), nullable=True)
     reaction_emoji_id = Column(Integer, ForeignKey("reaction_emojis.id"), nullable=False)
-    besitos_awarded = Column(Integer, nullable=False)  # Cuántos besitos se otorgaron
+    besitos_awarded = Column(BigInteger, nullable=False)  # Cuántos besitos se otorgaron
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relaciones
