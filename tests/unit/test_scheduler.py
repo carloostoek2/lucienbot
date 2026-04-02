@@ -10,6 +10,38 @@ from services.scheduler_service import SchedulerService
 
 
 @pytest.mark.unit
+class TestScheduleFreeWelcomeChannelId:
+    """Regression test: schedule_free_welcome debe recibir Telegram channel ID, no DB PK.
+
+    Bug encontrado: handle_join_request pasaba channel.id (DB PK) a schedule_free_welcome,
+    pero _send_free_welcome_job usa get_channel_by_id que espera Telegram channel ID.
+    Esto causaba que el mensaje de 30s nunca se enviara porque channel lookup siempre
+    fallaba (tabla Channel.channel_id = Telegram ID, no DB PK).
+    """
+
+    def test_schedule_free_welcome_receives_telegram_channel_id(self):
+        """Verifica que schedule_free_welcome recibe el ID correcto (Telegram, no DB PK)."""
+        mock_bot = AsyncMock()
+        mock_bot.token = "test_token"
+
+        scheduler = SchedulerService(mock_bot)
+
+        telegram_channel_id = -1001234567890
+        db_pk = 42  # Simula el DB PK que channel.id devolvería
+        user_id = 111222333
+
+        with patch.object(scheduler._scheduler, 'add_job') as mock_add_job:
+            scheduler.schedule_free_welcome(user_id, telegram_channel_id)
+
+            call = mock_add_job.call_args
+            assert call is not None, "add_job was not called"
+            assert call.kwargs.get('id') == f"free_welcome_{user_id}_{telegram_channel_id}"
+            assert call.kwargs['kwargs']['channel_id'] == telegram_channel_id
+            # El channel_id en kwargs DEBE ser el Telegram ID, no el DB PK
+            assert call.kwargs['kwargs']['channel_id'] != db_pk
+
+
+@pytest.mark.unit
 class TestSchedulerTriggers:
     """Tests para verificacion de triggers del scheduler"""
 

@@ -10,7 +10,7 @@ de serialización con APScheduler + SQLAlchemyJobStore:
   2. Funciones de módulo (no bound methods) para evitar que APScheduler
      detecte ciclos de serialización en self._scheduler
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from aiogram.types import BotCommandScopeAllPrivateChats
 from apscheduler.triggers.interval import IntervalTrigger
@@ -81,7 +81,7 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
 
         await bot.send_message(
             chat_id=user_id,
-            text=LucienVoice.free_entry_ritual(),
+            text=LucienVoice.free_entry_ritual(channel.channel_name or "Los Kinkys"),
             parse_mode="HTML",
             reply_markup=social_links_keyboard()
         )
@@ -117,8 +117,23 @@ async def _process_pending_requests():
                 request.approved_at = datetime.utcnow()
                 db.commit()
 
-                # NOTE: Mensaje de bienvenida enviado por webhook handler (handle_member_join)
-                # para evitar duplicación. El webhook se dispara al unirse el usuario.
+                # Enviar mensaje de bienvenida directamente.
+                # NOTA: El webhook handle_member_join NO se dispara cuando el bot
+                # aprueba via API (el evento tiene from_user=bot, no el usuario).
+                # Para aprobaciones manuales por custodio sí funciona el webhook.
+                try:
+                    message = LucienVoice.free_entry_welcome(channel.channel_name or "Los Kinkys")
+                    if channel.invite_link:
+                        message += f"\n{channel.invite_link}"
+                    await bot.send_message(
+                        chat_id=request.user_id,
+                        text=message,
+                        parse_mode="HTML",
+                        reply_markup=social_links_keyboard()
+                    )
+                    logger.info(f"Mensaje bienvenida enviado a user={request.user_id} tras aprobacion automatica")
+                except Exception as e:
+                    logger.error(f"Error enviando bienvenida a user={request.user_id}: {e}")
 
                 logger.info(f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}")
 
@@ -287,7 +302,7 @@ class SchedulerService:
         después de la solicitud de unión al canal Free.
         """
         job_id = f"free_welcome_{user_id}_{channel_id}"
-        run_date = datetime.utcnow() + timedelta(seconds=30)
+        run_date = datetime.now(timezone.utc) + timedelta(seconds=30)
         self._scheduler.add_job(
             _send_free_welcome_job,
             trigger=DateTrigger(run_date=run_date),

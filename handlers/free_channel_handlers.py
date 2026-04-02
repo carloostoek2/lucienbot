@@ -56,7 +56,7 @@ async def handle_join_request(join_request: ChatJoinRequest):
         # Enviar mensaje de impaciencia
         await join_request.bot.send_message(
             chat_id=user.id,
-            text=LucienVoice.free_entry_impatient(),
+            text=LucienVoice.free_entry_impatient(channel.channel_name or "Los Kinkys"),
             parse_mode="HTML"
         )
         return
@@ -71,9 +71,11 @@ async def handle_join_request(join_request: ChatJoinRequest):
         )
 
         # Programar mensaje ritual con delay de 30 segundos
+        # IMPORTANTE: pasar chat.id (Telegram channel ID), no channel.id (DB PK).
+        # _send_free_welcome_job usa get_channel_by_id que espera Telegram channel ID.
         scheduler = get_scheduler()
         if scheduler:
-            scheduler.schedule_free_welcome(user.id, channel.id)
+            scheduler.schedule_free_welcome(user.id, chat.id)
 
         logger.info(f"Solicitud pendiente creada: id={pending.id}, approve_at={pending.scheduled_approval_at}")
 
@@ -143,13 +145,14 @@ async def handle_member_join(event: ChatMemberUpdated):
 
         # Enviar mensaje de bienvenida ritual con enlace
         try:
-            message = LucienVoice.free_entry_welcome()
+            message = LucienVoice.free_entry_welcome(channel.channel_name or "Los Kinkys")
             if channel.invite_link:
                 message += f"\n{channel.invite_link}"
             await event.bot.send_message(
                 chat_id=user.id,
                 text=message,
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=social_links_keyboard()
             )
 
             logger.info(f"Mensaje de bienvenida enviado a user={user.id}")

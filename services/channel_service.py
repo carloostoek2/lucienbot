@@ -99,6 +99,16 @@ class ChannelService:
             return True
         return False
 
+    def update_invite_link(self, channel_id: int, invite_link: str) -> bool:
+        """Actualiza el enlace de invitación de un canal Free"""
+        db = self._get_db()
+        channel = self.get_channel_by_db_id(channel_id)
+        if channel:
+            channel.invite_link = invite_link
+            db.commit()
+            return True
+        return False
+
     # ==================== SOLICITUDES PENDIENTES ====================
 
     def create_pending_request(self, user_id: int, channel_id: int,

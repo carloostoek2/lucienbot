@@ -90,46 +90,61 @@ Si cambia de parecer, las puertas siempre están... casi abiertas."""
     # ==================== RITUALES DE ENTRADA (PHASE 10) ====================
 
     @staticmethod
-    def free_entry_ritual() -> str:
+    def free_entry_ritual(channel_name: str) -> str:
         """Mensaje 1: Ritual de entrada al canal Free (tras 30s de espera)"""
-        return """🎩 <b>Lucien:</b>
+        return f"""🎩 <b>Lucien:</b>
 
-Ah… alguien ha llamado a la puerta.
-Su solicitud para entrar a <b>Los Kinkys</b> ha sido registrada.
-Diana siempre nota cuando alguien decide cruzar hacia su mundo…
-Mientras su acceso se prepara, hay algo que puede hacer.
-Las redes de Diana no son simples perfiles.
-Obsérvela.
-Escuche el tono.
-Empiece a entender el juego.
-💡 No necesita quedarse aquí esperando.
-Cuando todo esté listo, yo mismo vendré a buscarle.
-Mientras tanto… aquí puede seguir su rastro 👇"""
+<i>Ah… alguien ha llamado a la puerta.</i>
+
+Su solicitud para entrar a <b>{channel_name}</b> ha sido registrada en los archivos de Diana.
+
+<i>Diana siempre nota cuando alguien decide cruzar hacia su mundo…</i>
+
+⏳ <b>Su acceso está siendo preparado.</b>
+
+<i>Mientras tanto, hay algo que puede hacer:</i>
+
+💡 <b>Observe sus redes.</b>
+No son simples perfiles.
+<i>Obsérvela. Escuche el tono.
+Empiece a entender el juego.</i>
+
+<i>No necesita quedarse aquí esperando.
+Cuando todo esté listo, yo mismo vendré a buscarle.</i>
+
+👇 <i>Entre tanto… puede seguir su rastro.</i>"""
 
     @staticmethod
-    def free_entry_impatient() -> str:
+    def free_entry_impatient(channel_name: str) -> str:
         """Mensaje 2: Cuando el usuario solicita acceso nuevamente estando pending"""
-        return """🎩 <b>Lucien:</b>
+        return f"""🎩 <b>Lucien:</b>
 
-Veo que el deseo de entrar no ha disminuido…
-Su acceso a Los Kinkys ya está en movimiento.
-Puede cerrar este chat con tranquilidad.
-Cuando llegue el momento, no tendrá que buscar la puerta.
-La puerta se abrirá."""
+<i>Veo que el deseo de entrar no ha disminuido…</i>
+
+Su acceso a <b>{channel_name}</b> ya está en movimiento.
+
+<i>Puede cerrar este chat con tranquilidad.
+Cuando llegue el momento, no tendrá que buscar la puerta.</i>
+
+🚪 <b>La puerta se abrirá.</b>"""
 
     @staticmethod
-    def free_entry_welcome() -> str:
+    def free_entry_welcome(channel_name: str) -> str:
         """Mensaje 3: Bienvenida al ser aprobado en el canal Free"""
-        return """Listo.
-Diana ha permitido su entrada.
-Bienvenido a Los Kinkys.
-Este no es el lugar donde ella se entrega.
+        return f"""🎩 <b>Lucien:</b>
+
+✨ <b>Las puertas se han abierto.</b>
+
+<i>Diana ha permitido su entrada a <b>{channel_name}</b>.</i>
+
+<i>Este no es el lugar donde ella se entrega.
 Es el lugar donde comienza a insinuarse…
-y donde algunos descubren que ya no quieren quedarse solo aquí.
-El enlace está abajo.
-Tiene 24 horas para cruzar antes de que se cierre de nuevo.
-Entre con intención.
-👇"""
+y donde algunos descubren que ya no quieren quedarse solo aquí.</i>
+
+⏰ <b> Tiene 24 horas para cruzar.</b>
+<i>Entre con intención.</i>
+
+👇 <b>Su enlace de acceso:</b>"""
 
     @staticmethod
     def vip_entry_expired() -> str:

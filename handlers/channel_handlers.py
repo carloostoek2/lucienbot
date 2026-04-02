@@ -27,6 +27,7 @@ class ChannelStates(StatesGroup):
     confirming_channel = State()
     selecting_channel_type = State()
     configuring_wait_time = State()
+    configuring_invite_link = State()
 
 
 # ==================== REGISTRO DE CANAL ====================
@@ -263,6 +264,74 @@ async def set_wait_time(callback: CallbackQuery, state: FSMContext):
     )
     await state.clear()
     await callback.answer()
+
+
+# ==================== CONFIGURAR ENLACE DE INVITACIÓN ====================
+
+@router.callback_query(F.data.startswith("config_invite_"))
+async def config_invite_link_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia la configuración del enlace de invitación"""
+    channel_id = int(callback.data.replace("config_invite_", ""))
+
+    channel_service = ChannelService()
+    channel = channel_service.get_channel_by_db_id(channel_id)
+
+    current = f"\n\n<i>Enlace actual:</i> <code>{channel.invite_link or 'No configurado'}</code>" if channel else ""
+
+    await state.update_data(channel_id=channel_id)
+
+    await callback.message.edit_text(
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Proporcione el enlace de invitación para este vestíbulo.</i>\n\n"
+        f"<i>Puede ser un enlace permanente o un enlace con期限:</i>\n"
+        f"<code>https://t.me/+ABC123xyz</code>\n"
+        f"<code>https://t.me/srtakinky</code>{current}\n\n"
+        f"<i>Envíe el enlace o escriba \"quitar\" para eliminarlo.</i>",
+        reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+        parse_mode="HTML"
+    )
+    await state.set_state(ChannelStates.configuring_invite_link)
+    await callback.answer()
+
+
+@router.message(ChannelStates.configuring_invite_link)
+async def process_invite_link(message: Message, state: FSMContext):
+    """Procesa el enlace de invitación ingresado"""
+    text = message.text.strip()
+
+    if text.lower() == "quitar":
+        link = None
+    else:
+        link = text
+
+    data = await state.get_data()
+    channel_id = data["channel_id"]
+
+    channel_service = ChannelService()
+    channel_service.update_invite_link(channel_id, link)
+
+    channel = channel_service.get_channel_by_db_id(channel_id)
+    name = channel.channel_name if channel else "este vestíbulo"
+
+    if link:
+        await message.answer(
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>El enlace de invitación para <b>{name}</b> ha sido actualizado.</i>\n\n"
+            f"🔗 <code>{link}</code>\n\n"
+            f"<i>Este enlace se enviará a los visitantes al ser aprobados.</i>",
+            reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>El enlace de invitación para <b>{name}</b> ha sido eliminado.</i>\n\n"
+            f"<i>Los visitantes no recibirán enlace al ser aprobados.</i>",
+            reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+            parse_mode="HTML"
+        )
+
+    await state.clear()
 
 
 # ==================== APROBAR SOLICITUDES PENDIENTES ====================

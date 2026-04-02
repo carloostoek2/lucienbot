@@ -134,6 +134,10 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
                 callback_data=f"config_wait_{channel_id}"
             )],
             [InlineKeyboardButton(
+                text="🔗 Configurar enlace de invitación",
+                callback_data=f"config_invite_{channel_id}"
+            )],
+            [InlineKeyboardButton(
                 text="📨 Configurar mensajes",
                 callback_data=f"config_messages_{channel_id}"
             )],
@@ -335,6 +339,7 @@ def social_links_keyboard() -> InlineKeyboardMarkup:
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 
 def vip_entry_continue_keyboard() -> InlineKeyboardMarkup:
