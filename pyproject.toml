@@ -28,7 +28,8 @@ addopts = [
 markers = [
     "unit: Unit tests",
     "integration: Integration tests",
-    "slow: Slow tests"
+    "slow: Slow tests",
+    "e2e: E2E tests"
 ]
 
 [tool.coverage.run]
