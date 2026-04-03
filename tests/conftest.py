@@ -459,6 +459,71 @@ def sample_reward_besitos(db_session: Session):
     return reward
 
 
+
+
+@pytest.fixture
+def sample_package(db_session: Session):
+    """Crea un paquete de prueba."""
+    package = Package(
+        name="Test Package",
+        description="A test package",
+        store_stock=-1,
+        reward_stock=-1,
+        is_active=True
+    )
+    db_session.add(package)
+    db_session.commit()
+    db_session.refresh(package)
+    return package
+
+
+@pytest.fixture
+def sample_promotion(db_session: Session, sample_package):
+    """Crea una promocion de prueba."""
+    promotion = Promotion(
+        name="Test Promotion",
+        description="A test promotion",
+        package_id=sample_package.id,
+        price_mxn=99900,
+        status=PromotionStatus.ACTIVE,
+        is_active=True
+    )
+    db_session.add(promotion)
+    db_session.commit()
+    db_session.refresh(promotion)
+    return promotion
+
+
+@pytest.fixture
+def sample_reaction_emoji(db_session: Session):
+    """Crea un emoji de reaccion de prueba."""
+    emoji = ReactionEmoji(
+        emoji="\U0001f48b",
+        name="beso",
+        besito_value=5,
+        is_active=True
+    )
+    db_session.add(emoji)
+    db_session.commit()
+    db_session.refresh(emoji)
+    return emoji
+
+
+@pytest.fixture
+def sample_broadcast_message(db_session: Session, sample_free_channel):
+    """Crea un mensaje de broadcast de prueba."""
+    broadcast = BroadcastMessage(
+        message_id=12345,
+        channel_id=sample_free_channel.channel_id,
+        admin_id=987654321,
+        text="Test broadcast",
+        has_reactions=True
+    )
+    db_session.add(broadcast)
+    db_session.commit()
+    db_session.refresh(broadcast)
+    return broadcast
+
 # ==================== MOCK FIXTURES ====================
 
 @pytest.fixture
