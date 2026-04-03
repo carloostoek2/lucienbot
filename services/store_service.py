@@ -309,7 +309,12 @@ class StoreService:
 
         # Procesar cada item
         for order_item in order.items:
-            product = order_item.product
+            product = db.query(StoreProduct).filter(
+                StoreProduct.id == order_item.product_id
+            ).with_for_update().first()
+
+            if not product:
+                continue
 
             # Decrementar stock
             if product.stock != -1:
