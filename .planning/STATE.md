@@ -56,6 +56,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 |------|--------|---------|-------------|
 | 11-01 | ✓ | 0bf6f6d, 1c38b43, cc05571 | Wave 0 test infrastructure: fixtures, e2e marker, stub files |
 | 11-02 | ✓ | 0bf6f6d, c8faa81 | StoreService tests + race condition fix with SELECT FOR UPDATE |
+| 11-03 | ✓ | 084dcbd, d14cf40, ead2f2b, 50ad430 | PromotionService + BroadcastService tests + race condition fixes |
 | 11-05 | ✓ | e13119a, 2a2d730, 9c76de8 | UserService + AnalyticsService + StoryService unit tests |
 
 ### Phase 10 Summary
@@ -67,7 +68,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 10-03 | ✓ | e3374f8, 089cdea, 4389368, 635831e | VIP entry: 3-phase ritual, callbacks, state management |
 | 10-04 | ✓ | ca076f3, e887eb8 | Tests: VIP entry state, scheduler triggers, regression |
 
-**Tests:** 98/98 unit tests passing
+**Tests:** 129/129 unit tests passing
 
 ## Execution Log
 
@@ -87,12 +88,13 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-03-31 | 10-03 | VIP 3-phase entry ritual — state management, callbacks, link generation — commits e3374f8, 089cdea, 4389368 |
 | 2026-03-31 | 10-04 | Tests: VIP entry state, scheduler triggers, channel regression — commit ca076f3 |
 | 2026-04-03 | 11-01 | Wave 0 test infrastructure: fixtures, e2e marker, 13 stub files — commits 0bf6f6d, 1c38b43, cc05571 |
+| 2026-04-03 | 11-03 | PromotionService + BroadcastService tests + race condition fixes — commits 084dcbd, d14cf40, ead2f2b, 50ad430 |
 | 2026-04-03 | 11-05 | UserService + AnalyticsService + StoryService unit tests — commits e13119a, 2a2d730, 9c76de8 |
 
 ## What's Next
 
-→ Phase 11 IN PROGRESS — Plans 11-01, 11-02, 11-05 complete
-→ Next: 11-03 or next uncompleted plan
+→ Phase 11 IN PROGRESS — Plans 11-01, 11-02, 11-03, 11-05 complete
+→ Next: 11-04 or next uncompleted plan
 
 ### Quick Tasks Completed
 
