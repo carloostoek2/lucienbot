@@ -1,7 +1,7 @@
 # Roadmap: Lucien Bot
 
 **Created:** 2026-03-30
-**Phases completed:** 8 of 10
+**Phases completed:** 8 of 11
 **Milestone:** v1.0 — Core bot functionality
 
 ## Summary
@@ -12,11 +12,11 @@
 | 2 | Canales | Canal Free con aprobacion + Canal VIP con acceso | CHAN-01, CHAN-02, CHAN-03, CHAN-04 | Usuarios acceden a canales segun flujo esperado |
 | 3 | Suscripciones VIP | Tokens, tarifas, suscripciones, expiracion | VIP-01, VIP-02, VIP-03, VIP-04, VIP-05, VIP-06, ADMIN-02 | Flujo completo VIP funcional |
 | 4 | Gamificacion | Besitos, hugs, gifts, balance, top | BESI-01, BESI-02, BESI-03, BESI-04 | Sistema de besitos activo y balance correcto |
-| 5 | Misiones | Misiones, progreso, recompensas | MISS-01, MISS-02, MISS-03, MISS-04, ADMIN-03 | Visitantes completan misiones y reciben recompensas |
+| 5 | Misiones | Misiones, progreso, recompensas | MISS-01, MISS-02, MISS-03, ADMIN-03 | Visitantes completan misiones y reciben recompensas |
 | 6 | Tienda + Promociones + Narrativa | Compra de paquetes, codigos, historias interactivas | STOR-01-04, PROM-01-03, NARR-01-04, ADMIN-04, ADMIN-05 | Store, promociones y narrativa funcionando |
 | 7 | **VIP Invite Links Dinamicos** ✓ | Links de invitacion de un solo uso para canal VIP | VIP-07 | Un token = un link de un solo uso generado dinamicamente |
 | 07.1 | **Integrar Alembic** ✓ | Sistema de migraciones Alembic reemplazar create_all() | Complete    | 2026-03-30 |
-| 8 | Testing & Technical Debt | Tests, linting, manejo de sessiones, refactor handlers | TEST-01-03, SCHED-02, SEC-03 | Cobertura de tests y codigo mas mantenible |
+| 8 | Testing & Technical Debt | Tests, linting, manejo de sessiones, refactor handlers | TEST-01, TEST-02, TEST-03, SCHED-02, SEC-03 | Cobertura de tests y codigo mas mantenible |
 | 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | Complete    | 2026-03-31 |
 
 ## Phase Details
@@ -144,13 +144,6 @@ Plans:
 5. Dashboard de metricas para Custodios
 6. Exportacion de datos de actividad
 
-## Milestone Completion Criteria
-
-- [ ] Phases 1-6: Todas las funcionalidades core validadas en produccion
-- [x] Phase 7: Invite links dinamicos deployados y funcionando
-- [ ] Phase 8: Cobertura de tests >= 70%, deuda tecnica reducida
-- [x] Phase 9: Bot hardened para produccion a escala (completed 2026-03-31)
-
 ### Phase 10: Flujos de entrada @docs/req_fase10.md
 
 **Goal:** Implement ritualized entry flows for Free and VIP channels
@@ -173,6 +166,33 @@ Plans:
 5. VIP channel: Resumable flow if user abandons and returns
 6. VIP channel: Expired subscription guard cancels flow
 7. All new code covered by unit tests
+
+### Phase 11: Critical Services Test Coverage + E2E Tests
+
+**Goal:** Expand test coverage to all remaining business logic services, fix race conditions, and validate E2E entry flows
+**Requirements:** REQ-11-01, REQ-11-02, REQ-11-03, REQ-11-04, REQ-11-05, REQ-11-06, REQ-11-07, REQ-11-08, REQ-11-09, REQ-11-10, REQ-11-11, REQ-11-12, REQ-11-13, REQ-11-14
+**Depends on:** Phase 10
+**Status:** Planned
+**Plans:** 7 plans planned
+
+Plans:
+- [ ] 11-01: Wave 0 — Test infrastructure: fixtures, e2e marker, stub files
+- [ ] 11-02: StoreService — Unit tests + race condition fix (SELECT FOR UPDATE)
+- [ ] 11-03: PromotionService + BroadcastService — Unit tests + race condition fixes
+- [ ] 11-04: PackageService + RewardService + DailyGiftService — Unit tests
+- [ ] 11-05: UserService + AnalyticsService + StoryService — Unit tests
+- [ ] 11-06: Free entry + VIP ritual — E2E integration tests with mocked bot
+- [ ] 11-07: LucienVoice + cross-service atomicity — E2E audit + integration tests
+
+**Success criteria:**
+1. StoreService: full unit coverage + race condition fixed
+2. PromotionService + BroadcastService: full unit coverage + race conditions fixed
+3. PackageService + RewardService + DailyGiftService: full unit coverage
+4. UserService + AnalyticsService + StoryService: full unit coverage
+5. Free channel entry flow and VIP 3-phase ritual covered by E2E tests
+6. LucienVoice consistency validated (no hardcoded strings in services)
+7. Cross-service atomicity patterns verified
+8. Full test suite passes with coverage >= 70%
 
 ---
 *Roadmap created: 2026-03-30 from codebase analysis and git history*
