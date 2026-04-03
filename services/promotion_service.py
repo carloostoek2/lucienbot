@@ -198,8 +198,12 @@ class PromotionService:
         if not promotion.is_available:
             return False, "Esta promocion no esta disponible actualmente", None
 
-        # Verificar si ya expreso interes
-        if self.has_user_expressed_interest(user_id, promotion_id):
+        # Verificar si ya expreso interes (con lock para evitar race conditions)
+        existing = db.query(PromotionInterest).filter(
+            PromotionInterest.user_id == user_id,
+            PromotionInterest.promotion_id == promotion_id
+        ).with_for_update().first()
+        if existing:
             return False, "Ya has expresado interes en esta promocion", None
 
         # Crear el registro de interes
