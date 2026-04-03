@@ -172,12 +172,12 @@ Plans:
 **Goal:** Expand test coverage to all remaining business logic services, fix race conditions, and validate E2E entry flows
 **Requirements:** REQ-11-01, REQ-11-02, REQ-11-03, REQ-11-04, REQ-11-05, REQ-11-06, REQ-11-07, REQ-11-08, REQ-11-09, REQ-11-10, REQ-11-11, REQ-11-12, REQ-11-13, REQ-11-14
 **Depends on:** Phase 10
-**Status:** Planned
-**Plans:** 2/7 plans executed
+**Status:** In Progress
+**Plans:** 3/7 plans executed
 
 Plans:
 - [x] 11-01: Wave 0 — Test infrastructure: fixtures, e2e marker, stub files
-- [ ] 11-02: StoreService — Unit tests + race condition fix (SELECT FOR UPDATE)
+- [x] 11-02: StoreService — Unit tests + race condition fix (SELECT FOR UPDATE)
 - [ ] 11-03: PromotionService + BroadcastService — Unit tests + race condition fixes
 - [ ] 11-04: PackageService + RewardService + DailyGiftService — Unit tests
 - [x] 11-05: UserService + AnalyticsService + StoryService — Unit tests

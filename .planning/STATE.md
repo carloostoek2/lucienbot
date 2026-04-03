@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Executing Phase 11
-last_updated: "2026-04-03T05:08:56.609Z"
+last_updated: "2026-04-03T05:30:00.000Z"
 progress:
   total_phases: 12
   completed_phases: 3
   total_plans: 17
-  completed_plans: 12
-  percent: 71
+  completed_plans: 13
+  percent: 76
 ---
 
 # State: Lucien Bot
@@ -55,6 +55,8 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | Plan | Status | Commits | Description |
 |------|--------|---------|-------------|
 | 11-01 | ✓ | 0bf6f6d, 1c38b43, cc05571 | Wave 0 test infrastructure: fixtures, e2e marker, stub files |
+| 11-02 | ✓ | 0bf6f6d, c8faa81 | StoreService tests + race condition fix with SELECT FOR UPDATE |
+| 11-05 | ✓ | e13119a, 2a2d730, 9c76de8 | UserService + AnalyticsService + StoryService unit tests |
 
 ### Phase 10 Summary
 
@@ -85,11 +87,12 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-03-31 | 10-03 | VIP 3-phase entry ritual — state management, callbacks, link generation — commits e3374f8, 089cdea, 4389368 |
 | 2026-03-31 | 10-04 | Tests: VIP entry state, scheduler triggers, channel regression — commit ca076f3 |
 | 2026-04-03 | 11-01 | Wave 0 test infrastructure: fixtures, e2e marker, 13 stub files — commits 0bf6f6d, 1c38b43, cc05571 |
+| 2026-04-03 | 11-05 | UserService + AnalyticsService + StoryService unit tests — commits e13119a, 2a2d730, 9c76de8 |
 
 ## What's Next
 
-→ Phase 11 IN PROGRESS — Plan 11-01 complete
-→ Next: 11-02 StoreService unit tests + race condition fix
+→ Phase 11 IN PROGRESS — Plans 11-01, 11-02, 11-05 complete
+→ Next: 11-03 or next uncompleted plan
 
 ### Quick Tasks Completed
 
