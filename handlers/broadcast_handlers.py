@@ -481,7 +481,7 @@ async def ask_for_protection(target, state: FSMContext):
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
     ])
-    
+
     text = f"""🎩 <b>Lucien:</b>
 
 <i>¿Desea proteger el mensaje?</i>
@@ -491,7 +491,7 @@ async def ask_for_protection(target, state: FSMContext):
 🔒 <b>Proteger:</b> Impide copiar, reenviar y descargar el contenido.
 
 ⚠️ <b>Nota:</b> La protección solo funciona en canales con contenido protegido habilitado."""
-    
+
     try:
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -503,8 +503,10 @@ async def ask_for_protection(target, state: FSMContext):
         else:
             raise
 
+    await state.set_state(BroadcastStates.waiting_protection_decision)
 
-@router.callback_query(BroadcastStates.waiting_reaction_decision, F.data.startswith("protect_"))
+
+@router.callback_query(BroadcastStates.waiting_protection_decision, F.data.startswith("protect_"))
 async def set_protection(callback: CallbackQuery, state: FSMContext):
     """Establece protección y muestra preview"""
     is_protected = callback.data == "protect_yes"
