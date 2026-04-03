@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Phase 10 shipped — PR #12"
-last_updated: "2026-03-31T23:58:34.239Z"
+status: Executing Phase 11
+last_updated: "2026-04-03T05:08:56.609Z"
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 3
-  total_plans: 10
-  completed_plans: 11
-  percent: 100
+  total_plans: 17
+  completed_plans: 12
+  percent: 71
 ---
 
 # State: Lucien Bot
@@ -22,13 +22,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Crear una experiencia premium y gamificada que incentiva el compromiso de la comunidad con Diana a través de un sistema de recompensas, acceso exclusivo VIP y narrativa inmersiva.
-**Current focus:** Phase 10 — Flujos de entrada (Plan 10-01 Complete)
+**Current focus:** Phase 11 — cubrir-los-servicios-cr-ticos-en-los-tests-realizar-test-e2e
 
 ## Milestone
 
 **Name:** v1.0 — Core bot functionality
 **Started:** ~2025 (inferred from git history)
-**Progress:** [██████████] 100%
+**Progress:** [███████░░░] 71%
 
 ## Phase Status
 
@@ -48,7 +48,13 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 ## Current Phase
 
-**Phase 10: Flujos de entrada @docs/req_fase10.md** — ✅ COMPLETE
+**Phase 11: cubrir-los-servicios-cr-ticos-en-los-tests-realizar-test-e2e** — ▶️ IN PROGRESS
+
+### Phase 11 Summary
+
+| Plan | Status | Commits | Description |
+|------|--------|---------|-------------|
+| 11-01 | ✓ | 0bf6f6d, 1c38b43, cc05571 | Wave 0 test infrastructure: fixtures, e2e marker, stub files |
 
 ### Phase 10 Summary
 
@@ -78,11 +84,12 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-03-31 | 10-02 | Free channel 30s delay mechanism — scheduler handlers, impatience messages — commits d82e88d, 72f99a6 |
 | 2026-03-31 | 10-03 | VIP 3-phase entry ritual — state management, callbacks, link generation — commits e3374f8, 089cdea, 4389368 |
 | 2026-03-31 | 10-04 | Tests: VIP entry state, scheduler triggers, channel regression — commit ca076f3 |
+| 2026-04-03 | 11-01 | Wave 0 test infrastructure: fixtures, e2e marker, 13 stub files — commits 0bf6f6d, 1c38b43, cc05571 |
 
 ## What's Next
 
-→ Phase 10 COMPLETE — All entry flow rituals implemented
-→ Ready for `/gsd:verify-work` to validate implementation
+→ Phase 11 IN PROGRESS — Plan 11-01 complete
+→ Next: 11-02 StoreService unit tests + race condition fix
 
 ### Quick Tasks Completed
 
@@ -105,6 +112,8 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | ~2025 | SQLite → PostgreSQL en Railway | SQLite no escala con writes concurrentes |
 | 2026-03-31 | BackupService usa subprocess.run para pg_dump y sqlite3 | Consistencia con patrones del proyecto |
 | 2026-03-31 | Backup cada 100 ciclos del scheduler (~50 min) | Evita refactorizar arquitectura del scheduler |
+| 2026-04-03 | Keep existing conftest pattern for new fixtures | Consistency with existing test codebase |
+| 2026-04-03 | Stub files include minimal pass test | Ensures pytest --collect-only never fails on new modules |
 
 ## Execution Log
 
