@@ -16,7 +16,11 @@ from models.database import Base
 from models.models import (
     User, UserRole, Channel, ChannelType, Tariff, Token, TokenStatus,
     Subscription, BesitoBalance, Mission, MissionType, MissionFrequency,
-    UserMissionProgress, PendingRequest
+    UserMissionProgress, PendingRequest,
+    StoreProduct, Package, Promotion, PromotionStatus, ReactionEmoji,
+    BroadcastMessage, StoryNode, StoryChoice, NodeType, Archetype,
+    ArchetypeType, DailyGiftConfig, DailyGiftClaim, CartItem, Order,
+    OrderStatus, Reward, RewardType
 )
 
 
@@ -269,6 +273,192 @@ def sample_pending_request(db_session: Session, sample_user, sample_free_channel
     return request
 
 
+@pytest.fixture
+def sample_package(db_session: Session):
+    """Crea un paquete de prueba."""
+    package = Package(
+        name="Test Package",
+        description="A test package",
+        store_stock=10,
+        reward_stock=5,
+        is_active=True
+    )
+    db_session.add(package)
+    db_session.commit()
+    db_session.refresh(package)
+    return package
+
+
+@pytest.fixture
+def sample_store_product(db_session: Session, sample_package):
+    """Crea un producto de tienda de prueba."""
+    product = StoreProduct(
+        name="Test Product",
+        description="A product",
+        package_id=sample_package.id,
+        price=100,
+        stock=10,
+        is_active=True
+    )
+    db_session.add(product)
+    db_session.commit()
+    db_session.refresh(product)
+    return product
+
+
+@pytest.fixture
+def sample_promotion(db_session: Session, sample_package):
+    """Crea una promoción de prueba."""
+    promotion = Promotion(
+        name="Test Promo",
+        description="A promo",
+        package_id=sample_package.id,
+        price_mxn=99900,
+        is_active=True,
+        status=PromotionStatus.ACTIVE
+    )
+    db_session.add(promotion)
+    db_session.commit()
+    db_session.refresh(promotion)
+    return promotion
+
+
+@pytest.fixture
+def sample_reaction_emoji(db_session: Session):
+    """Crea un emoji de reacción de prueba."""
+    emoji = ReactionEmoji(
+        emoji="💋",
+        name="besito",
+        besito_value=1,
+        is_active=True
+    )
+    db_session.add(emoji)
+    db_session.commit()
+    db_session.refresh(emoji)
+    return emoji
+
+
+@pytest.fixture
+def sample_broadcast_message(db_session: Session, sample_free_channel, sample_admin):
+    """Crea un mensaje de broadcast de prueba."""
+    message = BroadcastMessage(
+        message_id=1001,
+        channel_id=sample_free_channel.channel_id,
+        admin_id=sample_admin.telegram_id,
+        text="Test broadcast",
+        has_reactions=True
+    )
+    db_session.add(message)
+    db_session.commit()
+    db_session.refresh(message)
+    return message
+
+
+@pytest.fixture
+def sample_story_node(db_session: Session):
+    """Crea un nodo de historia de prueba."""
+    node = StoryNode(
+        title="Test Node",
+        content="Test content",
+        node_type=NodeType.NARRATIVE,
+        chapter=1,
+        is_active=True,
+        is_starting_node=True
+    )
+    db_session.add(node)
+    db_session.commit()
+    db_session.refresh(node)
+    return node
+
+
+@pytest.fixture
+def sample_story_choice(db_session: Session, sample_story_node):
+    """Crea una opción de historia de prueba."""
+    choice = StoryChoice(
+        node_id=sample_story_node.id,
+        text="Go forward",
+        next_node_id=None,
+        archetype_points=0
+    )
+    db_session.add(choice)
+    db_session.commit()
+    db_session.refresh(choice)
+    return choice
+
+
+@pytest.fixture
+def sample_archetype(db_session: Session):
+    """Crea un arquetipo de prueba."""
+    archetype = Archetype(
+        archetype_type=ArchetypeType.EXPLORADOR,
+        name="El Explorador",
+        description="Curioso y aventurero",
+        traits='["curiosidad","aventura"]'
+    )
+    db_session.add(archetype)
+    db_session.commit()
+    db_session.refresh(archetype)
+    return archetype
+
+
+@pytest.fixture
+def sample_daily_gift_config(db_session: Session):
+    """Crea una configuración de regalo diario de prueba."""
+    config = DailyGiftConfig(
+        besito_amount=10,
+        is_active=True
+    )
+    db_session.add(config)
+    db_session.commit()
+    db_session.refresh(config)
+    return config
+
+
+@pytest.fixture
+def sample_cart_item(db_session: Session, sample_user, sample_store_product):
+    """Crea un item de carrito de prueba."""
+    item = CartItem(
+        user_id=sample_user.id,
+        product_id=sample_store_product.id,
+        quantity=1
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+    return item
+
+
+@pytest.fixture
+def sample_order(db_session: Session, sample_user):
+    """Crea una orden de prueba."""
+    order = Order(
+        user_id=sample_user.id,
+        total_items=1,
+        total_price=100,
+        status=OrderStatus.PENDING
+    )
+    db_session.add(order)
+    db_session.commit()
+    db_session.refresh(order)
+    return order
+
+
+@pytest.fixture
+def sample_reward_besitos(db_session: Session):
+    """Crea una recompensa de besitos de prueba."""
+    reward = Reward(
+        name="Test Reward",
+        description="A reward",
+        reward_type=RewardType.BESITOS,
+        besito_amount=50,
+        is_active=True
+    )
+    db_session.add(reward)
+    db_session.commit()
+    db_session.refresh(reward)
+    return reward
+
+
 # ==================== MOCK FIXTURES ====================
 
 @pytest.fixture
@@ -276,6 +466,10 @@ def mock_bot():
     """Crea un mock del bot de Telegram."""
     bot = AsyncMock()
     bot.send_message = AsyncMock()
+    bot.send_photo = AsyncMock()
+    bot.send_video = AsyncMock()
+    bot.send_animation = AsyncMock()
+    bot.send_document = AsyncMock()
     bot.ban_chat_member = AsyncMock()
     bot.unban_chat_member = AsyncMock()
     bot.create_chat_invite_link = AsyncMock(return_value=MagicMock(invite_link="https://t.me/+NewInviteLink"))
