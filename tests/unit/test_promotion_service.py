@@ -259,15 +259,22 @@ class TestPromotionServiceRaceCondition:
         """Test que express_interest usa SELECT FOR UPDATE"""
         service = PromotionService(db_session)
 
-        mock_query = MagicMock()
-        mock_filtered = MagicMock()
-        mock_with_lock = MagicMock()
-        mock_first = MagicMock(return_value=None)
+        # Primer query: is_user_blocked (BlockedPromotionUser)
+        blocked_mock = MagicMock()
+        blocked_mock.filter.return_value.first.return_value = None
 
-        mock_query.filter.return_value = mock_filtered
-        mock_filtered.with_for_update.return_value = mock_with_lock
-        mock_with_lock.first.return_value = None
+        # Segundo query: get_promotion (Promotion)
+        promotion_mock = MagicMock()
+        promotion_mock.filter.return_value.first.return_value = sample_promotion
 
-        with patch.object(db_session, 'query', return_value=mock_query):
+        # Tercer query: PromotionInterest con with_for_update
+        interest_mock = MagicMock()
+        interest_filtered = MagicMock()
+        interest_with_lock = MagicMock()
+        interest_with_lock.first.return_value = None
+        interest_filtered.with_for_update.return_value = interest_with_lock
+        interest_mock.filter.return_value = interest_filtered
+
+        with patch.object(db_session, 'query', side_effect=[blocked_mock, promotion_mock, interest_mock]):
             service.express_interest(sample_user.id, sample_promotion.id)
-            mock_filtered.with_for_update.assert_called()
+            interest_filtered.with_for_update.assert_called()
