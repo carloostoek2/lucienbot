@@ -12,6 +12,7 @@ from models.models import (
     Reward, RewardType
 )
 from models.database import SessionLocal
+from services.reward_service import RewardService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -199,6 +200,61 @@ class MissionService:
                 progress.completed_at = datetime.utcnow()
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
+
+            db.commit()
+
+        return completed
+
+    async def increment_progress_and_deliver(self, user_id: int, mission_type: MissionType,
+                           amount: int = 1, bot=None) -> List[UserMissionProgress]:
+        """
+        Incrementa el progreso y entrega recompensas automaticamente.
+        Retorna las misiones completadas.
+
+        Args:
+            user_id: ID del usuario
+            mission_type: Tipo de misión
+            amount: Cantidad a incrementar
+            bot: Instancia del bot (requerido para entrega de recompensas)
+        """
+        db = self._get_db()
+        missions = self.get_missions_by_type(mission_type)
+        completed = []
+
+        for mission in missions:
+            if not mission.is_available:
+                continue
+
+            progress = self.get_or_create_progress(user_id, mission.id)
+
+            # Si ya esta completada y no es recurrente, saltar
+            if progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+                continue
+
+            # Si esta completada y es recurrente, reiniciar
+            if progress.is_completed and mission.frequency == MissionFrequency.RECURRING:
+                progress.current_value = 0
+                progress.is_completed = False
+                progress.completed_at = None
+
+            # Incrementar progreso
+            progress.current_value += amount
+
+            # Verificar completitud
+            if progress.current_value >= mission.target_value:
+                progress.is_completed = True
+                progress.completed_at = datetime.utcnow()
+                completed.append(progress)
+                logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
+
+                # Auto-entregar recompensa si está configurada
+                if mission.reward_id and bot:
+                    reward_service = RewardService(db)
+                    success, message = await reward_service.deliver_reward(
+                        bot=bot, user_id=user_id, reward_id=mission.reward_id, mission_id=mission.id
+                    )
+                    if success:
+                        logger.info(f"Recompensa entregada: user={user_id}, reward={mission.reward_id}")
 
             db.commit()
 

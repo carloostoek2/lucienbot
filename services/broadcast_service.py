@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from models.models import (
     BroadcastMessage, BroadcastReaction, ReactionEmoji,
-    Channel, ChannelType
+    Channel, ChannelType, MissionType
 )
 from models.database import SessionLocal
 from services.besito_service import BesitoService
+from services.mission_service import MissionService
 from models.models import TransactionSource
 import logging
 
@@ -203,8 +204,14 @@ class BroadcastService:
             
             self.db.commit()
             self.db.refresh(reaction)
-            
-            logger.info(f"Reacción registrada: user={user_id}, broadcast={broadcast_id}, besitos={besito_value}")
+
+            # Incrementar progreso de misiones REACTION_COUNT
+            mission_service = MissionService(self.db)
+            completed_missions = mission_service.increment_progress(
+                user_id, MissionType.REACTION_COUNT, amount=1
+            )
+
+            logger.info(f"Reacción registrada: user={user_id}, broadcast={broadcast_id}, besitos={besito_value}, misiones_completadas={len(completed_missions)}")
             return reaction
             
         except Exception as e:
