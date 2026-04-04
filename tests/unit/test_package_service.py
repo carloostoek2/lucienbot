@@ -202,7 +202,8 @@ class TestPackageService:
 
     @pytest.mark.asyncio
     async def test_deliver_package_to_user_success(self, db_session, sample_user, mock_bot):
-        """Test entregar paquete envía mensaje intro y cada archivo"""
+        """Test entregar paquete agrupa fotos/videos en media_group y envía resto individual"""
+        from aiogram.types import InputMediaPhoto, InputMediaVideo
         service = PackageService(db_session)
         package = service.create_package("Special Package", "A gift")
         service.add_file_to_package(package.id, "file_id_1", "photo")
@@ -217,8 +218,14 @@ class TestPackageService:
         assert success is True
         assert "Special Package" in msg
         mock_bot.send_message.assert_called_once()
-        mock_bot.send_photo.assert_called_once()
-        mock_bot.send_video.assert_called_once()
+        # Fotos y videos se agrupan en media_group
+        mock_bot.send_media_group.assert_called_once()
+        call_args = mock_bot.send_media_group.call_args
+        media = call_args.kwargs.get("media") or call_args[1].get("media")
+        assert len(media) == 2
+        assert isinstance(media[0], InputMediaPhoto)
+        assert isinstance(media[1], InputMediaVideo)
+        # Animaciones y documentos se envían individualmente
         mock_bot.send_animation.assert_called_once()
         mock_bot.send_document.assert_called_once()
 

@@ -6,6 +6,7 @@ Gestiona la creación, edición y entrega de paquetes de contenido.
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from aiogram.types import InputMediaPhoto, InputMediaVideo
 from models.models import Package, PackageFile
 from models.database import SessionLocal
 import logging
@@ -240,27 +241,69 @@ class PackageService:
     
     # ==================== ENTREGA ====================
     
+    def _build_media_groups(self, files: List[PackageFile]) -> Tuple[List[List], List[PackageFile]]:
+        """
+        Construye grupos de media para enviar como album.
+
+        Args:
+            files: Lista de archivos del paquete
+
+        Returns:
+            Tuple (lista de media groups, lista de archivos individuales)
+        """
+        media_groups = []
+        current_group = []
+        individual_files = []
+
+        for file_entry in files:
+            # Solo fotos y videos pueden agruparse
+            if file_entry.file_type == "photo":
+                media = InputMediaPhoto(media=file_entry.file_id)
+                current_group.append(media)
+            elif file_entry.file_type == "video":
+                media = InputMediaVideo(media=file_entry.file_id)
+                current_group.append(media)
+            else:
+                # Animaciones y documentos van individual
+                individual_files.append(file_entry)
+                continue
+
+            # Telegram permite max 10 items por media_group
+            if len(current_group) == 10:
+                media_groups.append(current_group)
+                current_group = []
+
+        # Agregar grupo residual si existe
+        if current_group:
+            media_groups.append(current_group)
+
+        return media_groups, individual_files
+
     async def deliver_package_to_user(self, bot, user_id: int, package_id: int) -> Tuple[bool, str]:
         """
         Entrega un paquete a un usuario enviando todos los archivos.
-        
+        Fotos y videos se agrupan en albums; animaciones y documentos se envían individual.
+
         Args:
             bot: Instancia del bot
             user_id: ID del usuario destino
             package_id: ID del paquete
-        
+
         Returns:
             Tuple (éxito, mensaje)
         """
         package = self.get_package(package_id)
         if not package:
             return False, "Paquete no encontrado"
-        
+
         files = self.get_package_files(package_id)
         if not files:
             return False, "El paquete no contiene archivos"
-        
+
         try:
+            # Construir grupos de media
+            media_groups, individual_files = self._build_media_groups(files)
+
             # Enviar mensaje introductorio
             await bot.send_message(
                 chat_id=user_id,
@@ -275,21 +318,21 @@ class PackageService:
 Enviando {len(files)} archivo(s)...""",
                 parse_mode="HTML"
             )
-            
-            # Enviar cada archivo
-            for file_entry in files:
+
+            # Enviar media groups (fotos y videos agrupados)
+            for media_group in media_groups:
                 try:
-                    if file_entry.file_type == "photo":
-                        await bot.send_photo(
-                            chat_id=user_id,
-                            photo=file_entry.file_id
-                        )
-                    elif file_entry.file_type == "video":
-                        await bot.send_video(
-                            chat_id=user_id,
-                            video=file_entry.file_id
-                        )
-                    elif file_entry.file_type == "animation":
+                    await bot.send_media_group(
+                        chat_id=user_id,
+                        media=media_group
+                    )
+                except Exception as e:
+                    logger.error(f"Error enviando media_group: {e}")
+
+            # Enviar archivos individuales (animaciones y documentos)
+            for file_entry in individual_files:
+                try:
+                    if file_entry.file_type == "animation":
                         await bot.send_animation(
                             chat_id=user_id,
                             animation=file_entry.file_id
@@ -303,10 +346,10 @@ Enviando {len(files)} archivo(s)...""",
                 except Exception as e:
                     logger.error(f"Error enviando archivo {file_entry.id}: {e}")
                     continue
-            
+
             logger.info(f"Paquete {package_id} entregado a usuario {user_id}")
             return True, f"Paquete '{package.name}' entregado exitosamente"
-            
+
         except Exception as e:
             logger.error(f"Error entregando paquete {package_id}: {e}")
             return False, "Error al entregar el paquete"

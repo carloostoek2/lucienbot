@@ -535,6 +535,7 @@ def mock_bot():
     bot.send_video = AsyncMock()
     bot.send_animation = AsyncMock()
     bot.send_document = AsyncMock()
+    bot.send_media_group = AsyncMock()
     bot.ban_chat_member = AsyncMock()
     bot.unban_chat_member = AsyncMock()
     bot.create_chat_invite_link = AsyncMock(return_value=MagicMock(invite_link="https://t.me/+NewInviteLink"))

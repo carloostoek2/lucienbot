@@ -144,7 +144,8 @@ class TestRewardServiceDelivery:
 
     @pytest.mark.asyncio
     async def test_deliver_reward_package(self, db_session, sample_user, sample_package, mock_bot):
-        """Test entregar recompensa de paquete decrementa stock y envía archivos"""
+        """Test entregar recompensa de paquete decrementa stock y envía media_group"""
+        from aiogram.types import InputMediaPhoto
         pkg_service = PackageService(db_session)
         pkg_service.add_file_to_package(sample_package.id, "file1", "photo")
         sample_package.reward_stock = 1
@@ -157,7 +158,12 @@ class TestRewardServiceDelivery:
 
         assert success is True
         mock_bot.send_message.assert_called_once()
-        mock_bot.send_photo.assert_called_once()
+        # Fotos se envían como media_group
+        mock_bot.send_media_group.assert_called_once()
+        call_args = mock_bot.send_media_group.call_args
+        media = call_args.kwargs.get("media") or call_args[1].get("media")
+        assert len(media) == 1
+        assert isinstance(media[0], InputMediaPhoto)
 
         # Verificar que el stock de recompensas se decrementó via model method
         refreshed_pkg = pkg_service.get_package(sample_package.id)
