@@ -16,6 +16,9 @@ import logging
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Deduplication set for reaction callbacks (prevents duplicate processing from Telegram retries)
+_reaction_callbacks_being_processed = set()
+
 
 # ==================== CONSULTAR SALDO ====================
 
@@ -175,83 +178,97 @@ async def claim_daily_gift(callback: CallbackQuery):
 async def handle_reaction(callback: CallbackQuery):
     """Maneja las reacciones a mensajes de broadcast y actualiza conteos"""
     user = callback.from_user
-    
+
     # Parsear datos: react_{broadcast_id}_{emoji_id}
     parts = callback.data.split("_")
     if len(parts) != 3:
         await callback.answer("Error en la reacción", show_alert=True)
         return
-    
+
     try:
         broadcast_id = int(parts[1])
         emoji_id = int(parts[2])
     except ValueError:
         await callback.answer("Error en la reacción", show_alert=True)
         return
-    
-    broadcast_service = BroadcastService()
-    
-    # Verificar si ya reaccionó
-    if broadcast_service.has_user_reacted(broadcast_id, user.id):
-        await callback.answer("Ya reaccionaste a este mensaje 💋", show_alert=True)
+
+    # Deduplication key para prevenir procesamiento duplicado
+    dedup_key = f"{user.id}:{broadcast_id}:{emoji_id}"
+
+    # Verificar si ya estamos procesando este callback (race condition protection)
+    if dedup_key in _reaction_callbacks_being_processed:
+        logger.debug(f"Callback duplicado ignorado: {dedup_key}")
+        await callback.answer("Procesando tu reacción...", show_alert=False)
         return
-    
-    # Registrar reacción
-    reaction = broadcast_service.register_reaction(
-        broadcast_id=broadcast_id,
-        user_id=user.id,
-        emoji_id=emoji_id,
-        username=user.username
-    )
-    
-    if reaction:
-        emoji = reaction.reaction_emoji.emoji if reaction.reaction_emoji else "💋"
-        besitos = reaction.besitos_awarded
 
-        # Obtener el broadcast para actualizar el mensaje
-        broadcast = broadcast_service.get_broadcast(broadcast_id)
-        if broadcast and broadcast.has_reactions:
-            # Obtener TODOS los emojis originales del broadcast
-            selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
+    # Marcar como en proceso
+    _reaction_callbacks_being_processed.add(dedup_key)
 
-            # Obtener conteo actualizado de reacciones
-            reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
+    try:
+        broadcast_service = BroadcastService()
 
-            # Contar reacciones por emoji
-            emoji_counts = {}
-            for r in reactions:
-                if r.reaction_emoji:
-                    emoji_id_val = r.reaction_emoji.id
-                    emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
+        # Registrar reacción con entrega automática de recompensas (verificación y registro atómico)
+        reaction = await broadcast_service.check_and_register_reaction(
+            broadcast_id=broadcast_id,
+            user_id=user.id,
+            emoji_id=emoji_id,
+            username=user.username,
+            bot=callback.bot
+        )
 
-            # Reconstruir el teclado con TODOS los emojis originales (con o sin conteo)
-            buttons = []
-            for emoji_id in selected_emoji_ids:
-                emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
-                if emoji_obj:
-                    count = emoji_counts.get(emoji_id, 0)
-                    # Mostrar el emoji con el conteo (o solo el emoji si no hay conteo)
-                    text = f"{emoji_obj.emoji} {count}" if count > 0 else emoji_obj.emoji
-                    buttons.append(InlineKeyboardButton(
-                        text=text,
-                        callback_data=f"react_{broadcast_id}_{emoji_id}"
-                    ))
+        if reaction:
+            # reaction ahora es un diccionario, usar los datos directamente
+            emoji_char = reaction.get('emoji_char', '💋')
+            besitos = reaction.get('besitos_awarded', 0)
 
-            if buttons:
-                new_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
-                try:
-                    await callback.bot.edit_message_reply_markup(
-                        chat_id=broadcast.channel_id,
-                        message_id=broadcast.message_id,
-                        reply_markup=new_markup
-                    )
-                except Exception as e:
-                    logger.warning(f"No se pudo actualizar conteo en mensaje: {e}")
-        
-        # Solo notificar via callback (sin mensaje privado)
-        await callback.answer(f"¡+{besitos} besitos! 💋")
-    else:
-        await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
+            # Obtener el broadcast para actualizar el mensaje
+            broadcast = broadcast_service.get_broadcast(broadcast_id)
+            if broadcast and broadcast.has_reactions:
+                # Obtener TODOS los emojis originales del broadcast
+                selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
+
+                # Obtener conteo actualizado de reacciones
+                reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
+
+                # Contar reacciones por emoji
+                emoji_counts = {}
+                for r in reactions:
+                    if r.reaction_emoji:
+                        emoji_id_val = r.reaction_emoji.id
+                        emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
+
+                # Reconstruir el teclado con TODOS los emojis originales (con o sin conteo)
+                buttons = []
+                for emoji_id in selected_emoji_ids:
+                    emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
+                    if emoji_obj:
+                        count = emoji_counts.get(emoji_id, 0)
+                        # Mostrar el emoji con el conteo (o solo el emoji si no hay conteo)
+                        text = f"{emoji_obj.emoji} {count}" if count > 0 else emoji_obj.emoji
+                        buttons.append(InlineKeyboardButton(
+                            text=text,
+                            callback_data=f"react_{broadcast_id}_{emoji_id}"
+                        ))
+
+                if buttons:
+                    new_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
+                    try:
+                        await callback.bot.edit_message_reply_markup(
+                            chat_id=broadcast.channel_id,
+                            message_id=broadcast.message_id,
+                            reply_markup=new_markup
+                        )
+                    except Exception as e:
+                        logger.warning(f"No se pudo actualizar conteo en mensaje: {e}")
+
+            # Solo notificar via callback (sin mensaje privado)
+            await callback.answer(f"¡+{besitos} besitos! 💋")
+        else:
+            await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
+
+    finally:
+        # Siempre remover el dedup key al finalizar
+        _reaction_callbacks_being_processed.discard(dedup_key)
 
 
 

@@ -5,8 +5,9 @@ Gestiona el envío de mensajes a canales con sistema de reacciones.
 """
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 from models.models import (
     BroadcastMessage, BroadcastReaction, ReactionEmoji,
     Channel, ChannelType, MissionType
@@ -213,15 +214,104 @@ class BroadcastService:
 
             logger.info(f"Reacción registrada: user={user_id}, broadcast={broadcast_id}, besitos={besito_value}, misiones_completadas={len(completed_missions)}")
             return reaction
-            
+
         except Exception as e:
             self.db.rollback()
             logger.error(f"Error registrando reacción: {e}")
             return None
-    
+
+    async def check_and_register_reaction(self, broadcast_id: int, user_id: int,
+                              emoji_id: int, username: str = None, bot=None) -> Optional[dict]:
+        """
+        Verifica y registra una reacción en una sola transacción atómica.
+        Entrega recompensas de misiones automáticamente.
+        Retorna None si el usuario ya reaccionó.
+        Retorna dict con datos de la reacción si fue exitosa.
+
+        IMPORTANTE: Construye el dict de retorno ANTES del segundo commit
+        para evitar el bug 'DetachedInstanceError' que existe en main.
+        """
+        db = self.db
+
+        # Obtener el emoji y su valor primero (no necesita transacción)
+        emoji = self.get_reaction_emoji(emoji_id)
+        if not emoji:
+            logger.error(f"Emoji {emoji_id} no encontrado")
+            return None
+
+        besito_value = emoji.besito_value
+
+        try:
+            # Crear la reacción - el UniqueConstraint en BD evitará duplicados
+            reaction = BroadcastReaction(
+                broadcast_id=broadcast_id,
+                user_id=user_id,
+                username=username,
+                reaction_emoji_id=emoji_id,
+                besitos_awarded=besito_value
+            )
+            db.add(reaction)
+            db.flush()  # Forzar el INSERT para capturar IntegrityError
+
+            # Acreditar besitos al usuario (dentro de la misma transacción)
+            description = f"Reacción con {emoji.emoji}"
+            self.besito_service.credit_besitos(
+                user_id=user_id,
+                amount=besito_value,
+                source=TransactionSource.REACTION,
+                description=description,
+                reference_id=broadcast_id
+            )
+
+            # Commit de la transacción principal
+            db.commit()
+
+            logger.info(f"Reacción registrada: user={user_id}, broadcast={broadcast_id}, besitos={besito_value}")
+
+            # GUARDAR el ID de la reacción ANTES de procesar misiones
+            # para evitarDetachedInstanceError después del segundo commit
+            reaction_id = reaction.id
+            emoji_char = emoji.emoji
+
+            # Procesar misiones en una NUEVA transacción para evitar problemas de sesión
+            completed_count = 0
+            try:
+                mission_service = MissionService(db)
+                completed_missions = await mission_service.increment_progress_and_deliver(
+                    user_id, MissionType.REACTION_COUNT, amount=1, bot=bot
+                )
+                completed_count = len(completed_missions)
+                if completed_missions:
+                    logger.info(f"Misiones completadas por reacción: user={user_id}, count={completed_count}")
+            except Exception as mission_error:
+                # Error en misiones no debe invalidar la reacción
+                logger.warning(f"Error procesando misiones para reacción: {mission_error}")
+
+            # Retornar diccionario con datos GUARDADOS (no acceder al objeto reaction)
+            return {
+                'id': reaction_id,
+                'broadcast_id': broadcast_id,
+                'user_id': user_id,
+                'besitos_awarded': besito_value,
+                'emoji_id': emoji_id,
+                'emoji_char': emoji_char
+            }
+
+        except IntegrityError:
+            # UniqueConstraint violado - usuario ya reaccionó (race condition)
+            db.rollback()
+            logger.info(f"Usuario {user_id} ya reaccionó al broadcast {broadcast_id} (detectado por constraint)")
+            return None
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error registrando reacción: {e}")
+            return None
+
     def get_reactions_by_broadcast(self, broadcast_id: int) -> List[BroadcastReaction]:
         """Obtiene todas las reacciones de un mensaje"""
-        return self.db.query(BroadcastReaction).filter(
+        return self.db.query(BroadcastReaction).options(
+            joinedload(BroadcastReaction.reaction_emoji)
+        ).filter(
             BroadcastReaction.broadcast_id == broadcast_id
         ).all()
     
