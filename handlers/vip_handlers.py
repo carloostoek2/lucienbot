@@ -436,9 +436,21 @@ async def vip_entry_ready(callback: CallbackQuery):
                     parse_mode="HTML"
                 )
             except Exception as e:
-                logger.error(f"Error creando invite link: {e}")
+                logger.error(f"Error creando invite link para canal {vip_channel.channel_id}: {e}")
                 if vip_channel.invite_link:
-                    await callback.message.answer(vip_channel.invite_link, parse_mode="HTML")
+                    await callback.message.answer(
+                        f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
+                        f"{vip_channel.invite_link}\n\n"
+                        f"<i>Diana le espera en el círculo íntimo...</i>",
+                        parse_mode="HTML"
+                    )
+                else:
+                    await callback.message.answer(
+                        f"🎩 <b>Lucien:</b>\n\n"
+                        f"<i>Disculpe, ha ocurrido un inconveniente técnico al generar su acceso...</i>\n\n"
+                        f"Por favor, contacte a Diana directamente para que le proporcione acceso al canal.",
+                        parse_mode="HTML"
+                    )
 
         # Complete the entry
         vip_service.complete_vip_entry(user.id)
