@@ -212,7 +212,7 @@ async def cancel_action(callback: CallbackQuery):
     await callback.answer("Acción cancelada")
 
 
-@router.callback_query(F.data.in_({"profile", "narrative", "vip_area"}))
+@router.callback_query(F.data.in_({"profile", "narrative"}))
 async def coming_soon_features(callback: CallbackQuery):
     """Features aún no implementadas"""
     await callback.message.edit_text(

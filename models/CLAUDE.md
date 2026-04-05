@@ -56,6 +56,8 @@ Entidades de SQLAlchemy y acceso a base de datos.
 | `Archetype` | Información sobre cada arquetipo | - |
 | `StoryAchievement` | Logros de narrativa desbloqueables | - |
 | `UserStoryAchievement` | Logros desbloqueados por cada usuario | - |
+| `AnonymousMessageStatus` | Estados de mensaje anónimo (UNREAD/READ/REPLIED) | - |
+| `AnonymousMessage` | Mensajes anónimos VIP a Diana | User (sender) |
 
 
 

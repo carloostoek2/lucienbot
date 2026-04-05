@@ -18,6 +18,7 @@ Lógica de negocio por dominio. Un service = un dominio (no fragmentar).
 | `MissionService` | Missions | `mission_service.py` | close, create_mission, get_mission, get_all_missions, get_available_missions, +10 más |
 | `RewardService` | Missions | `reward_service.py` | create_reward_besitos, create_reward_package, create_reward_vip, get_reward, get_all_rewards, +7 más |
 | `StoreService` | Store | `store_service.py` | close, create_product, get_product, get_all_products, get_available_products, +15 más |
+| `AnonymousMessageService` | VIP | `anonymous_message_service.py` | send_message, get_message, get_all_messages, get_unread_messages, mark_as_read, reply_to_message, get_sender_info, delete_message |
 
 
 

@@ -24,6 +24,9 @@ from .story_user_handlers import router as story_user_router
 from .story_admin_handlers import router as story_admin_router
 # Phase 9 - Analytics
 from .analytics_handlers import router as analytics_router
+# Phase 12 - Mensajes Anónimos VIP
+from .vip_user_handlers import router as vip_user_router
+from .anonymous_message_admin_handlers import router as anonymous_message_admin_router
 
 __all__ = [
     'common_router',
@@ -51,5 +54,8 @@ __all__ = [
     'story_user_router',
     'story_admin_router',
     # Phase 9 - Analytics
-    'analytics_router'
+    'analytics_router',
+    # Phase 12 - Mensajes Anónimos VIP
+    'vip_user_router',
+    'anonymous_message_admin_router'
 ]

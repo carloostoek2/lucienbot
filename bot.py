@@ -45,6 +45,9 @@ from handlers import (
     story_admin_router,
     # Phase 9 - Analytics
     analytics_router,
+    # Phase 12 - Mensajes Anónimos VIP
+    vip_user_router,
+    anonymous_message_admin_router,
 )
 
 # Configurar logging
@@ -245,7 +248,10 @@ async def main():
     dp.include_router(story_admin_router)
     # Phase 9 - Analytics
     dp.include_router(analytics_router)
-    
+    # Phase 12 - Mensajes Anónimos VIP
+    dp.include_router(vip_user_router)
+    dp.include_router(anonymous_message_admin_router)
+
     # Configurar eventos de startup/shutdown
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)

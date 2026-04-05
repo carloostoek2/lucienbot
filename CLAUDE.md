@@ -26,7 +26,7 @@ Cada dominio tiene su propio CLAUDE.md con contexto específico.
 
 | Dominio | Services | Descripción |
 |---------|---------|-------------|
-| **VIP** | `VIPService` | Membresías exclusivas via tokens, tarifas, suscripciones. Canal `Subscription` ↔ `Token` ↔ `Tariff` |
+| **VIP** | `VIPService`, `AnonymousMessageService` | Membresías exclusivas via tokens, tarifas, suscripciones. Canal `Subscription` ↔ `Token` ↔ `Tariff`. Mensajes anónimos VIP → Diana |
 | **Gamificación** | `BesitoService`, `BroadcastService`, `DailyGiftService` | Besitos (puntos), reacciones con besitos, regalo diario |
 | **Canales** | `ChannelService` | Canales VIP y free, auto-aprobación con wait time, `PendingRequest` |
 | **Tienda** | `StoreService`, `PackageService` | Catálogo, carrito, compras, paquetes de contenido. Stock: `-1`=ilimitado, `-2`=no disponible |
@@ -40,6 +40,7 @@ Cada dominio tiene su propio CLAUDE.md con contexto específico.
 ### Servicios adicionales
 - `SchedulerService` y `BackupService` son **System domain** — no expuestos a usuarios, corren en background
 - `AnalyticsService` es **Analytics domain** — solo accesible para Custodios
+- `AnonymousMessageService` es **VIP domain** — mensajes anónimos de suscriptores VIP a Diana
 
 ---
 

@@ -58,6 +58,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin_vip"
         )],
         [InlineKeyboardButton(
+            text="💌 Susurros del círculo (Mensajes anónimos)",
+            callback_data="admin_anonymous_messages"
+        )],
+        [InlineKeyboardButton(
             text="🎮 Las recompensas que cultivan devoción",
             callback_data="admin_gamification"
         )],

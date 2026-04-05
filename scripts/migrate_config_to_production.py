@@ -17,7 +17,7 @@ import sys
 # Agregar el directorio raíz al path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from models.models import (
     ReactionEmoji, DailyGiftConfig, Package, StoreProduct,
@@ -326,7 +326,7 @@ def main():
         session = Session()
 
         # Verificar conexión
-        session.execute("SELECT 1")
+        session.execute(text("SELECT 1"))
         logger.info("✓ Conexión exitosa")
         print()
 

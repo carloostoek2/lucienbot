@@ -17,7 +17,9 @@ handlers/
 ├── common_handlers.py           # /start, /help, profile, cancel
 ├── admin_handlers.py            # Panel admin [AdminStates]
 ├── channel_handlers.py          # Gestión canales [ChannelStates]
-├── vip_handlers.py             # Tarifas y tokens [TariffStates, TokenStates]
+├── vip_handlers.py             # Admin: Tarifas y tokens [TariffStates, TokenStates]
+├── vip_user_handlers.py        # Círculo VIP: mensajes anónimos [AnonymousMessageStates]
+├── anonymous_message_admin_handlers.py  # Diana: gestión de susurros [AnonymousReplyStates]
 ├── free_channel_handlers.py    # ChatJoinRequest, ChatMemberUpdatedFilter
 ├── gamification_user_handlers.py
 ├── gamification_admin_handlers.py  # [EmojiConfigStates, DailyGiftConfigStates]

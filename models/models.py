@@ -983,3 +983,44 @@ class UserStoryAchievement(Base):
     # Recompensa entregada
     reward_delivered = Column(Boolean, default=False)
     reward_delivered_at = Column(DateTime(timezone=True), nullable=True)
+
+
+# ============================================================
+# FASE 12: MENSAJES ANÓNIMOS VIP
+# ============================================================
+
+class AnonymousMessageStatus(str, enum.Enum):
+    """Estados de un mensaje anónimo"""
+    UNREAD = "unread"       # No leído por Diana
+    READ = "read"           # Leído por Diana
+    REPLIED = "replied"     # Diana respondió
+
+
+class AnonymousMessage(Base):
+    """Mensajes anónimos enviados por suscriptores VIP a Diana"""
+    __tablename__ = "anonymous_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Remitente (oculto para Diana, visible en BD para casos delicados)
+    sender_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False, index=True)
+
+    # Contenido del mensaje
+    content = Column(Text, nullable=False)
+
+    # Estado del mensaje
+    status = Column(Enum(AnonymousMessageStatus), default=AnonymousMessageStatus.UNREAD)
+
+    # Metadatos de lectura
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    read_by = Column(BigInteger, nullable=True)  # Admin que leyó (Diana)
+
+    # Respuesta de Diana (opcional)
+    admin_reply = Column(Text, nullable=True)
+    replied_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Fechas
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relaciones
+    sender = relationship("User", foreign_keys=[sender_id])
