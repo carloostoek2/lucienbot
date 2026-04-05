@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-04-05T12:00:00.000Z"
+last_updated: "2026-04-05T20:00:00.000Z"
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 4
   total_plans: 17
   completed_plans: 18
@@ -45,6 +45,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 8: Testing & Technical Debt | ✓ Complete | 2266d56 |
 | 9: Polish & Hardening | ✓ Complete | All 5 plans done (09-01 through 09-05) — SCHED-01 fulfilled |
 | 10: Flujos de entrada @docs/req_fase10.md | ✓ Complete | All 4 plans done (10-01 through 10-04) |
+| 12: Mejorar tienda | ⏳ Pending | Ver [CONTEXT.md](./phases/12-mejorar-tienda/CONTEXT.md) — Sistema de condicionalidad recíproca tienda-narrativa-gamificación |
 
 ## Current Phase
 
@@ -93,8 +94,8 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 ## What's Next
 
-→ Phase 11 IN PROGRESS — Plans 11-01, 11-02, 11-03, 11-05 complete
-→ Next: 11-04 or next uncompleted plan
+→ Phase 12 PENDING — Mejorar tienda
+→ Next: Crear planes para Phase 12
 
 ### Quick Tasks Completed
 
@@ -151,12 +152,14 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | # | Title | Area | Created |
 |---|-------|------|---------|
 | 1 | Expandir sistema de promociones a El Diván VIP - El Mapa del Deseo | promotions | 2026-04-05 |
+| 2 | Sección de recompensas en menú principal de usuarios | rewards | 2026-04-05 |
 
 ### Roadmap Evolution
 
 - Phase 07.1 inserted after Phase 7: Integrar completamente sistema de migraciones alembic (URGENT)
 - Phase 10 added: Flujos de entrada @docs/req_fase10.md
 - Plan 10-01 complete: Foundation for ritualized entry flows
+- Phase 12 added: Mejorar tienda — mejoras al sistema de tienda
 
 ## Notes
 
