@@ -237,6 +237,128 @@ async def store_category_products(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("product_detail_"))
+async def product_detail(callback: CallbackQuery):
+    """Muestra detalle de un producto con preview"""
+    try:
+        product_id = int(callback.data.replace("product_detail_", ""))
+    except ValueError:
+        await callback.answer("Error: ID invalido", show_alert=True)
+        return
+
+    store_service = StoreService()
+    package_service = PackageService()
+    besito_service = BesitoService()
+
+    product = store_service.get_product(product_id)
+    if not product:
+        await callback.answer("Producto no encontrado", show_alert=True)
+        return
+
+    user_id = callback.from_user.id
+    balance = besito_service.get_balance(user_id)
+
+    # Get package files for preview
+    package = product.package
+    files = package_service.get_package_files(package.id) if package else []
+    preview_files = files[:3]  # Show first 3 files as preview
+
+    stock_text = "∞" if product.stock == -1 else str(product.stock)
+    is_available = product.is_available
+
+    text = f"""🎩 <b>Lucien:</b>
+
+<i>{product.name}</i>
+
+📝 {product.description or 'Un tesoro del reino...'}
+
+💰 <b>Precio:</b> {product.price} besitos
+📊 <b>Stock:</b> {stock_text}
+📦 <b>Contenido:</b> {len(files)} archivo(s)
+
+💋 Tu saldo: {balance} besitos"""
+
+    # Add guidance on earning besitos if balance is insufficient
+    if balance < product.price:
+        text += f"\n\n<i>¿Necesitas mas besitos?</i>\n"
+        text += f"• Reclama tu regalo diario\n"
+        text += f"• Reacciona a publicaciones\n"
+        text += f"• Completa misiones\n"
+        text += f"• Subscribete VIP para mas beneficios"
+
+    # Build keyboard
+    buttons = []
+
+    # Check if product is available and user can afford it
+    if is_available:
+        if balance >= product.price:
+            buttons.append([InlineKeyboardButton(
+                text="🛒 Agregar al carrito",
+                callback_data=f"add_to_cart_{product.id}"
+            )])
+        else:
+            buttons.append([InlineKeyboardButton(
+                text=f"❌ Necesitas {product.price - balance} besitos mas",
+                callback_data="#"
+            )])
+    else:
+        buttons.append([InlineKeyboardButton(
+            text="🔒 Producto agotado",
+            callback_data="#"
+        )])
+
+    buttons.append([InlineKeyboardButton(
+        text="🛍️ Ver mas productos",
+        callback_data="store_catalog"
+    )])
+    buttons.append([InlineKeyboardButton(
+        text="📁 Por categorias",
+        callback_data="store_categories"
+    )])
+    buttons.append([InlineKeyboardButton(
+        text="🔙 Volver a la tienda",
+        callback_data="shop"
+    )])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    # Send preview files if available
+    if preview_files:
+        await callback.message.delete()
+
+        # Send text first
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        # Send preview files
+        for file_entry in preview_files:
+            try:
+                if file_entry.file_type == "photo":
+                    await callback.message.answer_photo(
+                        photo=file_entry.file_id,
+                        caption="<i>Preview del contenido...</i>",
+                        parse_mode="HTML"
+                    )
+                elif file_entry.file_type == "video":
+                    await callback.message.answer_video(
+                        video=file_entry.file_id,
+                        caption="<i>Preview del contenido...</i>",
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                logger.error(f"Error enviando preview: {e}")
+                continue
+
+        # Send closing message
+        await callback.message.answer(
+            "<i>...y mas contenido te espera al adquirir este tesoro.</i>",
+            parse_mode="HTML"
+        )
+    else:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("add_to_cart_"))
 async def add_to_cart(callback: CallbackQuery):
     """Agrega un producto al carrito"""
@@ -245,16 +367,17 @@ async def add_to_cart(callback: CallbackQuery):
     except ValueError:
         await callback.answer("Error: ID invalido", show_alert=True)
         return
-    
+
     store_service = StoreService()
     user_id = callback.from_user.id
-    
+
     success, message = store_service.add_to_cart(user_id, product_id)
-    
+
     if success:
         await callback.answer(message)
-        # Volver al catalogo
-        await store_catalog(callback)
+        # Return to product detail instead of catalog
+        callback.data = f"product_detail_{product_id}"
+        await product_detail(callback)
     else:
         await callback.answer(message, show_alert=True)
 
