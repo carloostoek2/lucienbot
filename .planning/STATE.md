@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Executing Phase 12
-last_updated: "2026-04-05T20:25:00.000Z"
+last_updated: "2026-04-05T14:30:00.000Z"
 progress:
   total_phases: 13
   completed_phases: 4
@@ -138,6 +138,8 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-03-31 | Backup cada 100 ciclos del scheduler (~50 min) | Evita refactorizar arquitectura del scheduler |
 | 2026-04-03 | Keep existing conftest pattern for new fixtures | Consistency with existing test codebase |
 | 2026-04-03 | Stub files include minimal pass test | Ensures pytest --collect-only never fails on new modules |
+| 2026-04-05 | Default low_stock_threshold set to 5 | Sensible default for most products |
+| 2026-04-05 | Stock status indicators: ♾️ ⚠️ 🚨 📦 | Visual distinction for admin quick scanning |
 
 ## Execution Log
 
