@@ -90,7 +90,7 @@ async def confirm_channel(callback: CallbackQuery, state: FSMContext):
         f"🎩 <b>Lucien:</b>\n\n"
         f"<i>Excelente. Ahora, ¿qué tipo de dominio es este?</i>\n\n"
         f"🚪 <b>Vestíbulo (Free):</b> Acceso con tiempo de espera\n"
-        f"👑 <b>Círculo Exclusivo (VIP):</b> Acceso mediante tokens",
+        f"👑 <b>El Diván (VIP):</b> Acceso mediante tokens",
         reply_markup=channel_type_keyboard(),
         parse_mode="HTML"
     )

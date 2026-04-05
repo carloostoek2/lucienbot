@@ -160,7 +160,7 @@ async def cmd_help(message: Message):
 3. Espere el tiempo indicado
 4. ¡Será aceptado automáticamente!
 
-<b>Para acceder al círculo exclusivo (VIP):</b>
+<b>Para acceder a El Diván (VIP):</b>
 1. Obtenga un enlace único del custodio
 2. Haga clic en el enlace
 3. Su membresía se activará automáticamente

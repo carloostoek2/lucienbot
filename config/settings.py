@@ -30,7 +30,7 @@ class MessagesConfig:
     ACCESS_APPROVED_FREE: str = "Su acceso ha sido concedido. Diana lo espera."
 
     # Canal VIP
-    WELCOME_VIP: str = "Bienvenido al círculo exclusivo."
+    WELCOME_VIP: str = "Bienvenido a El Diván."
     VIP_ACTIVATED: str = "Su membresía ha sido activada."
     RENEWAL_REMINDER: str = "Su acceso exclusivo vence mañana..."
     VIP_EXPIRED: str = "Su tiempo en el círculo íntimo ha concluido."

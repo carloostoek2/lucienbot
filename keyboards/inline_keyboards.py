@@ -39,7 +39,7 @@ def main_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
 
     if is_vip:
         buttons.insert(0, [InlineKeyboardButton(
-            text="💎 El círculo exclusivo",
+            text="💎 El Diván",
             callback_data="vip_area"
         )])
 
@@ -54,7 +54,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin_channels"
         )],
         [InlineKeyboardButton(
-            text="👑 El círculo exclusivo de Diana (VIP)",
+            text="👑 El Diván de Diana (VIP)",
             callback_data="admin_vip"
         )],
         [InlineKeyboardButton(
@@ -116,7 +116,7 @@ def channel_type_keyboard() -> InlineKeyboardMarkup:
             callback_data="channel_type_free"
         )],
         [InlineKeyboardButton(
-            text="👑 Círculo Exclusivo (VIP)",
+            text="👑 El Diván (VIP)",
             callback_data="channel_type_vip"
         )],
         [InlineKeyboardButton(

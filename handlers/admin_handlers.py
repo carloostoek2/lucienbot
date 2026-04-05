@@ -60,7 +60,7 @@ async def admin_vip(callback: CallbackQuery):
     """Gestión VIP"""
     await callback.message.edit_text(
         f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>El círculo exclusivo donde Diana comparte sus secretos\n"
+        f"<i>El Diván donde Diana comparte sus secretos\n"
         f"más íntimos con los selectos...</i>\n\n"
         f"¿Cómo desea calibrar los privilegios VIP?",
         reply_markup=vip_management_keyboard(),

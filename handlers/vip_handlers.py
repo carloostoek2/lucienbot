@@ -55,7 +55,7 @@ async def create_tariff_start(callback: CallbackQuery, state: FSMContext):
     """Inicia creación de tarifa"""
     await callback.message.edit_text(
         f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Vamos a calibrar una nueva tarifa para el círculo exclusivo...</i>\n\n"
+        f"<i>Vamos a calibrar una nueva tarifa para El Diván...</i>\n\n"
         f"📋 <b>Paso 1 de 3:</b> Nombre de la tarifa\n"
         f"Ejemplos: <code>Mensual</code>, <code>Trimestral</code>, <code>Anual</code>",
         reply_markup=back_keyboard("manage_tariffs"),
@@ -246,7 +246,7 @@ async def list_tokens(callback: CallbackQuery):
 
     text = f"""🎩 <b>Lucien:</b>
 
-<i>Los accesos forjados para el círculo exclusivo...</i>
+<i>Los accesos forjados para El Diván...</i>
 
 📋 <b>Tokens recientes:</b>
 
@@ -316,7 +316,7 @@ async def list_subscribers(callback: CallbackQuery):
     if not subscriptions:
         await callback.message.edit_text(
             f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>No hay miembros en el círculo exclusivo actualmente...</i>\n\n"
+            f"<i>No hay miembros en El Diván actualmente...</i>\n\n"
             f"Los selectos aún no han llegado.",
             reply_markup=vip_management_keyboard(),
             parse_mode="HTML"
@@ -326,7 +326,7 @@ async def list_subscribers(callback: CallbackQuery):
 
     text = f"""🎩 <b>Lucien:</b>
 
-<i>Los privilegiados del círculo exclusivo...</i>
+<i>Los privilegiados de El Diván...</i>
 
 👑 <b>Suscriptores activos:</b> {len(subscriptions)}
 

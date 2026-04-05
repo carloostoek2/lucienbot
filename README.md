@@ -14,7 +14,7 @@ Bot de Telegram para la gestión automatizada de canales Free y VIP, con una per
 - **Aprobación en lote** de solicitudes pendientes
 - **Gestión de múltiples canales** Free simultáneos
 
-### 👑 Canal VIP (Círculo Exclusivo)
+### 👑 Canal VIP (El Diván)
 - **Tokens de acceso** de un solo uso
 - **Tarifas configurables** (nombre, duración, precio)
 - **Recordatorios automáticos** 24h antes del vencimiento
@@ -108,7 +108,7 @@ python bot.py
 1. **Agregar el bot como administrador** del canal (mismos permisos que Free)
 
 2. **Registrar el canal** desde el panel:
-   - Seleccionar tipo "Círculo Exclusivo (VIP)"
+   - Seleccionar tipo "El Diván (VIP)"
 
 3. **Crear tarifas VIP**:
    - Nombre (ej: "Mensual", "Trimestral")

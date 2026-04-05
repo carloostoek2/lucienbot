@@ -42,7 +42,7 @@ y se tejen las experiencias de nuestros... visitantes.</i>
         name_part = f", {user_name}," if user_name else ""
         return f"""🎩 <b>Lucien:</b>
 
-<i>Ah{name_part}, bienvenido al círculo exclusivo.
+<i>Ah{name_part}, bienvenido a El Diván.
 Aquí, Diana puede mostrar facetas que... otros no conocen.
 Su presencia ha sido... anticipada.</i>
 
@@ -213,7 +213,7 @@ Entre con intención.
         exp_date_str = expiration_date.strftime("%d/%m/%Y")
         return f"""🎩 <b>Lucien:</b>
 
-<i>Bienvenido al círculo exclusivo de Diana.</i>
+<i>Bienvenido a El Diván de Diana.</i>
 
 👑 <b>Tarifa activada:</b> {tariff_name}
 📅 <b>Vencimiento:</b> {exp_date_str}
@@ -229,7 +229,7 @@ más íntimas. Diana se complace de tenerle entre sus selectos.</i>
         exp_date_str = expiration_date.strftime("%d/%m/%Y")
         return f"""🎩 <b>Lucien:</b>
 
-<i>Una observación delicada... su acceso al círculo exclusivo
+<i>Una observación delicada... su acceso a El Diván
 culmina mañana, {exp_date_str}.</i>
 
 Diana se pregunta si desea extender esta... relación privilegiada.
@@ -308,7 +308,7 @@ de discreción. Solicite uno nuevo al custodio.</i>"""
         """Token generado exitosamente"""
         return f"""🎩 <b>Lucien:</b>
 
-<i>Un nuevo acceso ha sido forjado para el círculo exclusivo.</i>
+<i>Un nuevo acceso ha sido forjado para El Diván.</i>
 
 👑 <b>Tarifa:</b> {tariff_name}
 🔗 <b>Enlace:</b> <code>{token_url}</code>
@@ -321,7 +321,7 @@ Compártalo con quien Diana considere digno.</i>"""
     @staticmethod
     def admin_channel_registered(channel_name: str, channel_type: str) -> str:
         """Canal registrado exitosamente"""
-        type_text = "vestíbulo" if channel_type == "free" else "círculo exclusivo"
+        type_text = "vestíbulo" if channel_type == "free" else "El Diván"
         return f"""🎩 <b>Lucien:</b>
 
 <i>El {type_text} <b>{channel_name}</b> ha sido registrado
@@ -375,7 +375,7 @@ de los archivos de Diana.</i>
         """Tarifa creada exitosamente"""
         return f"""🎩 <b>Lucien:</b>
 
-<i>Una nueva tarifa ha sido calibrada para el círculo exclusivo.</i>
+<i>Una nueva tarifa ha sido calibrada para El Diván.</i>
 
 📋 <b>Nombre:</b> {name}
 ⏱ <b>Duración:</b> {days} días
@@ -391,14 +391,14 @@ de los archivos de Diana.</i>
         if not tariffs:
             return f"""🎩 <b>Lucien:</b>
 
-<i>No hay tarifas configuradas para el círculo exclusivo.
+<i>No hay tarifas configuradas para El Diván.
 Diana aún no ha establecido los términos de acceso privilegiado...</i>
 
 👉 <i>Use "Crear tarifa" para establecer las opciones VIP.</i>"""
 
         text = f"""🎩 <b>Lucien:</b>
 
-<i>Las tarifas del círculo exclusivo son las siguientes:</i>
+<i>Las tarifas de El Diván son las siguientes:</i>
 
 """
         for t in tariffs:
@@ -719,7 +719,7 @@ Enviando archivo(s)..."""
     def reward_vip_message(tariff_name: str, duration_days: int, token_url: str) -> str:
         return f"""🎩 Lucien:
 
-Diana te ha concedido acceso al circulo exclusivo...
+Diana te ha concedido acceso a El Diván...
 
 👑 Recompensa VIP Activada
 
@@ -761,7 +761,7 @@ Haz clic para activar tu membresia VIP."""
 
     @staticmethod
     def story_fragment_vip_required() -> str:
-        return "Este fragmento requiere acceso al circulo exclusivo"
+        return "Este fragmento requiere acceso a El Diván"
 
     @staticmethod
     def story_fragment_archetype_required(archetype_name: str) -> str:

@@ -224,7 +224,7 @@ class StoryService:
 
         # Verificar VIP
         if node.required_vip and not is_vip:
-            return False, "Este fragmento requiere acceso al circulo exclusivo"
+            return False, "Este fragmento requiere acceso a El Diván"
 
         # Verificar arquetipo requerido
         if node.required_archetype:

@@ -1,6 +1,6 @@
 # VIP Domain
 
-Membresías exclusivas y acceso a contenido VIP via tokens de un solo uso. Incluye el círculo exclusivo donde los suscriptores pueden enviar mensajes anónimos a Diana.
+Membresías exclusivas y acceso a contenido VIP via tokens de un solo uso. Incluye El Diván donde los suscriptores pueden enviar mensajes anónimos a Diana.
 
 ## Services
 - `vip_service.py` — Gestión de membresías
@@ -8,7 +8,7 @@ Membresías exclusivas y acceso a contenido VIP via tokens de un solo uso. Inclu
 
 ## Handlers
 - `vip_handlers.py` — Admin: creación de tarifas y tokens
-- `vip_user_handlers.py` — Círculo exclusivo VIP, envío de mensajes anónimos
+- `vip_user_handlers.py` — El Diván VIP, envío de mensajes anónimos
 - `anonymous_message_admin_handlers.py` — Diana gestiona susurros recibidos
 
 ## Modelos clave
@@ -75,7 +75,7 @@ delete_message(message_id) -> bool
 
 ```
 Suscriptor VIP
-    → Click "💎 El círculo exclusivo"
+    → Click "💎 El Diván"
     → Click "💌 Enviar mensaje a Diana"
     → Escribe mensaje (3-4000 chars)
     → Confirma envío

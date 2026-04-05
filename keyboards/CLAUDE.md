@@ -23,7 +23,7 @@ Teclados inline de Telegram.
 | `broadcast_back_keyboard(current_step)` | Teclado con botón de regresar al paso anterior durante broadcast |
 | `vip_management_keyboard()` | Menú de gestión VIP |
 | `token_actions_keyboard(token_id)` | Acciones para un token específico |
-| `vip_area_keyboard()` | Menú del círculo exclusivo VIP (mensajes anónimos) |
+| `vip_area_keyboard()` | Menú de El Diván VIP (mensajes anónimos) |
 | `anonymous_message_confirm_keyboard()` | Confirmar envío de mensaje anónimo |
 | `anonymous_messages_menu_keyboard()` | Menú de gestión de mensajes anónimos (admin) |
 | `anonymous_message_actions_keyboard(message_id)` | Acciones para un mensaje anónimo específico |

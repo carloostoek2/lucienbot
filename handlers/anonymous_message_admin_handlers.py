@@ -114,7 +114,7 @@ async def admin_anonymous_messages_menu(callback: CallbackQuery):
 
         text = f"""🎩 <b>Lucien:</b>
 
-<i>Los susurros que llegan desde el círculo exclusivo...</i>
+<i>Los susurros que llegan desde El Diván...</i>
 
 💌 <b>Mensajes Anónimos VIP</b>
 
@@ -388,7 +388,7 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 💌 <b>Respuesta de Diana:</b>
 <blockquote>{reply_content}</blockquote>
 
-<i>El círculo exclusivo agradece su confianza.</i>""",
+<i>El Diván agradece su confianza.</i>""",
                     parse_mode="HTML"
                 )
 

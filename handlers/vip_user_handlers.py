@@ -2,7 +2,7 @@
 Handlers VIP para Usuarios - Lucien Bot
 
 Handlers exclusivos para suscriptores VIP:
-- Menú del círculo exclusivo
+- Menú de El Diván
 - Mensajes anónimos a Diana
 """
 from aiogram import Router, F
@@ -26,7 +26,7 @@ class AnonymousMessageStates(StatesGroup):
 
 
 def vip_area_keyboard() -> InlineKeyboardMarkup:
-    """Menú del círculo exclusivo VIP"""
+    """Menú de El Diván VIP"""
     buttons = [
         [InlineKeyboardButton(
             text="💌 Enviar mensaje a Diana",
@@ -51,7 +51,7 @@ def anonymous_message_confirm_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-# ==================== MENÚ DEL CÍRCULO EXCLUSIVO ====================
+# ==================== MENÚ DE EL DIVÁN ====================
 
 @router.callback_query(F.data == "vip_area")
 async def vip_area_menu(callback: CallbackQuery):
@@ -65,7 +65,7 @@ async def vip_area_menu(callback: CallbackQuery):
         if not is_vip:
             await callback.message.edit_text(
                 f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>El círculo exclusivo es solo para los privilegiados...</i>\n\n"
+                f"<i>El Diván es solo para los privilegiados...</i>\n\n"
                 f"Su suscripción VIP no está activa.",
                 reply_markup=main_menu_keyboard(is_vip=False),
                 parse_mode="HTML"
@@ -75,9 +75,9 @@ async def vip_area_menu(callback: CallbackQuery):
 
         await callback.message.edit_text(
             f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Bienvenido al círculo exclusivo, donde los privilegiados "
+            f"<i>Bienvenido a El Diván, donde los privilegiados "
             f"tienen acceso a experiencias únicas...</i>\n\n"
-            f"💎 <b>El Círculo Exclusivo de Diana</b>\n\n"
+            f"💎 <b>El Diván de Diana</b>\n\n"
             f"Aquí encontrará funciones reservadas solo para quienes "
             f"han sido admitidos en la intimidad de Diana.",
             reply_markup=vip_area_keyboard(),
@@ -218,7 +218,7 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
                 f"✅ <b>Mensaje anónimo enviado</b>\n\n"
                 f"Diana lo recibirá pronto. Si desea responder, "
                 f"lo hará a través de este mismo canal.\n\n"
-                f"<i>Gracias por confiar en el círculo exclusivo.</i>",
+                f"<i>Gracias por confiar en El Diván.</i>",
                 reply_markup=back_keyboard("vip_area"),
                 parse_mode="HTML"
             )

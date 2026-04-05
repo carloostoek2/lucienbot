@@ -229,7 +229,7 @@ class RewardService:
             chat_id=user_id,
             text=f"""🎩 Lucien:
 
-Diana te ha concedido acceso al circulo exclusivo...
+Diana te ha concedido acceso a El Diván...
 
 👑 Recompensa VIP Activada
 
