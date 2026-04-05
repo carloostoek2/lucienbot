@@ -153,6 +153,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 |---|-------|------|---------|
 | 1 | Expandir sistema de promociones a El Diván VIP - El Mapa del Deseo | promotions | 2026-04-05 |
 | 2 | Sección de recompensas en menú principal de usuarios | rewards | 2026-04-05 |
+| 3 | Sistema de auditoría de economía con historial de movimientos | gamification | 2026-04-05 |
 
 ### Roadmap Evolution
 
