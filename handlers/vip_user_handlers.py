@@ -11,12 +11,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from services.vip_service import VIPService
 from services.anonymous_message_service import AnonymousMessageService
+from services.besito_service import BesitoService
+from models.models import TransactionSource
 from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# Costo en besitos para mensajes anónimos VIP
+ANONYMOUS_MESSAGE_COST = 50
 
 
 # Estados para FSM
@@ -163,6 +168,7 @@ async def process_anonymous_message(message: Message, state: FSMContext):
         f"Antes de enviarlo… léalo de nuevo.\n\n"
         f"Esto es lo que Diana recibirá:\n\n"
         f"<blockquote>{preview}</blockquote>\n\n"
+        f"💋 <b>Costo: {ANONYMOUS_MESSAGE_COST} besitos</b>\n\n"
         f"¿Está seguro de que esto… merece su atención?",
         reply_markup=anonymous_message_confirm_keyboard(),
         parse_mode="HTML"
@@ -172,7 +178,7 @@ async def process_anonymous_message(message: Message, state: FSMContext):
 
 @router.callback_query(AnonymousMessageStates.confirming_send, F.data == "confirm_anonymous_send")
 async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
-    """Confirma y envía el mensaje anónimo"""
+    """Confirma y envía el mensaje anónimo, debitando besitos primero"""
     user = callback.from_user
     data = await state.get_data()
     content = data.get("message_content")
@@ -191,6 +197,7 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
 
     # Verificar que sigue siendo VIP
     vip_service = VIPService()
+    besito_service = BesitoService()
     try:
         is_vip = vip_service.is_user_vip(user.id)
         if not is_vip:
@@ -205,17 +212,58 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             return
 
+        # Verificar saldo suficiente
+        has_balance = besito_service.has_sufficient_balance(user.id, ANONYMOUS_MESSAGE_COST)
+        if not has_balance:
+            current_balance = besito_service.get_balance(user.id)
+            await callback.message.edit_text(
+                f"🎩 <b>Lucien:</b>\n\n"
+                f"<i>Los mensajes anónimos tienen un precio...</i>\n\n"
+                f"Necesita <b>{ANONYMOUS_MESSAGE_COST} besitos</b> para enviar este susurro a Diana.\n\n"
+                f"Su saldo actual: <b>{current_balance} besitos</b>\n\n"
+                f"Participe en la comunidad, reaccione a las publicaciones de Diana "
+                f"o reclame su regalo diario para acumular más.",
+                reply_markup=back_keyboard("vip_area"),
+                parse_mode="HTML"
+            )
+            await state.clear()
+            await callback.answer()
+            return
+
+        # Debitar besitos antes de enviar el mensaje
+        debit_success = besito_service.debit_besitos(
+            user_id=user.id,
+            amount=ANONYMOUS_MESSAGE_COST,
+            source=TransactionSource.ANONYMOUS_MESSAGE,
+            description="Envío de mensaje anónimo a Diana",
+            commit=True
+        )
+
+        if not debit_success:
+            logger.error(f"Fallo al debitar besitos para mensaje anónimo: user={user.id}")
+            await callback.message.edit_text(
+                f"🎩 <b>Lucien:</b>\n\n"
+                f"<i>Ha ocurrido un error inesperado...</i>\n\n"
+                f"No se pudo procesar el pago. Intente nuevamente.",
+                reply_markup=back_keyboard("vip_area"),
+                parse_mode="HTML"
+            )
+            await state.clear()
+            await callback.answer()
+            return
+
         # Enviar mensaje anónimo
         anon_service = AnonymousMessageService()
         try:
             message = anon_service.send_message(user.id, content)
 
-            logger.info(f"Mensaje anónimo enviado: id={message.id}, sender={user.id}")
+            logger.info(f"Mensaje anónimo enviado: id={message.id}, sender={user.id}, cost={ANONYMOUS_MESSAGE_COST}")
 
             await callback.message.edit_text(
                 f"🎩 <b>Lucien:</b>\n\n"
                 f"Listo.\n"
                 f"Su mensaje ha sido entregado.\n\n"
+                f"Se han debitado <b>{ANONYMOUS_MESSAGE_COST} besitos</b> de su cuenta.\n\n"
                 f"Ahora queda en manos de Diana… decidir si responde, ignora…\n"
                 f"o simplemente recuerda.\n\n"
                 f"<i>Le sugiero no obsesionarse con la respuesta.</i>",
@@ -226,6 +274,7 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
             anon_service.close()
     finally:
         vip_service.close()
+        besito_service.close()
 
     await state.clear()
     await callback.answer()
