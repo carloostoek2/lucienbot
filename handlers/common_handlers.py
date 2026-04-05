@@ -27,11 +27,15 @@ async def cmd_start(message: Message):
     user_service = UserService()
     vip_service = VIPService()
 
+    logger.info(f"/start recibido - user_id={user.id}, args={args}, full_text='{message.text}'")
+
     try:
         # Verificar si es deep link "free" para viejos conocidos
         # Solo si el usuario NO existe en la base de datos (nunca interactuó con el bot)
         if args == "free":
+            logger.info(f"Detectado args='free' para user_id={user.id}")
             existing_user = user_service.get_user(user.id)
+            logger.info(f"Usuario existente: {existing_user is not None}")
             if not existing_user:
                 # Es un "viejo conocido" - ya estaba en el canal antes del bot
                 # Registrarlo ahora
@@ -47,7 +51,9 @@ async def cmd_start(message: Message):
                     parse_mode="HTML"
                 )
                 return
-            # Si ya existe, continuar con flujo normal
+            # Si ya existe, tratar como /start normal (sin args)
+            logger.info(f"Usuario {user.id} ya existe, ignorando parámetro 'free'")
+            args = None
 
         # Registrar/actualizar usuario (para todos los demás casos)
         db_user = user_service.get_or_create_user(
