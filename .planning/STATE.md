@@ -149,6 +149,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | # | Title | Area | Created |
 |---|-------|------|---------|
 | 1 | Costo en besitos para mensajes anónimos VIP | vip | 2026-04-05 |
+| 2 | Expandir sistema de promociones a El Diván VIP - El Mapa del Deseo | promotions | 2026-04-05 |
 
 ### Roadmap Evolution
 
