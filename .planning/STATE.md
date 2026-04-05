@@ -104,6 +104,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 260330-reg | Regenerar migración inicial limpia de Alembic | 2026-03-30 | 2d68422 | — |
 | 260404-vjx | Crear función para eliminar fotos de paquetes: mostrar fotos existentes con botón de eliminar en cada una | 2026-04-05 | 457639f | [260404-vjx-crear-funci-n-para-eliminar-fotos-de-paq](./quick/260404-vjx-crear-funci-n-para-eliminar-fotos-de-paq/) |
 | 260405-vip | Agregar costo de 50 besitos para mensajes anónimos VIP | 2026-04-05 | 8ad214c | [260405-vip-anon-besito-cost](./quick/260405-vip-anon-besito-cost/) |
+| 260405-hje | Notificar a admin al recibir mensaje anónimo VIP | 2026-04-05 | b1487ac, 9607389 | [260405-hje-notificaci-n-admin-al-recibir-mensaje-an](./quick/260405-hje-notificaci-n-admin-al-recibir-mensaje-an/) |
 
 ## Decision Log
 
