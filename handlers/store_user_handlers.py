@@ -7,6 +7,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from services.store_service import StoreService
 from services.besito_service import BesitoService
+from services.package_service import PackageService
 from keyboards.inline_keyboards import back_keyboard
 import logging
 
@@ -28,6 +29,10 @@ async def shop_menu(callback: CallbackQuery):
         [InlineKeyboardButton(
             text="🛍️ Ver catalogo",
             callback_data="store_catalog"
+        )],
+        [InlineKeyboardButton(
+            text="📁 Ver por categorias",
+            callback_data="store_categories"
         )],
         [InlineKeyboardButton(
             text=f"🛒 Mi carrito ({cart_count})",
@@ -81,9 +86,14 @@ async def store_catalog(callback: CallbackQuery):
         text += f"📦 {product.name}\n"
         text += f"   💰 {product.price} besitos | {stock_text}\n"
         text += f"   {product.description or 'Sin descripcion'}\n\n"
-        
+
+        # Always show detail button
         buttons.append([InlineKeyboardButton(
-            text=f"➕ Agregar: {product.name[:25]}",
+            text=f"👁️ Ver: {product.name[:20]}",
+            callback_data=f"product_detail_{product.id}"
+        )])
+        buttons.append([InlineKeyboardButton(
+            text=f"➕ Agregar: {product.name[:20]}",
             callback_data=f"add_to_cart_{product.id}"
         )])
     
@@ -98,6 +108,131 @@ async def store_catalog(callback: CallbackQuery):
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "store_categories")
+async def store_categories(callback: CallbackQuery):
+    """Muestra categorias disponibles"""
+    package_service = PackageService()
+    categories = package_service.get_all_categories(active_only=True)
+
+    if not categories:
+        await callback.message.edit_text(
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>El catalogo aun no tiene secciones...</i>\n\n"
+            "Explora todos los productos disponibles.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🛍️ Ver catalogo completo", callback_data="store_catalog")],
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")]
+            ])
+        )
+        await callback.answer()
+        return
+
+    text = "🎩 <b>Lucien:</b>\n\n" \
+           "<i>Las estanterias de Diana...</i>\n\n" \
+           "Selecciona una categoria:"
+
+    buttons = []
+    for category in categories:
+        package_count = len([p for p in category.packages if p.is_active]) if category.packages else 0
+        buttons.append([InlineKeyboardButton(
+            text=f"📁 {category.name} ({package_count})",
+            callback_data=f"store_category_{category.id}"
+        )])
+
+    buttons.append([InlineKeyboardButton(
+        text="🛍️ Ver todo",
+        callback_data="store_catalog"
+    )])
+    buttons.append([InlineKeyboardButton(
+        text="🔙 Volver",
+        callback_data="shop"
+    )])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("store_category_"))
+async def store_category_products(callback: CallbackQuery):
+    """Muestra productos de una categoria"""
+    try:
+        category_id = int(callback.data.replace("store_category_", ""))
+    except ValueError:
+        await callback.answer("Error: ID invalido", show_alert=True)
+        return
+
+    package_service = PackageService()
+    store_service = StoreService()
+
+    category = package_service.get_category(category_id)
+    if not category:
+        await callback.answer("Categoria no encontrada", show_alert=True)
+        return
+
+    # Get products that have packages in this category
+    packages = package_service.get_packages_by_category(category_id, active_only=True)
+    package_ids = [p.id for p in packages]
+
+    # Get all active products and filter by category packages
+    all_products = store_service.get_all_products(active_only=True)
+    products = [p for p in all_products if p.package_id in package_ids]
+
+    if not products:
+        await callback.message.edit_text(
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>La estanteria '{category.name}' esta vacia...</i>\n\n"
+            f"Vuelve mas tarde para ver nuevos productos.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📁 Otras categorias", callback_data="store_categories")],
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")]
+            ])
+        )
+        await callback.answer()
+        return
+
+    text = f"🎩 <b>Lucien:</b>\n\n" \
+           f"<i>{category.name}...</i>\n\n"
+
+    if category.description:
+        text += f"{category.description}\n\n"
+
+    buttons = []
+    for product in products:
+        stock_text = "∞" if product.stock == -1 else f"Stock: {product.stock}"
+        text += f"📦 <b>{product.name}</b>\n"
+        text += f"   💰 {product.price} besitos | {stock_text}\n"
+        text += f"   {product.description or 'Sin descripcion'}\n\n"
+
+        buttons.append([InlineKeyboardButton(
+            text=f"👁️ Ver: {product.name[:20]}",
+            callback_data=f"product_detail_{product.id}"
+        )])
+        buttons.append([InlineKeyboardButton(
+            text=f"➕ Agregar al carrito",
+            callback_data=f"add_to_cart_{product.id}"
+        )])
+
+    buttons.append([InlineKeyboardButton(
+        text="📁 Otras categorias",
+        callback_data="store_categories"
+    )])
+    buttons.append([InlineKeyboardButton(
+        text="🛒 Ver carrito",
+        callback_data="view_cart"
+    )])
+    buttons.append([InlineKeyboardButton(
+        text="🔙 Volver",
+        callback_data="shop"
+    )])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
