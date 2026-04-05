@@ -10,7 +10,7 @@ from aiogram.enums import ChatType
 from config.settings import bot_config
 from services.user_service import UserService
 from services.vip_service import VIPService
-from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, vip_entry_continue_keyboard, vip_entry_ready_keyboard
+from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, vip_entry_continue_keyboard, vip_entry_ready_keyboard, returning_user_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -24,18 +24,40 @@ async def cmd_start(message: Message):
     user = message.from_user
     args = message.text.split()[1] if len(message.text.split()) > 1 else None
 
-    # Registrar/actualizar usuario
     user_service = UserService()
-    db_user = user_service.get_or_create_user(
-        telegram_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name
-    )
-
-    # Check for pending VIP entry ritual BEFORE token processing
     vip_service = VIPService()
+
     try:
+        # Verificar si es deep link "free" para viejos conocidos
+        # Solo si el usuario NO existe en la base de datos (nunca interactuó con el bot)
+        if args == "free":
+            existing_user = user_service.get_user(user.id)
+            if not existing_user:
+                # Es un "viejo conocido" - ya estaba en el canal antes del bot
+                # Registrarlo ahora
+                user_service.create_user(
+                    telegram_id=user.id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    last_name=user.last_name
+                )
+                await message.answer(
+                    LucienVoice.returning_user_greeting(),
+                    reply_markup=returning_user_keyboard(),
+                    parse_mode="HTML"
+                )
+                return
+            # Si ya existe, continuar con flujo normal
+
+        # Registrar/actualizar usuario (para todos los demás casos)
+        db_user = user_service.get_or_create_user(
+            telegram_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        )
+
+        # Check for pending VIP entry ritual BEFORE token processing
         status, stage = vip_service.get_vip_entry_state(user.id)
         if status == "pending_entry":
             subscription = vip_service.get_active_subscription_for_entry(user.id)

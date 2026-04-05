@@ -360,3 +360,11 @@ def vip_entry_ready_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Estoy listo", callback_data="vip_entry_ready")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def returning_user_keyboard() -> InlineKeyboardMarkup:
+    """Teclado para usuarios que ya estaban en el canal antes del bot"""
+    buttons = [
+        [InlineKeyboardButton(text="🔍 Explorar", callback_data="back_to_main")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

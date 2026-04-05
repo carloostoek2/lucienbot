@@ -51,6 +51,19 @@ Permíteme guiarle por los privilegios a su disposición."""
     # ==================== CANAL FREE ====================
 
     @staticmethod
+    def returning_user_greeting() -> str:
+        """Mensaje para usuarios que ya estaban en el canal antes del bot"""
+        return """🎩 <b>Lucien:</b>
+
+<i>Ah… un viejo conocido.
+Pensé que tardaría más en verle por aquí.
+Supongo que observar desde fuera deja de ser suficiente… eventualmente.</i>
+
+Siéntase cómodo de explorar las opciones que tiene a su disposición.
+
+<i>En nombre de Diana, Señorita Kinky, le doy la bienvenida.</i>"""
+
+    @staticmethod
     def free_request_received(wait_minutes: int) -> str:
         """Mensaje cuando se recibe solicitud al canal free"""
         return f"""🎩 <b>Lucien:</b>
