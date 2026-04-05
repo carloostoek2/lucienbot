@@ -18,7 +18,7 @@
 | 07.1 | **Integrar Alembic** ✓ | Sistema de migraciones Alembic reemplazar create_all() | Complete    | 2026-03-30 |
 | 8 | Testing & Technical Debt | Tests, linting, manejo de sessiones, refactor handlers | TEST-01, TEST-02, TEST-03, SCHED-02, SEC-03 | Cobertura de tests y codigo mas mantenible |
 | 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | Complete    | 2026-03-31 |
-| 12 | Mejorar tienda | Mejoras a tienda: fotos, categorías, flujo de compra | In Progress | 2/5 plans |
+| 12 | Mejorar tienda | 3/5 | In Progress|  |
 
 ## Phase Details
 
@@ -201,7 +201,7 @@ Plans:
 **Requirements:** STOR-05, STOR-06, STOR-07
 **Depends on:** Phase 11
 **Status:** In Progress
-**Plans:** 2/5 plans complete
+**Plans:** 3/5 plans executed
 
 **Success criteria:**
 1. Admin puede eliminar fotos de paquetes existentes ✓ (Already completed in quick task 260404-vjx)
@@ -213,7 +213,7 @@ Plans:
 **Plans:**
 - [x] 12-01-PLAN.md — Category System Foundation: models, migrations, PackageService methods (STOR-05) ✓
 - [x] 12-02-PLAN.md — Admin Category Management: handlers for CRUD and package assignment (STOR-05) ✓
-- [ ] 12-03-PLAN.md — User Store with Categories: category browsing, product detail with preview (STOR-05, STOR-06)
+- [x] 12-03-PLAN.md — User Store with Categories: category browsing, product detail with preview (STOR-05, STOR-06)
 - [ ] 12-04-PLAN.md — Stock Alerts and Management: thresholds, visual indicators, admin notifications (STOR-07)
 - [ ] 12-05-PLAN.md — Search and Filter: search by name, filter by price/availability (STOR-05, STOR-06)
 
