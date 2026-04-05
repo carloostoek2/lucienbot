@@ -19,6 +19,7 @@
 | 8 | Testing & Technical Debt | Tests, linting, manejo de sessiones, refactor handlers | TEST-01, TEST-02, TEST-03, SCHED-02, SEC-03 | Cobertura de tests y codigo mas mantenible |
 | 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | Complete    | 2026-03-31 |
 | 12 | Mejorar tienda | 5/5 | Complete    | 2026-04-05 |
+| 13 | El Mapa del Deseo | 3/3 | Complete    | 2026-04-05 |
 
 ## Phase Details
 
@@ -200,8 +201,23 @@ Plans:
 **Goal:** Mejoras al sistema de tienda: gestión de fotos de paquetes, organización por categorías, y flujo de compra optimizado
 **Requirements:** STOR-05, STOR-06, STOR-07
 **Depends on:** Phase 11
-**Status:** In Progress
+**Status:** ✓ Complete
 **Plans:** 5/5 plans complete
+
+### Phase 13: El Mapa del Deseo - Promociones VIP Exclusivas
+
+**Goal:** Sistema de promociones exclusivas dentro de El Diván con 3 niveles: Premium, Círculo Íntimo y El Secreto
+**Requirements:** PROM-04, VIP-08
+**Depends on:** Phase 12
+**Status:** ✓ Complete
+**Plans:** 3/3 plans complete
+
+**Success criteria:**
+1. Usuario VIP ve botón "🗺️ El Mapa del Deseo" en El Diván ✓
+2. Ve 3 promociones exclusivas con descripciones completas ✓
+3. Flujo "Me Interesa" funciona y notifica a admins ✓
+4. Promociones VIP no aparecen en catálogo general ✓
+5. Solo VIPs pueden acceder (no-VIPs redirigidos) ✓
 
 **Success criteria:**
 1. Admin puede eliminar fotos de paquetes existentes ✓ (Already completed in quick task 260404-vjx)

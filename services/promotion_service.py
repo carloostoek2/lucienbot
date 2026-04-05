@@ -86,12 +86,13 @@ class PromotionService:
         return query.order_by(desc(Promotion.created_at)).all()
 
     def get_available_promotions(self) -> List[Promotion]:
-        """Obtiene promociones disponibles para los usuarios"""
+        """Obtiene promociones disponibles para los usuarios (no VIP exclusivas)"""
         db = self._get_db()
         now = datetime.now(timezone.utc)
         return db.query(Promotion).filter(
             Promotion.is_active == True,
             Promotion.status == PromotionStatus.ACTIVE,
+            Promotion.is_vip_exclusive == False,  # Excluir promociones VIP
             and_(
                 Promotion.start_date.is_(None) | (Promotion.start_date <= now)
             ),
@@ -99,6 +100,22 @@ class PromotionService:
                 Promotion.end_date.is_(None) | (Promotion.end_date >= now)
             )
         ).order_by(desc(Promotion.created_at)).all()
+
+    def get_vip_exclusive_promotions(self) -> List[Promotion]:
+        """Obtiene promociones exclusivas para VIPs"""
+        db = self._get_db()
+        now = datetime.now(timezone.utc)
+        return db.query(Promotion).filter(
+            Promotion.is_active == True,
+            Promotion.status == PromotionStatus.ACTIVE,
+            Promotion.is_vip_exclusive == True,
+            and_(
+                Promotion.start_date.is_(None) | (Promotion.start_date <= now)
+            ),
+            and_(
+                Promotion.end_date.is_(None) | (Promotion.end_date >= now)
+            )
+        ).order_by(desc(Promotion.price_mxn)).all()
 
     def update_promotion(self, promotion_id: int, **kwargs) -> bool:
         """Actualiza una promocion"""

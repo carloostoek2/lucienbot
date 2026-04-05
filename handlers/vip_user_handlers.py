@@ -5,16 +5,18 @@ Handlers exclusivos para suscriptores VIP:
 - Menú de El Diván
 - Mensajes anónimos a Diana
 """
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from services.vip_service import VIPService
 from services.anonymous_message_service import AnonymousMessageService
 from services.besito_service import BesitoService
+from services.promotion_service import PromotionService
 from models.models import TransactionSource
 from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard, admin_anonymous_notification_keyboard
 from utils.lucien_voice import LucienVoice
+from handlers.promotion_user_handlers import notify_admins_about_interest
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,10 @@ class AnonymousMessageStates(StatesGroup):
 def vip_area_keyboard() -> InlineKeyboardMarkup:
     """Menú de El Diván VIP"""
     buttons = [
+        [InlineKeyboardButton(
+            text="🗺️ El Mapa del Deseo",
+            callback_data="vip_map_of_desire"
+        )],
         [InlineKeyboardButton(
             text="💌 Enviar mensaje a Diana",
             callback_data="send_anonymous_message"
@@ -91,6 +97,212 @@ async def vip_area_menu(callback: CallbackQuery):
         await callback.answer()
     finally:
         vip_service.close()
+
+
+# ==================== EL MAPA DEL DESEO ====================
+
+@router.callback_query(F.data == "vip_map_of_desire")
+async def show_map_of_desire(callback: CallbackQuery):
+    """Muestra El Mapa del Deseo - promociones VIP exclusivas"""
+    user = callback.from_user
+
+    # Verificar que sigue siendo VIP
+    vip_service = VIPService()
+    try:
+        is_vip = vip_service.is_user_vip(user.id)
+        if not is_vip:
+            await callback.message.edit_text(
+                f"🎩 <b>Lucien:</b>\n\n"
+                f"<i>El Mapa del Deseo solo se revela a quienes tienen acceso privilegiado...</i>\n\n"
+                f"Su suscripción VIP no está activa.",
+                reply_markup=main_menu_keyboard(is_vip=False),
+                parse_mode="HTML"
+            )
+            await callback.answer()
+            return
+
+        # Obtener promociones VIP exclusivas
+        promotion_service = PromotionService()
+        try:
+            vip_promos = promotion_service.get_vip_exclusive_promotions()
+
+            if not vip_promos:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Volver a El Diván", callback_data="vip_area")]
+                ])
+                text = ("🎩 <b>Lucien:</b>\n\n"
+                        "<i>El Mapa del Deseo está... momentáneamente en blanco.</i>\n\n"
+                        "Diana está preparando nuevas experiencias exclusivas. "
+                        "Las oportunidades más exquisitas requieren su tiempo...")
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer()
+                return
+
+            # Construir mensaje y botones
+            text = ("🎩 <b>Lucien:</b>\n\n"
+                    "<i>Bienvenido al Mapa del Deseo...</i>\n\n"
+                    "Aquí se encuentran las experiencias más exclusivas que Diana "
+                    "ha reservado solo para quienes han demostrado su compromiso.\n\n"
+                    "Cada nivel ofrece una intimidad diferente con ella. "
+                    "Elija sabiamente...")
+
+            buttons = []
+            for promo in vip_promos:
+                buttons.append([InlineKeyboardButton(
+                    text=f"✨ {promo.name}",
+                    callback_data=f"view_vip_promo_{promo.id}"
+                )])
+
+            buttons.append([InlineKeyboardButton(
+                text="🔙 Volver a El Diván",
+                callback_data="vip_area"
+            )])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            await callback.answer()
+
+        finally:
+            promotion_service.close()
+    finally:
+        vip_service.close()
+
+
+@router.callback_query(F.data.startswith("view_vip_promo_"))
+async def view_vip_promotion_detail(callback: CallbackQuery):
+    """Muestra detalle de una promoción VIP exclusiva"""
+    try:
+        promo_id = int(callback.data.replace("view_vip_promo_", ""))
+    except ValueError:
+        await callback.answer("Algo inesperado ha ocurrido...", show_alert=True)
+        return
+
+    promotion_service = PromotionService()
+    try:
+        promo = promotion_service.get_promotion(promo_id)
+
+        if not promo or not promo.is_vip_exclusive:
+            await callback.answer("Esa oferta no está disponible.", show_alert=True)
+            return
+
+        user_id = callback.from_user.id
+        has_interest = promotion_service.has_user_expressed_interest(user_id, promo_id)
+        is_blocked = promotion_service.is_user_blocked(user_id)
+
+        text = f"🎩 <b>Lucien:</b>\n\n"
+        text += f"✨ <b>{promo.name}</b>\n\n"
+
+        if promo.description:
+            text += f"{promo.description}\n\n"
+
+        text += f"💰 <b>Inversión:</b> {promo.price_display}\n\n"
+
+        buttons = []
+
+        if has_interest:
+            text += "<i>Ya ha expresado su interés en esta experiencia. "
+            text += "Diana ha sido notificada...</i>\n"
+        elif is_blocked:
+            text += "<i>Su cuenta tiene ciertas... limitaciones.</i>\n"
+        else:
+            text += "<i>Si esta experiencia despierta su curiosidad...</i>\n"
+            buttons.append([InlineKeyboardButton(
+                text="💕 Me interesa",
+                callback_data=f"vip_promo_interest_{promo.id}"
+            )])
+
+        buttons.append([InlineKeyboardButton(
+            text="🔙 Volver al Mapa",
+            callback_data="vip_map_of_desire"
+        )])
+        buttons.append([InlineKeyboardButton(
+            text="🏠 El Diván",
+            callback_data="vip_area"
+        )])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer()
+    finally:
+        promotion_service.close()
+
+
+@router.callback_query(F.data.startswith("vip_promo_interest_"))
+async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot):
+    """Procesa interés en promoción VIP exclusiva"""
+    try:
+        promo_id = int(callback.data.replace("vip_promo_interest_", ""))
+    except ValueError:
+        await callback.answer("Algo inesperado ha ocurrido...", show_alert=True)
+        return
+
+    promotion_service = PromotionService()
+    user = callback.from_user
+
+    try:
+        # Verificar bloqueo
+        if promotion_service.is_user_blocked(user.id):
+            await callback.answer(
+                "No puede expresar interés. Hay restricciones en su cuenta.",
+                show_alert=True
+            )
+            return
+
+        # Verificar si ya expresó interés
+        if promotion_service.has_user_expressed_interest(user.id, promo_id):
+            await callback.answer(
+                "Ya ha expresado interés en esta experiencia.",
+                show_alert=True
+            )
+            return
+
+        # Registrar interés
+        success, message, interest = promotion_service.express_interest(
+            user_id=user.id,
+            promotion_id=promo_id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        )
+
+        if not success:
+            await callback.answer(message, show_alert=True)
+            return
+
+        promo = promotion_service.get_promotion(promo_id)
+        promo_name = promo.name if promo else "Oferta"
+
+        # Notificar a admins
+        await notify_admins_about_interest(bot, interest, promo)
+
+        # Mostrar confirmación
+        from config.settings import bot_config
+        creator_username = getattr(bot_config, 'CREATOR_USERNAME', None)
+
+        keyboard_buttons = [
+            [InlineKeyboardButton(text="🔙 Volver al Mapa", callback_data="vip_map_of_desire")],
+            [InlineKeyboardButton(text="🏠 El Diván", callback_data="vip_area")]
+        ]
+
+        if creator_username:
+            keyboard_buttons.insert(0, [InlineKeyboardButton(
+                text="💬 Contactar a Diana",
+                url=f"https://t.me/{creator_username}"
+            )])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+        text = (f"🎩 <b>Lucien:</b>\n\n"
+                f"<i>Su interés ha sido... registrado.</i>\n\n"
+                f"✨ <b>{promo_name}</b>\n\n"
+                f"<i>Diana ha sido notificada de su curiosidad. "
+                f"En breve se pondrá en contacto con usted...</i>")
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer("Interés registrado")
+
+    finally:
+        promotion_service.close()
 
 
 # ==================== MENSAJES ANÓNIMOS ====================

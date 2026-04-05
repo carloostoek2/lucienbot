@@ -735,6 +735,7 @@ class Promotion(Base):
 
     # Estado
     is_active = Column(Boolean, default=True)
+    is_vip_exclusive = Column(Boolean, default=False, nullable=False)  # Solo visible para VIPs
     created_by = Column(BigInteger, nullable=True)  # Admin que creó la promoción
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -7,9 +7,9 @@ last_updated: "2026-04-05T20:28:11.421Z"
 progress:
   total_phases: 13
   completed_phases: 5
-  total_plans: 22
+  total_plans: 25
   completed_plans: 23
-  percent: 95
+  percent: 90
 ---
 
 # State: Lucien Bot
@@ -45,11 +45,24 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 8: Testing & Technical Debt | ✓ Complete | 2266d56 |
 | 9: Polish & Hardening | ✓ Complete | All 5 plans done (09-01 through 09-05) — SCHED-01 fulfilled |
 | 10: Flujos de entrada @docs/req_fase10.md | ✓ Complete | All 4 plans done (10-01 through 10-04) |
-| 12: Mejorar tienda | ⏳ Pending | Ver [CONTEXT.md](./phases/12-mejorar-tienda/CONTEXT.md) — Sistema de condicionalidad recíproca tienda-narrativa-gamificación |
+| 12: Mejorar tienda | ✓ Complete | All 5 plans done |
+| 13: El Mapa del Deseo | ✓ Complete | 3 planes completados |
 
 ## Current Phase
 
-**Phase 12: mejorar-tienda** — ▶️ IN PROGRESS
+**Phase 13: el-mapa-del-deseo** — ✅ COMPLETE
+
+### Phase 13 Summary
+
+| Plan | Status | Description |
+|------|--------|-------------|
+| 13-01 | ✓ | Foundation: Modelo, migración, service methods |
+| 13-02 | ✓ | Handlers: Botón en VIP area, flujo completo |
+| 13-03 | ✓ | Seed: Crear 3 promociones VIP en BD |
+
+**Previous Phase:**
+
+**Phase 12: mejorar-tienda** — ✓ COMPLETE
 
 ### Phase 12 Summary
 
@@ -106,11 +119,14 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 2026-04-05 | 12-03 | Product Detail View with preview — commits 93ea80f, 1eb7d6b, 1e367e3 |
 | 2026-04-05 | 12-04 | Stock Alert System — commits f328568, b545dd4, d63c37b, 05548ca |
 | 2026-04-05 | 12-05 | Search and Filter Products — commit 772ca70 |
+| 2026-04-05 | 13-01 | El Mapa del Deseo Foundation — model, migration, service methods |
+| 2026-04-05 | 13-02 | El Mapa del Deseo Handlers — vip_user_handlers updated |
+| 2026-04-05 | 13-03 | El Mapa del Deseo Seed — 3 VIP promotions created |
 
 ## What's Next
 
-→ Phase 12 PENDING — Mejorar tienda
-→ Next: Crear planes para Phase 12
+→ Phase 13 COMPLETE — El Mapa del Deseo implementado
+→ Milestone v1.0 ✅ COMPLETE
 
 ### Quick Tasks Completed
 
@@ -178,6 +194,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 - Phase 10 added: Flujos de entrada @docs/req_fase10.md
 - Plan 10-01 complete: Foundation for ritualized entry flows
 - Phase 12 added: Mejorar tienda — mejoras al sistema de tienda
+- Phase 13 added: El Mapa del Deseo — promociones VIP exclusivas
 
 ## Notes
 
