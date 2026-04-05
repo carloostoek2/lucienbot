@@ -65,8 +65,8 @@ async def shop_menu(callback: CallbackQuery):
 async def store_catalog(callback: CallbackQuery):
     """Muestra el catalogo de productos"""
     store_service = StoreService()
-    products = store_service.get_available_products()
-    
+    products = store_service.get_all_products(active_only=True)
+
     if not products:
         await callback.message.edit_text(
             "🎩 Lucien:\n\n"
@@ -76,15 +76,22 @@ async def store_catalog(callback: CallbackQuery):
         )
         await callback.answer()
         return
-    
+
     text = "🎩 Lucien:\n\n" \
            "Catalogo de productos:\n\n"
-    
+
     buttons = []
     for product in products:
+        is_available = product.is_available
         stock_text = "∞" if product.stock == -1 else f"Stock: {product.stock}"
-        text += f"📦 {product.name}\n"
+
+        status_emoji = "📦" if is_available else "🔒"
+        text += f"{status_emoji} <b>{product.name}</b>\n"
         text += f"   💰 {product.price} besitos | {stock_text}\n"
+
+        if not is_available:
+            text += f"   <i>Agotado temporalmente</i>\n"
+
         text += f"   {product.description or 'Sin descripcion'}\n\n"
 
         # Always show detail button
@@ -92,11 +99,18 @@ async def store_catalog(callback: CallbackQuery):
             text=f"👁️ Ver: {product.name[:20]}",
             callback_data=f"product_detail_{product.id}"
         )])
-        buttons.append([InlineKeyboardButton(
-            text=f"➕ Agregar: {product.name[:20]}",
-            callback_data=f"add_to_cart_{product.id}"
-        )])
-    
+
+        if is_available:
+            buttons.append([InlineKeyboardButton(
+                text=f"➕ Agregar al carrito",
+                callback_data=f"add_to_cart_{product.id}"
+            )])
+        else:
+            buttons.append([InlineKeyboardButton(
+                text=f"🔒 No disponible",
+                callback_data="#"
+            )])
+
     buttons.append([InlineKeyboardButton(
         text="🛒 Ver carrito",
         callback_data="view_cart"
@@ -105,10 +119,10 @@ async def store_catalog(callback: CallbackQuery):
         text="🔙 Volver",
         callback_data="shop"
     )])
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
+
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
 
