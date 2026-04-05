@@ -7,7 +7,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from aiogram.types import InputMediaPhoto, InputMediaVideo
-from models.models import Package, PackageFile
+from models.models import Package, PackageFile, Category
 from models.database import SessionLocal
 import logging
 
@@ -376,6 +376,120 @@ Enviando {len(files)} archivo(s)...""",
             'available_for_reward': package.is_available_for_reward
         }
     
+    # ==================== CATEGORÍAS ====================
+
+    def create_category(self, name: str, description: str = None,
+                        order_index: int = 0) -> Category:
+        """
+        Crea una nueva categoría.
+
+        Args:
+            name: Nombre de la categoría
+            description: Descripción opcional
+            order_index: Orden de visualización
+
+        Returns:
+            La categoría creada
+        """
+        category = Category(
+            name=name,
+            description=description,
+            order_index=order_index,
+            is_active=True
+        )
+        self.db.add(category)
+        self.db.commit()
+        self.db.refresh(category)
+        logger.info(f"Categoría creada: {name} (ID: {category.id})")
+        return category
+
+    def get_category(self, category_id: int) -> Optional[Category]:
+        """Obtiene una categoría por ID"""
+        return self.db.query(Category).filter(Category.id == category_id).first()
+
+    def get_all_categories(self, active_only: bool = True) -> List[Category]:
+        """Obtiene todas las categorías ordenadas por order_index"""
+        query = self.db.query(Category)
+        if active_only:
+            query = query.filter(Category.is_active == True)
+        return query.order_by(Category.order_index).all()
+
+    def update_category(self, category_id: int, **kwargs) -> bool:
+        """
+        Actualiza una categoría.
+
+        Args:
+            category_id: ID de la categoría
+            **kwargs: Campos a actualizar (name, description, order_index, is_active)
+
+        Returns:
+            True si se actualizó correctamente
+        """
+        category = self.get_category(category_id)
+        if not category:
+            return False
+
+        allowed_fields = ['name', 'description', 'order_index', 'is_active']
+        for field, value in kwargs.items():
+            if field in allowed_fields and hasattr(category, field):
+                setattr(category, field, value)
+
+        self.db.commit()
+        logger.info(f"Categoría {category_id} actualizada")
+        return True
+
+    def delete_category(self, category_id: int) -> bool:
+        """
+        Elimina (desactiva) una categoría.
+
+        Args:
+            category_id: ID de la categoría
+
+        Returns:
+            True si se eliminó correctamente
+        """
+        return self.update_category(category_id, is_active=False)
+
+    def assign_package_to_category(self, package_id: int, category_id: int) -> bool:
+        """
+        Asigna un paquete a una categoría.
+
+        Args:
+            package_id: ID del paquete
+            category_id: ID de la categoría
+
+        Returns:
+            True si se asignó correctamente
+        """
+        package = self.get_package(package_id)
+        if not package:
+            return False
+
+        category = self.get_category(category_id)
+        if not category:
+            return False
+
+        package.category_id = category_id
+        self.db.commit()
+        logger.info(f"Paquete {package_id} asignado a categoría {category_id}")
+        return True
+
+    def get_packages_by_category(self, category_id: int, active_only: bool = True) -> List[Package]:
+        """
+        Obtiene los paquetes de una categoría.
+
+        Args:
+            category_id: ID de la categoría
+            active_only: Si solo obtener paquetes activos
+
+        Returns:
+            Lista de paquetes
+        """
+        query = self.db.query(Package).filter(Package.category_id == category_id)
+        if active_only:
+            query = query.filter(Package.is_active == True)
+        return query.order_by(desc(Package.created_at)).all()
+
     def __del__(self):
         """Cierra la sesión de base de datos"""
         if hasattr(self, 'db'):
