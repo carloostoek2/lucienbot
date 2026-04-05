@@ -373,6 +373,7 @@ class StoreService:
             return False, "Error al procesar el pago"
 
         # Procesar cada item
+        low_stock_products = []
         for order_item in order.items:
             product = db.query(StoreProduct).filter(
                 StoreProduct.id == order_item.product_id
@@ -384,6 +385,14 @@ class StoreService:
             # Decrementar stock
             if product.stock != -1:
                 product.stock -= order_item.quantity
+
+                # Check for low stock alert
+                if product.stock <= product.low_stock_threshold:
+                    low_stock_products.append(product.id)
+                    logger.warning(
+                        f"STOCK_ALERT: Product {product.id} ({product.name}) - "
+                        f"Stock: {product.stock}, Threshold: {product.low_stock_threshold}"
+                    )
 
             # Entregar paquete
             if product.package:
@@ -397,6 +406,10 @@ class StoreService:
         order.status = OrderStatus.COMPLETED
         order.completed_at = datetime.utcnow()
         db.commit()
+
+        # Notificar alertas de stock a admins
+        for product_id in low_stock_products:
+            await self.notify_stock_alert(bot, product_id)
 
         logger.info(f"Orden completada: {order.id}")
         return True, f"Compra completada! Se debitaron {order.total_price} besitos."
