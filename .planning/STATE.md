@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-04-03T05:44:31.162Z"
+last_updated: "2026-04-05T12:00:00.000Z"
 progress:
   total_phases: 12
   completed_phases: 4
@@ -103,6 +103,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 260330-bpj | Agregar columna invite_link a Channel via migración Alembic | 2026-03-30 | d66b8b7 | [260330-bpj-agregar-columna-invite-link-a-channel-vi](./quick/260330-bpj-agregar-columna-invite-link-a-channel-vi/) |
 | 260330-reg | Regenerar migración inicial limpia de Alembic | 2026-03-30 | 2d68422 | — |
 | 260404-vjx | Crear función para eliminar fotos de paquetes: mostrar fotos existentes con botón de eliminar en cada una | 2026-04-05 | 457639f | [260404-vjx-crear-funci-n-para-eliminar-fotos-de-paq](./quick/260404-vjx-crear-funci-n-para-eliminar-fotos-de-paq/) |
+| 260405-vip | Agregar costo de 50 besitos para mensajes anónimos VIP | 2026-04-05 | 8ad214c | [260405-vip-anon-besito-cost](./quick/260405-vip-anon-besito-cost/) |
 
 ## Decision Log
 
@@ -148,8 +149,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 | # | Title | Area | Created |
 |---|-------|------|---------|
-| 1 | Costo en besitos para mensajes anónimos VIP | vip | 2026-04-05 |
-| 2 | Expandir sistema de promociones a El Diván VIP - El Mapa del Deseo | promotions | 2026-04-05 |
+| 1 | Expandir sistema de promociones a El Diván VIP - El Mapa del Deseo | promotions | 2026-04-05 |
 
 ### Roadmap Evolution
 
