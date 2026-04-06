@@ -725,7 +725,11 @@ class Promotion(Base):
     description = Column(Text, nullable=True)
 
     # Relación con paquete (reutiliza el sistema de paquetes)
-    package_id = Column(Integer, ForeignKey("packages.id"), nullable=False)
+    # Ahora opcional - permite promociones sin paquete asociado
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=True)
+
+    # Conteo manual de archivos (para promociones sin paquete)
+    manual_file_count = Column(Integer, nullable=True)
 
     # Precio en pesos mexicanos (dinero real)
     price_mxn = Column(Integer, nullable=False)  # Precio en centavos para evitar decimales
@@ -773,7 +777,9 @@ class Promotion(Base):
 
     @property
     def file_count(self) -> int:
-        """Retorna la cantidad de archivos en el paquete asociado"""
+        """Retorna la cantidad de archivos: manual si está definido, sino del paquete"""
+        if self.manual_file_count is not None:
+            return self.manual_file_count
         return self.package.file_count if self.package else 0
 
 

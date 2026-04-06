@@ -39,16 +39,18 @@ class PromotionService:
 
     # ==================== PROMOCIONES ====================
 
-    def create_promotion(self, name: str, description: str, package_id: int,
-                         price_mxn: int, created_by: int = None,
-                         start_date: datetime = None, end_date: datetime = None) -> Promotion:
+    def create_promotion(self, name: str, description: str, package_id: int = None,
+                         manual_file_count: int = None, price_mxn: int = None,
+                         created_by: int = None, start_date: datetime = None,
+                         end_date: datetime = None) -> Promotion:
         """
         Crea una nueva promocion comercial.
 
         Args:
             name: Nombre de la promocion
             description: Descripcion de la promocion
-            package_id: ID del paquete asociado
+            package_id: ID del paquete asociado (opcional)
+            manual_file_count: Numero manual de archivos (si no hay paquete)
             price_mxn: Precio en centavos de peso mexicano (ej: 99900 = $999.00 MXN)
             created_by: ID del admin que crea la promocion
             start_date: Fecha de inicio (None = inmediato)
@@ -59,6 +61,7 @@ class PromotionService:
             name=name,
             description=description,
             package_id=package_id,
+            manual_file_count=manual_file_count,
             price_mxn=price_mxn,
             created_by=created_by,
             start_date=start_date,
@@ -125,7 +128,7 @@ class PromotionService:
             return False
 
         allowed_fields = ['name', 'description', 'price_mxn', 'status',
-                         'start_date', 'end_date', 'is_active']
+                         'start_date', 'end_date', 'is_active', 'manual_file_count']
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(promotion, field):
                 setattr(promotion, field, value)

@@ -24,7 +24,9 @@ router = Router()
 class PromotionWizardStates(StatesGroup):
     waiting_name = State()
     waiting_description = State()
+    selecting_source = State()  # Nuevo: elegir entre paquete o manual
     selecting_package = State()
+    waiting_manual_files = State()  # Nuevo: ingresar número manual
     waiting_price = State()
     waiting_dates = State()
     confirming = State()
@@ -122,19 +124,36 @@ async def process_promotion_description(message: Message, state: FSMContext):
     description = None if message.text == "/skip" else message.text.strip()
     await state.update_data(description=description)
 
-    # Mostrar paquetes disponibles
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 Seleccionar coleccion existente", callback_data="promo_select_package")],
+        [InlineKeyboardButton(text="📝 Definir archivos manualmente", callback_data="promo_manual_files")],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
+    ])
+
+    text = ("🎩 <b>Lucien:</b>\n\n"
+            "<b>Paso 3 de 5:</b> Definir el contenido\n\n"
+            "Diana puede vincular esta experiencia a una coleccion existente, "
+            "o simplemente indicar cuantos archivos entregara de forma independiente...")
+
+    await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+    await state.set_state(PromotionWizardStates.selecting_source)
+
+
+@router.callback_query(PromotionWizardStates.selecting_source, F.data == "promo_select_package")
+async def select_package_source(callback: CallbackQuery, state: FSMContext):
+    """Muestra lista de paquetes para seleccionar - Voz de Lucien"""
     package_service = PackageService()
     packages = package_service.get_all_packages()
 
     if not packages:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Definir archivos manualmente", callback_data="promo_manual_files")],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]
         ])
         text = ("🎩 <b>Lucien:</b>\n\n"
                 "<i>No hay colecciones disponibles...</i>\n\n"
-                "Debe crear una coleccion primero desde la gestion de paquetes.")
-        await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-        await state.clear()
+                "Puede definir los archivos manualmente o crear una coleccion primero.")
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         return
 
     buttons = []
@@ -146,14 +165,58 @@ async def process_promotion_description(message: Message, state: FSMContext):
                 callback_data=f"select_pkg_promo_{pkg.id}"
             )])
 
-    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
 
     text = ("🎩 <b>Lucien:</b>\n\n"
             "<b>Paso 3 de 5:</b> Seleccionar la coleccion\n\n"
             "Elija que coleccion formara parte de esta experiencia:")
 
-    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
     await state.set_state(PromotionWizardStates.selecting_package)
+    await callback.answer()
+
+
+@router.callback_query(PromotionWizardStates.selecting_source, F.data == "promo_manual_files")
+async def select_manual_files(callback: CallbackQuery, state: FSMContext):
+    """Inicia entrada manual de archivos - Voz de Lucien"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
+    ])
+
+    text = ("🎩 <b>Lucien:</b>\n\n"
+            "<b>Paso 3 de 5:</b> Definir archivos manualmente\n\n"
+            "Indique cuantos archivos contendra esta experiencia:\n"
+            "<i>Ejemplo: 15</i>")
+
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+    await state.set_state(PromotionWizardStates.waiting_manual_files)
+    await callback.answer()
+
+
+@router.message(PromotionWizardStates.waiting_manual_files)
+async def process_manual_files(message: Message, state: FSMContext):
+    """Procesa numero manual de archivos - Voz de Lucien"""
+    try:
+        file_count = int(message.text.strip())
+        if file_count < 0:
+            raise ValueError("Debe ser 0 o mayor")
+    except ValueError:
+        await message.answer("Por favor indique un numero valido (0 o mayor).")
+        return
+
+    await state.update_data(manual_file_count=file_count, package_id=None)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
+    ])
+
+    text = ("🎩 <b>Lucien:</b>\n\n"
+            "<b>Paso 4 de 5:</b> La inversion\n\n"
+            "Indique el precio en pesos mexicanos (sin decimales):\n"
+            "<i>Ejemplo: 299 (para $299.00 MXN)</i>")
+
+    await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+    await state.set_state(PromotionWizardStates.waiting_price)
 
 
 @router.callback_query(PromotionWizardStates.selecting_package, F.data.startswith("select_pkg_promo_"))
@@ -165,7 +228,7 @@ async def select_package_for_promotion(callback: CallbackQuery, state: FSMContex
         await callback.answer("ID invalido", show_alert=True)
         return
 
-    await state.update_data(package_id=package_id)
+    await state.update_data(package_id=package_id, manual_file_count=None)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
@@ -261,8 +324,18 @@ async def show_promotion_confirmation(target, state: FSMContext):
     price_mxn = data.get('price_mxn', 0)
     start_date = data.get('start_date')
     end_date = data.get('end_date')
+    manual_file_count = data.get('manual_file_count')
+    package_id = data.get('package_id')
 
     price_display = f"${price_mxn // 100:,}.00 MXN"
+
+    # Determinar el numero de archivos para mostrar
+    if manual_file_count is not None:
+        file_text = f"📁 <b>Archivos:</b> {manual_file_count} (definido manualmente)\n"
+    elif package_id:
+        file_text = "📁 <b>Contenido:</b> De coleccion existente\n"
+    else:
+        file_text = "📁 <b>Archivos:</b> No especificado\n"
 
     dates_text = "Sin fechas (disponible inmediatamente, sin expiracion)"
     if start_date:
@@ -275,6 +348,7 @@ async def show_promotion_confirmation(target, state: FSMContext):
             f"✨ <b>{name}</b>\n"
             f"📝 {description}\n"
             f"💰 <b>Inversion:</b> {price_display}\n"
+            f"{file_text}"
             f"📅 <b>Disponibilidad:</b> {dates_text}\n\n"
             f"<i>Desea forjar esta experiencia?</i>")
 
@@ -302,6 +376,7 @@ async def confirm_create_promotion(callback: CallbackQuery, state: FSMContext):
             name=data.get('name'),
             description=data.get('description'),
             package_id=data.get('package_id'),
+            manual_file_count=data.get('manual_file_count'),
             price_mxn=data.get('price_mxn'),
             created_by=callback.from_user.id,
             start_date=data.get('start_date'),
