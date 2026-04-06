@@ -266,6 +266,58 @@ class StoreService:
         db.commit()
         return True
 
+    # ==================== COMPRA DIRECTA ====================
+
+    def direct_purchase(self, user_id: int, product_id: int) -> tuple:
+        """
+        Crea una orden directa para un producto sin usar carrito.
+        Retorna (orden, mensaje_error)
+        """
+        db = self._get_db()
+        product = self.get_product(product_id)
+
+        if not product:
+            return None, LucienVoice.store_product_not_found()
+
+        if not product.is_available:
+            return None, LucienVoice.store_product_unavailable(product.name)
+
+        # Verificar stock
+        if product.stock != -1 and product.stock < 1:
+            return None, LucienVoice.store_stock_insufficient(product.name, product.stock)
+
+        # Verificar saldo
+        balance = self.besito_service.get_balance(user_id)
+        if balance < product.price:
+            return None, LucienVoice.store_balance_insufficient(product.price, balance)
+
+        # Crear la orden
+        order = Order(
+            user_id=user_id,
+            total_items=1,
+            total_price=product.price,
+            status=OrderStatus.PENDING
+        )
+        db.add(order)
+        db.flush()
+
+        # Crear item de la orden
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            product_name=product.name,
+            quantity=1,
+            unit_price=product.price,
+            total_price=product.price
+        )
+        db.add(order_item)
+
+        db.commit()
+        db.refresh(order)
+
+        logger.info(f"Orden directa creada: {order.id} para usuario {user_id}, producto {product_id}")
+        return order, None
+
     # ==================== ORDENES/COMPRAS ====================
 
     def create_order(self, user_id: int) -> tuple:
@@ -510,52 +562,3 @@ class StoreService:
             return
 
         product = alert.get('product')
-        message = alert.get('message')
-
-        alert_text = (
-            f"🎩 <b>Lucien - Alerta de Inventario</b>\n\n"
-            f"{message}\n\n"
-            f"<i>Gestiona el stock desde el panel de administracion.</i>"
-        )
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📝 Gestionar stock",
-                callback_data=f"restock_product_{product_id}"
-            )]
-        ])
-
-        # Send to all admins
-        for admin_id in bot_config.ADMIN_IDS:
-            try:
-                await bot.send_message(
-                    chat_id=admin_id,
-                    text=alert_text,
-                    reply_markup=keyboard,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Error enviando alerta de stock a admin {admin_id}: {e}")
-
-    # ==================== ESTADISTICAS ====================
-
-    def get_store_stats(self) -> dict:
-        """Obtiene estadisticas de la tienda"""
-        db = self._get_db()
-        total_products = db.query(StoreProduct).filter(StoreProduct.is_active == True).count()
-        available_products = len(self.get_available_products())
-
-        total_orders = db.query(Order).count()
-        completed_orders = db.query(Order).filter(Order.status == OrderStatus.COMPLETED).count()
-
-        # Total de besitos gastados
-        completed = db.query(Order).filter(Order.status == OrderStatus.COMPLETED).all()
-        total_besitos_spent = sum(o.total_price for o in completed)
-
-        return {
-            'total_products': total_products,
-            'available_products': available_products,
-            'total_orders': total_orders,
-            'completed_orders': completed_orders,
-            'total_besitos_spent': total_besitos_spent
-        }

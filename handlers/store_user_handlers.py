@@ -1,8 +1,9 @@
 """
 Handlers de Tienda para Usuarios - Lucien Bot
 
-Catalogo, carrito, checkout y historial de compras.
+Catalogo y compra directa de productos.
 """
+import random
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 from aiogram.fsm.context import FSMContext
@@ -16,28 +17,27 @@ import logging
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Emojis para botones del catálogo (se asignan aleatoriamente)
+CATALOG_EMOJI_LIST = ["✨", "💫", "❤️", "💋", "👅", "👄", "🫦", "🌟"]
+
+
+def get_random_emoji() -> str:
+    """Retorna un emoji aleatorio de la lista"""
+    return random.choice(CATALOG_EMOJI_LIST)
+
 
 class SearchStates(StatesGroup):
     waiting_query = State()
-    showing_results = State()
-
-
-class FilterStates(StatesGroup):
-    selecting_category = State()
-    selecting_price_range = State()
-    showing_results = State()
 
 
 @router.callback_query(F.data == "shop")
 async def shop_menu(callback: CallbackQuery):
     """Menu principal de la tienda"""
-    store_service = StoreService()
     besito_service = BesitoService()
-    
+
     user_id = callback.from_user.id
     balance = besito_service.get_balance(user_id)
-    cart_count = store_service.get_cart_items_count(user_id)
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="🔍 Buscar productos",
@@ -52,14 +52,6 @@ async def shop_menu(callback: CallbackQuery):
             callback_data="store_catalog"
         )],
         [InlineKeyboardButton(
-            text="⚡ Filtros",
-            callback_data="store_filters"
-        )],
-        [InlineKeyboardButton(
-            text=f"🛒 Mi carrito ({cart_count})",
-            callback_data="view_cart"
-        )],
-        [InlineKeyboardButton(
             text="📜 Historial de compras",
             callback_data="purchase_history"
         )],
@@ -68,12 +60,11 @@ async def shop_menu(callback: CallbackQuery):
             callback_data="back_to_main"
         )]
     ])
-    
+
     await callback.message.edit_text(
         f"🎩 Lucien:\n\n"
         f"Bienvenido a la tienda de Diana...\n\n"
-        f"💋 Tu saldo: {balance} besitos\n"
-        f"🛒 Items en carrito: {cart_count}\n\n"
+        f"💋 Tu saldo: {balance} besitos\n\n"
         f"Que deseas hacer?",
         reply_markup=keyboard
     )
@@ -84,7 +75,7 @@ async def shop_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "store_catalog")
 async def store_catalog(callback: CallbackQuery):
-    """Muestra el catalogo de productos"""
+    """Muestra el catalogo de productos con botones minimalistas"""
     store_service = StoreService()
     products = store_service.get_all_products(active_only=True)
 
@@ -102,40 +93,24 @@ async def store_catalog(callback: CallbackQuery):
            "Catalogo de productos:\n\n"
 
     buttons = []
+    row = []
     for product in products:
-        is_available = product.is_available
-        stock_text = "∞" if product.stock == -1 else f"Stock: {product.stock}"
-
-        status_emoji = "📦" if is_available else "🔒"
-        text += f"{status_emoji} <b>{product.name}</b>\n"
-        text += f"   💰 {product.price} besitos | {stock_text}\n"
-
-        if not is_available:
-            text += f"   <i>Agotado temporalmente</i>\n"
-
-        text += f"   {product.description or 'Sin descripcion'}\n\n"
-
-        # Always show detail button
-        buttons.append([InlineKeyboardButton(
-            text=f"👁️ Ver: {product.name[:20]}",
+        emoji = get_random_emoji()
+        btn_text = f"{emoji} {product.name[:20]}"
+        row.append(InlineKeyboardButton(
+            text=btn_text,
             callback_data=f"product_detail_{product.id}"
-        )])
+        ))
 
-        if is_available:
-            buttons.append([InlineKeyboardButton(
-                text=f"➕ Agregar al carrito",
-                callback_data=f"add_to_cart_{product.id}"
-            )])
-        else:
-            buttons.append([InlineKeyboardButton(
-                text=f"🔒 No disponible",
-                callback_data="#"
-            )])
+        # 2 botones por fila
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
 
-    buttons.append([InlineKeyboardButton(
-        text="🛒 Ver carrito",
-        callback_data="view_cart"
-    )])
+    # Agregar fila incompleta si existe
+    if row:
+        buttons.append(row)
+
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver",
         callback_data="shop"
@@ -195,7 +170,7 @@ async def store_categories(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("store_category_"))
 async def store_category_products(callback: CallbackQuery):
-    """Muestra productos de una categoria"""
+    """Muestra productos de una categoria con botones minimalistas"""
     try:
         category_id = int(callback.data.replace("store_category_", ""))
     except ValueError:
@@ -210,13 +185,8 @@ async def store_category_products(callback: CallbackQuery):
         await callback.answer("Categoria no encontrada", show_alert=True)
         return
 
-    # Get products that have packages in this category
-    packages = package_service.get_packages_by_category(category_id, active_only=True)
-    package_ids = [p.id for p in packages]
-
-    # Get all active products and filter by category packages
-    all_products = store_service.get_all_products(active_only=True)
-    products = [p for p in all_products if p.package_id in package_ids]
+    # Get products in this category via service filter
+    products = store_service.filter_products(category_id=category_id, active_only=True)
 
     if not products:
         await callback.message.edit_text(
@@ -238,28 +208,26 @@ async def store_category_products(callback: CallbackQuery):
         text += f"{category.description}\n\n"
 
     buttons = []
+    row = []
     for product in products:
-        stock_text = "∞" if product.stock == -1 else f"Stock: {product.stock}"
-        text += f"📦 <b>{product.name}</b>\n"
-        text += f"   💰 {product.price} besitos | {stock_text}\n"
-        text += f"   {product.description or 'Sin descripcion'}\n\n"
-
-        buttons.append([InlineKeyboardButton(
-            text=f"👁️ Ver: {product.name[:20]}",
+        emoji = get_random_emoji()
+        btn_text = f"{emoji} {product.name[:20]}"
+        row.append(InlineKeyboardButton(
+            text=btn_text,
             callback_data=f"product_detail_{product.id}"
-        )])
-        buttons.append([InlineKeyboardButton(
-            text=f"➕ Agregar al carrito",
-            callback_data=f"add_to_cart_{product.id}"
-        )])
+        ))
+
+        # 2 botones por fila
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
 
     buttons.append([InlineKeyboardButton(
         text="📁 Otras categorias",
         callback_data="store_categories"
-    )])
-    buttons.append([InlineKeyboardButton(
-        text="🛒 Ver carrito",
-        callback_data="view_cart"
     )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver",
@@ -274,7 +242,7 @@ async def store_category_products(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("product_detail_"))
 async def product_detail(callback: CallbackQuery):
-    """Muestra detalle de un producto con preview"""
+    """Muestra detalle de un producto sin preview automatico"""
     try:
         product_id = int(callback.data.replace("product_detail_", ""))
     except ValueError:
@@ -293,10 +261,9 @@ async def product_detail(callback: CallbackQuery):
     user_id = callback.from_user.id
     balance = besito_service.get_balance(user_id)
 
-    # Get package files for preview
+    # Get package files count for display
     package = product.package
     files = package_service.get_package_files(package.id) if package else []
-    preview_files = files[:3]  # Show first 3 files as preview
 
     stock_text = "∞" if product.stock == -1 else str(product.stock)
     is_available = product.is_available
@@ -323,25 +290,34 @@ async def product_detail(callback: CallbackQuery):
 
     # Build keyboard
     buttons = []
+    row = []
 
-    # Check if product is available and user can afford it
+    # First row: Preview button and Buy button (if available)
+    row.append(InlineKeyboardButton(
+        text="👁️ Preview",
+        callback_data=f"product_preview_{product.id}"
+    ))
+
     if is_available:
         if balance >= product.price:
-            buttons.append([InlineKeyboardButton(
-                text="🛒 Agregar al carrito",
-                callback_data=f"add_to_cart_{product.id}"
-            )])
+            row.append(InlineKeyboardButton(
+                text="💋 Comprar ahora",
+                callback_data=f"direct_buy_{product.id}"
+            ))
         else:
-            buttons.append([InlineKeyboardButton(
+            row.append(InlineKeyboardButton(
                 text=f"❌ Necesitas {product.price - balance} besitos mas",
                 callback_data="#"
-            )])
+            ))
     else:
-        buttons.append([InlineKeyboardButton(
-            text="🔒 Producto agotado",
+        row.append(InlineKeyboardButton(
+            text="🔒 Agotado",
             callback_data="#"
-        )])
+        ))
 
+    buttons.append(row)
+
+    # Navigation row
     buttons.append([InlineKeyboardButton(
         text="🛍️ Ver mas productos",
         callback_data="store_catalog"
@@ -357,14 +333,39 @@ async def product_detail(callback: CallbackQuery):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    # Send preview files if available
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product_preview_"))
+async def product_preview(callback: CallbackQuery):
+    """Envía el preview del producto bajo demanda y vuelve a mostrar la tarjeta"""
+    try:
+        product_id = int(callback.data.replace("product_preview_", ""))
+    except ValueError:
+        await callback.answer("Error: ID invalido", show_alert=True)
+        return
+
+    store_service = StoreService()
+    package_service = PackageService()
+    besito_service = BesitoService()
+
+    product = store_service.get_product(product_id)
+    if not product:
+        await callback.answer("Producto no encontrado", show_alert=True)
+        return
+
+    package = product.package
+    files = package_service.get_package_files(package.id) if package else []
+    preview_files = files[:3]
+
+    user_id = callback.from_user.id
+    balance = besito_service.get_balance(user_id)
+    stock_text = "∞" if product.stock == -1 else str(product.stock)
+    is_available = product.is_available
+
+    # Enviar preview si hay archivos
     if preview_files:
-        await callback.message.delete()
-
-        # Send text first
-        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-
-        # Send preview files
         for file_entry in preview_files:
             try:
                 if file_entry.file_type == "photo":
@@ -383,187 +384,138 @@ async def product_detail(callback: CallbackQuery):
                 logger.error(f"Error enviando preview: {e}")
                 continue
 
-        # Send closing message
-        await callback.message.answer(
-            "<i>...y mas contenido te espera al adquirir este tesoro.</i>",
-            parse_mode="HTML"
-        )
-    else:
-        await callback.message.edit_text(text, reply_markup=keyboard)
+    # Construir mensaje con la tarjeta del producto y botones
+    text = f"""🎩 <b>Lucien:</b>
 
-    await callback.answer()
+<i>{product.name}</i>
 
+📝 {product.description or 'Un tesoro del reino...'}
 
-@router.callback_query(F.data.startswith("add_to_cart_"))
-async def add_to_cart(callback: CallbackQuery):
-    """Agrega un producto al carrito"""
-    try:
-        product_id = int(callback.data.replace("add_to_cart_", ""))
-    except ValueError:
-        await callback.answer("Error: ID invalido", show_alert=True)
-        return
+💰 <b>Precio:</b> {product.price} besitos
+📊 <b>Stock:</b> {stock_text}
+📦 <b>Contenido:</b> {len(files)} archivo(s)
 
-    store_service = StoreService()
-    user_id = callback.from_user.id
+💋 Tu saldo: {balance} besitos"""
 
-    success, message = store_service.add_to_cart(user_id, product_id)
+    if balance < product.price:
+        text += f"\n\n<i>¿Necesitas mas besitos?</i>\n"
+        text += f"• Reclama tu regalo diario\n"
+        text += f"• Reacciona a publicaciones\n"
+        text += f"• Completa misiones\n"
+        text += f"• Subscribete VIP para mas beneficios"
 
-    if success:
-        await callback.answer(message)
-        # Return to product detail instead of catalog
-        callback.data = f"product_detail_{product_id}"
-        await product_detail(callback)
-    else:
-        await callback.answer(message, show_alert=True)
-
-
-# ==================== CARRITO ====================
-
-@router.callback_query(F.data == "view_cart")
-async def view_cart(callback: CallbackQuery):
-    """Muestra el contenido del carrito"""
-    store_service = StoreService()
-    besito_service = BesitoService()
-    
-    user_id = callback.from_user.id
-    cart_items = store_service.get_cart_items(user_id)
-    balance = besito_service.get_balance(user_id)
-    cart_total = store_service.get_cart_total(user_id)
-    
-    if not cart_items:
-        await callback.message.edit_text(
-            "🎩 Lucien:\n\n"
-            "Tu carrito esta vacio...\n\n"
-            "Visita el catalogo para agregar productos.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🛍️ Ver catalogo", callback_data="store_catalog")],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")]
-            ])
-        )
-        await callback.answer()
-        return
-    
-    text = f"🎩 Lucien:\n\n" \
-           f"Tu carrito de compras:\n\n" \
-           f"💋 Tu saldo: {balance} besitos\n" \
-           f"💰 Total: {cart_total} besitos\n\n"
-    
     buttons = []
-    for item in cart_items:
-        product = item.product
-        if product:
-            text += f"📦 {product.name}\n"
-            text += f"   Cantidad: {item.quantity}\n"
-            text += f"   Precio: {product.price} besitos c/u\n"
-            text += f"   Subtotal: {product.price * item.quantity} besitos\n\n"
-            
-            buttons.append([InlineKeyboardButton(
-                text=f"🗑️ Quitar: {product.name[:20]}",
-                callback_data=f"remove_from_cart_{item.id}"
-            )])
-    
-    # Verificar si tiene saldo suficiente
-    can_checkout = balance >= cart_total
-    
+    row = []
+
+    # Botón de comprar
+    if is_available:
+        if balance >= product.price:
+            row.append(InlineKeyboardButton(
+                text="💋 Comprar ahora",
+                callback_data=f"direct_buy_{product.id}"
+            ))
+        else:
+            row.append(InlineKeyboardButton(
+                text=f"❌ Necesitas {product.price - balance} besitos mas",
+                callback_data="#"
+            ))
+    else:
+        row.append(InlineKeyboardButton(
+            text="🔒 Agotado",
+            callback_data="#"
+        ))
+
+    buttons.append(row)
+
     buttons.append([InlineKeyboardButton(
-        text="✅ Proceder al pago" if can_checkout else "❌ Saldo insuficiente",
-        callback_data="checkout" if can_checkout else "#"
-    )])
-    buttons.append([InlineKeyboardButton(
-        text="🛍️ Seguir comprando",
+        text="🛍️ Ver mas productos",
         callback_data="store_catalog"
     )])
     buttons.append([InlineKeyboardButton(
-        text="🔙 Volver",
+        text="🔙 Volver a la tienda",
         callback_data="shop"
     )])
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
+
+    await callback.message.answer(
+        text,
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await callback.answer("Preview enviado!", show_alert=False)
 
 
-@router.callback_query(F.data.startswith("remove_from_cart_"))
-async def remove_from_cart(callback: CallbackQuery):
-    """Elimina un item del carrito"""
+# ==================== COMPRA DIRECTA ====================
+
+@router.callback_query(F.data.startswith("direct_buy_"))
+async def direct_buy(callback: CallbackQuery):
+    """Muestra confirmacion de compra directa"""
     try:
-        cart_item_id = int(callback.data.replace("remove_from_cart_", ""))
+        product_id = int(callback.data.replace("direct_buy_", ""))
     except ValueError:
         await callback.answer("Error: ID invalido", show_alert=True)
         return
-    
-    store_service = StoreService()
-    user_id = callback.from_user.id
-    
-    success = store_service.remove_from_cart(user_id, cart_item_id)
-    
-    if success:
-        await callback.answer("Producto eliminado del carrito")
-        await view_cart(callback)
-    else:
-        await callback.answer("Error al eliminar", show_alert=True)
 
-
-# ==================== CHECKOUT ====================
-
-@router.callback_query(F.data == "checkout")
-async def checkout(callback: CallbackQuery):
-    """Muestra resumen antes de confirmar compra"""
     store_service = StoreService()
     besito_service = BesitoService()
-    
-    user_id = callback.from_user.id
-    cart_items = store_service.get_cart_items(user_id)
-    balance = besito_service.get_balance(user_id)
-    cart_total = store_service.get_cart_total(user_id)
-    
-    if not cart_items:
-        await callback.answer("Tu carrito esta vacio", show_alert=True)
+
+    product = store_service.get_product(product_id)
+    if not product:
+        await callback.answer("Producto no encontrado", show_alert=True)
         return
-    
-    if balance < cart_total:
+
+    user_id = callback.from_user.id
+    balance = besito_service.get_balance(user_id)
+
+    if balance < product.price:
         await callback.answer("Saldo insuficiente", show_alert=True)
         return
-    
-    text = "🎩 Lucien:\n\n" \
-           "Resumen de tu compra:\n\n"
-    
-    for item in cart_items:
-        product = item.product
-        if product:
-            text += f"📦 {product.name} x{item.quantity}\n"
-            text += f"   {product.price * item.quantity} besitos\n\n"
-    
-    text += f"💰 Total a pagar: {cart_total} besitos\n"
-    text += f"💋 Tu saldo: {balance} besitos\n\n"
-    text += "Confirmas la compra?"
-    
+
+    text = f"🎩 <b>Lucien:</b>\n\n" \
+           f"<i>¿Confirmar compra?</i>\n\n" \
+           f"📦 <b>{product.name}</b>\n" \
+           f"💰 <b>Precio:</b> {product.price} besitos\n\n" \
+           f"💋 Tu saldo: {balance} besitos\n" \
+           f"📊 Después de compra: {balance - product.price} besitos"
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Confirmar compra", callback_data="confirm_checkout")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="view_cart")]
+        [InlineKeyboardButton(
+            text="✅ Confirmar",
+            callback_data=f"confirm_direct_buy_{product_id}"
+        )],
+        [InlineKeyboardButton(
+            text="❌ Cancelar",
+            callback_data=f"product_detail_{product_id}"
+        )]
     ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
+
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
 
-@router.callback_query(F.data == "confirm_checkout")
-async def confirm_checkout(callback: CallbackQuery, bot: Bot):
-    """Procesa la compra"""
+@router.callback_query(F.data.startswith("confirm_direct_buy_"))
+async def confirm_direct_buy(callback: CallbackQuery, bot: Bot):
+    """Procesa la compra directa"""
+    try:
+        product_id = int(callback.data.replace("confirm_direct_buy_", ""))
+    except ValueError:
+        await callback.answer("Error: ID invalido", show_alert=True)
+        return
+
     store_service = StoreService()
     user_id = callback.from_user.id
-    
-    # Crear orden
-    order, error = store_service.create_order(user_id)
-    
+
+    # Crear orden directa
+    order, error = store_service.direct_purchase(user_id, product_id)
+
     if error:
         await callback.answer(error, show_alert=True)
         return
-    
+
     # Completar orden
     success, message = await store_service.complete_order(bot, order.id)
-    
+
     if success:
         await callback.message.edit_text(
             f"🎩 Lucien:\n\n"
@@ -646,7 +598,7 @@ async def store_search_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(SearchStates.waiting_query)
+@router.message(SearchStates.waiting_query, F.text)
 async def process_search_query(message: Message, state: FSMContext):
     """Procesa busqueda de productos"""
     query = message.text.strip()
@@ -681,16 +633,21 @@ async def process_search_query(message: Message, state: FSMContext):
            f"{len(products)} tesoro(s) encontrado(s)\n\n"
 
     buttons = []
+    row = []
     for product in products:
-        stock_text = "∞" if product.stock == -1 else f"Stock: {product.stock}"
-        status_emoji = "📦" if product.is_available else "🔒"
-        text += f"{status_emoji} <b>{product.name}</b>\n"
-        text += f"   💰 {product.price} besitos | {stock_text}\n\n"
-
-        buttons.append([InlineKeyboardButton(
-            text=f"👁️ Ver: {product.name[:20]}",
+        emoji = get_random_emoji()
+        btn_text = f"{emoji} {product.name[:20]}"
+        row.append(InlineKeyboardButton(
+            text=btn_text,
             callback_data=f"product_detail_{product.id}"
-        )])
+        ))
+
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
 
     buttons.append([InlineKeyboardButton(
         text="🔍 Nueva busqueda",
@@ -786,7 +743,7 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
             "🎩 <b>Lucien:</b>\n\n"
             "<i>No hay tesoros que coincidan...</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="store_filters")]
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")]
             ])
         )
         await callback.answer()
@@ -797,24 +754,25 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
            f"{len(products)} tesoro(s)\n\n"
 
     buttons = []
+    row = []
     for product in products[:10]:  # Limit to 10 for display
-        stock_text = "∞" if product.stock == -1 else f"Stock: {product.stock}"
-        status_emoji = "📦" if product.is_available else "🔒"
-        text += f"{status_emoji} <b>{product.name}</b>\n"
-        text += f"   💰 {product.price} besitos | {stock_text}\n\n"
-
-        buttons.append([InlineKeyboardButton(
-            text=f"👁️ Ver: {product.name[:20]}",
+        emoji = get_random_emoji()
+        btn_text = f"{emoji} {product.name[:20]}"
+        row.append(InlineKeyboardButton(
+            text=btn_text,
             callback_data=f"product_detail_{product.id}"
-        )])
+        ))
+
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
 
     if len(products) > 10:
         text += f"<i>...y {len(products) - 10} mas</i>\n\n"
 
-    buttons.append([InlineKeyboardButton(
-        text="⚡ Otros filtros",
-        callback_data="store_filters"
-    )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver",
         callback_data="shop"

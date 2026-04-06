@@ -28,6 +28,7 @@ class ProductWizardStates(StatesGroup):
 
 class ProductRestockStates(StatesGroup):
     waiting_amount = State()
+    waiting_threshold = State()
 
 
 def is_admin(user_id: int) -> bool:
@@ -597,16 +598,13 @@ async def config_stock_alert(callback: CallbackQuery, state: FSMContext):
             [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"product_admin_detail_{product_id}")]
         ])
     )
-    await state.set_state("ProductRestockStates:waiting_threshold")
+    await state.set_state(ProductRestockStates.waiting_threshold)
     await callback.answer()
 
 
-@router.message(F.text.regexp(r"^\d+$"))
+@router.message(ProductRestockStates.waiting_threshold, F.text.regexp(r"^\d+$"))
 async def process_stock_threshold(message: Message, state: FSMContext):
     """Procesa umbral de alerta de stock"""
-    current_state = await state.get_state()
-    if current_state != "ProductRestockStates:waiting_threshold":
-        return
 
     try:
         threshold = int(message.text.strip())
