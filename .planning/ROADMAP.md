@@ -243,7 +243,7 @@ Plans:
 **Plans:** 2/2 plans pending
 
 **Plans:**
-- [ ] 14-01-PLAN.md — Game Service + TransactionSource.GAME: lógica de minijuegos (dados, trivia) ✓ (plan created)
+- [x] 14-01-PLAN.md — Game Service + TransactionSource.GAME: lógica de minijuegos (dados, trivia) ✓ (plan created)
 - [ ] 14-02-PLAN.md — Game Handlers: menú, dados con animación, trivia con botones inline (plan created)
 
 **Success criteria:**
