@@ -32,11 +32,8 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint('id'),
-        sa UniqueConstraint('name')
+        sa.UniqueConstraint('name')
     )
-
-    # Agregar índice único en name
-    op.create_index('ix_categories_name', 'categories', ['name'], unique=True)
 
     # Agregar columna category_id a packages
     op.add_column('packages', sa.Column('category_id', sa.Integer(), nullable=True))
