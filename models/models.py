@@ -172,6 +172,8 @@ class TransactionSource(str, enum.Enum):
     PURCHASE = "purchase"          # Compra en tienda
     ADMIN = "admin"                # Ajuste manual por admin
     ANONYMOUS_MESSAGE = "anonymous_message"  # Mensaje anónimo VIP
+    GAME = "game"               # Victoria en dados
+    TRIVIA = "trivia"           # Respuesta correcta en trivia
 
 
 class BesitoBalance(Base):
@@ -1069,3 +1071,19 @@ class AnonymousMessage(Base):
 
     # Relaciones
     sender = relationship("User", foreign_keys=[sender_id])
+
+
+# ============================================================
+# FASE 14: MINIJUEGOS (DADOS Y TRIVIA)
+# ============================================================
+
+class GameRecord(Base):
+    """Registros de jugadas en minijuegos"""
+    __tablename__ = "game_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    game_type = Column(String(20), nullable=False)  # 'dice', 'trivia'
+    result = Column(String(50), nullable=False)
+    payout = Column(Integer, default=0)
+    played_at = Column(DateTime(timezone=True), server_default=func.now())

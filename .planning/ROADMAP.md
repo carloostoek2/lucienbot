@@ -20,6 +20,7 @@
 | 9 | Polish & Hardening | Rate limiting, FSM persistente, backups, analytics | Complete    | 2026-03-31 |
 | 12 | Mejorar tienda | 5/5 | Complete    | 2026-04-05 |
 | 13 | El Mapa del Deseo | 3/3 | Complete    | 2026-04-05 |
+| 14 | Minijuegos | Sistema de dados y trivia para ganar besitos | Complete    | 2026-04-06 |
 
 ## Phase Details
 
@@ -233,6 +234,26 @@ Plans:
 - [x] 12-04-PLAN.md — Stock Alerts and Management: thresholds, visual indicators, admin notifications (STOR-07)
 - [x] 12-05-PLAN.md — Search and Filter: search by name, filter by price/availability (STOR-05, STOR-06)
 
+### Phase 14: Minijuegos
+
+**Goal:** Sistema de minijuegos (dados y trivia) para que usuarios ganen besitos
+**Requirements:** GAME-01, GAME-02, GAME-03
+**Depends on:** Phase 13
+**Status:** Pending
+**Plans:** 1/1 plans complete
+
+**Plans:**
+- [x] 14-01-PLAN.md — Game Service + TransactionSource.GAME: lógica de minijuegos (dados, trivia) ✓ (plan created)
+- [ ] 14-02-PLAN.md — Game Handlers: menú, dados con animación, trivia con botones inline (plan created)
+
+**Success criteria:**
+1. Dados: usuario lanza 2 dados, gana si son pares (ambos pares diferentes) o dobles (iguales)
+2. Dados: animación visual de lanzamiento
+3. Trivia: pregunta aleatoria de docs/preguntas.json con 4 opciones
+4. Victoria: +1 besito con mensaje de celebración
+5. Botón de minijuegos en menú principal
+
 ---
+
 *Roadmap created: 2026-03-30 from codebase analysis and git history*
-*Updated: 2026-04-05 — Phase 12 plans created*
+*Updated: 2026-04-06 — Phase 14 Minijuegos added*
