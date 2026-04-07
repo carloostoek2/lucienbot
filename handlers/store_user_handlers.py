@@ -36,7 +36,10 @@ async def shop_menu(callback: CallbackQuery):
     besito_service = BesitoService()
 
     user_id = callback.from_user.id
-    balance = besito_service.get_balance(user_id)
+    try:
+        balance = besito_service.get_balance(user_id)
+    finally:
+        besito_service.close()
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
@@ -77,7 +80,10 @@ async def shop_menu(callback: CallbackQuery):
 async def store_catalog(callback: CallbackQuery):
     """Muestra el catalogo de productos con botones minimalistas"""
     store_service = StoreService()
-    products = store_service.get_all_products(active_only=True)
+    try:
+        products = store_service.get_all_products(active_only=True)
+    finally:
+        store_service.close()
 
     if not products:
         await callback.message.edit_text(
@@ -126,7 +132,10 @@ async def store_catalog(callback: CallbackQuery):
 async def store_categories(callback: CallbackQuery):
     """Muestra categorias disponibles"""
     package_service = PackageService()
-    categories = package_service.get_all_categories(active_only=True)
+    try:
+        categories = package_service.get_all_categories(active_only=True)
+    finally:
+        package_service.close()
 
     if not categories:
         await callback.message.edit_text(

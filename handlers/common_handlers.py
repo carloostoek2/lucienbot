@@ -191,7 +191,10 @@ async def cmd_start(message: Message):
                 parse_mode="HTML"
             )
     finally:
-        vip_service.close()
+        if user_service:
+            user_service.close()
+        if vip_service:
+            vip_service.close()
 
 
 @router.message(Command("help"))

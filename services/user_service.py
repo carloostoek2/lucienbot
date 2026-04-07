@@ -100,7 +100,12 @@ class UserService:
             return True
         return False
     
+    def close(self):
+        """Cierra la sesión de base de datos"""
+        if hasattr(self, 'db') and self.db:
+            self.db.close()
+            self.db = None
+
     def __del__(self):
         """Cierra la sesión de base de datos"""
-        if hasattr(self, 'db'):
-            self.db.close()
+        self.close()

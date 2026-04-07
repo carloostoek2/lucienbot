@@ -351,7 +351,12 @@ class BroadcastService:
             'unique_users': len(set(r.user_id for r in reactions))
         }
     
+    def close(self):
+        """Cierra la sesión de base de datos"""
+        if hasattr(self, 'db') and self.db:
+            self.db.close()
+            self.db = None
+
     def __del__(self):
         """Cierra la sesión de base de datos"""
-        if hasattr(self, 'db'):
-            self.db.close()
+        self.close()

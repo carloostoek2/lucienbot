@@ -506,7 +506,12 @@ Enviando {len(files)} archivo(s)...""",
             query = query.filter(Package.is_active == True)
         return query.order_by(desc(Package.created_at)).all()
 
+    def close(self):
+        """Cierra la sesión de base de datos"""
+        if hasattr(self, 'db') and self.db:
+            self.db.close()
+            self.db = None
+
     def __del__(self):
         """Cierra la sesión de base de datos"""
-        if hasattr(self, 'db'):
-            self.db.close()
+        self.close()

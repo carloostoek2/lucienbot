@@ -173,7 +173,12 @@ class DailyGiftService:
         ).all()
         return sum(claim.besitos_received for claim in claims)
     
+    def close(self):
+        """Cierra la sesión de base de datos"""
+        if hasattr(self, 'db') and self.db:
+            self.db.close()
+            self.db = None
+
     def __del__(self):
         """Cierra la sesión de base de datos"""
-        if hasattr(self, 'db'):
-            self.db.close()
+        self.close()
