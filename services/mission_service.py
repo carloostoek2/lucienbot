@@ -166,10 +166,16 @@ class MissionService:
     # ==================== ACTUALIZACION DE PROGRESO ====================
 
     def increment_progress(self, user_id: int, mission_type: MissionType,
-                           amount: int = 1) -> List[UserMissionProgress]:
+                           amount: int = 1, reference_id: int = None) -> List[UserMissionProgress]:
         """
         Incrementa el progreso del usuario en todas las misiones del tipo especificado.
         Retorna las misiones completadas.
+
+        Args:
+            user_id: ID del usuario
+            mission_type: Tipo de misión
+            amount: Cantidad a incrementar
+            reference_id: ID de referencia (broadcast_id) para evitar duplicados
         """
         db = self._get_db()
         missions = self.get_missions_by_type(mission_type)
@@ -191,8 +197,17 @@ class MissionService:
                 progress.is_completed = False
                 progress.completed_at = None
 
+            # Verificar duplicados: si el mismo reference_id ya fue procesado, skipear
+            if reference_id is not None and progress.last_reference_id == reference_id:
+                logger.debug(f"Mision {mission.id}: duplicado skipeado ref={reference_id}")
+                continue
+
             # Incrementar progreso
             progress.current_value += amount
+
+            # Actualizar last_reference_id para evitar duplicados
+            if reference_id is not None:
+                progress.last_reference_id = reference_id
 
             # Verificar completitud
             if progress.current_value >= mission.target_value:
@@ -206,7 +221,7 @@ class MissionService:
         return completed
 
     async def increment_progress_and_deliver(self, user_id: int, mission_type: MissionType,
-                           amount: int = 1, bot=None) -> List[UserMissionProgress]:
+                           amount: int = 1, bot=None, reference_id: int = None) -> List[UserMissionProgress]:
         """
         Incrementa el progreso y entrega recompensas automaticamente.
         Retorna las misiones completadas.
@@ -216,6 +231,7 @@ class MissionService:
             mission_type: Tipo de misión
             amount: Cantidad a incrementar
             bot: Instancia del bot (requerido para entrega de recompensas)
+            reference_id: ID de referencia (broadcast_id) para evitar duplicados
         """
         db = self._get_db()
         missions = self.get_missions_by_type(mission_type)
@@ -237,8 +253,17 @@ class MissionService:
                 progress.is_completed = False
                 progress.completed_at = None
 
+            # Verificar duplicados: si el mismo reference_id ya fue procesado, skipear
+            if reference_id is not None and progress.last_reference_id == reference_id:
+                logger.debug(f"Mision {mission.id}: duplicado skipeado ref={reference_id}")
+                continue
+
             # Incrementar progreso
             progress.current_value += amount
+
+            # Actualizar last_reference_id para evitar duplicados
+            if reference_id is not None:
+                progress.last_reference_id = reference_id
 
             # Verificar completitud
             if progress.current_value >= mission.target_value:
@@ -247,8 +272,16 @@ class MissionService:
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
 
-                # Auto-entregar recompensa si está configurada
+                # Auto-entregar recompensa si está configurada (verificar cooldown para RECURRING)
                 if mission.reward_id and bot:
+                    # Verificar cooldown para misiones RECURRING
+                    if mission.frequency == MissionFrequency.RECURRING and mission.cooldown_hours:
+                        if progress.last_updated:
+                            hours_since = (datetime.utcnow() - progress.last_updated).total_seconds() / 3600
+                            if hours_since < mission.cooldown_hours:
+                                logger.info(f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa")
+                                continue
+
                     reward_service = RewardService(db)
                     success, message = await reward_service.deliver_reward(
                         bot=bot, user_id=user_id, reward_id=mission.reward_id, mission_id=mission.id

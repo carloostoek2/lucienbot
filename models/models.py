@@ -462,7 +462,8 @@ class Mission(Base):
     frequency = Column(Enum(MissionFrequency), default=MissionFrequency.ONE_TIME)
     start_date = Column(DateTime(timezone=True), nullable=True)  # None = sin fecha inicio
     end_date = Column(DateTime(timezone=True), nullable=True)    # None = sin fecha fin
-    
+    cooldown_hours = Column(Integer, nullable=True)  # Cooldown para RECURRING (None = sin cooldown)
+
     # Estado
     is_active = Column(Boolean, default=True)
     created_by = Column(BigInteger, nullable=True)
@@ -495,21 +496,24 @@ class Mission(Base):
 class UserMissionProgress(Base):
     """Progreso de cada usuario en las misiones"""
     __tablename__ = "user_mission_progress"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
     mission_id = Column(Integer, ForeignKey("missions.id"), nullable=False, index=True)
-    
+
     # Progreso
     current_value = Column(Integer, default=0, nullable=False)
     target_value = Column(Integer, nullable=False)
     is_completed = Column(Boolean, default=False)
-    
+
+    # Tracking para evitar duplicados -Último reference_id procesado
+    last_reference_id = Column(Integer, nullable=True)
+
     # Fechas
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
     last_updated = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relaciones
     mission = relationship("Mission", back_populates="user_progress")
 

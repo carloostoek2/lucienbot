@@ -278,11 +278,11 @@ class BroadcastService:
             try:
                 mission_service = MissionService(db)
                 completed_missions = await mission_service.increment_progress_and_deliver(
-                    user_id, MissionType.REACTION_COUNT, amount=1, bot=bot
+                    user_id, MissionType.REACTION_COUNT, amount=1, bot=bot, reference_id=broadcast_id
                 )
                 completed_count = len(completed_missions)
                 if completed_missions:
-                    logger.info(f"Misiones completadas por reacción: user={user_id}, count={completed_count}")
+                    logger.info(f"Misiones completadas por reacción: user={user_id}, broadcast={broadcast_id}, count={completed_count}")
             except Exception as mission_error:
                 # Error en misiones no debe invalidar la reacción
                 logger.warning(f"Error procesando misiones para reacción: {mission_error}")
