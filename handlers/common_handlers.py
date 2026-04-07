@@ -30,15 +30,37 @@ async def cmd_start(message: Message):
     logger.info(f"/start recibido - user_id={user.id}, args={args}, full_text='{message.text}'")
 
     try:
-        # Verificar si es deep link "free" para viejos conocidos
-        # Solo si el usuario NO existe en la base de datos (nunca interactuó con el bot)
+        # Verificar si es deep link "free"
         if args == "free":
             logger.info(f"Detectado args='free' para user_id={user.id}")
+
+            # Verificar si el usuario es miembro del canal VIP
+            vip_channel = vip_service.get_vip_channel()
+            is_vip_member = False
+            if vip_channel:
+                try:
+                    chat_member = await message.bot.get_chat_member(
+                        chat_id=vip_channel.channel_id,
+                        user_id=user.id
+                    )
+                    is_vip_member = chat_member.status in ["member", "administrator", "creator"]
+                    logger.info(f"Usuario {user.id} membresía VIP: {chat_member.status}")
+                except Exception as e:
+                    logger.warning(f"No se pudo verificar membresía VIP para user {user.id}: {e}")
+
+            # Si es miembro VIP, enviar mensaje especial
+            if is_vip_member:
+                await message.answer(
+                    LucienVoice.vip_member_free_link_greeting(),
+                    parse_mode="HTML"
+                )
+                return
+
+            # Si no es VIP, verificar si es usuario existente para flujo de "viejo conocido"
             existing_user = user_service.get_user(user.id)
             logger.info(f"Usuario existente: {existing_user is not None}")
             if not existing_user:
                 # Es un "viejo conocido" - ya estaba en el canal antes del bot
-                # Registrarlo ahora
                 user_service.create_user(
                     telegram_id=user.id,
                     username=user.username,
@@ -51,7 +73,8 @@ async def cmd_start(message: Message):
                     parse_mode="HTML"
                 )
                 return
-            # Si ya existe, tratar como /start normal (sin args)
+
+            # Si ya existe y no es VIP, tratar como /start normal
             logger.info(f"Usuario {user.id} ya existe, ignorando parámetro 'free'")
             args = None
 
@@ -215,7 +238,11 @@ async def back_to_main(callback: CallbackQuery):
         )
     finally:
         vip_service.close()
-    await callback.answer()
+    try:
+        await callback.answer()
+    except Exception:
+        # Callback query expired, ignore
+        pass
 
 
 @router.callback_query(F.data == "back_to_admin")

@@ -64,6 +64,28 @@ Siéntase cómodo de explorar las opciones que tiene a su disposición.
 <i>En nombre de Diana, Señorita Kinky, le doy la bienvenida.</i>"""
 
     @staticmethod
+    def vip_member_free_link_greeting() -> str:
+        """Mensaje para usuarios VIP que entran por el link free"""
+        return """🎩 <b>Lucien:</b>
+
+<i>Oh, uno de los elegidos.</i>
+
+Usted, por favor, diríjase con Diana porque ella le activará características especiales solo para VIP.
+
+@DianaKinky"""
+
+    @staticmethod
+    def vip_and_free_greeting() -> str:
+        """Mensaje para usuarios que son VIP y también suscriptores del canal free"""
+        return """🎩 <b>Lucien:</b>
+
+<i>Oh, uno de los elegidos.</i>
+
+Usted, por favor, diríjase con Diana porque ella le activará características especiales solo para VIP.
+
+@DianaKinky"""
+
+    @staticmethod
     def free_request_received(wait_minutes: int) -> str:
         """Mensaje cuando se recibe solicitud al canal free"""
         return f"""🎩 <b>Lucien:</b>

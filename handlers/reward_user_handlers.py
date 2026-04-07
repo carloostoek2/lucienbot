@@ -49,7 +49,10 @@ No hay recompensas disponibles en este momento...
 Vuelve mas tarde para nuevas oportunidades.""",
                 reply_markup=back_keyboard("back_to_main")
             )
-            await callback.answer()
+            try:
+                await callback.answer()
+            except Exception:
+                pass
             return
 
         total_rewards = len(rewards_with_missions)
@@ -92,7 +95,10 @@ Elige una recompensa para ver como obtenerla...
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
         await callback.message.edit_text(text, reply_markup=keyboard)
-        await callback.answer()
+        try:
+            await callback.answer()
+        except Exception:
+            pass
 
     finally:
         mission_service.close()
@@ -112,12 +118,18 @@ async def reward_detail(callback: CallbackQuery):
         mission = mission_service.get_mission(mission_id)
 
         if not mission or not mission.reward_id:
-            await callback.answer("Recompensa no encontrada", show_alert=True)
+            try:
+                await callback.answer("Recompensa no encontrada", show_alert=True)
+            except Exception:
+                pass
             return
 
         reward = reward_service.get_reward(mission.reward_id)
         if not reward:
-            await callback.answer("Recompensa no encontrada", show_alert=True)
+            try:
+                await callback.answer("Recompensa no encontrada", show_alert=True)
+            except Exception:
+                pass
             return
 
         progress = mission_service.get_or_create_progress(user_id, mission_id)
@@ -178,7 +190,10 @@ async def reward_detail(callback: CallbackQuery):
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
         await callback.message.edit_text(text, reply_markup=keyboard)
-        await callback.answer()
+        try:
+            await callback.answer()
+        except Exception:
+            pass
 
     finally:
         mission_service.close()

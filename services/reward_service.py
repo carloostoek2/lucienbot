@@ -290,6 +290,15 @@ Haz clic para activar tu membresia VIP."""
             'total_deliveries': deliveries
         }
     
+    def close(self):
+        """Cierra la sesion de base de datos y servicios asociados"""
+        if hasattr(self, 'db'):
+            self.db.close()
+        if hasattr(self, 'besito_service'):
+            self.besito_service.close()
+        if hasattr(self, 'vip_service'):
+            self.vip_service.close()
+
     def __del__(self):
         """Cierra la sesion de base de datos"""
         if hasattr(self, 'db'):
