@@ -31,7 +31,7 @@ class GameService:
 
     # Recompensas por victoria
     DICE_WIN_BESITOS = 1
-    TRIVIA_WIN_BESITOS = 2
+    TRIVIA_WIN_BESITOS = 1
 
     # ==================== TEMPLATES DE COPY ====================
 
@@ -90,9 +90,9 @@ class GameService:
             "¡La simetría de la fortuna le sonríe!"
         ],
         'near_miss_consecutive': [
-            "*inhala lentamente*... {dice1} y {dice2}. Tan cerca que duele, ¿no cree?",
-            "Oh, la ironía... {dice1} y {dice2} son vecinos, pero el destino no permite visitas.",
-            "Casi, casi... {dice1} y {dice2} le susurran al oído: 'la próxima vez, quizás'."
+            "<i>inhala lentamente</i>... <b>{dice1}</b> y <b>{dice2}</b>. Tan cerca que duele, ¿no cree?",
+            "Oh, la ironía... <b>{dice1}</b> y <b>{dice2}</b> son vecinos, pero el destino no permite visitas.",
+            "Casi, casi... <b>{dice1}</b> y <b>{dice2}</b> le susurran al oído: 'la próxima vez, quizás'."
         ],
         'near_miss_seven': [
             "Siete, el número de la fortuna... pero no para usted, al parecer.",
@@ -100,9 +100,9 @@ class GameService:
             "Siete le susurra... 'hoy no es su día'."
         ],
         'loss': [
-            "Hmm... {dice1} y {dice2}. El destino ha decidido ser discreto con usted. No se preocupe — Diana ha visto a sus favoritos perder muchas veces antes de que todo cambie.",
-            "{dice1} y {dice2}... Interesante. Lucien observa que la fortuna le está haciendo esperar. Quizás debería intentarlo de nuevo... o no.",
-            "{dice1} y {dice2}. Ah, la ironía del azar. Un momento desalentador, ciertamente, pero ¿quién sabe? Quizás mañana el destino sea más... generoso."
+            "Hmm... <b>{dice1}</b> y <b>{dice2}</b>. El destino ha decidido ser discreto con usted. No se preocupe — Diana ha visto a sus favoritos perder muchas veces antes de que todo cambie.",
+            "<b>{dice1}</b> y <b>{dice2}</b>... Interesante. Lucien observa que la fortuna le está haciendo esperar. Quizás debería intentarlo de nuevo... o no.",
+            "<b>{dice1}</b> y <b>{dice2}</b>. Ah, la ironía del azar. Un momento desalentador, certamente, pero ¿quién sabe? Quizás mañana el destino sea más... generoso."
         ],
         'limit_reached': [
             "Ha completado todos sus rituales del día. El destino, como Diana misma, aprecia la mesura sobre la obsesión.",
@@ -128,14 +128,14 @@ class GameService:
             "{remaining} de {limit} intentos aguardan su sabiduría."
         ],
         'correct': [
-            "¡Correcto! Diana asiente con aprobación...",
-            "¡La respuesta exacta! Su atención no pasa desapercibida.",
-            "¡Sabiduría revelada! Ha demostrado su devoción."
+            "🎩 <b>Lucien:</b>\n<i>¡Correcto! Diana asiente con aprobación...</i>",
+            "🎩 <b>Lucien:</b>\n<i>¡La respuesta exacta! Su atención no pasa desapercibida.</i>",
+            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría revelada! Ha demostrado su devoción.</i>"
         ],
         'incorrect': [
-            "Ah... No exactamente. La respuesta era: **{correct_answer}**. Diana dice que equivocarse es inevitable. Lo revelador es cómo uno continúa después.",
-            "Hmm... No. Era **{correct_answer}**. Lucien observa que incluso los más devotos pueden distraerse. Quizás debería prestar más atención...",
-            "No... La respuesta correcta era **{correct_answer}**. Un momento humillante, ¿verdad? Pero no se preocupe — Diana ha perdonado errores peores."
+            "🎩 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana dice que equivocarse es inevitable. Lo revelador es cómo uno continúa después.</i>",
+            "🎩 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Lucien observa que incluso los más devotos pueden distraerse. Quizás debería prestar más atención...</i>",
+            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un momento humillante, ¿verdad? Pero no se preocupe — Diana ha perdonado errores peores.</i>"
         ],
         'streak_messages': {
             2: ["🔥 Comienza a calentar...", "🔥 Diana nota su constancia..."],
@@ -252,9 +252,7 @@ class GameService:
 
     def _build_trivia_message(self, parts: dict) -> str:
         """Construye mensaje final de trivia desde partes"""
-        lines = [parts['header'], '', parts['result_text']]
-        if parts.get('correct_answer'):
-            lines.extend(['', f"La respuesta era: {parts['correct_answer']}"])
+        lines = [parts['header']]
         if parts.get('reward_text'):
             lines.extend(['', parts['reward_text']])
         if parts.get('streak_text'):
@@ -470,7 +468,7 @@ class GameService:
         elif near_miss['is_near_miss']:
             result_text = near_miss['description']
         else:
-            result_text = self._select_template(self.DICE_TEMPLATES['loss'])
+            result_text = self._select_template(self.DICE_TEMPLATES['loss']).format(dice1=dice1, dice2=dice2)
 
         # Texto de recompensa
         reward_text = None
@@ -671,11 +669,8 @@ class GameService:
             header_template = self._select_template(self.TRIVIA_TEMPLATES['incorrect'])
             header = header_template.format(correct_answer=correct_answer_text)
 
-        # Resultado de la respuesta
-        if is_correct:
-            result_text = f"¡Respuesta correcta: {correct_answer_text}"
-        else:
-            result_text = f"Su respuesta no fue la correcta esta vez."
+        # Resultado de la respuesta - simplificado
+        result_text = None
 
         # Respuesta correcta (solo se muestra si se equivocó - ahora ya está en el header)
         correct_answer = None
