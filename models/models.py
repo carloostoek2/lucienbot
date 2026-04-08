@@ -845,6 +845,18 @@ class BlockedPromotionUser(Base):
 
 
 # ============================================================
+# FASE TRIVIA DISCOUNT: Sistema de Promociones por Racha
+# ============================================================
+
+class DiscountCodeStatus(str, enum.Enum):
+    """Estados de códigos de descuento por racha de trivia"""
+    ACTIVE = "active"
+    USED = "used"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+
+
+# ============================================================
 # FASE 6: SISTEMA DE NARRATIVA CON ARQUETIPOS
 # ============================================================
 
