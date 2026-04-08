@@ -255,5 +255,24 @@ Plans:
 
 ---
 
+## Phase 15: Sistema de Mochila
+
+**Description:** Inventario de usuario - Consultar recompensas, productos comprados y archivos de paquetes mediante álbum de Telegram
+
+**Reference:** docs/SISTEMA_MOCHILA.md
+
+**Status:** ✅ COMPLETE (d8331ce)
+
+**Success criteria:**
+1. Comando /mochila muestra menú principal con categorías (Recompensas, Compras, VIP) ✓
+2. Ver recompensas: lista de recompensas ganadas con besitos incluidos ✓
+3. Ver compras: lista de productos comprados en la tienda ✓
+4. Ver archivos: envío de álbumes Telegram para paquetes comprados ✓
+5. Voz de Lucien en todas las interfaces ✓
+
+---
+
 *Roadmap created: 2026-03-30 from codebase analysis and git history*
 *Updated: 2026-04-06 — Phase 14 Minijuegos added*
+*Updated: 2026-04-08 — Phase 15 Sistema de Mochila added*
+*Updated: 2026-04-08 — Phase 15 COMPLETE*
