@@ -752,6 +752,7 @@ class Promotion(Base):
     # Relaciones
     package = relationship("Package")
     interests = relationship("PromotionInterest", back_populates="promotion", cascade="all, delete-orphan")
+    trivia_promotion_configs = relationship("TriviaPromotionConfig", back_populates="promotion", cascade="all, delete-orphan")
 
     @property
     def price_display(self) -> str:
@@ -1108,3 +1109,53 @@ class GameRecord(Base):
     result = Column(String(50), nullable=False)
     payout = Column(Integer, default=0)
     played_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Enlace a código de descuento generado (nullable - no siempre se genera)
+    discount_code_id = Column(Integer, ForeignKey("discount_codes.id"), nullable=True)
+
+    discount_code = relationship("DiscountCode", back_populates="game_records")
+
+
+# ============================================================
+# FASE TRIVIA DISCOUNT: Sistema de Promociones por Racha
+# ============================================================
+
+class TriviaPromotionConfig(Base):
+    """Configuración de promoción por racha de trivia"""
+    __tablename__ = "trivia_promotion_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=False)
+    discount_percentage = Column(Integer, nullable=False)
+    required_streak = Column(Integer, default=5, nullable=False)
+    is_active = Column(Boolean, default=True)
+    max_codes = Column(Integer, default=5)
+    codes_claimed = Column(Integer, default=0)
+    start_date = Column(DateTime(timezone=True), nullable=True)
+    end_date = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    promotion = relationship("Promotion", back_populates="trivia_promotion_configs")
+    discount_codes = relationship("DiscountCode", back_populates="config", cascade="all, delete-orphan")
+
+
+class DiscountCode(Base):
+    """Códigos de descuento emitidos por rachas de trivia"""
+    __tablename__ = "discount_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    config_id = Column(Integer, ForeignKey("trivia_promotion_configs.id"), nullable=False)
+    code = Column(String(20), nullable=False, unique=True, index=True)
+    user_id = Column(BigInteger, nullable=False)
+    username = Column(String(100), nullable=True)
+    first_name = Column(String(100), nullable=True)
+    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=False)
+    status = Column(Enum(DiscountCodeStatus), default=DiscountCodeStatus.ACTIVE)
+    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    used_at = Column(DateTime(timezone=True), nullable=True)
+
+    config = relationship("TriviaPromotionConfig", back_populates="discount_codes")
+    promotion = relationship("Promotion")
+    game_records = relationship("GameRecord", back_populates="discount_code")
