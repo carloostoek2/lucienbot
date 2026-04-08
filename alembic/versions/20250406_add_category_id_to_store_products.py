@@ -23,13 +23,32 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Agregar columna category_id a store_products
-    op.add_column('store_products', sa.Column('category_id', sa.Integer(), nullable=True))
-    op.create_index('ix_store_products_category_id', 'store_products', ['category_id'])
+    conn = op.get_bind()
+    dialect = conn.dialect.name
 
-    # Agregar foreign key
-    op.create_foreign_key('fk_store_products_category_id', 'store_products', 'categories',
-                       ['category_id'], ['id'])
+    # Verificar si la columna category_id ya existe en store_products (idempotente)
+    column_exists = False
+    if dialect == 'sqlite':
+        result = conn.execute(sa.text("PRAGMA table_info(store_products)"))
+        columns = [row[1] for row in result.fetchall()]
+        column_exists = 'category_id' in columns
+    else:
+        result = conn.execute(sa.text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'store_products' AND column_name = 'category_id'
+            )
+        """))
+        column_exists = result.scalar()
+
+    if not column_exists:
+        # Agregar columna category_id a store_products
+        op.add_column('store_products', sa.Column('category_id', sa.Integer(), nullable=True))
+        op.create_index('ix_store_products_category_id', 'store_products', ['category_id'])
+
+        # Agregar foreign key
+        op.create_foreign_key('fk_store_products_category_id', 'store_products', 'categories',
+                           ['category_id'], ['id'])
 
 
 def downgrade() -> None:

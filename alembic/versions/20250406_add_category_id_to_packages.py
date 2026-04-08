@@ -24,13 +24,23 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Verificar si la tabla categories ya existe (idempotente)
     conn = op.get_bind()
-    result = conn.execute(sa.text("""
-        SELECT EXISTS (
-            SELECT FROM information_schema.tables
-            WHERE table_name = 'categories'
-        )
-    """))
-    table_exists = result.scalar()
+
+    # SQLite usa sqlite_master, PostgreSQL usa information_schema
+    dialect = conn.dialect.name
+    if dialect == 'sqlite':
+        result = conn.execute(sa.text("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='categories'
+        """))
+        table_exists = result.fetchone() is not None
+    else:
+        result = conn.execute(sa.text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'categories'
+            )
+        """))
+        table_exists = result.scalar()
 
     if not table_exists:
         op.create_table(
@@ -46,13 +56,30 @@ def upgrade() -> None:
             sa.UniqueConstraint('name')
         )
 
-    # Agregar columna category_id a packages
-    op.add_column('packages', sa.Column('category_id', sa.Integer(), nullable=True))
-    op.create_index('ix_packages_category_id', 'packages', ['category_id'])
+    # Verificar si la columna category_id ya existe en packages (idempotente)
+    dialect = conn.dialect.name
+    column_exists = False
+    if dialect == 'sqlite':
+        result = conn.execute(sa.text("PRAGMA table_info(packages)"))
+        columns = [row[1] for row in result.fetchall()]
+        column_exists = 'category_id' in columns
+    else:
+        result = conn.execute(sa.text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'packages' AND column_name = 'category_id'
+            )
+        """))
+        column_exists = result.scalar()
 
-    # Agregar foreign key
-    op.create_foreign_key('fk_packages_category_id', 'packages', 'categories',
-                         ['category_id'], ['id'])
+    if not column_exists:
+        # Agregar columna category_id a packages
+        op.add_column('packages', sa.Column('category_id', sa.Integer(), nullable=True))
+        op.create_index('ix_packages_category_id', 'packages', ['category_id'])
+
+        # Agregar foreign key
+        op.create_foreign_key('fk_packages_category_id', 'packages', 'categories',
+                             ['category_id'], ['id'])
 
 
 def downgrade() -> None:
