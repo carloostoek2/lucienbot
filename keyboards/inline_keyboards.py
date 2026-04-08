@@ -25,46 +25,46 @@ def main_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
         callback_data="offers"
     )])
 
-    # Minijuegos - Mochila
-    buttons.extend([
-        [InlineKeyboardButton(
+    # Minijuegos - Mochila (misma fila)
+    buttons.append([
+        InlineKeyboardButton(
             text="🎮 Minijuegos",
             callback_data="game_menu"
         ),
-        [InlineKeyboardButton(
+        InlineKeyboardButton(
             text="📦 Mochila",
             callback_data="backpack_menu"
-        )]
+        )
     ])
 
-    # Mi saldo - Regalo diario
-    buttons.extend([
-        [InlineKeyboardButton(
+    # Mi saldo - Regalo diario (misma fila)
+    buttons.append([
+        InlineKeyboardButton(
             text="💋 Mi saldo de besitos",
             callback_data="my_balance"
         ),
         InlineKeyboardButton(
             text="🎁 Regalo diario",
             callback_data="daily_gift"
-        )]
+        )
     ])
 
-    # Tienda - Misiones - Recompensas
-    buttons.extend([
-        [InlineKeyboardButton(
-            text="🛍️ Tienda",
-            callback_data="shop"
-        )],
-        [
-            InlineKeyboardButton(
-                text="🎯 Misiones",
-                callback_data="my_missions"
-            ),
-            InlineKeyboardButton(
-                text="🎁 Recompensas",
-                callback_data="rewards_list"
-            )
-        ]
+    # Tienda (solo)
+    buttons.append([InlineKeyboardButton(
+        text="🛍️ Tienda",
+        callback_data="shop"
+    )])
+
+    # Misiones - Recompensas (misma fila)
+    buttons.append([
+        InlineKeyboardButton(
+            text="🎯 Misiones",
+            callback_data="my_missions"
+        ),
+        InlineKeyboardButton(
+            text="🎁 Recompensas",
+            callback_data="rewards_list"
+        )
     ])
 
     # Fragmentos de la historia
