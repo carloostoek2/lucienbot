@@ -11,6 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from services.trivia_discount_service import TriviaDiscountService
 from services.promotion_service import PromotionService
 from services.user_service import UserService
+from models.models import DiscountCodeStatus
 from handlers.admin_handlers import is_admin
 import logging
 
@@ -385,25 +386,57 @@ async def view_discount_codes(callback: CallbackQuery):
             await callback.answer()
             return
 
-        # Mostrar códigos (primeros 10 con paginación)
-        code_list = []
-        for i, code in enumerate(codes[:10], 1):
-            code_list.append(
-                f"{i}. <code>{code.code}</code> - {code.username or code.first_name or code.user_id} [{code.status.value}]"
-            )
+        # Agrupar códigos por estado
+        active_codes = [c for c in codes if c.status == DiscountCodeStatus.ACTIVE]
+        used_codes = [c for c in codes if c.status == DiscountCodeStatus.USED]
+        other_codes = [c for c in codes if c.status not in [DiscountCodeStatus.ACTIVE, DiscountCodeStatus.USED]]
 
-        text = "🎫 <b>Códigos de descuento</b>\n\n" + "\n".join(code_list)
+        # Construir mensaje con cada código y sus acciones
+        text_parts = ["🎫 <b>Códigos de descuento</b>\n"]
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📥 Exportar CSV", callback_data=f"export_codes_{config_id}")],
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="view_trivia_discounts")]
-        ])
+        if active_codes:
+            text_parts.append("\n🟢 <b>Activos:</b>")
+            for i, code in enumerate(active_codes, 1):
+                user_info = code.username or code.first_name or f"ID:{code.user_id}"
+                text_parts.append(f"\n{i}. <code>{code.code}</code> - {user_info}")
+                text_parts.append(f"   [ACTIVO]")
 
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
+        if used_codes:
+            text_parts.append("\n✅ <b>Usados:</b>")
+            for i, code in enumerate(used_codes, 1):
+                user_info = code.username or code.first_name or f"ID:{code.user_id}"
+                text_parts.append(f"\n{i}. <code>{code.code}</code> - {user_info}")
+                text_parts.append(f"   [USADO]")
+
+        if other_codes:
+            text_parts.append("\n⚪ <b>Otros:</b>")
+            for i, code in enumerate(other_codes, 1):
+                user_info = code.username or code.first_name or f"ID:{code.user_id}"
+                text_parts.append(f"\n{i}. <code>{code.code}</code> - {user_info}")
+                text_parts.append(f"   [{code.status.value}]")
+
+        text = "".join(text_parts)
+
+        keyboard_buttons = []
+
+        # Agregar botones de acción para códigos activos
+        for code in active_codes[:5]:
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"✓ Usar {code.code}",
+                    callback_data=f"use_code_{code.id}"
+                ),
+                InlineKeyboardButton(
+                    text=f"✗ Cancelar {code.code}",
+                    callback_data=f"cancel_code_{code.id}"
+                )
+            ])
+
+        keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="view_trivia_discounts")])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     finally:
         pass
     await callback.answer()
