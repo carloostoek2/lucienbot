@@ -16,6 +16,7 @@ from models.database import SessionLocal
 from services.besito_service import BesitoService
 from services.user_service import UserService
 from services.vip_service import VIPService
+from services.trivia_discount_service import TriviaDiscountService
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,7 @@ class GameService:
         self.besito_service = BesitoService(self.db)
         self._user_service = UserService(self.db)
         self._vip_service = VIPService(self.db)
+        self._trivia_discount_service = TriviaDiscountService()
         self._questions = None
         self._vip_questions = None
 
@@ -558,6 +560,9 @@ class GameService:
             if not is_vip:
                 limit_message += "\n\nLos caminos de VIP siempre tienen más oportunidades..."
 
+        # Información de descuento por racha
+        discount_info = self._get_trivia_discount_info(user_id)
+
         logger.info(f"game_service - get_trivia_entry_data - {user_id} - remaining:{remaining}, streak:{streak}")
 
         return {
@@ -569,7 +574,8 @@ class GameService:
             'current_streak': streak,
             'is_vip': self.is_user_vip(user_id),
             'can_play': can_play,
-            'limit_message': limit_message
+            'limit_message': limit_message,
+            'discount_info': discount_info
         }
 
     def load_trivia_questions(self) -> list:
@@ -693,6 +699,14 @@ class GameService:
 
         logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}")
 
+        # 12. Verificar generación de código de descuento
+        discount_code = None
+        if is_correct and new_streak > 0:
+            discount_code = self._check_and_generate_discount_code(
+                user_id=user_id,
+                new_streak=new_streak
+            )
+
         return {
             'correct': is_correct,
             'besitos': besitos,
@@ -702,7 +716,12 @@ class GameService:
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
-            'limit_reached': False
+            'limit_reached': False,
+            'discount_code': {
+                'code': discount_code.code if discount_code else None,
+                'promotion_name': discount_code.promotion.name if discount_code else None,
+                'discount_percentage': discount_code.config.discount_percentage if discount_code else None
+            } if discount_code else None
         }
 
     def _build_trivia_message_parts(self, is_correct: bool, question: dict,
@@ -750,6 +769,65 @@ class GameService:
             'reward_text': reward_text,
             'streak_text': streak_text,
             'encouragement': encouragement
+        }
+
+    # ==================== TRIVIA DISCOUNT ====================
+
+    def _get_active_trivia_promotion(self) -> Optional[object]:
+        """Obtiene promoción activa de trivia (primera que encuentra)"""
+        configs = self._trivia_discount_service.get_active_trivia_promotion_configs()
+        for config in configs:
+            if config.is_active:
+                return config
+        return None
+
+    def _check_and_generate_discount_code(self, user_id: int, new_streak: int) -> Optional[object]:
+        """Verifica si corresponde generar código de descuento"""
+        config = self._get_active_trivia_promotion()
+        if not config:
+            return None
+
+        # Verificar que alcanzó la racha requerida
+        if new_streak < config.required_streak:
+            return None
+
+        # Verificar códigos disponibles (basado en reclamados, no emitidos)
+        available = self._trivia_discount_service.get_available_codes_count(config.id)
+        if available <= 0:
+            return None
+
+        # Obtener datos del usuario
+        user_data = self._user_service.get_user(user_id)
+        username = user_data.username if user_data else None
+        first_name = user_data.first_name if user_data else None
+
+        # Generar código
+        return self._trivia_discount_service.generate_discount_code(
+            user_id=user_id,
+            config_id=config.id,
+            username=username,
+            first_name=first_name
+        )
+
+    def _get_trivia_discount_info(self, user_id: int) -> Optional[dict]:
+        """Obtiene información de descuento para mostrar en menú de trivia"""
+        config = self._get_active_trivia_promotion()
+        if not config:
+            return None
+
+        user_code = self._trivia_discount_service.get_user_discount_code(user_id, config.id)
+        available = self._trivia_discount_service.get_available_codes_count(config.id)
+
+        return {
+            'promotion_id': config.promotion_id,
+            'promotion_name': config.promotion.name,
+            'discount_percentage': config.discount_percentage,
+            'required_streak': config.required_streak,
+            'available_codes': available,
+            'total_codes': config.max_codes,
+            'user_has_code': user_code is not None,
+            'user_code': user_code.code if user_code else None,
+            'user_code_status': user_code.status.value if user_code else None
         }
 
     # ==================== TRIVIA VIP ====================
@@ -941,6 +1019,14 @@ class GameService:
 
         logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}")
 
+        # 12. Verificar generación de código de descuento
+        discount_code = None
+        if is_correct and new_streak > 0:
+            discount_code = self._check_and_generate_discount_code(
+                user_id=user_id,
+                new_streak=new_streak
+            )
+
         return {
             'correct': is_correct,
             'besitos': besitos,
@@ -950,7 +1036,12 @@ class GameService:
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
-            'limit_reached': False
+            'limit_reached': False,
+            'discount_code': {
+                'code': discount_code.code if discount_code else None,
+                'promotion_name': discount_code.promotion.name if discount_code else None,
+                'discount_percentage': discount_code.config.discount_percentage if discount_code else None
+            } if discount_code else None
         }
 
     def _build_trivia_vip_message_parts(self, is_correct: bool, question: dict,
