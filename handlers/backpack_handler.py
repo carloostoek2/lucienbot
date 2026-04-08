@@ -46,8 +46,8 @@ def build_backpack_summary_keyboard(summary: dict) -> InlineKeyboardMarkup:
             callback_data="backpack_vip"
         )],
         [InlineKeyboardButton(
-            text=f"💋 Besitos: {summary['besitos_balance']}",
-            callback_data="backpack_balance"
+            text="🔙 Volver al menú",
+            callback_data="back_to_main"
         )]
     ])
 
