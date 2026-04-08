@@ -15,6 +15,7 @@ Crear una experiencia premium y gamificada que incentiva el compromiso de la com
 - ✓ **Sistema VIP completo** — Tokens, tarifas, suscripciones, expiración automática — Fase 3
 - ✓ **Gestión de canales** — Canal Free con aprobación automática y canal VIP con acceso por suscripción — Fase 2
 - ✓ **Minijuegos (Dados y Trivia)** — Dados con límites diarios, trivia con preguntas, recompensas en besitos — Fase 14
+- ✓ **Sistema de Mochila (Inventario)** — Comando /mochila con recompensas, compras, VIP, entrega de paquetes — Fase 15
 - ✓ **Gamificación (Besitos)** — Sistema de besitos, hugs, regalos diarios, balances — Fase 4
 - ✓ **Sistema de Misiones** — Misiones activas, seguimiento de progreso, recompensas — Fase 5
 - ✓ **Tienda Virtual** — Paquetes de besitos, compra, entrega de contenido — Fase 6
