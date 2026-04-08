@@ -118,7 +118,7 @@ class PromotionService:
             and_(
                 Promotion.end_date.is_(None) | (Promotion.end_date >= now)
             )
-        ).order_by(desc(Promotion.price_mxn)).all()
+        ).order_by(asc(Promotion.price_mxn)).all()
 
     def update_promotion(self, promotion_id: int, **kwargs) -> bool:
         """Actualiza una promocion"""

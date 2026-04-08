@@ -407,7 +407,7 @@ def admin_anonymous_notification_keyboard(message_id: int) -> InlineKeyboardMark
 
 # ==================== MINIJUEGOS (PHASE 14) ====================
 
-def game_menu_keyboard() -> InlineKeyboardMarkup:
+def game_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
     """Menú de selección de juegos"""
     buttons = [
         [InlineKeyboardButton(text="🎲 Lanzar los dados del destino", callback_data="game_dice")],
@@ -426,7 +426,7 @@ def dice_play_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def trivia_keyboard(question: dict, question_idx: int) -> InlineKeyboardMarkup:
+def trivia_keyboard(question: dict, question_idx: int, back_callback: str = "game_menu") -> InlineKeyboardMarkup:
     """Teclado con opciones de trivia A, B, C"""
     buttons = []
     for idx, opt_text in enumerate(question['opts']):
@@ -435,7 +435,31 @@ def trivia_keyboard(question: dict, question_idx: int) -> InlineKeyboardMarkup:
             callback_data=f"trivia_answer_{idx}_{question_idx}"
         )])
     buttons.append([InlineKeyboardButton(
-        text="🔙 Menú de juegos",
-        callback_data="game_menu"
+        text="🔙 Volver al menú de juegos",
+        callback_data=back_callback
     )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def trivia_vip_keyboard(question: dict, question_idx: int, back_callback: str = "vip_area") -> InlineKeyboardMarkup:
+    """Teclado con opciones de trivia VIP (soporta 4 opciones A, B, C, D)"""
+    buttons = []
+    for idx, opt_text in enumerate(question['opts']):
+        buttons.append([InlineKeyboardButton(
+            text=opt_text,
+            callback_data=f"trivia_vip_answer_{idx}_{question_idx}"
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="🔙 Volver a El Diván",
+        callback_data=back_callback
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def trivia_vip_result_keyboard(back_callback: str = "vip_area") -> InlineKeyboardMarkup:
+    """Teclado para resultado de trivia VIP con opción de reintentar"""
+    buttons = [
+        [InlineKeyboardButton(text="🔄 Intentarlo de nuevo", callback_data="game_trivia_vip")],
+        [InlineKeyboardButton(text="🔙 Volver a El Diván", callback_data=back_callback)]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

@@ -6,6 +6,7 @@ from .scheduler_service import SchedulerService
 from .besito_service import BesitoService
 from .broadcast_service import BroadcastService
 from .daily_gift_service import DailyGiftService
+from .game_service import GameService
 # Fase 2 - Paquetes
 from .package_service import PackageService
 # Fase 3 - Misiones y Recompensas
@@ -17,7 +18,7 @@ from .store_service import StoreService
 __all__ = [
     'ChannelService', 'VIPService', 'UserService', 'SchedulerService',
     # Fase 1 - Gamificacion
-    'BesitoService', 'BroadcastService', 'DailyGiftService',
+    'BesitoService', 'BroadcastService', 'DailyGiftService', 'GameService',
     # Fase 2 - Paquetes
     'PackageService',
     # Fase 3 - Misiones y Recompensas

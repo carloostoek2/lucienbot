@@ -32,6 +32,10 @@ class GameService:
     # Recompensas por victoria
     DICE_WIN_BESITOS = 1
     TRIVIA_WIN_BESITOS = 1
+    TRIVIA_VIP_WIN_BESITOS = 5
+
+    # Límites trivia VIP
+    DAILY_TRIVIA_VIP_LIMIT = 5
 
     # ==================== TEMPLATES DE COPY ====================
 
@@ -55,6 +59,11 @@ class GameService:
             "❓ Trivia — el conocimiento es poder",
             "❓ El examen de Diana aguarda...",
             "❓ Las preguntas revelan quienes realmente observan."
+        ],
+        'trivia_vip_description': [
+            "🎩 Trivia VIP — solo para los más devotos",
+            "🎩 El Examen Secreto de Diana",
+            "🎩 Demuestra tu conocimiento íntimo"
         ],
         'footer': [
             "Sus oportunidades de esta noche:",
@@ -141,7 +150,7 @@ class GameService:
             2: ["🔥 Comienza a calentar...", "🔥 Diana nota su constancia..."],
             3: ["⚡ ¡Racha de {streak}! Su mente despierta...", "⚡ {streak} correctas... impresionante."],
             5: ["🌟 ¡Imparable! La sabiduría fluye en usted.", "🌟 {streak} victorias... es un prodigio."],
-            7: ["👑 ¡Una leyenda nace! {streak} aciertos.", "👑 Los dioses envidian su conocimiento."],
+            7: ["🎩 ¡Una leyenda nace! {streak} aciertos.", "🎩 Los dioses envidian su conocimiento."],
             10: ["✨ ¡DIVINO! {streak} respuestas perfectas.", "✨ Es uno con la sabiduría de Diana."]
         },
         'limit_reached': [
@@ -151,12 +160,53 @@ class GameService:
         ]
     }
 
+    TRIVIA_VIP_TEMPLATES = {
+        'entry_title': [
+            "🎩 El Examen Secreto de Diana",
+            "🎩 La Trivia que solo los iniciados conocen",
+            "🎩 Donde el conocimiento tiene recompensa mayor"
+        ],
+        'entry_intro': [
+            "Solo los verdaderamente devotos conocen estas respuestas...",
+            "Diana ha preparado preguntas especiales para sus favoritos.",
+            "El conocimiento íntimo se recompensa con generosidad."
+        ],
+        'counter': [
+            "Oportunidades VIP restantes: {remaining} de {limit}",
+            "Tiene {remaining} preguntas secretas de {limit}...",
+            "{remaining} de {limit} caminos exclusivos aguardan."
+        ],
+        'correct': [
+            "🎩 <b>Lucien:</b>\n<i>¡Impresionante! Diana está complacida...</i>",
+            "🎩 <b>Lucien:</b>\n<i>¡La respuesta perfecta! Su devoción es innegable.</i>",
+            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría de élite! Diana asiente con admiración.</i>"
+        ],
+        'incorrect': [
+            "🎩 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso los más cercanos pueden fallar. Continúe intentándolo...</i>",
+            "🎩 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El camino del conocimiento íntimo requiere paciencia. Diana perdona el error.</i>",
+            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un tropiezo, certamente. Pero el verdadero devoto se levanta.</i>"
+        ],
+        'streak_messages': {
+            2: ["🔥 Comienza a destacar entre los demás...", "🔥 Diana nota su dedicación VIP..."],
+            3: ["⚡ ¡Racha de {streak}! Es verdaderamente especial.", "⚡ {streak} correctas... hay quienes pagarían por este conocimiento."],
+            5: ["🌟 ¡Imparable! La aristocracia del conocimiento.", "🌟 {streak} victorias... es usted crème de la crème."],
+            7: ["🎩 ¡LEYENDA! {streak} aciertos. Diana le observa con interés.", "🎩 Los dioses del conocimiento palidecen ante usted."],
+            10: ["✨ ¡DIVINO! {streak} respuestas perfectas. Es parte del círculo íntimo.", "✨ Ha alcanzado la iluminación de Diana."]
+        },
+        'limit_reached': [
+            "Ha agotado sus preguntas secretas por hoy. Diana aprecia su persistencia, pero también la mesura.",
+            "El examen VIP ha terminado... por ahora. Regrese mañana para más desafíos.",
+            "Diana ha guardado sus preguntas VIP para mañana. El verdadero connaisseur sabe esperar."
+        ]
+    }
+
     def __init__(self, db: Session = None):
         self.db = db or SessionLocal()
         self.besito_service = BesitoService(self.db)
         self._user_service = UserService(self.db)
         self._vip_service = VIPService(self.db)
         self._questions = None
+        self._vip_questions = None
 
     def close(self):
         """Cierra la sesión de base de datos"""
@@ -272,7 +322,8 @@ class GameService:
         is_vip = self.is_user_vip(user_id)
         return {
             'dice_limit': self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE,
-            'trivia_limit': self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE
+            'trivia_limit': self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE,
+            'trivia_vip_limit': self.DAILY_TRIVIA_VIP_LIMIT
         }
 
     def get_menu_data(self, user_id: int) -> dict:
@@ -659,7 +710,9 @@ class GameService:
                                      remaining: int) -> dict:
         """Construye las partes del mensaje de trivia"""
         # Respuesta correcta (para formatear templates)
-        correct_letter = ["A", "B", "C"][question['answer']]
+        letters = ["A", "B", "C", "D"]
+        answer_idx = min(question['answer'], len(letters) - 1)
+        correct_letter = letters[answer_idx]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
 
         # Header según resultado
@@ -698,6 +751,255 @@ class GameService:
             'streak_text': streak_text,
             'encouragement': encouragement
         }
+
+    # ==================== TRIVIA VIP ====================
+
+    def _get_today_vip_trivia_records(self, user_id: int) -> list:
+        """Obtiene registros de trivia VIP de hoy ordenados por tiempo DESC"""
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        records = self.db.query(GameRecord).filter(
+            GameRecord.user_id == user_id,
+            GameRecord.game_type == 'trivia_vip',
+            GameRecord.played_at >= today
+        ).order_by(GameRecord.played_at.desc()).all()
+        return records
+
+    def _get_vip_trivia_streak(self, user_id: int) -> int:
+        """Calcula racha actual de victorias en trivia VIP (solo hoy)"""
+        records = self._get_today_vip_trivia_records(user_id)
+        streak = 0
+        for record in records:
+            if record.payout > 0:
+                streak += 1
+            else:
+                break
+        return streak
+
+    def can_play_vip_trivia(self, user_id: int) -> Tuple[bool, int, int, str]:
+        """
+        Verifica si usuario VIP puede jugar trivia VIP.
+        Returns: (puede_jugar, jugadas_hoy, limite, mensaje)
+        """
+        if not self.is_user_vip(user_id):
+            return False, 0, self.DAILY_TRIVIA_VIP_LIMIT, "Esta trivia es exclusiva para miembros VIP."
+
+        played = len(self._get_today_vip_trivia_records(user_id))
+        limit = self.DAILY_TRIVIA_VIP_LIMIT
+
+        if played >= limit:
+            return False, played, limit, self._select_template(self.TRIVIA_VIP_TEMPLATES['limit_reached'])
+
+        return True, played, limit, None
+
+    def load_trivia_vip_questions(self) -> list:
+        """Carga preguntas VIP de docs/preguntas_vip.json"""
+        if self._vip_questions is not None:
+            return self._vip_questions
+
+        questions_path = Path("docs/preguntas_vip.json")
+        if not questions_path.exists():
+            logger.warning("VIP Questions file not found: docs/preguntas_vip.json")
+            return []
+
+        try:
+            with open(questions_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self._vip_questions = data if isinstance(data, list) else data.get('questions', [])
+        except Exception as e:
+            logger.error(f"Error loading VIP trivia questions: {e}")
+            self._vip_questions = []
+
+        return self._vip_questions
+
+    def get_random_vip_question(self) -> Tuple[Optional[dict], int]:
+        """Retorna pregunta VIP aleatoria con índice"""
+        questions = self.load_trivia_vip_questions()
+        if not questions:
+            return None, -1
+
+        idx = random.randint(0, len(questions) - 1)
+        return questions[idx], idx
+
+    def get_vip_question_by_index(self, index: int) -> Optional[dict]:
+        """Retorna pregunta VIP por índice"""
+        questions = self.load_trivia_vip_questions()
+        if 0 <= index < len(questions):
+            return questions[index]
+        return None
+
+    def check_trivia_vip_answer(self, question: dict, answer_idx: int) -> bool:
+        """Verifica si respuesta VIP es correcta"""
+        if not question:
+            return False
+        return question.get('answer') == answer_idx
+
+    def get_trivia_vip_entry_data(self, user_id: int) -> dict:
+        """Obtiene datos enriquecidos para la entrada de trivia VIP"""
+        limits = self.get_daily_limits(user_id)
+        played = len(self._get_today_vip_trivia_records(user_id))
+        remaining = max(0, limits['trivia_vip_limit'] - played)
+        streak = self._get_vip_trivia_streak(user_id)
+
+        can_play = remaining > 0
+        is_vip = self.is_user_vip(user_id)
+        limit_message = None
+
+        if not is_vip:
+            limit_message = "Esta trivia es exclusiva para miembros VIP."
+            can_play = False
+        elif not can_play:
+            limit_message = self._select_template(self.TRIVIA_VIP_TEMPLATES['limit_reached'])
+
+        logger.info(f"game_service - get_trivia_vip_entry_data - {user_id} - remaining:{remaining}, streak:{streak}, is_vip:{is_vip}")
+
+        return {
+            'title': self._select_template(self.TRIVIA_VIP_TEMPLATES['entry_title']),
+            'intro': self._select_template(self.TRIVIA_VIP_TEMPLATES['entry_intro']),
+            'counter_template': self._select_template(self.TRIVIA_VIP_TEMPLATES['counter']),
+            'remaining': remaining,
+            'limit': limits['trivia_vip_limit'],
+            'current_streak': streak,
+            'is_vip': is_vip,
+            'can_play': can_play,
+            'limit_message': limit_message
+        }
+
+    def play_trivia_vip(self, user_id: int, question_idx: int, answer_idx: int) -> Dict[str, Any]:
+        """
+        Procesa respuesta de trivia VIP con sistema de rachas y 5 besitos.
+        Returns: {correct, besitos, previous_streak, new_streak, streak_message,
+                 message, message_parts, remaining_after, limit_reached}
+        """
+        # 1. Verificar si es VIP y límites
+        can_play, played, limit, limit_msg = self.can_play_vip_trivia(user_id)
+        if not can_play:
+            return {
+                'correct': False, 'besitos': 0,
+                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
+                'message': limit_msg, 'message_parts': {},
+                'remaining_after': 0, 'limit_reached': True
+            }
+
+        # 2. Obtener pregunta
+        question = self.get_vip_question_by_index(question_idx)
+        if not question:
+            return {
+                'correct': False, 'besitos': 0,
+                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
+                'message': "Pregunta no encontrada.", 'message_parts': {},
+                'remaining_after': max(0, limit - played), 'limit_reached': False
+            }
+
+        # 3. Obtener racha previa
+        previous_streak = self._get_vip_trivia_streak(user_id)
+
+        # 4. Verificar respuesta
+        is_correct = self.check_trivia_vip_answer(question, answer_idx)
+
+        # 5. Calcular nueva racha
+        if is_correct:
+            new_streak = previous_streak + 1
+        else:
+            new_streak = 0
+
+        # 6. Obtener mensaje de racha si aplica
+        streak_message = None
+        if is_correct:
+            streak_message = self._get_streak_message(new_streak)
+
+        # 7. Acreditar 5 besitos si correcto
+        besitos = 0
+        if is_correct:
+            besitos = self.TRIVIA_VIP_WIN_BESITOS
+            self.besito_service.credit_besitos(
+                user_id=user_id,
+                amount=besitos,
+                source=TransactionSource.TRIVIA,
+                description=f"Victoria en trivia VIP (racha: {new_streak})"
+            )
+
+        # 8. Registrar jugada
+        record = GameRecord(
+            user_id=user_id,
+            game_type='trivia_vip',
+            result=f"vip_question_{question_idx}",
+            payout=besitos
+        )
+        self.db.add(record)
+        self.db.commit()
+
+        # 9. Calcular oportunidades restantes
+        remaining_after = max(0, limit - (played + 1))
+
+        # 10. Construir partes del mensaje
+        message_parts = self._build_trivia_vip_message_parts(
+            is_correct, question, besitos, streak_message, remaining_after
+        )
+
+        # 11. Construir mensaje final
+        message = self._build_trivia_vip_message(message_parts)
+
+        logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}")
+
+        return {
+            'correct': is_correct,
+            'besitos': besitos,
+            'previous_streak': previous_streak,
+            'new_streak': new_streak,
+            'streak_message': streak_message,
+            'message': message,
+            'message_parts': message_parts,
+            'remaining_after': remaining_after,
+            'limit_reached': False
+        }
+
+    def _build_trivia_vip_message_parts(self, is_correct: bool, question: dict,
+                                        besitos: int, streak_message: Optional[str],
+                                        remaining: int) -> dict:
+        """Construye las partes del mensaje de trivia VIP"""
+        correct_letter = ["A", "B", "C", "D"][question['answer']]
+        correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
+
+        if is_correct:
+            header = self._select_template(self.TRIVIA_VIP_TEMPLATES['correct'])
+        else:
+            header_template = self._select_template(self.TRIVIA_VIP_TEMPLATES['incorrect'])
+            header = header_template.format(correct_answer=correct_answer_text)
+
+        result_text = None
+        correct_answer = None
+
+        reward_text = None
+        if is_correct:
+            reward_text = f"+{besitos} besitos 💋💋💋💋💋"
+
+        streak_text = streak_message
+
+        encouragement = None
+        if remaining > 0:
+            encouragement = f"Oportunidades VIP restantes: {remaining}"
+        else:
+            encouragement = "Ha agotado sus preguntas secretas por hoy."
+
+        return {
+            'header': header,
+            'result_text': result_text,
+            'correct_answer': correct_answer,
+            'reward_text': reward_text,
+            'streak_text': streak_text,
+            'encouragement': encouragement
+        }
+
+    def _build_trivia_vip_message(self, parts: dict) -> str:
+        """Construye mensaje final de trivia VIP"""
+        lines = [parts['header']]
+        if parts.get('reward_text'):
+            lines.extend(['', parts['reward_text']])
+        if parts.get('streak_text'):
+            lines.extend(['', parts['streak_text']])
+        if parts.get('encouragement'):
+            lines.extend(['', parts['encouragement']])
+        return '\n'.join(lines)
 
     def __del__(self):
         """Cierra la sesión"""

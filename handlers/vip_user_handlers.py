@@ -40,7 +40,11 @@ def vip_area_keyboard() -> InlineKeyboardMarkup:
             callback_data="vip_map_of_desire"
         )],
         [InlineKeyboardButton(
-            text="💌 Enviar mensaje a Diana",
+            text="💎 Trivia VIP",
+            callback_data="game_trivia_vip"
+        )],
+        [InlineKeyboardButton(
+            text="💌 Mensajes anónimos a Diana",
             callback_data="send_anonymous_message"
         )],
         [InlineKeyboardButton(
@@ -334,7 +338,8 @@ async def start_anonymous_message(callback: CallbackQuery, state: FSMContext):
             f"Sin nombre. Sin rastro.\n\n"
             f"Algo que debe saber:\n"
             f"Diana <b>no</b> responde a todo.\n"
-            f"Solo a lo que… le interesa.",
+            f"Solo a lo que… le interesa.\n\n"
+            f"📝 <i>Envíe su mensaje ahora</i>",
             reply_markup=back_keyboard("vip_area"),
             parse_mode="HTML"
         )
