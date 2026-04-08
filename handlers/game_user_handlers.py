@@ -12,7 +12,8 @@ from keyboards.inline_keyboards import (
     dice_play_keyboard,
     trivia_keyboard,
     trivia_vip_keyboard,
-    trivia_vip_result_keyboard
+    trivia_vip_result_keyboard,
+    discount_claim_keyboard
 )
 from services import get_service, GameService
 
@@ -162,11 +163,11 @@ async def trivia_answer(callback: CallbackQuery):
         message += f"📋 <b>Código:</b> <code>{discount['code']}</code>\n"
         message += f"💰 <b>Descuento:</b> {discount['discount_percentage']}% en {discount['promotion_name']}\n\n"
         message += "<i>Usa este código al comprar la promoción.</i>"
+        keyboard = discount_claim_keyboard(discount['code'])
+    else:
+        keyboard = game_menu_keyboard()
 
-    await callback.message.edit_text(
-        message,
-        reply_markup=game_menu_keyboard()
-    )
+    await callback.message.edit_text(message, reply_markup=keyboard)
     await callback.answer()
     logger.info(f"game_user_handlers - trivia_answer - {user_id} - correct:{result['correct']}")
 
@@ -243,10 +244,10 @@ async def trivia_vip_answer(callback: CallbackQuery):
         message += f"📋 <b>Código:</b> <code>{discount['code']}</code>\n"
         message += f"💰 <b>Descuento:</b> {discount['discount_percentage']}% en {discount['promotion_name']}\n\n"
         message += "<i>Usa este código al comprar la promoción.</i>"
+        keyboard = discount_claim_keyboard(discount['code'])
+    else:
+        keyboard = trivia_vip_result_keyboard()
 
-    await callback.message.edit_text(
-        message,
-        reply_markup=trivia_vip_result_keyboard()
-    )
+    await callback.message.edit_text(message, reply_markup=keyboard)
     await callback.answer()
     logger.info(f"game_user_handlers - trivia_vip_answer - {user_id} - correct:{result['correct']}, besitos:{result['besitos']}")
