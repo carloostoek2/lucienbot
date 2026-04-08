@@ -115,16 +115,28 @@ async def game_trivia(callback: CallbackQuery):
     if data['current_streak'] > 0:
         streak_text = f"\n🔥 Racha actual: {data['current_streak']}"
 
+    # Información de descuento por racha
+    discount_info = data.get('discount_info')
+    discount_text = ""
+    if discount_info:
+        needed = max(0, discount_info['required_streak'] - data['current_streak'])
+        discount_text = f"\n\n🎁 <b>Promoción por racha:</b>\n"
+        discount_text += f"• Racha requerida: {discount_info['required_streak']} ({needed} más para desbloquear)\n"
+        discount_text += f"• Descuentos disponibles: {discount_info['available_codes']} de {discount_info['total_codes']}"
+        if discount_info.get('user_has_code'):
+            discount_text += f"\n• Tu código: <code>{discount_info['user_code']}</code>"
+
     text = (
         f"<b>{data['title']}</b>{streak_text}\n\n"
         f"{data['intro']}\n\n"
-        f"<i>{counter_text}</i>\n\n"
+        f"<i>{counter_text}</i>{discount_text}\n\n"
         f"❓ <b>Pregunta:</b> {question['q']}"
     )
 
     await callback.message.edit_text(
         text=text,
-        reply_markup=trivia_keyboard(question, question_idx)
+        reply_markup=trivia_keyboard(question, question_idx),
+        parse_mode="HTML"
     )
     await callback.answer()
     logger.info(f"game_user_handlers - game_trivia - {user_id} - shown")
@@ -142,8 +154,17 @@ async def trivia_answer(callback: CallbackQuery):
     with get_service(GameService) as service:
         result = service.play_trivia(user_id, question_idx, answer_idx)
 
+    # Construir mensaje enriquecido si hay descuento
+    message = result['message']
+    discount = result.get('discount_code')
+    if discount and discount.get('code'):
+        message += f"\n\n🎁 <b>¡DESCUENTO DESBLOQUEADO!</b>\n\n"
+        message += f"📋 <b>Código:</b> <code>{discount['code']}</code>\n"
+        message += f"💰 <b>Descuento:</b> {discount['discount_percentage']}% en {discount['promotion_name']}\n\n"
+        message += "<i>Usa este código al comprar la promoción.</i>"
+
     await callback.message.edit_text(
-        result['message'],
+        message,
         reply_markup=game_menu_keyboard()
     )
     await callback.answer()
@@ -214,8 +235,17 @@ async def trivia_vip_answer(callback: CallbackQuery):
     with get_service(GameService) as service:
         result = service.play_trivia_vip(user_id, question_idx, answer_idx)
 
+    # Construir mensaje enriquecido si hay descuento
+    message = result['message']
+    discount = result.get('discount_code')
+    if discount and discount.get('code'):
+        message += f"\n\n🎁 <b>¡DESCUENTO DESBLOQUEADO!</b>\n\n"
+        message += f"📋 <b>Código:</b> <code>{discount['code']}</code>\n"
+        message += f"💰 <b>Descuento:</b> {discount['discount_percentage']}% en {discount['promotion_name']}\n\n"
+        message += "<i>Usa este código al comprar la promoción.</i>"
+
     await callback.message.edit_text(
-        result['message'],
+        message,
         reply_markup=trivia_vip_result_keyboard()
     )
     await callback.answer()
