@@ -1126,7 +1126,8 @@ class TriviaPromotionConfig(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
-    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=False)
+    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=True)
+    custom_description = Column(String(500), nullable=True)
     discount_percentage = Column(Integer, nullable=False)
     required_streak = Column(Integer, default=5, nullable=False)
     is_active = Column(Boolean, default=True)
@@ -1151,7 +1152,7 @@ class DiscountCode(Base):
     user_id = Column(BigInteger, nullable=False)
     username = Column(String(100), nullable=True)
     first_name = Column(String(100), nullable=True)
-    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=False)
+    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=True)
     status = Column(Enum(DiscountCodeStatus), default=DiscountCodeStatus.ACTIVE)
     generated_at = Column(DateTime(timezone=True), server_default=func.now())
     used_at = Column(DateTime(timezone=True), nullable=True)

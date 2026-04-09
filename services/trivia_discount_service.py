@@ -10,7 +10,7 @@ import string
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from models.models import (
     TriviaPromotionConfig,
     DiscountCode,
@@ -37,13 +37,14 @@ class TriviaDiscountService:
     def create_trivia_promotion_config(
         self,
         name: str,
-        promotion_id: int,
+        promotion_id: Optional[int],
         discount_percentage: int,
         required_streak: int = 5,
         max_codes: int = 5,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        custom_description: Optional[str] = None
     ) -> Optional[TriviaPromotionConfig]:
         """Crea configuración de promoción por racha"""
         with SessionLocal() as session:
@@ -51,6 +52,7 @@ class TriviaDiscountService:
                 config = TriviaPromotionConfig(
                     name=name,
                     promotion_id=promotion_id,
+                    custom_description=custom_description,
                     discount_percentage=discount_percentage,
                     required_streak=required_streak,
                     max_codes=max_codes,
@@ -71,14 +73,18 @@ class TriviaDiscountService:
     def get_trivia_promotion_config(self, config_id: int) -> Optional[TriviaPromotionConfig]:
         """Obtiene configuración por ID"""
         with SessionLocal() as session:
-            config = session.get(TriviaPromotionConfig, config_id)
+            config = session.query(TriviaPromotionConfig).options(
+                joinedload(TriviaPromotionConfig.promotion)
+            ).filter(TriviaPromotionConfig.id == config_id).first()
             logger.info(f"trivia_discount_service - get_trivia_promotion_config - {config_id} - {'found' if config else 'not_found'}")
             return config
 
     def get_active_trivia_promotion_configs(self) -> list[TriviaPromotionConfig]:
         """Obtiene todas las configuraciones activas"""
         with SessionLocal() as session:
-            configs = session.query(TriviaPromotionConfig).filter(
+            configs = session.query(TriviaPromotionConfig).options(
+                joinedload(TriviaPromotionConfig.promotion)
+            ).filter(
                 TriviaPromotionConfig.is_active == True
             ).all()
             logger.info(f"trivia_discount_service - get_active_trivia_promotion_configs - count: {len(configs)}")

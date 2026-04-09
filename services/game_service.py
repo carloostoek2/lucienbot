@@ -27,8 +27,8 @@ class GameService:
     # Constantes de límites diarios
     DAILY_DICE_LIMIT_FREE = 10
     DAILY_DICE_LIMIT_VIP = 20
-    DAILY_TRIVIA_LIMIT_FREE = 5
-    DAILY_TRIVIA_LIMIT_VIP = 10
+    DAILY_TRIVIA_LIMIT_FREE = 10
+    DAILY_TRIVIA_LIMIT_VIP = 20
 
     # Recompensas por victoria
     DICE_WIN_BESITOS = 1
@@ -820,7 +820,7 @@ class GameService:
 
         return {
             'promotion_id': config.promotion_id,
-            'promotion_name': config.promotion.name,
+            'promotion_name': config.promotion.name if config.promotion_id and config.promotion else config.custom_description,
             'discount_percentage': config.discount_percentage,
             'required_streak': config.required_streak,
             'available_codes': available,

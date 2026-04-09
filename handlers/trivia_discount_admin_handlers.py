@@ -21,7 +21,9 @@ router = Router()
 
 # Estados para FSM
 class TriviaDiscountStates(StatesGroup):
+    waiting_promotion_type = State()
     waiting_promotion = State()
+    waiting_custom_description = State()
     waiting_discount_percentage = State()
     waiting_required_streak = State()
     waiting_max_codes = State()
@@ -78,49 +80,32 @@ async def admin_trivia_discount_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "create_trivia_discount", lambda cb: is_admin(cb.from_user.id))
 async def create_trivia_discount_start(callback: CallbackQuery, state: FSMContext):
-    """Paso 1: Seleccionar promoción comercial"""
-    promo_service = PromotionService()
-    try:
-        promotions = promo_service.get_active_promotions()
-    finally:
-        promo_service.close()
-
-    if not promotions:
-        await callback.message.edit_text(
-            "🎩 <b>Lucien:</b>\n\n"
-            "<i>No hay promociones comerciales activas.</i>\n\n"
-            "Cree una promoción primero en el panel de promociones.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
-            ]),
-            parse_mode="HTML"
-        )
-        await callback.answer()
-        return
-
+    """Paso 1: Seleccionar tipo de promoción"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"{p.name} ({p.price_display})",
-            callback_data=f"select_promo_{p.id}"
-        )]
-        for p in promotions
-    ])
-    keyboard.inline_keyboard.append([
-        InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")
+            text="🏪 Usar promoción existente",
+            callback_data="select_promo_type_existing"
+        )],
+        [InlineKeyboardButton(
+            text="✨ Crear promoción independiente",
+            callback_data="select_promo_type_independent"
+        )],
+        [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
     ])
 
     await callback.message.edit_text(
         "🎩 <b>Lucien:</b>\n\n"
-        "<i>Paso 1 de 6:</i> Seleccione la promoción comercial\n"
-        "que se aplicará al código de descuento.",
+        "<i>Paso 1 de 6:</i> Seleccione el tipo de promoción\n\n"
+        "🏪 <b>Promoción existente:</b> Vincular a una promoción comercial del catálogo\n"
+        "✨ <b>Promoción independiente:</b> Crear una trivia sin promoción comercial (ej: descuentos eventales)",
         reply_markup=keyboard,
         parse_mode="HTML"
     )
-    await state.set_state(TriviaDiscountStates.waiting_promotion)
+    await state.set_state(TriviaDiscountStates.waiting_promotion_type)
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("select_promo_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.regex(r"^select_promo_\d+$"), lambda cb: is_admin(cb.from_user.id))
 async def create_trivia_discount_promo(callback: CallbackQuery, state: FSMContext):
     """Paso 2: Porcentaje de descuento"""
     promotion_id = int(callback.data.replace("select_promo_", ""))
@@ -235,12 +220,18 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
 
     # Mostrar confirmación
     data = await state.get_data()
-    promo_service = PromotionService()
-    try:
-        promo = promo_service.get_promotion(data['promotion_id'])
-        promo_name = promo.name if promo else "Desconocida"
-    finally:
-        promo_service.close()
+
+    # Determinar tipo de promoción
+    if data.get('promotion_id'):
+        promo_service = PromotionService()
+        try:
+            promo = promo_service.get_promotion(data['promotion_id'])
+            promo_name = promo.name if promo else "Desconocida"
+        finally:
+            promo_service.close()
+        promo_info = f"🏪 {promo_name}"
+    else:
+        promo_info = f"✨ {data.get('custom_description', 'N/A')}"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✓ Confirmar", callback_data="confirm_trivia_discount")],
@@ -250,7 +241,7 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
     await message.answer(
         f"🎩 <b>Lucien:</b>\n\n"
         "<i>Paso 6 de 6:</i> Confirmar configuración\n\n"
-        f"📋 <b>Promoción:</b> {promo_name}\n"
+        f"📋 <b>Promoción:</b> {promo_info}\n"
         f"💰 <b>Descuento:</b> {data['discount_percentage']}%\n"
         f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
         f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
@@ -261,6 +252,89 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
     await state.set_state(TriviaDiscountStates.waiting_confirmation)
 
 
+@router.callback_query(F.data == "select_promo_type_existing", lambda cb: is_admin(cb.from_user.id))
+async def create_trivia_discount_existing_promo(callback: CallbackQuery, state: FSMContext):
+    """Mostrar lista de promociones existentes"""
+    promo_service = PromotionService()
+    try:
+        promotions = promo_service.get_active_promotions()
+    finally:
+        promo_service.close()
+
+    if not promotions:
+        await callback.message.edit_text(
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>No hay promociones comerciales activas.</i>\n\n"
+            "Cree una promoción primero en el panel de promociones.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
+            ]),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"{p.name} ({p.price_display})",
+            callback_data=f"select_promo_{p.id}"
+        )]
+        for p in promotions
+    ])
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")
+    ])
+
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 1a:</i> Seleccione la promoción comercial\n"
+        "que se aplicará al código de descuento.",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_promotion)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "select_promo_type_independent", lambda cb: is_admin(cb.from_user.id))
+async def create_trivia_discount_independent_promo(callback: CallbackQuery, state: FSMContext):
+    """Solicitar descripción para promoción independiente"""
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 1b:</i> Ingrese la descripción de la promoción\n\n"
+        "Esta descripción se mostrará al usuario cuando desbloquee el código.\n"
+        "Ejemplo: <code>2x1 en fotos de Srta. Kinky</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_custom_description)
+    await callback.answer()
+
+
+@router.message(TriviaDiscountStates.waiting_custom_description, lambda msg: is_admin(msg.from_user.id))
+async def create_trivia_discount_custom_description(message: Message, state: FSMContext):
+    """Procesar descripción personalizada"""
+    description = message.text.strip()
+    if len(description) < 3:
+        await message.answer("La descripción debe tener al menos 3 caracteres:")
+        return
+    if len(description) > 500:
+        await message.answer("La descripción no puede exceder 500 caracteres:")
+        return
+
+    await state.update_data(custom_description=description)
+
+    await message.answer(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 2 de 6:</i> Ingrese el porcentaje de descuento (0-100)\n\n"
+        "Ejemplo: 20 para 20% de descuento",
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_discount_percentage)
+
+
 @router.callback_query(F.data == "confirm_trivia_discount", lambda cb: is_admin(cb.from_user.id))
 async def create_trivia_discount_confirm(callback: CallbackQuery, state: FSMContext):
     """Confirmar y crear configuración"""
@@ -269,14 +343,15 @@ async def create_trivia_discount_confirm(callback: CallbackQuery, state: FSMCont
 
     service = TriviaDiscountService()
     config = service.create_trivia_promotion_config(
-        name=f"Trivia {data['promotion_id']}",
-        promotion_id=data['promotion_id'],
+        name=f"Trivia {data.get('promotion_id', data.get('custom_description', 'Ind'))[:30]}",
+        promotion_id=data.get('promotion_id'),
         discount_percentage=data['discount_percentage'],
         required_streak=data['required_streak'],
         max_codes=data['max_codes'],
         start_date=data.get('start_date'),
         end_date=data.get('end_date'),
-        created_by=user_id
+        created_by=user_id,
+        custom_description=data.get('custom_description')
     )
 
     if config:
@@ -348,9 +423,10 @@ async def view_trivia_discounts(callback: CallbackQuery):
             ])
 
             promo = config.promotion
+            promo_info = f"🏪 {promo.name}" if promo else f"✨ {config.custom_description or 'N/A'}"
             await callback.message.edit_text(
                 f"🎫 <b>{config.name}</b>\n\n"
-                f"📋 {promo.name if promo else 'N/A'}\n"
+                f"📋 {promo_info}\n"
                 f"💰 Descuento: {config.discount_percentage}%\n"
                 f"🔥 Racha: {config.required_streak}\n"
                 f"🎫 Códigos: {stats['available']} disponibles / {config.max_codes} total\n"

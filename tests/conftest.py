@@ -26,9 +26,9 @@ from models.models import (
 
 # ==================== DATABASE FIXTURES ====================
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def engine():
-    """Crea un engine de SQLite en memoria para tests."""
+    """Crea un engine de SQLite en memoria para tests (function scope para aislamiento)."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False}
