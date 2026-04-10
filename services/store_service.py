@@ -155,7 +155,7 @@ class StoreService:
         if not product:
             return False
 
-        allowed_fields = ['name', 'description', 'price', 'stock', 'is_active', 'low_stock_threshold']
+        allowed_fields = ['name', 'description', 'price', 'stock', 'is_active', 'low_stock_threshold', 'package_id', 'category_id']
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(product, field):
                 setattr(product, field, value)

@@ -33,6 +33,16 @@ class ProductRestockStates(StatesGroup):
     waiting_threshold = State()
 
 
+class ProductEditStates(StatesGroup):
+    selecting_field = State()
+    waiting_name = State()
+    waiting_description = State()
+    selecting_package = State()
+    waiting_price = State()
+    waiting_stock_value = State()
+    confirming = State()
+
+
 def is_admin(user_id: int) -> bool:
     return user_id in bot_config.ADMIN_IDS
 
@@ -545,6 +555,10 @@ async def product_admin_detail(callback: CallbackQuery):
                     callback_data=f"toggle_product_{product_id}"
                 )],
                 [InlineKeyboardButton(
+                    text="✏️ Editar información",
+                    callback_data=f"edit_product_{product_id}"
+                )],
+                [InlineKeyboardButton(
                     text="📝 Reabastecer",
                     callback_data=f"restock_product_{product_id}"
                 )],
@@ -716,6 +730,365 @@ async def confirm_delete_product(callback: CallbackQuery):
                     ])
                 )
             await callback.answer()
+
+
+        # ==================== EDITAR PRODUCTO ====================
+
+@router.callback_query(F.data.startswith("edit_product_"), lambda cb: is_admin(cb.from_user.id))
+async def edit_product_menu(callback: CallbackQuery, state: FSMContext):
+    """Muestra menú para seleccionar qué campo editar"""
+    try:
+        product_id = int(callback.data.replace("edit_product_", ""))
+    except ValueError:
+        await callback.answer("ID invalido", show_alert=True)
+        return
+
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product(product_id)
+
+        if not product:
+            await callback.answer("Producto no encontrado", show_alert=True)
+            return
+
+        await state.update_data(
+            product_id=product_id,
+            product_name=product.name,
+            name=product.name,
+            description=product.description,
+            price=product.price,
+            stock=product.stock,
+            package_id=product.package_id
+        )
+
+        stock_text = "Ilimitado" if product.stock == -1 else str(product.stock)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Nombre", callback_data="edit_field_name")],
+            [InlineKeyboardButton(text="📄 Descripcion", callback_data="edit_field_description")],
+            [InlineKeyboardButton(text="💰 Precio", callback_data="edit_field_price")],
+            [InlineKeyboardButton(text="📦 Paquete", callback_data="edit_field_package")],
+            [InlineKeyboardButton(text="📊 Stock", callback_data="edit_field_stock")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data=f"product_admin_detail_{product_id}")]
+        ])
+
+        await callback.message.edit_text(
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>Editar tesoro...</i>\n\n"
+            f"📦 <b>{product.name}</b>\n"
+            f"📝 {product.description or 'Sin descripcion'}\n"
+            f"💰 Precio: {product.price} besitos\n"
+            f"📊 Stock: {stock_text}\n\n"
+            f"Que campo deseas modificar?",
+            reply_markup=keyboard
+        )
+        await state.set_state(ProductEditStates.selecting_field)
+        await callback.answer()
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_field_name")
+async def edit_product_name_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia edicion de nombre"""
+    data = await state.get_data()
+    current_name = data.get('name', '')
+
+    await callback.message.edit_text(
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Editar nombre del tesoro...</i>\n\n"
+        f"Nombre actual: <b>{current_name}</b>\n\n"
+        f"Indica el nuevo nombre:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="edit_cancel")]
+        ])
+    )
+    await state.set_state(ProductEditStates.waiting_name)
+    await callback.answer()
+
+
+@router.message(ProductEditStates.waiting_name)
+async def edit_product_name_process(message: Message, state: FSMContext):
+    """Procesa nuevo nombre"""
+    name = message.text.strip()
+    if len(name) < 3:
+        await message.answer("El nombre debe tener al menos 3 caracteres.")
+        return
+
+    await state.update_data(name=name)
+    await show_edit_summary(message, state)
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_field_description")
+async def edit_product_description_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia edicion de descripcion"""
+    data = await state.get_data()
+    current_desc = data.get('description', '')
+
+    await callback.message.edit_text(
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Editar descripcion del tesoro...</i>\n\n"
+        f"Descripcion actual: {current_desc or 'Sin descripcion'}\n\n"
+        f"Escribe la nueva descripcion:\n"
+        f"O envia /clear para dejar sin descripcion.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="edit_cancel")]
+        ])
+    )
+    await state.set_state(ProductEditStates.waiting_description)
+    await callback.answer()
+
+
+@router.message(ProductEditStates.waiting_description)
+async def edit_product_description_process(message: Message, state: FSMContext):
+    """Procesa nueva descripcion"""
+    if message.text == "/clear":
+        description = None
+    else:
+        description = message.text.strip()
+
+    await state.update_data(description=description)
+    await show_edit_summary(message, state)
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_field_price")
+async def edit_product_price_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia edicion de precio"""
+    data = await state.get_data()
+    current_price = data.get('price', 0)
+
+    await callback.message.edit_text(
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Editar precio del tesoro...</i>\n\n"
+        f"Precio actual: <b>{current_price} besitos</b>\n\n"
+        f"Indica el nuevo precio en besitos:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="edit_cancel")]
+        ])
+    )
+    await state.set_state(ProductEditStates.waiting_price)
+    await callback.answer()
+
+
+@router.message(ProductEditStates.waiting_price)
+async def edit_product_price_process(message: Message, state: FSMContext):
+    """Procesa nuevo precio"""
+    try:
+        price = int(message.text.strip())
+        if price < 1:
+            raise ValueError("Debe ser mayor a 0")
+    except ValueError:
+        await message.answer("Por favor indica un numero valido mayor a 0.")
+        return
+
+    await state.update_data(price=price)
+    await show_edit_summary(message, state)
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_field_package")
+async def edit_product_package_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia edicion de paquete"""
+    package_service = PackageService()
+    packages = package_service.get_available_packages_for_store()
+
+    if not packages:
+        await callback.message.edit_text(
+            "🎩 <b>Lucien:</b>\n\n"
+            "No hay paquetes disponibles.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="edit_cancel")]
+            ])
+        )
+        await callback.answer()
+        return
+
+    buttons = []
+    for pkg in packages:
+        stock_text = "∞" if pkg.store_stock == -1 else str(pkg.store_stock)
+        buttons.append([InlineKeyboardButton(
+            text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
+            callback_data=f"edit_select_pkg_{pkg.id}"
+        )])
+
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="edit_cancel")])
+
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Seleccionar nuevo paquete...</i>\n\n"
+        "Elige el paquete que se vendera:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await state.set_state(ProductEditStates.selecting_package)
+    await callback.answer()
+
+
+@router.callback_query(ProductEditStates.selecting_package, F.data.startswith("edit_select_pkg_"))
+async def edit_product_package_select(callback: CallbackQuery, state: FSMContext):
+    """Selecciona paquete para el producto"""
+    try:
+        package_id = int(callback.data.replace("edit_select_pkg_", ""))
+    except ValueError:
+        await callback.answer("ID invalido", show_alert=True)
+        return
+
+    await state.update_data(package_id=package_id)
+    await show_edit_summary(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_field_stock")
+async def edit_product_stock_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia edicion de stock"""
+    data = await state.get_data()
+    current_stock = data.get('stock', -1)
+    stock_text = "Ilimitado" if current_stock == -1 else str(current_stock)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♾️ Ilimitado", callback_data="edit_stock_unlimited")],
+        [InlineKeyboardButton(text="📦 Limitado", callback_data="edit_stock_limited")],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="edit_cancel")]
+    ])
+
+    await callback.message.edit_text(
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Editar stock del tesoro...</i>\n\n"
+        f"Stock actual: <b>{stock_text}</b>\n\n"
+        f"Configura el nuevo stock:",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_stock_unlimited")
+async def edit_product_stock_unlimited(callback: CallbackQuery, state: FSMContext):
+    """Establece stock ilimitado"""
+    await state.update_data(stock=-1)
+    await show_edit_summary(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(ProductEditStates.selecting_field, F.data == "edit_stock_limited")
+async def edit_product_stock_limited(callback: CallbackQuery, state: FSMContext):
+    """Pide cantidad limitada"""
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "Indica la cantidad de unidades disponibles:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="edit_cancel")]
+        ])
+    )
+    await state.set_state(ProductEditStates.waiting_stock_value)
+    await callback.answer()
+
+
+@router.message(ProductEditStates.waiting_stock_value)
+async def edit_product_stock_process(message: Message, state: FSMContext):
+    """Procesa stock del producto (cuando viene de edit_stock_limited)"""
+    try:
+        stock = int(message.text.strip())
+        if stock < 0:
+            raise ValueError("Debe ser 0 o mayor")
+    except ValueError:
+        await message.answer("Indica un numero valido (0 o mayor).")
+        return
+
+    await state.update_data(stock=stock)
+    await show_edit_summary(message, state)
+
+
+async def show_edit_summary(target, state: FSMContext):
+    """Muestra resumen de cambios para confirmar"""
+    data = await state.get_data()
+
+    name = data.get('name', '')
+    description = data.get('description', '')
+    price = data.get('price', 0)
+    stock = data.get('stock', -1)
+    stock_text = "Ilimitado" if stock == -1 else str(stock)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Guardar cambios", callback_data="edit_confirm_save")],
+        [InlineKeyboardButton(text="📝 Seguir editando", callback_data="edit_continue")],
+        [InlineKeyboardButton(text="❌ Descartar", callback_data="edit_cancel")]
+    ])
+
+    text = (
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Resumen del tesoro...</i>\n\n"
+        f"📦 <b>{name}</b>\n"
+        f"📝 {description or 'Sin descripcion'}\n"
+        f"💰 Precio: {price} besitos\n"
+        f"📊 Stock: {stock_text}\n\n"
+        f"Guardar los cambios?"
+    )
+
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await target.answer(text, reply_markup=keyboard)
+
+    await state.set_state(ProductEditStates.confirming)
+
+
+@router.callback_query(ProductEditStates.confirming, F.data == "edit_confirm_save")
+async def edit_product_save(callback: CallbackQuery, state: FSMContext):
+    """Guarda los cambios del producto"""
+    data = await state.get_data()
+    product_id = data.get('product_id')
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(
+            product_id=product_id,
+            name=data.get('name'),
+            description=data.get('description'),
+            price=data.get('price'),
+            stock=data.get('stock'),
+            package_id=data.get('package_id')
+        )
+
+        if success:
+            await callback.message.edit_text(
+                f"🎩 <b>Lucien:</b>\n\n"
+                f"✅ Producto actualizado exitosamente.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data=f"product_admin_detail_{product_id}")]
+                ])
+            )
+            logger.info(f"Producto {product_id} actualizado por admin {callback.from_user.id}")
+        else:
+            await callback.message.edit_text(
+                "Error al actualizar el producto.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
+                ])
+            )
+
+    await state.clear()
+    await callback.answer()
+
+
+@router.callback_query(F.data == "edit_continue")
+async def edit_continue(callback: CallbackQuery, state: FSMContext):
+    """Vuelve al menu de edicion"""
+    await edit_product_menu(callback, state)
+
+
+@router.callback_query(F.data == "edit_cancel")
+async def edit_cancel(callback: CallbackQuery, state: FSMContext):
+    """Cancela la edicion"""
+    data = await state.get_data()
+    product_id = data.get('product_id')
+
+    await state.clear()
+
+    if product_id:
+        callback.data = f"product_admin_detail_{product_id}"
+        await product_admin_detail(callback)
+    else:
+        await callback.message.edit_text(
+            "Edicion cancelada.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
+            ])
+        )
+        await callback.answer()
 
 
         # ==================== ESTADISTICAS ====================

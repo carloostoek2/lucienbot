@@ -367,7 +367,7 @@ class TestTriviaStreakE2E:
         # Después incorrecta
         result = game_service.play_trivia(unique_user.id, 0, wrong_idx)
         assert result['correct'] is False
-        assert result['payout'] == 0
+        assert result['besitos'] == 0
 
         # Verificar que hay un registro con payout=0
         wrong_records = db_session.query(GameRecord).filter(
