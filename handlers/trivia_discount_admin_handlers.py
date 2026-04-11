@@ -563,9 +563,15 @@ async def mark_code_as_used(callback: CallbackQuery):
 
     await callback.answer("Código marcado como usado" if result else "Error")
     await callback.message.delete()
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Volver a códigos", callback_data="view_trivia_discounts")]
+    ])
+
     await callback.message.answer(
         "🎩 <b>Lucien:</b>\n\n"
         f"<i>Código {'marcado como usado' if result else 'error al marcar'}.</i>",
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
 
@@ -579,8 +585,14 @@ async def cancel_discount_code(callback: CallbackQuery):
 
     await callback.answer("Código cancelado" if result else "Error")
     await callback.message.delete()
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Volver a códigos", callback_data="view_trivia_discounts")]
+    ])
+
     await callback.message.answer(
         "🎩 <b>Lucien:</b>\n\n"
         f"<i>Código {'cancelado' if result else 'error al cancelar'}.</i>",
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
