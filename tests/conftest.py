@@ -547,3 +547,38 @@ def mock_dispatcher():
     """Crea un mock del dispatcher."""
     dp = MagicMock()
     return dp
+
+
+# ==================== SIMULATION FIXTURES ====================
+
+@pytest.fixture
+def simulation_service():
+    """Fresh simulation service with cleared state."""
+    from services.simulation_service import SimulationService
+    service = SimulationService()
+    service._overrides = {}
+    yield service
+    service._overrides = {}
+
+
+@pytest.fixture
+def admin_user_context():
+    """UserContext for an admin user."""
+    from services.user_context import UserContext
+    return UserContext(user_id=123, real_role="admin")
+
+
+@pytest.fixture
+def vip_simulation_context():
+    """UserContext for admin simulating VIP."""
+    from services.user_context import UserContext, SimulationRole
+    ctx = UserContext(user_id=123, real_role="admin")
+    return ctx.with_simulation(SimulationRole.VIP)
+
+
+@pytest.fixture
+def free_simulation_context():
+    """UserContext for admin simulating free user."""
+    from services.user_context import UserContext, SimulationRole
+    ctx = UserContext(user_id=123, real_role="admin")
+    return ctx.with_simulation(SimulationRole.FREE)
