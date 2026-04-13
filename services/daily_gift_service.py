@@ -3,7 +3,7 @@ Servicio de Regalo Diario - Lucien Bot
 
 Gestiona el sistema de regalo diario de besitos.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
