@@ -207,6 +207,12 @@ async def handle_reaction(callback: CallbackQuery):
         await callback.answer("Error en la reacción", show_alert=True)
         return
 
+    # Validar que broadcast_id sea válido (no 0 - indica que el keyboard no se actualizó correctamente)
+    if broadcast_id == 0:
+        logger.warning(f"Rechazada reacción con broadcast_id=0 (keyboard no actualizado correctamente)")
+        await callback.answer("El mensaje aún se está configurando, intenta reaccionar de nuevo", show_alert=True)
+        return
+
     # Deduplication key para prevenir procesamiento duplicado
     dedup_key = f"{user.id}:{broadcast_id}:{emoji_id}"
 
