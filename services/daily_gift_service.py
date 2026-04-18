@@ -108,8 +108,10 @@ class DailyGiftService:
             return True, None, "¡Puedes reclamar tu regalo diario!"
         
         # Calcular tiempo desde el último reclamo
-        now = datetime.now(timezone.utc)
-        time_since_last = now - last_claim.claimed_at
+        # Normalizar ambos a timezone-naive para evitar error de comparación
+        now = datetime.now()
+        last_claim_time = last_claim.claimed_at.replace(tzinfo=None) if last_claim.claimed_at.tzinfo else last_claim.claimed_at
+        time_since_last = now - last_claim_time
         cooldown = timedelta(hours=24)
         
         # Verificar si han pasado 24 horas
