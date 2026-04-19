@@ -1135,6 +1135,10 @@ class TriviaPromotionConfig(Base):
     codes_claimed = Column(Integer, default=0)
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
+    # Duración relativa en minutos (nullable = usar fechas fijas)
+    duration_minutes = Column(Integer, nullable=True)
+    # Timestamp de inicio de la promoción (para duraciones relativas)
+    started_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -8,6 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from typing import Optional
 from services.trivia_discount_service import TriviaDiscountService
 from services.promotion_service import PromotionService
 from services.user_service import UserService
@@ -29,7 +30,9 @@ class TriviaDiscountStates(StatesGroup):
     waiting_max_codes = State()
     waiting_start_date = State()
     waiting_end_date = State()
+    waiting_duration = State()
     waiting_confirmation = State()
+    waiting_extend_duration = State()
 
 
 # ==================== MENÚ PRINCIPAL ====================
@@ -178,15 +181,28 @@ async def create_trivia_discount_max_codes(message: Message, state: FSMContext):
             return
         await state.update_data(max_codes=max_codes)
 
+        # Nuevo paso: Elegir tipo de vigencia
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="📅 Fechas fijas",
+                callback_data="duration_type_fixed"
+            )],
+            [InlineKeyboardButton(
+                text="⏰ Duración relativa (min/h/d)",
+                callback_data="duration_type_relative"
+            )],
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ])
+
         await message.answer(
             "🎩 <b>Lucien:</b>\n\n"
-            "<i>Paso 5 de 6:</i> Fechas de vigencia (opcional)\n\n"
-            "Envíe las fechas en formato:\n"
-            "<code>YYYY-MM-DD YYYY-MM-DD</code>\n\n"
-            "O envíe <b>skip</b> para sin límite de tiempo",
+            "<i>Paso 5 de 6:</i> Seleccione el tipo de vigencia\n\n"
+            "📅 <b>Fechas fijas:</b> Fecha de inicio y fin específica\n"
+            "⏰ <b>Duración relativa:</b> Ej: 30min, 2h, 1d (contador regresivo)",
+            reply_markup=keyboard,
             parse_mode="HTML"
         )
-        await state.set_state(TriviaDiscountStates.waiting_start_date)
+        await state.set_state(TriviaDiscountStates.waiting_duration)
     except ValueError:
         await message.answer("Por favor ingrese un número válido:")
 
@@ -246,6 +262,163 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
         f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
         f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
         f"📅 <b>Vigencia:</b> {data.get('start_date', 'Sin inicio')} - {data.get('end_date', 'Sin fin')}",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_confirmation)
+
+
+def _parse_duration(text: str) -> Optional[int]:
+    """Parsea texto de duración a minutos. Formatos: 30m, 30min, 2h, 2hr, 1d, 1day"""
+    text = text.strip().lower()
+    try:
+        if text.endswith('min') or text.endswith('m'):
+            return int(text.replace('min', '').replace('m', '').strip())
+        elif text.endswith('hr') or text.endswith('h'):
+            return int(text.replace('hr', '').replace('h', '').strip()) * 60
+        elif text.endswith('d') or text.endswith('day'):
+            return int(text.replace('day', '').replace('d', '').strip()) * 1440
+        else:
+            # Asumir minutos
+            return int(text)
+    except (ValueError, TypeError):
+        return None
+
+
+@router.callback_query(F.data == "duration_type_fixed", lambda cb: is_admin(cb.from_user.id))
+async def duration_type_fixed(callback: CallbackQuery, state: FSMContext):
+    """Usuario eligió fechas fijas"""
+    await state.update_data(duration_type='fixed', duration_minutes=None)
+
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 5b:</i> Fechas de vigencia (opcional)\n\n"
+        "Envíe las fechas en formato:\n"
+        "<code>YYYY-MM-DD YYYY-MM-DD</code>\n\n"
+        "O envíe <b>skip</b> para sin límite de tiempo",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_start_date)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "duration_type_relative", lambda cb: is_admin(cb.from_user.id))
+async def duration_type_relative(callback: CallbackQuery, state: FSMContext):
+    """Usuario eligió duración relativa"""
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 5b:</i> Ingrese la duración\n\n"
+        "Formatos aceptados:\n"
+        "• <code>30</code> → 30 minutos\n"
+        "• <code>30m</code> o <code>30min</code> → 30 minutos\n"
+        "• <code>2h</code> o <code>2hr</code> → 2 horas\n"
+        "• <code>1d</code> o <code>1day</code> → 1 día\n\n"
+        "La promoción começará a contar cuando se active.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_start_date)
+    await callback.answer()
+
+
+@router.message(TriviaDiscountStates.waiting_start_date, lambda msg: is_admin(msg.from_user.id))
+async def create_trivia_discount_dates(message: Message, state: FSMContext):
+    """Procesar fechas o duración relativa"""
+    data = await state.get_data()
+    duration_type = data.get('duration_type')
+
+    if duration_type == 'relative':
+        # Procesar duración relativa
+        duration = _parse_duration(message.text.strip())
+        if not duration or duration < 1:
+            await message.answer(
+                "Duración inválida. Use formatos como: 30m, 2h, 1d\n"
+                "Intente de nuevo:",
+                parse_mode="HTML"
+            )
+            return
+        await state.update_data(start_date=None, end_date=None, duration_minutes=duration)
+    else:
+        # Procesar fechas fijas
+        text = message.text.strip().lower()
+        if text == "skip":
+            await state.update_data(start_date=None, end_date=None, duration_minutes=None)
+        else:
+            try:
+                parts = text.split()
+                if len(parts) != 2:
+                    raise ValueError("Formato inválido")
+
+                from datetime import datetime
+                start = datetime.strptime(parts[0], "%Y-%m-%d")
+                end = datetime.strptime(parts[1], "%Y-%m-%d")
+
+                await state.update_data(start_date=start, end_date=end, duration_minutes=None)
+            except Exception:
+                await message.answer(
+                    "Formato inválido. Envíe:\n"
+                    "<code>YYYY-MM-DD YYYY-MM-DD</code>\n"
+                    "o <b>skip</b> para omitir",
+                    parse_mode="HTML"
+                )
+                return
+
+    # Mostrar confirmación
+    data = await state.get_data()
+
+    # Determinar tipo de promoción
+    if data.get('promotion_id'):
+        promo_service = PromotionService()
+        try:
+            promo = promo_service.get_promotion(data['promotion_id'])
+            promo_name = promo.name if promo else "Desconocida"
+        finally:
+            promo_service.close()
+        promo_info = f"🏪 {promo_name}"
+    else:
+        promo_info = f"✨ {data.get('custom_description', 'N/A')}"
+
+    # Construir info de vigencia
+    duration_type = data.get('duration_type')
+    if duration_type == 'relative':
+        duration_val = data.get('duration_minutes', 0)
+        if duration_val >= 1440:
+            days = duration_val // 1440
+            vigencia = f"⏰ {days} día(s)"
+        elif duration_val >= 60:
+            hours = duration_val // 60
+            mins = duration_val % 60
+            vigencia = f"⏰ {hours}h {mins}min" if mins > 0 else f"⏰ {hours} horas"
+        else:
+            vigencia = f"⏰ {duration_val} minutos"
+    else:
+        start = data.get('start_date')
+        end = data.get('end_date')
+        if start and end:
+            vigencia = f"📅 {start.strftime('%Y-%m-%d')} - {end.strftime('%Y-%m-%d')}"
+        elif start:
+            vigencia = f"📅 Desde {start.strftime('%Y-%m-%d')}"
+        else:
+            vigencia = "📅 Sin límite"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✓ Confirmar", callback_data="confirm_trivia_discount")],
+        [InlineKeyboardButton(text="✗ Cancelar", callback_data="admin_trivia_discount")]
+    ])
+
+    await message.answer(
+        f"🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 6 de 6:</i> Confirmar configuración\n\n"
+        f"📋 <b>Promoción:</b> {promo_info}\n"
+        f"💰 <b>Descuento:</b> {data['discount_percentage']}%\n"
+        f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
+        f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
+        f"⏱️ <b>Vigencia:</b> {vigencia}",
         reply_markup=keyboard,
         parse_mode="HTML"
     )
@@ -351,17 +524,31 @@ async def create_trivia_discount_confirm(callback: CallbackQuery, state: FSMCont
         start_date=data.get('start_date'),
         end_date=data.get('end_date'),
         created_by=user_id,
-        custom_description=data.get('custom_description')
+        custom_description=data.get('custom_description'),
+        duration_minutes=data.get('duration_minutes')
     )
 
     if config:
+        # Si es duración relativa, iniciar automáticamente
+        started = False
+        if data.get('duration_minutes'):
+            started = service.start_trivia_promotion(config.id)
+
+        duration_info = ""
+        if data.get('duration_minutes'):
+            duration_val = data['duration_minutes']
+            if duration_val >= 60:
+                duration_info = f"\n⏱️ Duración: {duration_val // 60}h (iniciada)" if started else f"\n⏱️ Duración: {duration_val // 60}h"
+            else:
+                duration_info = f"\n⏱️ Duración: {duration_val} min (iniciada)" if started else f"\n⏱️ Duración: {duration_val} min"
+
         await callback.message.edit_text(
             "🎩 <b>Lucien:</b>\n\n"
             f"<i>Configuración creada con éxito.</i>\n\n"
             f"ID: {config.id}\n"
             f"Descuento: {config.discount_percentage}%\n"
             f"Racha: {config.required_streak}\n"
-            f"Códigos: {config.max_codes}",
+            f"Códigos: {config.max_codes}{duration_info}",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
             ]),
@@ -406,11 +593,28 @@ async def view_trivia_discounts(callback: CallbackQuery):
         for config in configs:
             stats = service.get_discount_stats(config.id)
 
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            # Construir botones según el tipo de vigencia
+            keyboard_buttons = [
                 [InlineKeyboardButton(
                     text="📊 Ver códigos",
                     callback_data=f"view_codes_{config.id}"
-                )],
+                )]
+            ]
+
+            # Si es duración relativa, mostrar tiempo restante y botón de extender
+            if service.is_duration_based(config):
+                remaining = service.get_time_remaining_formatted(config.id)
+                time_info = f"\n⏱️ Tiempo: {remaining}"
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text="⏰ Extender",
+                        callback_data=f"extend_duration_{config.id}"
+                    )
+                ])
+            else:
+                time_info = ""
+
+            keyboard_buttons.extend([
                 [InlineKeyboardButton(
                     text="⏸️ Pausar",
                     callback_data=f"pause_trivia_{config.id}"
@@ -422,6 +626,8 @@ async def view_trivia_discounts(callback: CallbackQuery):
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
             ])
 
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
             promo = config.promotion
             promo_info = f"🏪 {promo.name}" if promo else f"✨ {config.custom_description or 'N/A'}"
             await callback.message.edit_text(
@@ -430,7 +636,7 @@ async def view_trivia_discounts(callback: CallbackQuery):
                 f"💰 Descuento: {config.discount_percentage}%\n"
                 f"🔥 Racha: {config.required_streak}\n"
                 f"🎫 Códigos: {stats['available']} disponibles / {config.max_codes} total\n"
-                f"📊 Usados: {stats['used']} ({stats['used_percentage']}%)",
+                f"📊 Usados: {stats['used']} ({stats['used_percentage']}%){time_info}",
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
@@ -596,3 +802,71 @@ async def cancel_discount_code(callback: CallbackQuery):
         reply_markup=keyboard,
         parse_mode="HTML"
     )
+
+
+# ==================== EXTENDER DURACIÓN ====================
+
+@router.callback_query(F.data.regex(r"^extend_duration_\d+$"), lambda cb: is_admin(cb.from_user.id))
+async def extend_duration_start(callback: CallbackQuery, state: FSMContext):
+    """Iniciar extensión de duración"""
+    config_id = int(callback.data.replace("extend_duration_", ""))
+    await state.update_data(extend_config_id=config_id)
+
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "Ingrese la duración a agregar:\n\n"
+        "Formatos aceptados:\n"
+        "• <code>30</code> → 30 minutos\n"
+        "• <code>30m</code> o <code>30min</code> → 30 minutos\n"
+        "• <code>2h</code> o <code>2hr</code> → 2 horas\n"
+        "• <code>1d</code> o <code>1day</code> → 1 día",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="view_trivia_discounts")]
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_extend_duration)
+    await callback.answer()
+
+
+@router.message(TriviaDiscountStates.waiting_extend_duration, lambda msg: is_admin(msg.from_user.id))
+async def extend_duration_process(message: Message, state: FSMContext):
+    """Procesar extensión de duración"""
+    data = await state.get_data()
+    config_id = data.get('extend_config_id')
+
+    additional = _parse_duration(message.text.strip())
+    if not additional or additional < 1:
+        await message.answer(
+            "Duración inválida. Use formatos como: 30m, 2h, 1d\n"
+            "Intente de nuevo:",
+            parse_mode="HTML"
+        )
+        return
+
+    service = TriviaDiscountService()
+    result = service.extend_duration(config_id, additional)
+
+    if result:
+        remaining = service.get_time_remaining_formatted(config_id)
+        await message.answer(
+            "🎩 <b>Lucien:</b>\n\n"
+            f"<i>Duración extendida con éxito.</i>\n\n"
+            f"Nuevo tiempo restante: {remaining}",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="view_trivia_discounts")]
+            ]),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>Error al extender la duración.</i>\n\n"
+            "Intente de nuevo.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="view_trivia_discounts")]
+            ]),
+            parse_mode="HTML"
+        )
+
+    await state.clear()

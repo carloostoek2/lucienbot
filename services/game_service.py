@@ -818,6 +818,11 @@ class GameService:
         user_code = self._trivia_discount_service.get_user_discount_code(user_id, config.id)
         available = self._trivia_discount_service.get_available_codes_count(config.id)
 
+        # Obtener tiempo restante si es duración relativa
+        time_remaining = None
+        if self._trivia_discount_service.is_duration_based(config):
+            time_remaining = self._trivia_discount_service.get_time_remaining_formatted(config.id)
+
         return {
             'promotion_id': config.promotion_id,
             'promotion_name': config.promotion.name if config.promotion_id and config.promotion else config.custom_description,
@@ -827,7 +832,9 @@ class GameService:
             'total_codes': config.max_codes,
             'user_has_code': user_code is not None,
             'user_code': user_code.code if user_code else None,
-            'user_code_status': user_code.status.value if user_code else None
+            'user_code_status': user_code.status.value if user_code else None,
+            'time_remaining': time_remaining,
+            'is_duration_based': self._trivia_discount_service.is_duration_based(config)
         }
 
     # ==================== TRIVIA VIP ====================
@@ -939,7 +946,8 @@ class GameService:
             'current_streak': streak,
             'is_vip': is_vip,
             'can_play': can_play,
-            'limit_message': limit_message
+            'limit_message': limit_message,
+            'discount_info': self._get_trivia_discount_info(user_id)
         }
 
     def play_trivia_vip(self, user_id: int, question_idx: int, answer_idx: int) -> Dict[str, Any]:

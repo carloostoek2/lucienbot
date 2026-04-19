@@ -124,6 +124,11 @@ async def game_trivia(callback: CallbackQuery):
         discount_text = f"\n\n🎁 <b>Promoción por racha:</b>\n"
         discount_text += f"• Racha requerida: {discount_info['required_streak']} ({needed} más para desbloquear)\n"
         discount_text += f"• Descuentos disponibles: {discount_info['available_codes']} de {discount_info['total_codes']}"
+
+        # Mostrar tiempo restante si es duración relativa
+        if discount_info.get('time_remaining') and discount_info.get('is_duration_based'):
+            discount_text += f"\n• ⏱️ Tiempo restante: {discount_info['time_remaining']}"
+
         if discount_info.get('user_has_code'):
             discount_text += f"\n• Tu código: <code>{discount_info['user_code']}</code>"
 
@@ -209,10 +214,26 @@ async def game_trivia_vip(callback: CallbackQuery):
     if data['current_streak'] > 0:
         streak_text = f"\n🔥 Tu racha VIP: {data['current_streak']}"
 
+    # Información de descuento por racha
+    discount_info = data.get('discount_info')
+    discount_text = ""
+    if discount_info:
+        needed = max(0, discount_info['required_streak'] - data['current_streak'])
+        discount_text = f"\n\n🎁 <b>Promoción por racha:</b>\n"
+        discount_text += f"• Racha requerida: {discount_info['required_streak']} ({needed} más para desbloquear)\n"
+        discount_text += f"• Descuentos disponibles: {discount_info['available_codes']} de {discount_info['total_codes']}"
+
+        # Mostrar tiempo restante si es duración relativa
+        if discount_info.get('time_remaining') and discount_info.get('is_duration_based'):
+            discount_text += f"\n• ⏱️ Tiempo restante: {discount_info['time_remaining']}"
+
+        if discount_info.get('user_has_code'):
+            discount_text += f"\n• Tu código: <code>{discount_info['user_code']}</code>"
+
     text = (
         f"<b>{data['title']}</b>{streak_text}\n\n"
         f"{data['intro']}\n\n"
-        f"<i>{counter_text}</i>\n\n"
+        f"<i>{counter_text}</i>{discount_text}\n\n"
         f"👑 <b>Pregunta Secreta:</b> {question['q']}"
     )
 

@@ -8,9 +8,16 @@ from typing import List, Optional
 from models.models import Channel, Tariff
 
 
-def main_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
+def main_menu_keyboard(is_vip: bool = False, active_promo: dict = None) -> InlineKeyboardMarkup:
     """Menú principal de usuario con gamificación"""
     buttons = []
+
+    # Aviso de promoción activa (si hay)
+    if active_promo:
+        buttons.append([InlineKeyboardButton(
+            text=f"🎯 {active_promo['name']} - ⏱️ {active_promo['remaining_formatted']}",
+            callback_data="game_menu"
+        )])
 
     # Solo VIP: El Diván
     if is_vip:

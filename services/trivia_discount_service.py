@@ -44,7 +44,8 @@ class TriviaDiscountService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         created_by: Optional[int] = None,
-        custom_description: Optional[str] = None
+        custom_description: Optional[str] = None,
+        duration_minutes: Optional[int] = None
     ) -> Optional[TriviaPromotionConfig]:
         """Crea configuración de promoción por racha"""
         with SessionLocal() as session:
@@ -58,6 +59,7 @@ class TriviaDiscountService:
                     max_codes=max_codes,
                     start_date=start_date,
                     end_date=end_date,
+                    duration_minutes=duration_minutes,
                     created_by=created_by
                 )
                 session.add(config)
@@ -128,6 +130,115 @@ class TriviaDiscountService:
         """Pausa configuración"""
         return self.update_trivia_promotion_config(config_id, is_active=False)
 
+    # ==================== DURACIÓN RELATIVA ====================
+
+    def is_duration_based(self, config: TriviaPromotionConfig) -> bool:
+        """Verifica si la configuración usa duración relativa"""
+        return config.duration_minutes is not None and config.duration_minutes > 0
+
+    def start_trivia_promotion(self, config_id: int) -> bool:
+        """Inicia el contador de la promoción"""
+        with SessionLocal() as session:
+            try:
+                config = session.get(TriviaPromotionConfig, config_id)
+                if not config:
+                    return False
+                if not self.is_duration_based(config):
+                    logger.warning(f"trivia_discount_service - start_trivia_promotion - {config_id} - not duration based")
+                    return False
+                config.started_at = datetime.now(timezone.utc)
+                session.commit()
+                logger.info(f"trivia_discount_service - start_trivia_promotion - {config_id} - started")
+                return True
+            except Exception as e:
+                session.rollback()
+                logger.error(f"trivia_discount_service - start_trivia_promotion - {config_id} - error: {e}")
+                return False
+
+    def get_time_remaining(self, config_id: int) -> int:
+        """Obtiene minutos restantes de la promoción (0 si expiró o no es por duración)"""
+        with SessionLocal() as session:
+            try:
+                config = session.get(TriviaPromotionConfig, config_id)
+                if not config or not self.is_duration_based(config):
+                    return 0
+                if not config.started_at:
+                    # Si no se ha iniciado, devolver la duración completa
+                    return config.duration_minutes
+                now = datetime.now(timezone.utc)
+                elapsed_minutes = (now - config.started_at).total_seconds() / 60
+                remaining = max(0, int(config.duration_minutes - elapsed_minutes))
+                return remaining
+            except Exception as e:
+                logger.error(f"trivia_discount_service - get_time_remaining - {config_id} - error: {e}")
+                return 0
+
+    def get_time_remaining_formatted(self, config_id: int) -> str:
+        """Obtiene tiempo restante formateado para mostrar"""
+        remaining = self.get_time_remaining(config_id)
+        if remaining <= 0:
+            return "Expirada"
+        if remaining < 60:
+            return f"{remaining} min"
+        hours = remaining // 60
+        mins = remaining % 60
+        if remaining < 1440:  # menos de 24 horas
+            if mins > 0:
+                return f"{hours}h {mins}min"
+            return f"{hours}h"
+        days = remaining // 1440
+        hours = (remaining % 1440) // 60
+        if hours > 0:
+            return f"{days}d {hours}h"
+        return f"{days}d"
+
+    def extend_duration(self, config_id: int, additional_minutes: int) -> bool:
+        """Extiende la duración de la promoción"""
+        with SessionLocal() as session:
+            try:
+                config = session.get(TriviaPromotionConfig, config_id)
+                if not config or not self.is_duration_based(config):
+                    return False
+                # Extender la duración total (no agregar al tiempo restante)
+                if config.duration_minutes:
+                    config.duration_minutes += additional_minutes
+                else:
+                    config.duration_minutes = additional_minutes
+                session.commit()
+                logger.info(f"trivia_discount_service - extend_duration - {config_id} - extended by {additional_minutes} min")
+                return True
+            except Exception as e:
+                session.rollback()
+                logger.error(f"trivia_discount_service - extend_duration - {config_id} - error: {e}")
+                return False
+
+    def get_active_promotion_with_time(self) -> Optional[dict]:
+        """Obtiene la promoción activa con tiempo restante formateado (para menú principal)"""
+        with SessionLocal() as session:
+            try:
+                configs = session.query(TriviaPromotionConfig).options(
+                    joinedload(TriviaPromotionConfig.promotion)
+                ).filter(
+                    TriviaPromotionConfig.is_active == True
+                ).all()
+
+                for config in configs:
+                    remaining = self.get_time_remaining(config.id)
+                    if remaining > 0:
+                        promo_name = config.promotion.name if config.promotion else config.custom_description or config.name
+                        return {
+                            'id': config.id,
+                            'name': promo_name,
+                            'remaining': remaining,
+                            'remaining_formatted': self.get_time_remaining_formatted(config.id),
+                            'discount_percentage': config.discount_percentage,
+                            'required_streak': config.required_streak
+                        }
+                return None
+            except Exception as e:
+                logger.error(f"trivia_discount_service - get_active_promotion_with_time - error: {e}")
+                return None
+
     # ==================== CÓDIGOS ====================
 
     def generate_discount_code(
@@ -154,6 +265,13 @@ class TriviaDiscountService:
                 if config.end_date and now > config.end_date:
                     logger.warning(f"trivia_discount_service - generate_discount_code - {user_id} - expired")
                     return None
+
+                # Verificar vigencia por duración relativa
+                if config.duration_minutes and config.started_at:
+                    elapsed_minutes = (now - config.started_at).total_seconds() / 60
+                    if elapsed_minutes > config.duration_minutes:
+                        logger.warning(f"trivia_discount_service - generate_discount_code - {user_id} - expired by duration")
+                        return None
 
                 # Verificar códigos disponibles (basado en reclamados, no emitidos)
                 available = config.max_codes - config.codes_claimed

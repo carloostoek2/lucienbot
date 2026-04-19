@@ -10,6 +10,7 @@ from aiogram.enums import ChatType
 from config.settings import bot_config
 from services.user_service import UserService
 from services.vip_service import VIPService
+from services.trivia_discount_service import TriviaDiscountService
 from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, vip_entry_continue_keyboard, vip_entry_ready_keyboard, returning_user_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
@@ -185,9 +186,14 @@ async def cmd_start(message: Message):
             # Verificar si es VIP
             is_vip = vip_service.is_user_vip(user.id)
 
+            # Obtener promoción activa con tiempo restante
+            trivia_service = TriviaDiscountService()
+            active_promo = trivia_service.get_active_promotion_with_time()
+            trivia_service.close()
+
             await message.answer(
                 LucienVoice.greeting(user.first_name),
-                reply_markup=main_menu_keyboard(is_vip),
+                reply_markup=main_menu_keyboard(is_vip, active_promo),
                 parse_mode="HTML"
             )
     finally:
@@ -231,16 +237,19 @@ async def back_to_main(callback: CallbackQuery):
 
     # Verificar si es VIP
     vip_service = VIPService()
+    trivia_service = TriviaDiscountService()
     try:
         is_vip = vip_service.is_user_vip(user.id)
+        active_promo = trivia_service.get_active_promotion_with_time()
 
         await callback.message.edit_text(
             LucienVoice.greeting(user.first_name),
-            reply_markup=main_menu_keyboard(is_vip),
+            reply_markup=main_menu_keyboard(is_vip, active_promo),
             parse_mode="HTML"
         )
     finally:
         vip_service.close()
+        trivia_service.close()
     try:
         await callback.answer()
     except Exception:
