@@ -271,7 +271,7 @@ class TriviaDiscountService:
                     return None
 
                 # Verificar vigencia de fechas
-                now = datetime.now(timezone.utc)
+                now = datetime.utcnow()
                 if config.start_date and now < config.start_date:
                     logger.warning(f"trivia_discount_service - generate_discount_code - {user_id} - not started")
                     return None
@@ -357,7 +357,7 @@ class TriviaDiscountService:
 
                 # Marcar como usado
                 code.status = DiscountCodeStatus.USED
-                code.used_at = datetime.now(timezone.utc)
+                code.used_at = datetime.utcnow()
 
                 # Incrementar contador de reclamados
                 config = session.get(TriviaPromotionConfig, code.config_id)
