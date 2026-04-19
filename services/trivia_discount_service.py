@@ -150,7 +150,8 @@ class TriviaDiscountService:
                 if not self.is_duration_based(config):
                     logger.warning(f"trivia_discount_service - start_trivia_promotion - {config_id} - not duration based")
                     return False
-                config.started_at = datetime.now(timezone.utc)
+                # Usar datetime sin timezone para consistencia
+                config.started_at = datetime.utcnow()
                 session.commit()
                 logger.info(f"trivia_discount_service - start_trivia_promotion - {config_id} - started")
                 return True
@@ -169,8 +170,15 @@ class TriviaDiscountService:
                 if not config.started_at:
                     # Si no se ha iniciado, devolver la duración completa
                     return config.duration_minutes
-                now = datetime.now(timezone.utc)
-                elapsed_minutes = (now - config.started_at).total_seconds() / 60
+
+                # Usar datetime.utcnow() para comparar con started_at naive de la DB
+                now = datetime.utcnow()
+                started = config.started_at
+                if started.tzinfo:
+                    # Si started_at tiene timezone, convertir now a UTC
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+                elapsed_minutes = (now - started).total_seconds() / 60
                 remaining = max(0, int(config.duration_minutes - elapsed_minutes))
                 return remaining
             except Exception as e:
@@ -272,7 +280,12 @@ class TriviaDiscountService:
 
                 # Verificar vigencia por duración relativa
                 if config.duration_minutes and config.started_at:
-                    elapsed_minutes = (now - config.started_at).total_seconds() / 60
+                    # Usar datetime sin timezone para consistencia con la DB
+                    now_naive = datetime.utcnow()
+                    started = config.started_at
+                    if started.tzinfo:
+                        started = started.replace(tzinfo=None)
+                    elapsed_minutes = (now_naive - started).total_seconds() / 60
                     if elapsed_minutes > config.duration_minutes:
                         logger.warning(f"trivia_discount_service - generate_discount_code - {user_id} - expired by duration")
                         return None
