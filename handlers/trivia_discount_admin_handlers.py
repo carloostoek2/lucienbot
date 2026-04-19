@@ -207,67 +207,6 @@ async def create_trivia_discount_max_codes(message: Message, state: FSMContext):
         await message.answer("Por favor ingrese un número válido:")
 
 
-@router.message(TriviaDiscountStates.waiting_start_date, lambda msg: is_admin(msg.from_user.id))
-async def create_trivia_discount_dates(message: Message, state: FSMContext):
-    """Procesar fechas"""
-    text = message.text.strip().lower()
-
-    if text == "skip":
-        await state.update_data(start_date=None, end_date=None)
-    else:
-        try:
-            parts = text.split()
-            if len(parts) != 2:
-                raise ValueError("Formato inválido")
-
-            from datetime import datetime
-            start = datetime.strptime(parts[0], "%Y-%m-%d")
-            end = datetime.strptime(parts[1], "%Y-%m-%d")
-
-            await state.update_data(start_date=start, end_date=end)
-        except Exception:
-            await message.answer(
-                "Formato inválido. Envíe:\n"
-                "<code>YYYY-MM-DD YYYY-MM-DD</code>\n"
-                "o <b>skip</b> para omitir",
-                parse_mode="HTML"
-            )
-            return
-
-    # Mostrar confirmación
-    data = await state.get_data()
-
-    # Determinar tipo de promoción
-    if data.get('promotion_id'):
-        promo_service = PromotionService()
-        try:
-            promo = promo_service.get_promotion(data['promotion_id'])
-            promo_name = promo.name if promo else "Desconocida"
-        finally:
-            promo_service.close()
-        promo_info = f"🏪 {promo_name}"
-    else:
-        promo_info = f"✨ {data.get('custom_description', 'N/A')}"
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✓ Confirmar", callback_data="confirm_trivia_discount")],
-        [InlineKeyboardButton(text="✗ Cancelar", callback_data="admin_trivia_discount")]
-    ])
-
-    await message.answer(
-        f"🎩 <b>Lucien:</b>\n\n"
-        "<i>Paso 6 de 6:</i> Confirmar configuración\n\n"
-        f"📋 <b>Promoción:</b> {promo_info}\n"
-        f"💰 <b>Descuento:</b> {data['discount_percentage']}%\n"
-        f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
-        f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
-        f"📅 <b>Vigencia:</b> {data.get('start_date', 'Sin inicio')} - {data.get('end_date', 'Sin fin')}",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    await state.set_state(TriviaDiscountStates.waiting_confirmation)
-
-
 def _parse_duration(text: str) -> Optional[int]:
     """Parsea texto de duración a minutos. Formatos: 30m, 30min, 2h, 2hr, 1d, 1day"""
     text = text.strip().lower()
@@ -334,6 +273,10 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
     data = await state.get_data()
     duration_type = data.get('duration_type')
 
+    # Debug: registrar el tipo de duración
+    logger.info(f"create_trivia_discount_dates - duration_type: {duration_type}, message: {message.text}")
+
+    # Si duration_type es 'relative' o no está definido Y el mensaje parece ser duración
     if duration_type == 'relative':
         # Procesar duración relativa
         duration = _parse_duration(message.text.strip())
@@ -345,7 +288,7 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
             )
             return
         await state.update_data(start_date=None, end_date=None, duration_minutes=duration)
-    else:
+    elif duration_type == 'fixed':
         # Procesar fechas fijas
         text = message.text.strip().lower()
         if text == "skip":
@@ -369,6 +312,20 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
                     parse_mode="HTML"
                 )
                 return
+    else:
+        #duration_type no está definido - tratar como duración relativa por defecto
+        duration = _parse_duration(message.text.strip())
+        if duration and duration > 0:
+            await state.update_data(duration_type='relative', start_date=None, end_date=None, duration_minutes=duration)
+        else:
+            await message.answer(
+                "Formato inválido. Seleccione:\n"
+                "• Duración: 30m, 2h, 1d\n"
+                "• O fechas: YYYY-MM-DD YYYY-MM-DD\n"
+                "• O skip para omitir",
+                parse_mode="HTML"
+            )
+            return
 
     # Mostrar confirmación
     data = await state.get_data()
