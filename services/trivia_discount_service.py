@@ -32,6 +32,10 @@ def _generate_trivia_code() -> str:
 class TriviaDiscountService:
     """Servicio para gestionar promociones por racha de trivia"""
 
+    def close(self):
+        """Cierra el servicio (no hay recursos externos)"""
+        pass
+
     # ==================== CONFIGURACIÓN ====================
 
     def create_trivia_promotion_config(
