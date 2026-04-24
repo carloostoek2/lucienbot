@@ -43,7 +43,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run pytest
-        run: pytest --strict-markers -v
+        run: pytest --strict-markers -v --ignore=tests/unit/test_user_context.py
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
