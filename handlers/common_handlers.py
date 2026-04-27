@@ -290,7 +290,7 @@ async def coming_soon_features(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.message(F.chat.type == ChatType.PRIVATE, F.text)
+@router.message(F.chat.type == ChatType.PRIVATE, F.text, ~F.state)
 async def react_with_heart(message: Message):
     """
     Reacciona con un corazón a cada mensaje privado del usuario.
