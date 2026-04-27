@@ -667,7 +667,23 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
 
     broadcast_service = BroadcastService()
     try:
-        # Construir teclado de reacciones - todos los botones en una sola hilera
+        # Pre-crear registro en DB para obtener ID antes de enviar mensaje
+        # Esto evita la race condition donde el keyboard tiene broadcast_id=0
+        selected_emoji_ids_str = ','.join(str(eid) for eid in selected_emojis)
+        broadcast = broadcast_service.create_broadcast_message(
+            message_id=0,  # Temporal, se actualiza después
+            channel_id=channel_id,
+            admin_id=callback.from_user.id,
+            text=text,
+            has_attachment=has_attachment,
+            attachment_type=attachment_type,
+            attachment_file_id=attachment_file_id,
+            has_reactions=len(selected_emojis) > 0,
+            is_protected=is_protected,
+            selected_emoji_ids=selected_emoji_ids_str
+        )
+
+        # Construir teclado de reacciones con el ID real del broadcast
         reply_markup = None
         if selected_emojis:
             buttons = []
@@ -676,14 +692,14 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                 if emoji:
                     buttons.append(InlineKeyboardButton(
                         text=f"{emoji.emoji}",
-                        callback_data=f"react_0_{emoji.id}"  # broadcast_id se actualizará después
+                        callback_data=f"react_{broadcast.id}_{emoji.id}"  # ID real, no placeholder
                     ))
             if buttons:
-                reply_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
-        
-        # Enviar mensaje
+                reply_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])
+
+        # Enviar mensaje con el keyboard correcto desde el inicio
         protect_content = is_protected
-        
+
         if has_attachment and attachment_file_id:
             # Enviar con adjunto
             if attachment_type == "photo":
@@ -733,44 +749,9 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                 protect_content=protect_content
             )
         
-        # Registrar en base de datos
-        selected_emoji_ids_str = ','.join(str(eid) for eid in selected_emojis)
-        broadcast = broadcast_service.create_broadcast_message(
-            message_id=sent_message.message_id,
-            channel_id=channel_id,
-            admin_id=callback.from_user.id,
-            text=text,
-            has_attachment=has_attachment,
-            attachment_type=attachment_type,
-            attachment_file_id=attachment_file_id,
-            has_reactions=len(selected_emojis) > 0,
-            is_protected=is_protected,
-            selected_emoji_ids=selected_emoji_ids_str
-        )
-        
-        # Actualizar callback_data de los botones con el ID real del broadcast
-        if reply_markup and selected_emojis:
-            buttons = []
-            for emoji_id in selected_emojis:
-                emoji = broadcast_service.get_reaction_emoji(emoji_id)
-                if emoji:
-                    buttons.append(InlineKeyboardButton(
-                        text=f"{emoji.emoji}",
-                        callback_data=f"react_{broadcast.id}_{emoji.id}"
-                    ))
-            new_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
-            try:
-                await bot.edit_message_reply_markup(
-                    chat_id=channel_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=new_markup
-                )
-            except Exception as e:
-                if "message is not modified" in str(e).lower():
-                    pass  # Ignorar si no hay cambios
-                else:
-                    logger.warning(f"Error actualizando reply markup: {e}")
-        
+        # Actualizar el message_id del broadcast ya creado
+        broadcast_service.update_broadcast_message_id(broadcast.id, sent_message.message_id)
+
         try:
             await callback.message.edit_text(
                 f"""🎩 <b>Lucien:</b>

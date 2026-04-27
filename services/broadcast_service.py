@@ -125,6 +125,16 @@ class BroadcastService:
             BroadcastMessage.id == broadcast_id
         ).first()
 
+    def update_broadcast_message_id(self, broadcast_id: int, message_id: int) -> bool:
+        """Actualiza el message_id de un broadcast ya creado (para evitar race condition)"""
+        broadcast = self.get_broadcast(broadcast_id)
+        if broadcast:
+            broadcast.message_id = message_id
+            self.db.commit()
+            logger.info(f"Broadcast {broadcast_id} actualizado con message_id={message_id}")
+            return True
+        return False
+
     def get_selected_emoji_ids(self, broadcast_id: int) -> List[int]:
         """Obtiene la lista de IDs de emojis seleccionados para un broadcast"""
         broadcast = self.get_broadcast(broadcast_id)
