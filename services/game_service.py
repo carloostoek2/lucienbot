@@ -42,10 +42,6 @@ class GameService:
     _active_question_set_path = "docs/preguntas.json"
     _active_question_set_vip_path = None  # None = use default VIP questions
 
-    # Instance-level cache tracking
-    _last_loaded_path = None
-    _last_loaded_vip_path = None
-
     def _get_active_question_set_path(self) -> str:
         """Returns the file path of the currently active question set.
         Priority: manual override > promotion active > default
@@ -228,6 +224,9 @@ class GameService:
         self._trivia_discount_service = TriviaDiscountService()
         self._questions = None
         self._vip_questions = None
+        # Instance-level cache tracking - each instance tracks its own loaded path
+        self._last_loaded_path = None
+        self._last_loaded_vip_path = None
 
     def close(self):
         """Cierra la sesión de base de datos"""

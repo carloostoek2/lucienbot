@@ -246,23 +246,31 @@ async def _sync_question_sets():
     try:
         now = datetime.now(timezone.utc)
 
-        # 1. Find most recent active promotion with a question set
+        # 0. Prioridad: Verificar si hay un override manual activo
+        override_set = db.query(QuestionSet).filter(QuestionSet.is_override == True).first()
+        if override_set:
+            if GameService._active_question_set_path != override_set.file_path:
+                logger.info(f"[Scheduler] Manteniendo override manual: {override_set.name}")
+                GameService._active_question_set_path = override_set.file_path
+                GameService._active_question_set_vip_path = None
+            return
+
+        # 1. Buscar promociones activas con set de preguntas
         promotion = db.query(Promotion).filter(
             Promotion.status == PromotionStatus.ACTIVE,
             Promotion.question_set_id.isnot(None),
-            Promotion.is_active == True,
-            Promotion.start_date.isnot(None),
-            Promotion.end_date.isnot(None),
-        ).order_by(Promotion.start_date.desc()).first()
+            Promotion.is_active == True
+        ).order_by(Promotion.start_date.desc().nullslast()).first()
 
-        # 2. Filter to only those currently in their date range
+        # 2. Filter to only those currently in their date range (NULL dates = always available)
         active_promotion = None
         if promotion:
-            # Check if currently in date range
-            if promotion.start_date <= now <= promotion.end_date:
+            # NULL start_date = immediately available; NULL end_date = never expires
+            is_started = promotion.start_date is None or promotion.start_date <= now
+            is_not_expired = promotion.end_date is None or promotion.end_date >= now
+            if is_started and is_not_expired:
                 active_promotion = promotion
             else:
-                # Not currently active (date range ended or hasn't started)
                 active_promotion = None
 
         if active_promotion and active_promotion.question_set_id:
@@ -281,17 +289,7 @@ async def _sync_question_sets():
                         f"file_path={new_path}"
                     )
                     GameService._active_question_set_path = new_path
-
-                    # Clear all instance-level caches by resetting the class-level
-                    # paths - next load_trivia_questions will detect
-                    # _last_loaded_path != _active_question_set_path and reload
                     GameService._active_question_set_vip_path = None  # VIP uses default
-
-                    # Also clear any cached questions on existing instances by
-                    # resetting instance cache flags
-                    for attr_name in dir(GameService):
-                        attr = getattr(GameService, attr_name, None)
-                        # Not trying to reset instance cache here - just the class attr
 
                 # Update DB state: this QuestionSet is active, others are not
                 db.query(QuestionSet).filter(
@@ -302,8 +300,9 @@ async def _sync_question_sets():
 
                 if not question_set.is_active:
                     question_set.is_active = True
-                    db.commit()
-                    logger.info(f"[Scheduler] Set QuestionSet id={question_set.id} is_active=True")
+
+                db.commit()
+                logger.info(f"[Scheduler] QuestionSet id={question_set.id} sincronizado como activo")
             else:
                 logger.warning(
                     f"[Scheduler] Promotion id={active_promotion.id} has question_set_id="
@@ -319,6 +318,7 @@ async def _sync_question_sets():
 
     except Exception as e:
         logger.error(f"[Scheduler] Error syncing question sets: {e}")
+        db.rollback()
     finally:
         db.close()
 

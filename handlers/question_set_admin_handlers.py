@@ -219,6 +219,16 @@ async def create_question_set_file_path(message: Message, state: FSMContext):
         )
         return
 
+    from pathlib import Path
+    if not Path(file_path).exists():
+        await message.answer(
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>El archivo no parece existir en la ruta indicada.</i>\n\n"
+            "Por favor, verifique que el archivo JSON esté en el servidor e intente de nuevo:",
+            parse_mode="HTML"
+        )
+        return
+
     data = await state.get_data()
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
