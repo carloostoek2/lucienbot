@@ -1,0 +1,42 @@
+[
+  {
+    "q": "¿En qué fecha se celebra el Día Internacional del Trabajo en la mayoría de países?",
+    "opts": ["1 de Mayo", "1 de Abril", "1 de Junio", "5 de Mayo"],
+    "answer": 0
+  },
+  {
+    "q": "¿Qué significa 'Día del Trabajo' en español?",
+    "opts": ["Día de la Familia", "Día del Trabajo", "Día de la Paz", "Día del Obrero"],
+    "answer": 1
+  },
+  {
+    "q": "¿Es el 1 de Mayo un día festivo público en México?",
+    "opts": ["Sí, es día festivo oficial", "No, es día laboral", "Solo es festivo en algunos estados", "Se celebra pero no es oficial"],
+    "answer": 0
+  },
+  {
+    "q": "¿Qué evento histórico de Chicago en 1886 está relacionado con el origen del Día del Trabajo el 1 de Mayo?",
+    "opts": ["La Revolución Industrial", "La Revuelta de Haymarket", "El Gran Incendio", "La Gran Depresión"],
+    "answer": 1
+  },
+  {
+    "q": "¿Qué tipo de actividades son típicas en México durante el Día del Trabajo el 1 de Mayo?",
+    "opts": ["Desfiles militares", "Marchas y desfiles laborales", "Conciertos nocturnos", "Ferias gastronómicas"],
+    "answer": 1
+  },
+  {
+    "q": "¿Qué demandas fueron centrales en el movimiento laboral queoriginó la celebración del 1 de Mayo?",
+    "opts": ["Reducción de la jornada laboral a 8 horas", "Aumento de vacaciones", "Mejor alimentación en fábricas", "Pensiones anticipadas"],
+    "answer": 0
+  },
+  {
+    "q": "¿En qué año se conmemó por primera vez el Día Internacional del Trabajo el 1 de Mayo?",
+    "opts": ["1889", "1890", "1910", "1920"],
+    "answer": 1
+  },
+  {
+    "q": "¿Qué país europeo fue escenario de los eventos de la Revuelta de Haymarket que inspiraron el Día del Trabajo?",
+    "opts": ["Francia", "Inglaterra", "Estados Unidos", "Alemania"],
+    "answer": 2
+  }
+]
