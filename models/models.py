@@ -712,6 +712,21 @@ class OrderItem(Base):
 # FASE 5: PROMOCIONES Y SISTEMA "ME INTERESA"
 # ============================================================
 
+class QuestionSet(Base):
+    """Sets temáticos de preguntas de trivia"""
+    __tablename__ = "question_sets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, unique=True)
+    file_path = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=False)
+    is_override = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    promotions = relationship("Promotion", back_populates="question_set")
+
+
 class PromotionStatus(str, enum.Enum):
     """Estados de una promoción"""
     ACTIVE = "active"       # Activa y visible
@@ -751,6 +766,7 @@ class Promotion(Base):
 
     # Relaciones
     package = relationship("Package")
+    question_set = relationship("QuestionSet", back_populates="promotions")
     interests = relationship("PromotionInterest", back_populates="promotion", cascade="all, delete-orphan")
     trivia_promotion_configs = relationship("TriviaPromotionConfig", back_populates="promotion", cascade="all, delete-orphan")
 
