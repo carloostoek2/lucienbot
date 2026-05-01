@@ -49,3 +49,4 @@ ENV/
 # Sistema operativo
 .DS_Store
 Thumbs.db
+.worktrees/
