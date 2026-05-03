@@ -1164,8 +1164,10 @@ class TriviaPromotionConfig(Base):
     max_reset_cycles = Column(Integer, nullable=True)
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    question_set_id = Column(Integer, ForeignKey("question_sets.id"), nullable=True)
 
     promotion = relationship("Promotion", back_populates="trivia_promotion_configs")
+    question_set = relationship("QuestionSet")
     discount_codes = relationship("DiscountCode", back_populates="config", cascade="all, delete-orphan")
 
 

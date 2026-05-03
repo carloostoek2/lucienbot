@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 class QuestionSetService:
     """Servicio para gestionar sets de preguntas de trivia"""
 
+    def __init__(self, db=None):
+        """Acepta db opcional para compatibilidad con get_service"""
+        pass
+
     def close(self):
         """Cierra el servicio (no hay recursos externos)"""
         pass

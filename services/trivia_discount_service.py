@@ -15,7 +15,8 @@ from models.models import (
     TriviaPromotionConfig,
     DiscountCode,
     DiscountCodeStatus,
-    Promotion
+    Promotion,
+    QuestionSet
 )
 from models.database import SessionLocal
 
@@ -51,7 +52,8 @@ class TriviaDiscountService:
         custom_description: Optional[str] = None,
         duration_minutes: Optional[int] = None,
         auto_reset_enabled: bool = False,
-        max_reset_cycles: Optional[int] = None
+        max_reset_cycles: Optional[int] = None,
+        question_set_id: Optional[int] = None
     ) -> Optional[TriviaPromotionConfig]:
         """Crea configuración de promoción por racha"""
         with SessionLocal() as session:
@@ -68,7 +70,8 @@ class TriviaDiscountService:
                     duration_minutes=duration_minutes,
                     auto_reset_enabled=auto_reset_enabled,
                     max_reset_cycles=max_reset_cycles,
-                    created_by=created_by
+                    created_by=created_by,
+                    question_set_id=question_set_id
                 )
                 session.add(config)
                 session.commit()
@@ -84,7 +87,8 @@ class TriviaDiscountService:
         """Obtiene configuración por ID"""
         with SessionLocal() as session:
             config = session.query(TriviaPromotionConfig).options(
-                joinedload(TriviaPromotionConfig.promotion)
+                joinedload(TriviaPromotionConfig.promotion),
+                joinedload(TriviaPromotionConfig.question_set)
             ).filter(TriviaPromotionConfig.id == config_id).first()
             logger.info(f"trivia_discount_service - get_trivia_promotion_config - {config_id} - {'found' if config else 'not_found'}")
             return config
@@ -93,7 +97,8 @@ class TriviaDiscountService:
         """Obtiene todas las configuraciones activas"""
         with SessionLocal() as session:
             configs = session.query(TriviaPromotionConfig).options(
-                joinedload(TriviaPromotionConfig.promotion)
+                joinedload(TriviaPromotionConfig.promotion),
+                joinedload(TriviaPromotionConfig.question_set)
             ).filter(
                 TriviaPromotionConfig.is_active == True
             ).all()

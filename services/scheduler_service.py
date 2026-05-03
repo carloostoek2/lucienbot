@@ -231,15 +231,32 @@ async def _process_expired_subscriptions():
         db.close()
 
 
+def _is_config_active(config, now: datetime) -> bool:
+    """Verifica si una TriviaPromotionConfig está actualmente activa."""
+    if not config.is_active:
+        return False
+    # Duración relativa: usar started_at + duration_minutes
+    if config.duration_minutes and config.started_at:
+        from datetime import timedelta
+        elapsed = now - config.started_at
+        return elapsed.total_seconds() < (config.duration_minutes * 60)
+    # Duración fija: verificar start_date <= now <= end_date
+    is_started = config.start_date is None or config.start_date <= now
+    is_not_expired = config.end_date is None or config.end_date >= now
+    return is_started and is_not_expired
+
+
 async def _sync_question_sets():
     """Sincroniza el question set activo basándose en promociones activas.
 
-    Busca la promoción activa más reciente con question_set_id asignado,
-    actualiza GameService._active_question_set_path y limpia el caché de
-    instancias existentes para forzar recarga.
+    Prioridad:
+    1. Override manual (is_override=True en QuestionSet)
+    2. TriviaPromotionConfig activa con question_set_id
+    3. Promotion activa con question_set_id
+    4. Default (docs/preguntas.json)
     """
     from datetime import datetime, timezone
-    from models.models import Promotion, PromotionStatus, QuestionSet
+    from models.models import Promotion, PromotionStatus, QuestionSet, TriviaPromotionConfig
     from services.game_service import GameService
 
     db = SessionLocal()
@@ -255,33 +272,62 @@ async def _sync_question_sets():
                 GameService._active_question_set_vip_path = None
             return
 
-        # 1. Buscar promociones activas con set de preguntas
+        # 1. TriviaPromotionConfig activa con question_set_id (PRIORIDAD 2)
+        trivia_config = db.query(TriviaPromotionConfig).filter(
+            TriviaPromotionConfig.is_active == True,
+            TriviaPromotionConfig.question_set_id.isnot(None)
+        ).order_by(TriviaPromotionConfig.started_at.desc().nullslast()).first()
+
+        active_trivia_config = None
+        if trivia_config and _is_config_active(trivia_config, now):
+            active_trivia_config = trivia_config
+
+        if active_trivia_config and active_trivia_config.question_set_id:
+            question_set = db.query(QuestionSet).filter(
+                QuestionSet.id == active_trivia_config.question_set_id
+            ).first()
+            if question_set:
+                new_path = question_set.file_path
+                old_path = GameService._active_question_set_path
+                if old_path != new_path:
+                    logger.info(
+                        f"[Scheduler] Activating question set from trivia_config "
+                        f"id={active_trivia_config.id} '{active_trivia_config.name}': "
+                        f"file_path={new_path}"
+                    )
+                    GameService._active_question_set_path = new_path
+                    GameService._active_question_set_vip_path = None
+                db.query(QuestionSet).filter(
+                    QuestionSet.id != question_set.id,
+                    QuestionSet.is_active == True,
+                    QuestionSet.is_override == False
+                ).update({QuestionSet.is_active: False})
+                if not question_set.is_active:
+                    question_set.is_active = True
+                db.commit()
+                return
+
+        # 2. Promotion activa con question_set_id (PRIORIDAD 3)
         promotion = db.query(Promotion).filter(
             Promotion.status == PromotionStatus.ACTIVE,
             Promotion.question_set_id.isnot(None),
             Promotion.is_active == True
         ).order_by(Promotion.start_date.desc().nullslast()).first()
 
-        # 2. Filter to only those currently in their date range (NULL dates = always available)
         active_promotion = None
         if promotion:
-            # NULL start_date = immediately available; NULL end_date = never expires
             is_started = promotion.start_date is None or promotion.start_date <= now
             is_not_expired = promotion.end_date is None or promotion.end_date >= now
             if is_started and is_not_expired:
                 active_promotion = promotion
-            else:
-                active_promotion = None
 
         if active_promotion and active_promotion.question_set_id:
             question_set = db.query(QuestionSet).filter(
                 QuestionSet.id == active_promotion.question_set_id
             ).first()
-
             if question_set:
                 new_path = question_set.file_path
                 old_path = GameService._active_question_set_path
-
                 if old_path != new_path:
                     logger.info(
                         f"[Scheduler] Activating question set from promotion "
@@ -289,32 +335,23 @@ async def _sync_question_sets():
                         f"file_path={new_path}"
                     )
                     GameService._active_question_set_path = new_path
-                    GameService._active_question_set_vip_path = None  # VIP uses default
-
-                # Update DB state: this QuestionSet is active, others are not
+                    GameService._active_question_set_vip_path = None
                 db.query(QuestionSet).filter(
                     QuestionSet.id != question_set.id,
                     QuestionSet.is_active == True,
                     QuestionSet.is_override == False
                 ).update({QuestionSet.is_active: False})
-
                 if not question_set.is_active:
                     question_set.is_active = True
-
                 db.commit()
-                logger.info(f"[Scheduler] QuestionSet id={question_set.id} sincronizado como activo")
-            else:
-                logger.warning(
-                    f"[Scheduler] Promotion id={active_promotion.id} has question_set_id="
-                    f"{active_promotion.question_set_id} but QuestionSet not found"
-                )
-        else:
-            # No active promotion - reset to default
-            default_path = "docs/preguntas.json"
-            if GameService._active_question_set_path != default_path:
-                logger.info("[Scheduler] No active promotion, resetting question set to default")
-                GameService._active_question_set_path = default_path
-                GameService._active_question_set_vip_path = None
+                return
+
+        # 3. No hay override - reset a default
+        default_path = "docs/preguntas.json"
+        if GameService._active_question_set_path != default_path:
+            logger.info("[Scheduler] No active promotion, resetting question set to default")
+            GameService._active_question_set_path = default_path
+            GameService._active_question_set_vip_path = None
 
     except Exception as e:
         logger.error(f"[Scheduler] Error syncing question sets: {e}")
