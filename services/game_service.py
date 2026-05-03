@@ -38,6 +38,21 @@ class GameService:
     # Límites trivia VIP
     DAILY_TRIVIA_VIP_LIMIT = 5
 
+    # Class-level cache for active question set path (updated by scheduler)
+    _active_question_set_path = "docs/preguntas.json"
+    _active_question_set_vip_path = None  # None = use default VIP questions
+
+    def _get_active_question_set_path(self) -> str:
+        """Returns the file path of the currently active question set.
+        Priority: manual override > promotion active > default
+        Updated by scheduler job, cached here for synchronous access.
+        """
+        return self._active_question_set_path
+
+    def _get_active_question_set_vip_path(self) -> Optional[str]:
+        """Returns optional VIP themed question set path, or None for default."""
+        return self._active_question_set_vip_path
+
     # ==================== TEMPLATES DE COPY ====================
 
     MENU_TEMPLATES = {
@@ -209,6 +224,9 @@ class GameService:
         self._trivia_discount_service = TriviaDiscountService()
         self._questions = None
         self._vip_questions = None
+        # Instance-level cache tracking - each instance tracks its own loaded path
+        self._last_loaded_path = None
+        self._last_loaded_vip_path = None
 
     def close(self):
         """Cierra la sesión de base de datos"""
@@ -579,13 +597,14 @@ class GameService:
         }
 
     def load_trivia_questions(self) -> list:
-        """Carga preguntas de docs/preguntas.json"""
-        if self._questions is not None:
+        """Carga preguntas del question set activo"""
+        active_path = self._get_active_question_set_path()
+        if self._questions is not None and getattr(self, '_last_loaded_path', None) == active_path:
             return self._questions
 
-        questions_path = Path("docs/preguntas.json")
+        questions_path = Path(active_path)
         if not questions_path.exists():
-            logger.warning("Questions file not found: docs/preguntas.json")
+            logger.warning(f"Questions file not found: {active_path}")
             return []
 
         try:
@@ -596,6 +615,7 @@ class GameService:
             logger.error(f"Error loading trivia questions: {e}")
             self._questions = []
 
+        self._last_loaded_path = active_path
         return self._questions
 
     def get_random_question(self) -> Tuple[Optional[dict], int]:
@@ -873,13 +893,14 @@ class GameService:
         return True, played, limit, None
 
     def load_trivia_vip_questions(self) -> list:
-        """Carga preguntas VIP de docs/preguntas_vip.json"""
-        if self._vip_questions is not None:
+        """Carga preguntas VIP del question set activo"""
+        active_path = self._get_active_question_set_vip_path() or "docs/preguntas_vip.json"
+        if self._vip_questions is not None and getattr(self, '_last_loaded_vip_path', None) == active_path:
             return self._vip_questions
 
-        questions_path = Path("docs/preguntas_vip.json")
+        questions_path = Path(active_path)
         if not questions_path.exists():
-            logger.warning("VIP Questions file not found: docs/preguntas_vip.json")
+            logger.warning(f"VIP Questions file not found: {active_path}")
             return []
 
         try:
@@ -890,6 +911,7 @@ class GameService:
             logger.error(f"Error loading VIP trivia questions: {e}")
             self._vip_questions = []
 
+        self._last_loaded_vip_path = active_path
         return self._vip_questions
 
     def get_random_vip_question(self) -> Tuple[Optional[dict], int]:

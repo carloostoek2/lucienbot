@@ -14,6 +14,7 @@ from services import get_service
 from services.promotion_service import PromotionService
 from services import get_service
 from services.package_service import PackageService
+from services.question_set_service import QuestionSetService
 from models.models import PromotionStatus, InterestStatus
 from datetime import datetime
 import logging
@@ -31,6 +32,7 @@ class PromotionWizardStates(StatesGroup):
     waiting_manual_files = State()  # Nuevo: ingresar número manual
     waiting_price = State()
     waiting_dates = State()
+    waiting_question_set = State()  # Opcional: asociar QuestionSet
     confirming = State()
 
 
@@ -285,7 +287,7 @@ async def process_promotion_price(message: Message, state: FSMContext):
 async def promotion_no_dates(callback: CallbackQuery, state: FSMContext):
     """Sin fechas de vigencia - Voz de Lucien"""
     await state.update_data(start_date=None, end_date=None)
-    await show_promotion_confirmation(callback, state)
+    await show_question_set_selection(callback, state)
     await callback.answer()
 
 
@@ -307,7 +309,7 @@ async def process_promotion_dates(message: Message, state: FSMContext):
                 end_date = datetime.strptime(date_str, '%Y-%m-%d')
 
         await state.update_data(start_date=start_date, end_date=end_date)
-        await show_promotion_confirmation(message, state)
+        await show_question_set_selection(message, state)
     except ValueError:
         await message.answer(
             "Formato incorrecto. Use:\n\n"
@@ -315,6 +317,63 @@ async def process_promotion_dates(message: Message, state: FSMContext):
             "<code>FIN: YYYY-MM-DD</code>",
             parse_mode=ParseMode.HTML
         )
+
+
+async def show_question_set_selection(target, state: FSMContext):
+    """Muestra seleccion de QuestionSet (opcional) - Voz de Lucien"""
+    with get_service(QuestionSetService) as question_set_service:
+        sets = question_set_service.get_all_sets()
+
+    buttons = []
+    for qs in sets:
+        status = "✅" if qs.is_active else "❌"
+        buttons.append([InlineKeyboardButton(
+            text=f"{status} {qs.name}",
+            callback_data=f"select_qs_promo_{qs.id}"
+        )])
+
+    buttons.append([InlineKeyboardButton(
+        text="No asociar",
+        callback_data="skip_qs_promo"
+    )])
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")])
+
+    text = ("🎩 <b>Lucien:</b>\n\n"
+            "<b>Paso opcional:</b> Asociar un set de preguntas\n\n"
+            "Si lo desea, puede vincular una trivia temática a esta experiencia. "
+            "Los visitantes que adquieran la experiencia podrán participar en la trivia.\n\n"
+            "<i>Seleccione un set o elija 'No asociar' para omitir:</i>")
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+    else:
+        await target.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+
+    await state.set_state(PromotionWizardStates.waiting_question_set)
+
+
+@router.callback_query(PromotionWizardStates.waiting_question_set, F.data == "skip_qs_promo")
+async def skip_question_set(callback: CallbackQuery, state: FSMContext):
+    """Omite la asociacion de QuestionSet - Voz de Lucien"""
+    await state.update_data(question_set_id=None)
+    await show_promotion_confirmation(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(PromotionWizardStates.waiting_question_set, F.data.startswith("select_qs_promo_"))
+async def select_question_set(callback: CallbackQuery, state: FSMContext):
+    """Selecciona QuestionSet para la promocion - Voz de Lucien"""
+    try:
+        qs_id = int(callback.data.replace("select_qs_promo_", ""))
+    except ValueError:
+        await callback.answer("ID invalido", show_alert=True)
+        return
+
+    await state.update_data(question_set_id=qs_id)
+    await show_promotion_confirmation(callback, state)
+    await callback.answer()
 
 
 async def show_promotion_confirmation(target, state: FSMContext):
@@ -328,6 +387,7 @@ async def show_promotion_confirmation(target, state: FSMContext):
     end_date = data.get('end_date')
     manual_file_count = data.get('manual_file_count')
     package_id = data.get('package_id')
+    question_set_id = data.get('question_set_id')
 
     price_display = f"${price_mxn // 100:,}.00 MXN"
 
@@ -382,7 +442,8 @@ async def confirm_create_promotion(callback: CallbackQuery, state: FSMContext):
                     price_mxn=data.get('price_mxn'),
                     created_by=callback.from_user.id,
                     start_date=data.get('start_date'),
-                    end_date=data.get('end_date')
+                    end_date=data.get('end_date'),
+                    question_set_id=data.get('question_set_id')
                 )
 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[

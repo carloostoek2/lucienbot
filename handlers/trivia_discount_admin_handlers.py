@@ -11,6 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from typing import Optional
 from services.trivia_discount_service import TriviaDiscountService
 from services.promotion_service import PromotionService
+from services.question_set_service import QuestionSetService
 from services.user_service import UserService
 from models.models import DiscountCodeStatus
 from handlers.admin_handlers import is_admin
@@ -33,6 +34,7 @@ class TriviaDiscountStates(StatesGroup):
     waiting_duration = State()
     waiting_auto_reset = State()
     waiting_reset_cycles = State()
+    waiting_question_set = State()
     waiting_confirmation = State()
     waiting_extend_duration = State()
 
@@ -351,59 +353,9 @@ async def create_trivia_discount_dates(message: Message, state: FSMContext):
         await state.set_state(TriviaDiscountStates.waiting_auto_reset)
         return
 
-    # Si no es duración relativa, ir directo a confirmación
+    # Si no es duración relativa, ir directo a selección de question set
     await state.update_data(auto_reset_enabled=False, max_reset_cycles=None)
-    if data.get('promotion_id'):
-        promo_service = PromotionService()
-        try:
-            promo = promo_service.get_promotion(data['promotion_id'])
-            promo_name = promo.name if promo else "Desconocida"
-        finally:
-            promo_service.close()
-        promo_info = f"🏪 {promo_name}"
-    else:
-        promo_info = f"✨ {data.get('custom_description', 'N/A')}"
-
-    # Construir info de vigencia
-    duration_type = data.get('duration_type')
-    if duration_type == 'relative':
-        duration_val = data.get('duration_minutes', 0)
-        if duration_val >= 1440:
-            days = duration_val // 1440
-            vigencia = f"⏰ {days} día(s)"
-        elif duration_val >= 60:
-            hours = duration_val // 60
-            mins = duration_val % 60
-            vigencia = f"⏰ {hours}h {mins}min" if mins > 0 else f"⏰ {hours} horas"
-        else:
-            vigencia = f"⏰ {duration_val} minutos"
-    else:
-        start = data.get('start_date')
-        end = data.get('end_date')
-        if start and end:
-            vigencia = f"📅 {start.strftime('%Y-%m-%d')} - {end.strftime('%Y-%m-%d')}"
-        elif start:
-            vigencia = f"📅 Desde {start.strftime('%Y-%m-%d')}"
-        else:
-            vigencia = "📅 Sin límite"
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✓ Confirmar", callback_data="confirm_trivia_discount")],
-        [InlineKeyboardButton(text="✗ Cancelar", callback_data="admin_trivia_discount")]
-    ])
-
-    await message.answer(
-        f"🎩 <b>Lucien:</b>\n\n"
-        "<i>Paso 6 de 6:</i> Confirmar configuración\n\n"
-        f"📋 <b>Promoción:</b> {promo_info}\n"
-        f"💰 <b>Descuento:</b> {data['discount_percentage']}%\n"
-        f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
-        f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
-        f"⏱️ <b>Vigencia:</b> {vigencia}",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    await state.set_state(TriviaDiscountStates.waiting_confirmation)
+    await show_question_set_selection(message, state)
 
 
 # ==================== REINICIO AUTOMÁTICO ====================
@@ -432,9 +384,7 @@ async def auto_reset_yes(callback: CallbackQuery, state: FSMContext):
 async def auto_reset_no(callback: CallbackQuery, state: FSMContext):
     """Usuario eligió NO habilitar reinicio automático"""
     await state.update_data(auto_reset_enabled=False, max_reset_cycles=None)
-
-    # Ir directo a confirmación
-    await show_confirmation(callback.message, state)
+    await show_question_set_selection(callback.message, state)
     await callback.answer()
 
 
@@ -447,11 +397,57 @@ async def process_reset_cycles(message: Message, state: FSMContext):
             await message.answer("El número de ciclos debe ser al menos 1. Intente de nuevo:")
             return
         await state.update_data(max_reset_cycles=cycles)
-
-        # Ir a confirmación
-        await show_confirmation(message, state)
+        await show_question_set_selection(message, state)
     except ValueError:
         await message.answer("Por favor ingrese un número válido:")
+
+
+async def show_question_set_selection(message: Message, state: FSMContext):
+    """Muestra la pantalla de selección de QuestionSet"""
+    qs_service = QuestionSetService()
+    sets = qs_service.get_all_sets()
+    qs_service.close()
+
+    keyboard_buttons = []
+    if sets:
+        for s in sets:
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"📚 {s.name}",
+                    callback_data=f"select_qs_{s.id}"
+                )
+            ])
+    keyboard_buttons.append([
+        InlineKeyboardButton(
+            text="🔄 Ninguno (usar default)",
+            callback_data="select_qs_none"
+    )])
+    keyboard_buttons.append([
+        InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")
+    ])
+
+    await message.answer(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Pregunta adicional:</i> Seleccione el set de preguntas de trivia\n\n"
+        "📚 <b>Set temático:</b> Las preguntas de trivia serán de este tema durante la promoción\n"
+        "🔄 <b>Ninguno:</b> Usará las preguntas por defecto",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_buttons),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_question_set)
+
+
+@router.callback_query(F.data.startswith("select_qs_"), lambda cb: is_admin(cb.from_user.id))
+async def select_question_set(callback: CallbackQuery, state: FSMContext):
+    """Procesar selección de QuestionSet"""
+    data = callback.data.replace("select_qs_", "")
+    if data == "none":
+        await state.update_data(question_set_id=None)
+    else:
+        qs_id = int(data)
+        await state.update_data(question_set_id=qs_id)
+    await show_confirmation(callback.message, state)
+    await callback.answer()
 
 
 async def show_confirmation(message: Message, state: FSMContext):
@@ -501,6 +497,16 @@ async def show_confirmation(message: Message, state: FSMContext):
     else:
         reset_info = "❌ Desactivado"
 
+    # Info de question set
+    qs_id = data.get('question_set_id')
+    if qs_id:
+        qs_service = QuestionSetService()
+        qs = qs_service.get_set_by_id(qs_id)
+        qs_service.close()
+        qs_info = f"📚 {qs.name}" if qs else f"📚 ID:{qs_id}"
+    else:
+        qs_info = "🔄 Default"
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✓ Confirmar", callback_data="confirm_trivia_discount")],
         [InlineKeyboardButton(text="✗ Cancelar", callback_data="admin_trivia_discount")]
@@ -508,13 +514,14 @@ async def show_confirmation(message: Message, state: FSMContext):
 
     await message.answer(
         f"🎩 <b>Lucien:</b>\n\n"
-        "<i>Paso 6 de 6:</i> Confirmar configuración\n\n"
+        "<i>Paso 7 de 7:</i> Confirmar configuración\n\n"
         f"📋 <b>Promoción:</b> {promo_info}\n"
         f"💰 <b>Descuento:</b> {data['discount_percentage']}%\n"
         f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
         f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
         f"⏱️ <b>Vigencia:</b> {vigencia}\n"
-        f"🔁 <b>Reinicio auto:</b> {reset_info}",
+        f"🔁 <b>Reinicio auto:</b> {reset_info}\n"
+        f"📚 <b>Set de trivia:</b> {qs_info}",
         reply_markup=keyboard,
         parse_mode="HTML"
     )
@@ -623,7 +630,8 @@ async def create_trivia_discount_confirm(callback: CallbackQuery, state: FSMCont
         custom_description=data.get('custom_description'),
         duration_minutes=data.get('duration_minutes'),
         auto_reset_enabled=data.get('auto_reset_enabled', False),
-        max_reset_cycles=data.get('max_reset_cycles')
+        max_reset_cycles=data.get('max_reset_cycles'),
+        question_set_id=data.get('question_set_id')
     )
 
     if config:

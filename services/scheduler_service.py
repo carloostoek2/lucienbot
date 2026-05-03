@@ -231,6 +231,135 @@ async def _process_expired_subscriptions():
         db.close()
 
 
+def _is_config_active(config, now: datetime) -> bool:
+    """Verifica si una TriviaPromotionConfig está actualmente activa."""
+    if not config.is_active:
+        return False
+    # Duración relativa: usar started_at + duration_minutes
+    if config.duration_minutes and config.started_at:
+        from datetime import timedelta
+        elapsed = now - config.started_at
+        return elapsed.total_seconds() < (config.duration_minutes * 60)
+    # Duración fija: verificar start_date <= now <= end_date
+    is_started = config.start_date is None or config.start_date <= now
+    is_not_expired = config.end_date is None or config.end_date >= now
+    return is_started and is_not_expired
+
+
+async def _sync_question_sets():
+    """Sincroniza el question set activo basándose en promociones activas.
+
+    Prioridad:
+    1. Override manual (is_override=True en QuestionSet)
+    2. TriviaPromotionConfig activa con question_set_id
+    3. Promotion activa con question_set_id
+    4. Default (docs/preguntas.json)
+    """
+    from datetime import datetime, timezone
+    from models.models import Promotion, PromotionStatus, QuestionSet, TriviaPromotionConfig
+    from services.game_service import GameService
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # 0. Prioridad: Verificar si hay un override manual activo
+        override_set = db.query(QuestionSet).filter(QuestionSet.is_override == True).first()
+        if override_set:
+            if GameService._active_question_set_path != override_set.file_path:
+                logger.info(f"[Scheduler] Manteniendo override manual: {override_set.name}")
+                GameService._active_question_set_path = override_set.file_path
+                GameService._active_question_set_vip_path = None
+            return
+
+        # 1. TriviaPromotionConfig activa con question_set_id (PRIORIDAD 2)
+        trivia_config = db.query(TriviaPromotionConfig).filter(
+            TriviaPromotionConfig.is_active == True,
+            TriviaPromotionConfig.question_set_id.isnot(None)
+        ).order_by(TriviaPromotionConfig.started_at.desc().nullslast()).first()
+
+        active_trivia_config = None
+        if trivia_config and _is_config_active(trivia_config, now):
+            active_trivia_config = trivia_config
+
+        if active_trivia_config and active_trivia_config.question_set_id:
+            question_set = db.query(QuestionSet).filter(
+                QuestionSet.id == active_trivia_config.question_set_id
+            ).first()
+            if question_set:
+                new_path = question_set.file_path
+                old_path = GameService._active_question_set_path
+                if old_path != new_path:
+                    logger.info(
+                        f"[Scheduler] Activating question set from trivia_config "
+                        f"id={active_trivia_config.id} '{active_trivia_config.name}': "
+                        f"file_path={new_path}"
+                    )
+                    GameService._active_question_set_path = new_path
+                    GameService._active_question_set_vip_path = None
+                db.query(QuestionSet).filter(
+                    QuestionSet.id != question_set.id,
+                    QuestionSet.is_active == True,
+                    QuestionSet.is_override == False
+                ).update({QuestionSet.is_active: False})
+                if not question_set.is_active:
+                    question_set.is_active = True
+                db.commit()
+                return
+
+        # 2. Promotion activa con question_set_id (PRIORIDAD 3)
+        promotion = db.query(Promotion).filter(
+            Promotion.status == PromotionStatus.ACTIVE,
+            Promotion.question_set_id.isnot(None),
+            Promotion.is_active == True
+        ).order_by(Promotion.start_date.desc().nullslast()).first()
+
+        active_promotion = None
+        if promotion:
+            is_started = promotion.start_date is None or promotion.start_date <= now
+            is_not_expired = promotion.end_date is None or promotion.end_date >= now
+            if is_started and is_not_expired:
+                active_promotion = promotion
+
+        if active_promotion and active_promotion.question_set_id:
+            question_set = db.query(QuestionSet).filter(
+                QuestionSet.id == active_promotion.question_set_id
+            ).first()
+            if question_set:
+                new_path = question_set.file_path
+                old_path = GameService._active_question_set_path
+                if old_path != new_path:
+                    logger.info(
+                        f"[Scheduler] Activating question set from promotion "
+                        f"id={active_promotion.id} '{active_promotion.name}': "
+                        f"file_path={new_path}"
+                    )
+                    GameService._active_question_set_path = new_path
+                    GameService._active_question_set_vip_path = None
+                db.query(QuestionSet).filter(
+                    QuestionSet.id != question_set.id,
+                    QuestionSet.is_active == True,
+                    QuestionSet.is_override == False
+                ).update({QuestionSet.is_active: False})
+                if not question_set.is_active:
+                    question_set.is_active = True
+                db.commit()
+                return
+
+        # 3. No hay override - reset a default
+        default_path = "docs/preguntas.json"
+        if GameService._active_question_set_path != default_path:
+            logger.info("[Scheduler] No active promotion, resetting question set to default")
+            GameService._active_question_set_path = default_path
+            GameService._active_question_set_vip_path = None
+
+    except Exception as e:
+        logger.error(f"[Scheduler] Error syncing question sets: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SchedulerService — solo maneja el ciclo de vida de APScheduler
 # ─────────────────────────────────────────────────────────────────────────────
@@ -303,6 +432,13 @@ class SchedulerService:
             hour=3, minute=0,
             id="daily_backup",
             name="Daily database backup",
+            replace_existing=True,
+        )
+        self._scheduler.add_job(
+            _sync_question_sets,
+            trigger=IntervalTrigger(minutes=1),
+            id="sync_question_sets",
+            name="Sync active question set from promotions",
             replace_existing=True,
         )
 

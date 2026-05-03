@@ -103,6 +103,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin_gamification"
         )],
         [InlineKeyboardButton(
+            text="🎯 Sets de Preguntas",
+            callback_data="admin_question_sets"
+        )],
+        [InlineKeyboardButton(
             text="✨ Promociones comerciales",
             callback_data="admin_promotions"
         )],

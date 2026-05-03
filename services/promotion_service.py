@@ -7,7 +7,7 @@ y el sistema de "Me Interesa" para notificar a administradores.
 from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import desc, asc, and_
 from models.models import (
     Promotion, PromotionStatus, PromotionInterest, InterestStatus,
     BlockedPromotionUser, Package
@@ -42,7 +42,8 @@ class PromotionService:
     def create_promotion(self, name: str, description: str, package_id: int = None,
                          manual_file_count: int = None, price_mxn: int = None,
                          created_by: int = None, start_date: datetime = None,
-                         end_date: datetime = None) -> Promotion:
+                         end_date: datetime = None,
+                         question_set_id: int = None) -> Promotion:
         """
         Crea una nueva promocion comercial.
 
@@ -55,6 +56,7 @@ class PromotionService:
             created_by: ID del admin que crea la promocion
             start_date: Fecha de inicio (None = inmediato)
             end_date: Fecha de expiracion (None = sin expiracion)
+            question_set_id: ID del QuestionSet asociado (opcional)
         """
         db = self._get_db()
         promotion = Promotion(
@@ -67,7 +69,8 @@ class PromotionService:
             start_date=start_date,
             end_date=end_date,
             status=PromotionStatus.ACTIVE,
-            is_active=True
+            is_active=True,
+            question_set_id=question_set_id
         )
         db.add(promotion)
         db.commit()
@@ -128,7 +131,8 @@ class PromotionService:
             return False
 
         allowed_fields = ['name', 'description', 'price_mxn', 'status',
-                         'start_date', 'end_date', 'is_active', 'manual_file_count']
+                         'start_date', 'end_date', 'is_active', 'manual_file_count',
+                         'question_set_id']
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(promotion, field):
                 setattr(promotion, field, value)
