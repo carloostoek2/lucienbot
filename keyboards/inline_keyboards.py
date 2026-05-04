@@ -497,3 +497,30 @@ def discount_claim_keyboard(code: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔙 Volver al menú", callback_data="game_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def streak_choice_keyboard(current_discount: int, next_discount: int = None) -> InlineKeyboardMarkup:
+    """Teclado para elegir entre retirarse o continuar en racha de trivia"""
+    buttons = [
+        [InlineKeyboardButton(
+            text=f"💰 Retirarse ({current_discount}% descuento)",
+            callback_data="streak_retire"
+        )],
+        [InlineKeyboardButton(
+            text="🎯 Continuar (buscar mayor descuento)",
+            callback_data="streak_continue"
+        )]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def streak_final_keyboard() -> InlineKeyboardMarkup:
+    """Teclado para cuando el usuario gana 100% - solo confirmar"""
+    buttons = [
+        [InlineKeyboardButton(
+            text="🏆 ¡100% GRATIS!",
+            callback_data="streak_final_win"
+        )],
+        [InlineKeyboardButton(text="🔙 Volver al menú", callback_data="game_menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

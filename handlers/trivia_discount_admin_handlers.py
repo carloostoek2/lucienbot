@@ -28,6 +28,8 @@ class TriviaDiscountStates(StatesGroup):
     waiting_custom_description = State()
     waiting_discount_percentage = State()
     waiting_required_streak = State()
+    waiting_tier_mode = State()          # Nuevo: single o multi tier
+    waiting_discount_tiers = State()     # Nuevo: JSON de tiers
     waiting_max_codes = State()
     waiting_start_date = State()
     waiting_end_date = State()
@@ -46,7 +48,11 @@ async def admin_trivia_discount_menu(callback: CallbackQuery):
     """Menú principal de gestión de promociones por racha"""
     service = TriviaDiscountService()
     try:
-        configs = service.get_active_trivia_promotion_configs()
+        all_configs = service.get_all_trivia_promotion_configs()
+        active = [c for c in all_configs if c.status == 'active']
+        paused = [c for c in all_configs if c.status == 'paused']
+        expired = [c for c in all_configs if c.status == 'expired']
+        completed = [c for c in all_configs if c.status == 'completed']
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
@@ -55,13 +61,27 @@ async def admin_trivia_discount_menu(callback: CallbackQuery):
             )]
         ])
 
-        if configs:
+        # Mostrar todas las categorías con conteos
+        if all_configs:
+            status_lines = []
+            if active:
+                status_lines.append(f"✅ Activas: {len(active)}")
+            if paused:
+                status_lines.append(f"⏸️ Pausadas: {len(paused)}")
+            if expired:
+                status_lines.append(f"🔚 Terminadas: {len(expired)}")
+            if completed:
+                status_lines.append(f"📭 Completadas: {len(completed)}")
+
+            status_text = "\n".join(status_lines)
             keyboard.inline_keyboard.append([
                 InlineKeyboardButton(
-                    text="📋 Ver promociones activas",
+                    text="📋 Ver todas las promociones",
                     callback_data="view_trivia_discounts"
                 )
             ])
+        else:
+            status_text = "\n<i>No hay configuraciones creadas.</i>"
 
         keyboard.inline_keyboard.append([
             InlineKeyboardButton(
@@ -73,7 +93,7 @@ async def admin_trivia_discount_menu(callback: CallbackQuery):
         await callback.message.edit_text(
             "🎩 <b>Lucien:</b>\n\n"
             "<i>Las recompensas que el conocimiento merece...</i>\n\n"
-            f"Promociones activas: {len(configs)}\n\n"
+            f"{status_text}\n\n"
             "Configure promociones que se desbloquean al alcanzar rachas en trivia.",
             reply_markup=keyboard,
             parse_mode="HTML"
@@ -156,7 +176,7 @@ async def create_trivia_discount_percentage(message: Message, state: FSMContext)
 
 @router.message(TriviaDiscountStates.waiting_required_streak, lambda msg: is_admin(msg.from_user.id))
 async def create_trivia_discount_streak(message: Message, state: FSMContext):
-    """Procesar racha requerida"""
+    """Procesar racha requerida y preguntar por modo de tiers"""
     try:
         streak = int(message.text.strip())
         if streak < 3:
@@ -164,15 +184,118 @@ async def create_trivia_discount_streak(message: Message, state: FSMContext):
             return
         await state.update_data(required_streak=streak)
 
+        # Preguntar si quiere un solo tier o múltiples
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="1️⃣ Un solo nivel",
+                callback_data="tier_mode_single"
+            )],
+            [InlineKeyboardButton(
+                text="2️⃣ Múltiples niveles",
+                callback_data="tier_mode_multi"
+            )],
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ])
+
         await message.answer(
             "🎩 <b>Lucien:</b>\n\n"
-            "<i>Paso 4 de 6:</i> Ingrese el límite de códigos\n\n"
-            "Número máximo de códigos que se pueden reclamar (mínimo 1)",
+            "<i>Paso 3b:</i> Configuración de niveles de descuento\n\n"
+            "1️⃣ <b>Un solo nivel:</b> Un único descuento al alcanzar la racha\n"
+            "2️⃣ <b>Múltiples niveles:</b> Varios descuentos progresivos (ej: 5=50%, 10=75%, 15=100%)",
+            reply_markup=keyboard,
             parse_mode="HTML"
         )
-        await state.set_state(TriviaDiscountStates.waiting_max_codes)
+        await state.set_state(TriviaDiscountStates.waiting_tier_mode)
     except ValueError:
         await message.answer("Por favor ingrese un número válido:")
+
+
+@router.callback_query(F.data == "tier_mode_single", lambda cb: is_admin(cb.from_user.id))
+async def tier_mode_single(callback: CallbackQuery, state: FSMContext):
+    """Usuario eligió un solo tier - usar valores por defecto"""
+    data = await state.get_data()
+
+    # Crear tier único con los valores por defecto
+    discount_tiers = [{
+        'streak': data.get('required_streak', 5),
+        'discount': data.get('discount_percentage', 50)
+    }]
+    await state.update_data(discount_tiers=discount_tiers)
+
+    # Continuar al paso de max_codes
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 4 de 6:</i> Ingrese el límite de códigos\n\n"
+        "Número máximo de códigos que se pueden reclamar (mínimo 1)",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_max_codes)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "tier_mode_multi", lambda cb: is_admin(cb.from_user.id))
+async def tier_mode_multi(callback: CallbackQuery, state: FSMContext):
+    """Usuario eligió múltiples tiers - solicitar JSON"""
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 3c:</i> Ingrese los niveles de descuento en formato JSON\n\n"
+        "Ejemplo:\n"
+        "<code>[{\"streak\": 5, \"discount\": 50}, {\"streak\": 10, \"discount\": 75}, {\"streak\": 15, \"discount\": 100}]</code>\n\n"
+        "• streak: respuestas correctas para desbloquear\n"
+        "• discount: porcentaje de descuento (0-100)\n"
+        "• Ordene por streak ascendente\n"
+        "• El último tier DEBE ser 100%",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_discount_tiers)
+    await callback.answer()
+
+
+@router.message(TriviaDiscountStates.waiting_discount_tiers, lambda msg: is_admin(msg.from_user.id))
+async def process_discount_tiers(message: Message, state: FSMContext):
+    """Procesar y validar tiers JSON"""
+    import json as json_lib
+
+    text = message.text.strip()
+    try:
+        tiers = json_lib.loads(text)
+    except json_lib.JSONDecodeError:
+        await message.answer(
+            "Formato JSON inválido. Intente de nuevo:\n"
+            "Ejemplo: <code>[{\"streak\": 5, \"discount\": 50}, {\"streak\": 10, \"discount\": 100}]</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    # Validar usando el servicio
+    service = TriviaDiscountService()
+    is_valid, error_msg = service.validate_discount_tiers(tiers)
+    service.close()
+
+    if not is_valid:
+        await message.answer(
+            f"Error en los tiers: {error_msg}\n\n"
+            "Intente de nuevo:",
+            parse_mode="HTML"
+        )
+        return
+
+    await state.update_data(discount_tiers=tiers)
+
+    # Continuar al paso de max_codes
+    await message.answer(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Paso 4 de 6:</i> Ingrese el límite de códigos\n\n"
+        "Número máximo de códigos que se pueden reclamar (mínimo 1)",
+        parse_mode="HTML"
+    )
+    await state.set_state(TriviaDiscountStates.waiting_max_codes)
 
 
 @router.message(TriviaDiscountStates.waiting_max_codes, lambda msg: is_admin(msg.from_user.id))
@@ -507,6 +630,20 @@ async def show_confirmation(message: Message, state: FSMContext):
     else:
         qs_info = "🔄 Default"
 
+    # Info de tiers
+    tiers = data.get('discount_tiers')
+    if tiers and len(tiers) > 0:
+        if len(tiers) == 1:
+            tiers_info = f"🔥 <b>Nivel único:</b> {tiers[0]['streak']} respuestas = {tiers[0]['discount']}%\n"
+        else:
+            tiers_info = "🔥 <b>Niveles de descuento:</b>\n"
+            for i, tier in enumerate(tiers, 1):
+                is_last = (i == len(tiers))
+                bonus = " (GRATIS)" if is_last and tier['discount'] == 100 else ""
+                tiers_info += f"   {i}. {tier['streak']} respuestas → {tier['discount']}%{bonus}\n"
+    else:
+        tiers_info = f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas\n"
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✓ Confirmar", callback_data="confirm_trivia_discount")],
         [InlineKeyboardButton(text="✗ Cancelar", callback_data="admin_trivia_discount")]
@@ -516,9 +653,8 @@ async def show_confirmation(message: Message, state: FSMContext):
         f"🎩 <b>Lucien:</b>\n\n"
         "<i>Paso 7 de 7:</i> Confirmar configuración\n\n"
         f"📋 <b>Promoción:</b> {promo_info}\n"
-        f"💰 <b>Descuento:</b> {data['discount_percentage']}%\n"
-        f"🔥 <b>Racha requerida:</b> {data['required_streak']} respuestas correctas\n"
         f"🎫 <b>Códigos máximo:</b> {data['max_codes']}\n"
+        f"{tiers_info}"
         f"⏱️ <b>Vigencia:</b> {vigencia}\n"
         f"🔁 <b>Reinicio auto:</b> {reset_info}\n"
         f"📚 <b>Set de trivia:</b> {qs_info}",
@@ -631,7 +767,8 @@ async def create_trivia_discount_confirm(callback: CallbackQuery, state: FSMCont
         duration_minutes=data.get('duration_minutes'),
         auto_reset_enabled=data.get('auto_reset_enabled', False),
         max_reset_cycles=data.get('max_reset_cycles'),
-        question_set_id=data.get('question_set_id')
+        question_set_id=data.get('question_set_id'),
+        discount_tiers=data.get('discount_tiers')
     )
 
     if config:
@@ -702,17 +839,14 @@ async def view_trivia_discounts(callback: CallbackQuery):
         config = all_configs[0]
         stats = service.get_discount_stats(config.id)
 
-        # Determinar estado
-        is_expired = False
-        if not config.is_active:
-            # Verificar si expiró por fecha fija
-            if config.end_date:
-                from datetime import datetime, timezone
-                if datetime.now(timezone.utc) > config.end_date:
-                    is_expired = True
-            status_text = "⏸️ Inactiva"
-        else:
-            status_text = "✅ Activa"
+        # Determinar estado basado en status
+        status_labels = {
+            'active': '✅ Activa',
+            'paused': '⏸️ Pausada',
+            'expired': '🔚 Terminada',
+            'completed': '📭 Completada'
+        }
+        status_text = status_labels.get(config.status, '❓ Desconocido')
 
         # Construir botones según el tipo de vigencia
         keyboard_buttons = [
@@ -733,7 +867,7 @@ async def view_trivia_discounts(callback: CallbackQuery):
             else:
                 cycles_info = ""
             time_info = f"\n⏱️ Tiempo: {remaining}{cycles_info}"
-            if config.is_active:
+            if config.status == 'active':
                 keyboard_buttons.append([
                     InlineKeyboardButton(
                         text="⏰ Extender",
@@ -751,7 +885,8 @@ async def view_trivia_discounts(callback: CallbackQuery):
             else:
                 time_info = ""
 
-        if config.is_active:
+        # Botones según estado
+        if config.status == 'active':
             keyboard_buttons.extend([
                 [InlineKeyboardButton(
                     text="⏸️ Pausar",
@@ -762,7 +897,19 @@ async def view_trivia_discounts(callback: CallbackQuery):
                     callback_data=f"delete_trivia_{config.id}"
                 )]
             ])
+        elif config.status in ('paused', 'expired'):
+            keyboard_buttons.extend([
+                [InlineKeyboardButton(
+                    text="▶️ Reanudar",
+                    callback_data=f"resume_trivia_{config.id}"
+                )],
+                [InlineKeyboardButton(
+                    text="🗑️ Eliminar",
+                    callback_data=f"delete_trivia_{config.id}"
+                )]
+            ])
         else:
+            # completed u otro estado - solo eliminar
             keyboard_buttons.append([
                 InlineKeyboardButton(
                     text="🗑️ Eliminar",
@@ -881,6 +1028,24 @@ async def pause_trivia_discount(callback: CallbackQuery):
     await callback.message.edit_text(
         "🎩 <b>Lucien:</b>\n\n"
         f"<i>Configuración {'pausada' if result else 'error al pausar'}.</i>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
+        ]),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("resume_trivia_"), lambda cb: is_admin(cb.from_user.id))
+async def resume_trivia_discount(callback: CallbackQuery):
+    """Reanudar configuración pausada o terminada"""
+    config_id = int(callback.data.replace("resume_trivia_", ""))
+    service = TriviaDiscountService()
+    result = service.resume_trivia_promotion_config(config_id)
+
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        f"<i>Configuración {'reanudada' if result else 'error al reanudar'}.</i>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
         ]),

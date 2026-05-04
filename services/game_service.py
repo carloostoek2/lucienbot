@@ -722,13 +722,10 @@ class GameService:
 
         logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}")
 
-        # 12. Verificar generación de código de descuento
-        discount_code = None
+        # 12. Verificar si alcanzó un tier (pero NO generar código automáticamente)
+        tier_info = None
         if is_correct and new_streak > 0:
-            discount_code = self._check_and_generate_discount_code(
-                user_id=user_id,
-                new_streak=new_streak
-            )
+            tier_info = self._get_streak_tier_info(user_id, new_streak)
 
         return {
             'correct': is_correct,
@@ -740,7 +737,7 @@ class GameService:
             'message_parts': message_parts,
             'remaining_after': remaining_after,
             'limit_reached': False,
-            'discount_code': discount_code  # Ahora es un dict directamente
+            'tier_info': tier_info  # Info del tier alcanzado (para mostrar decisión)
         }
 
     def _build_trivia_message_parts(self, is_correct: bool, question: dict,
@@ -800,33 +797,71 @@ class GameService:
                 return config
         return None
 
-    def _check_and_generate_discount_code(self, user_id: int, new_streak: int) -> Optional[object]:
-        """Verifica si corresponde generar código de descuento"""
+    def _get_streak_tier_info(self, user_id: int, new_streak: int) -> Optional[dict]:
+        """Verifica si el streak alcanza un tier y retorna info del tier"""
         config = self._get_active_trivia_promotion()
         if not config:
             return None
 
-        # Verificar que alcanzó la racha requerida
-        if new_streak < config.required_streak:
+        # Usar el sistema de tiers del trivia_discount_service
+        tier = self._trivia_discount_service.get_tier_for_streak(config, new_streak)
+        if not tier:
             return None
 
-        # Verificar códigos disponibles (basado en reclamados, no emitidos)
+        # Verificar códigos disponibles
         available = self._trivia_discount_service.get_available_codes_count(config.id)
         if available <= 0:
             return None
 
-        # Obtener datos del usuario
+        # Obtener siguiente tier para mostrar al usuario
+        next_tier = self._trivia_discount_service.get_next_tier(config, new_streak)
+
+        return {
+            'tier_reached': True,
+            'current_tier': tier,
+            'next_tier': next_tier,
+            'config_id': config.id,
+            'is_final': next_tier is None  # True si no hay siguiente tier (100% gratis)
+        }
+
+    def _generate_tier_discount_code(self, user_id: int, config_id: int, discount_percentage: int) -> Optional[dict]:
+        """Genera código de descuento con porcentaje específico del tier"""
         user_data = self._user_service.get_user(user_id)
         username = user_data.username if user_data else None
         first_name = user_data.first_name if user_data else None
 
-        # Generar código
-        return self._trivia_discount_service.generate_discount_code(
+        return self._trivia_discount_service.generate_tiered_discount_code(
             user_id=user_id,
-            config_id=config.id,
+            config_id=config_id,
+            discount_percentage=discount_percentage,
             username=username,
             first_name=first_name
         )
+
+    def invalidate_streak_code(self, user_id: int, config_id: int) -> bool:
+        """Invalida el código activo del usuario para una config (por fallo en racha)"""
+        return self._trivia_discount_service.invalidate_user_code(user_id, config_id)
+
+    def reset_trivia_streak(self, user_id: int, game_type: str = 'trivia') -> bool:
+        """Invalida la última partida de trivia del usuario para romper racha (al retirarse)"""
+        try:
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            record = self.db.query(GameRecord).filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == game_type,
+                GameRecord.played_at >= today
+            ).order_by(GameRecord.played_at.desc()).first()
+
+            if record and record.payout > 0:
+                record.payout = 0
+                self.db.commit()
+                logger.info(f"game_service - reset_trivia_streak - {user_id}/{game_type} - streak_broken")
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"game_service - reset_trivia_streak - {user_id}/{game_type} - error: {e}")
+            return False
 
     def _get_trivia_discount_info(self, user_id: int) -> Optional[dict]:
         """Obtiene información de descuento para mostrar en menú de trivia"""
@@ -1050,13 +1085,10 @@ class GameService:
 
         logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}")
 
-        # 12. Verificar generación de código de descuento
-        discount_code = None
+        # 12. Verificar si alcanzó un tier (pero NO generar código automáticamente)
+        tier_info = None
         if is_correct and new_streak > 0:
-            discount_code = self._check_and_generate_discount_code(
-                user_id=user_id,
-                new_streak=new_streak
-            )
+            tier_info = self._get_streak_tier_info(user_id, new_streak)
 
         return {
             'correct': is_correct,
@@ -1068,7 +1100,7 @@ class GameService:
             'message_parts': message_parts,
             'remaining_after': remaining_after,
             'limit_reached': False,
-            'discount_code': discount_code  # Ahora es un dict directamente
+            'tier_info': tier_info
         }
 
     def _build_trivia_vip_message_parts(self, is_correct: bool, question: dict,
