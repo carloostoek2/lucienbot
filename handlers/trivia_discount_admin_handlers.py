@@ -853,6 +853,10 @@ async def view_trivia_discounts(callback: CallbackQuery):
             [InlineKeyboardButton(
                 text="📊 Ver códigos",
                 callback_data=f"view_codes_{config.id}"
+            )],
+            [InlineKeyboardButton(
+                text="🔍 Verificar códigos",
+                callback_data=f"verify_codes_{config.id}"
             )]
         ]
 
@@ -1018,7 +1022,129 @@ async def view_discount_codes(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("pause_trivia_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("verify_codes_"), lambda cb: is_admin(cb.from_user.id))
+async def verify_discount_codes(callback: CallbackQuery):
+    """Verificación detallada de códigos con streak y descuento"""
+    config_id = int(callback.data.replace("verify_codes_", ""))
+    service = TriviaDiscountService()
+
+    try:
+        codes = service.get_codes_by_config(config_id)
+        config = service.get_trivia_promotion_config(config_id)
+
+        if not codes:
+            await callback.message.edit_text(
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>No hay códigos generados aún.</i>",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data="view_trivia_discounts")]
+                ]),
+                parse_mode="HTML"
+            )
+            await callback.answer()
+            return
+
+        # Obtener detalles de cada código
+        text_parts = ["🔍 <b>Verificación de Códigos</b>\n\n"]
+
+        # Título con info de la promoción
+        promo_name = config.promotion.name if config.promotion else config.custom_description or "N/A"
+        text_parts.append(f"📋 <b>Promoción:</b> {promo_name}\n")
+
+        # Mostrar tiers si existen
+        tiers = service.parse_discount_tiers(config)
+        if len(tiers) > 1:
+            text_parts.append("📊 <b>Niveles de descuento:</b>\n")
+            for i, tier in enumerate(tiers, 1):
+                text_parts.append(f"   {i}. {tier['streak']} respuestas → {tier['discount']}%\n")
+
+        text_parts.append("\n" + "─" * 30 + "\n")
+
+        # Agrupar códigos por estado
+        active_codes = [c for c in codes if c.status == DiscountCodeStatus.ACTIVE]
+        used_codes = [c for c in codes if c.status == DiscountCodeStatus.USED]
+        other_codes = [c for c in codes if c.status not in [DiscountCodeStatus.ACTIVE, DiscountCodeStatus.USED]]
+
+        # Función helper para formatear fecha
+        def format_date(dt):
+            if not dt:
+                return "N/A"
+            if hasattr(dt, 'strftime'):
+                return dt.strftime("%Y-%m-%d %H:%M")
+            return str(dt)
+
+        # Códigos activos
+        if active_codes:
+            text_parts.append("\n🟢 <b>Códigos Activos:</b>")
+            for i, code in enumerate(active_codes, 1):
+                user_info = code.username or code.first_name or f"ID:{code.user_id}"
+                details = service.get_code_details_with_streak(code.id)
+                streak = details.get('max_streak', 0) if details else 0
+                discount = code.discount_percentage or config.discount_percentage
+
+                text_parts.append(f"\n{i}. <code>{code.code}</code>")
+                text_parts.append(f"   👤 {user_info}")
+                text_parts.append(f"   💰 Descuento: {discount}%")
+                text_parts.append(f"   🔥 Racha máxima: {streak}")
+                text_parts.append(f"   📅 Generado: {format_date(code.generated_at)}")
+                text_parts.append(f"   ⏱️ Estado: ACTIVO")
+
+        # Códigos usados
+        if used_codes:
+            text_parts.append("\n\n✅ <b>Códigos Usados:</b>")
+            for i, code in enumerate(used_codes, 1):
+                user_info = code.username or code.first_name or f"ID:{code.user_id}"
+                details = service.get_code_details_with_streak(code.id)
+                streak = details.get('max_streak', 0) if details else 0
+                discount = code.discount_percentage or config.discount_percentage
+
+                text_parts.append(f"\n{i}. <code>{code.code}</code>")
+                text_parts.append(f"   👤 {user_info}")
+                text_parts.append(f"   💰 Descuento: {discount}%")
+                text_parts.append(f"   🔥 Racha máxima: {streak}")
+                text_parts.append(f"   📅 Generado: {format_date(code.generated_at)}")
+                text_parts.append(f"   📅 Usado: {format_date(code.used_at)}")
+                text_parts.append(f"   ⏱️ Estado: USADO")
+
+        # Otros códigos
+        if other_codes:
+            text_parts.append("\n\n⚪ <b>Otros:</b>")
+            for i, code in enumerate(other_codes, 1):
+                user_info = code.username or code.first_name or f"ID:{code.user_id}"
+                details = service.get_code_details_with_streak(code.id)
+                streak = details.get('max_streak', 0) if details else 0
+                discount = code.discount_percentage or config.discount_percentage
+
+                text_parts.append(f"\n{i}. <code>{code.code}</code>")
+                text_parts.append(f"   👤 {user_info}")
+                text_parts.append(f"   💰 Descuento: {discount}%")
+                text_parts.append(f"   🔥 Racha máxima: {streak}")
+                text_parts.append(f"   ⏱️ Estado: {code.status.value.upper()}")
+
+        text = "".join(text_parts)
+
+        # Construir botones de acción para códigos activos
+        keyboard_buttons = []
+        for code in active_codes[:5]:
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"✓ Usar {code.code[:8]}",
+                    callback_data=f"use_code_{code.id}"
+                ),
+                InlineKeyboardButton(
+                    text=f"✗ Cancelar {code.code[:8]}",
+                    callback_data=f"cancel_code_{code.id}"
+                )
+            ])
+
+        keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="view_trivia_discounts")])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    finally:
+        pass
+    await callback.answer()
 async def pause_trivia_discount(callback: CallbackQuery):
     """Pausar configuración"""
     config_id = int(callback.data.replace("pause_trivia_", ""))

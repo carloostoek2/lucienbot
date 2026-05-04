@@ -1188,6 +1188,8 @@ class DiscountCode(Base):
     status = Column(Enum(DiscountCodeStatus), default=DiscountCodeStatus.ACTIVE)
     generated_at = Column(DateTime(timezone=True), server_default=func.now())
     used_at = Column(DateTime(timezone=True), nullable=True)
+    # Porcentaje de descuento en el momento de generación (para tiers)
+    discount_percentage = Column(Integer, nullable=True)
 
     config = relationship("TriviaPromotionConfig", back_populates="discount_codes")
     promotion = relationship("Promotion")

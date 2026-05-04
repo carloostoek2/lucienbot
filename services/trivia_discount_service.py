@@ -380,7 +380,8 @@ class TriviaDiscountService:
                     username=username,
                     first_name=first_name,
                     promotion_id=config.promotion_id,
-                    status=DiscountCodeStatus.ACTIVE
+                    status=DiscountCodeStatus.ACTIVE,
+                    discount_percentage=discount_percentage
                 )
                 session.add(discount_code)
                 session.commit()
@@ -390,7 +391,7 @@ class TriviaDiscountService:
                 result = {
                     'code': discount_code.code,
                     'promotion_name': config.promotion.name if config.promotion else config.custom_description,
-                    'discount_percentage': config.discount_percentage
+                    'discount_percentage': discount_percentage
                 }
                 logger.info(f"trivia_discount_service - generate_discount_code - {user_id} - success: {code}")
                 return result
@@ -632,7 +633,8 @@ class TriviaDiscountService:
                     username=username,
                     first_name=first_name,
                     promotion_id=config.promotion_id,
-                    status=DiscountCodeStatus.ACTIVE
+                    status=DiscountCodeStatus.ACTIVE,
+                    discount_percentage=discount_percentage
                 )
                 session.add(discount_code)
                 session.commit()
@@ -678,4 +680,52 @@ class TriviaDiscountService:
                 'cancelled': cancelled,
                 'expired': expired,
                 'used_percentage': round((used / config.max_codes * 100), 1) if config.max_codes > 0 else 0
+            }
+
+    def get_code_details_with_streak(self, code_id: int) -> Optional[dict]:
+        """Obtiene detalles de un código incluyendo streak máximo alcanzado"""
+        with SessionLocal() as session:
+            code = session.get(DiscountCode, code_id)
+            if not code:
+                return None
+
+            # Obtener streak máximo de los game_records asociados
+            from models.models import GameRecord
+            records = session.query(GameRecord).filter(
+                GameRecord.discount_code_id == code_id,
+                GameRecord.game_type.in_(['trivia', 'trivia_vip'])
+            ).all()
+
+            max_streak = 0
+            for record in records:
+                # El streak se mide por victorias consecutivas
+                # Un GameRecord con payout > 0 indica victoria
+                if record.payout > 0:
+                    max_streak += 1
+                else:
+                    max_streak = 0
+
+            # Calcular streak máximo de otra forma: buscar rachas consecutivas
+            # En lugar de lo anterior, buscamos el máximo consecutive wins
+            max_streak = 0
+            current_streak = 0
+            for record in records:
+                if record.payout > 0:
+                    current_streak += 1
+                    max_streak = max(max_streak, current_streak)
+                else:
+                    current_streak = 0
+
+            return {
+                'code_id': code.id,
+                'code': code.code,
+                'user_id': code.user_id,
+                'username': code.username,
+                'first_name': code.first_name,
+                'status': code.status.value,
+                'discount_percentage': code.discount_percentage,
+                'max_streak': max_streak,
+                'generated_at': code.generated_at.isoformat() if code.generated_at else None,
+                'used_at': code.used_at.isoformat() if code.used_at else None,
+                'config_id': code.config_id
             }
