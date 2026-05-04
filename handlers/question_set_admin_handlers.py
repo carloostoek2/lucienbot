@@ -51,7 +51,7 @@ async def admin_question_sets_menu(callback: CallbackQuery):
             )],
             [InlineKeyboardButton(
                 text="🔙 Volver",
-                callback_data="admin_gamification"
+                callback_data="admin_trivia_management"
             )]
         ])
 

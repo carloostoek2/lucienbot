@@ -31,12 +31,6 @@ class DailyGiftConfigStates(StatesGroup):
     waiting_amount = State()
 
 
-class TriviaConfigStates(StatesGroup):
-    waiting_free_limit = State()
-    waiting_vip_limit = State()
-    waiting_vip_exclusive_limit = State()
-
-
 def is_admin(user_id: int) -> bool:
     return user_id in bot_config.ADMIN_IDS
 
@@ -68,12 +62,8 @@ async def admin_gamification_menu(callback: CallbackQuery):
             callback_data="admin_missions"
         )],
         [InlineKeyboardButton(
-            text="🎫 Promociones por racha",
-            callback_data="admin_trivia_discount"
-        )],
-        [InlineKeyboardButton(
-            text="🎯 Configurar trivia",
-            callback_data="config_trivia"
+            text="🎯 Gestión de trivias",
+            callback_data="admin_trivia_management"
         )],
         [InlineKeyboardButton(
             text="🛒 Gestionar tienda",
@@ -404,190 +394,6 @@ async def toggle_daily_gift(callback: CallbackQuery):
     status = "activado" if config.is_active else "desactivado"
     await callback.answer(f"Regalo diario {status}")
     await config_daily_gift(callback)
-
-
-# ==================== CONFIGURAR TRIVIA ====================
-
-@router.callback_query(F.data == "config_trivia", lambda cb: is_admin(cb.from_user.id))
-async def config_trivia(callback: CallbackQuery):
-    """Configuración de límites de trivia"""
-    trivia_service = TriviaConfigService()
-    try:
-        config = trivia_service.get_config()
-    finally:
-        trivia_service.close()
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"Gratuitos: {config.daily_trivia_limit_free}/dia",
-            callback_data="change_trivia_free_limit"
-        )],
-        [InlineKeyboardButton(
-            text=f"VIP: {config.daily_trivia_limit_vip}/dia",
-            callback_data="change_trivia_vip_limit"
-        )],
-        [InlineKeyboardButton(
-            text=f"Trivia VIP exclusiva: {config.daily_trivia_vip_limit}/dia",
-            callback_data="change_trivia_vip_exclusive_limit"
-        )],
-        [InlineKeyboardButton(
-            text="🔙 Volver",
-            callback_data="admin_gamification"
-        )]
-    ])
-
-    await callback.message.edit_text(
-        f"🎩 Lucien:\n\n"
-        f"El examen de Diana tiene diferentes umbrales segun el visitante...\n\n"
-        f"📊 Limites de Trivia:\n"
-        f"   • Gratuitos: {config.daily_trivia_limit_free} oportunidades/dia\n"
-        f"   • VIP: {config.daily_trivia_limit_vip} oportunidades/dia\n"
-        f"   • VIP Exclusiva: {config.daily_trivia_vip_limit} oportunidades/dia\n\n"
-        f"Presione un boton para modificar ese limite.",
-        reply_markup=keyboard
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "change_trivia_free_limit", lambda cb: is_admin(cb.from_user.id))
-async def change_trivia_free_limit_start(callback: CallbackQuery, state: FSMContext):
-    """Inicia cambio de limite para gratuitos"""
-    await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Cuantas oportunidades de trivia tendran los visitantes gratuitos?\n\n"
-        "Indique el numero de intentos diarios:\n\n"
-        "Ejemplo: 7",
-        reply_markup=cancel_keyboard()
-    )
-    await state.set_state(TriviaConfigStates.waiting_free_limit)
-    await callback.answer()
-
-
-@router.message(TriviaConfigStates.waiting_free_limit)
-async def process_trivia_free_limit(message: Message, state: FSMContext):
-    """Procesa el nuevo limite para gratuitos"""
-    try:
-        limit = int(message.text.strip())
-        if limit < 0:
-            raise ValueError("Cantidad debe ser cero o mayor")
-    except ValueError:
-        await message.answer(
-            "🎩 Lucien:\n\n"
-            "Por favor, indique un numero valido mayor o igual a cero...",
-            reply_markup=cancel_keyboard()
-        )
-        return
-
-    trivia_service = TriviaConfigService()
-    config = trivia_service.get_config()
-    trivia_service.update_config(
-        limit, config.daily_trivia_limit_vip, config.daily_trivia_vip_limit,
-        admin_id=message.from_user.id
-    )
-    trivia_service.close()
-
-    await message.answer(
-        f"🎩 Lucien:\n\n"
-        f"El velo se ha liftsado ligeramente...\n\n"
-        f"✅ Limite para gratuitos: {limit} oportunidades/dia\n\n"
-        f"Los visitantes no suscritos ahora tendran mas razones para unirse.",
-        reply_markup=back_keyboard("config_trivia")
-    )
-    await state.clear()
-
-
-@router.callback_query(F.data == "change_trivia_vip_limit", lambda cb: is_admin(cb.from_user.id))
-async def change_trivia_vip_limit_start(callback: CallbackQuery, state: FSMContext):
-    """Inicia cambio de limite para VIP"""
-    await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Cuantas oportunidades de trivia tendran los miembros VIP?\n\n"
-        "Indique el numero de intentos diarios:\n\n"
-        "Ejemplo: 15",
-        reply_markup=cancel_keyboard()
-    )
-    await state.set_state(TriviaConfigStates.waiting_vip_limit)
-    await callback.answer()
-
-
-@router.message(TriviaConfigStates.waiting_vip_limit)
-async def process_trivia_vip_limit(message: Message, state: FSMContext):
-    """Procesa el nuevo limite para VIP"""
-    try:
-        limit = int(message.text.strip())
-        if limit < 0:
-            raise ValueError("Cantidad debe ser cero o mayor")
-    except ValueError:
-        await message.answer(
-            "🎩 Lucien:\n\n"
-            "Por favor, indique un numero valido mayor o igual a cero...",
-            reply_markup=cancel_keyboard()
-        )
-        return
-
-    trivia_service = TriviaConfigService()
-    config = trivia_service.get_config()
-    trivia_service.update_config(
-        config.daily_trivia_limit_free, limit, config.daily_trivia_vip_limit,
-        admin_id=message.from_user.id
-    )
-    trivia_service.close()
-
-    await message.answer(
-        f"🎩 Lucien:\n\n"
-        f"El favor de Diana se expande...\n\n"
-        f"✅ Limite para VIP: {limit} oportunidades/dia\n\n"
-        f"Sus favoritos recibiran mayor abundancia.",
-        reply_markup=back_keyboard("config_trivia")
-    )
-    await state.clear()
-
-
-@router.callback_query(F.data == "change_trivia_vip_exclusive_limit", lambda cb: is_admin(cb.from_user.id))
-async def change_trivia_vip_exclusive_limit_start(callback: CallbackQuery, state: FSMContext):
-    """Inicia cambio de limite para trivia VIP exclusiva"""
-    await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Cuantas oportunidades de trivia VIP exclusiva habra?\n\n"
-        "Indique el numero de intentos diarios:\n\n"
-        "Ejemplo: 5",
-        reply_markup=cancel_keyboard()
-    )
-    await state.set_state(TriviaConfigStates.waiting_vip_exclusive_limit)
-    await callback.answer()
-
-
-@router.message(TriviaConfigStates.waiting_vip_exclusive_limit)
-async def process_trivia_vip_exclusive_limit(message: Message, state: FSMContext):
-    """Procesa el nuevo limite para trivia VIP exclusiva"""
-    try:
-        limit = int(message.text.strip())
-        if limit < 0:
-            raise ValueError("Cantidad debe ser cero o mayor")
-    except ValueError:
-        await message.answer(
-            "🎩 Lucien:\n\n"
-            "Por favor, indique un numero valido mayor o igual a cero...",
-            reply_markup=cancel_keyboard()
-        )
-        return
-
-    trivia_service = TriviaConfigService()
-    config = trivia_service.get_config()
-    trivia_service.update_config(
-        config.daily_trivia_limit_free, config.daily_trivia_limit_vip, limit,
-        admin_id=message.from_user.id
-    )
-    trivia_service.close()
-
-    await message.answer(
-        f"🎩 Lucien:\n\n"
-        f"El circulo intimo se ajusta...\n\n"
-        f"✅ Limite VIP Exclusiva: {limit} oportunidades/dia\n\n"
-        f"Solo los mas devotos accederan a estas preguntas.",
-        reply_markup=back_keyboard("config_trivia")
-    )
-    await state.clear()
 
 
 # ==================== ESTADISTICAS ====================
