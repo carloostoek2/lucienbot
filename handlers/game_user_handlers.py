@@ -140,7 +140,7 @@ async def game_trivia(callback: CallbackQuery):
             discount_text += f"\n• ⏱️ Tiempo restante: {discount_info['time_remaining']}"
 
         if discount_info.get('user_has_code'):
-            discount_text += f"\n• Tu código: <code>{discount_info['user_code']}</code>"
+            discount_text += f"\n• Su código: <code>{discount_info['user_code']}</code>"
 
     text = (
         f"<b>{data['title']}</b>{streak_text}\n\n"
@@ -179,6 +179,11 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
 
     # Caso especial: streak_continue + respuesta incorrecta = perder todo
     if is_streak_continue and not result['correct']:
+        data = await state.get_data()
+        config_id = data.get('current_config_id')
+        if config_id:
+            with get_service(GameService) as svc:
+                svc.invalidate_streak_code(user_id, config_id)
         await state.clear()
         keyboard = game_menu_keyboard()
         await callback.message.edit_text(message, reply_markup=keyboard)
@@ -210,15 +215,19 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
                 return
 
         data = await state.get_data()
-        current_streak = data.get('current_tier_streak', 0)
-        next_tier_streak = data.get('next_tier_streak', 0) or (current_streak + 5)
+        current_tier_streak = data.get('current_tier_streak', 0)
+        next_tier_streak = data.get('next_tier_streak', 0) or (current_tier_streak + 5)
+
+        # Incrementar streak acumulado en el estado
+        new_streak = current_tier_streak + 1
+        await state.update_data(current_tier_streak=new_streak)
 
         text = (
-            f"🎯 <b>Continúas en tu racha!</b>\n\n"
-            f"Llevas <b>{current_streak + 1}</b> respuestas correctas.\n"
-            f"Tu próximo objetivo: <b>{next_tier_streak}</b> para el "
+            f"🎯 <b>Continúa en su racha!</b>\n\n"
+            f"Ha acumulado <b>{new_streak}</b> respuestas correctas.\n"
+            f"Su próximo objetivo: <b>{next_tier_streak}</b> para el "
             f"<b>{data.get('next_tier_discount', 0)}%</b> de descuento.\n\n"
-            f"Cuidado: si fallas, perderás TODO el descuento acumulado.\n\n"
+            f"Cuidado: si falla, perderá TODO el descuento acumulado.\n\n"
             f"❓ <b>Pregunta:</b> {question['q']}"
         )
 
@@ -227,7 +236,7 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
         keyboard = trivia_keyboard(question, question_idx)
         await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
-        logger.info(f"game_user_handlers - trivia_answer - {user_id} - streak_continue_correct")
+        logger.info(f"game_user_handlers - trivia_answer - {user_id} - streak_continue_correct:{new_streak}")
         return
 
     # Caso 1: Respuesta incorrecta (pierde TODO)
@@ -330,7 +339,7 @@ async def game_trivia_vip(callback: CallbackQuery):
 
     streak_text = ""
     if data['current_streak'] > 0:
-        streak_text = f"\n🔥 Tu racha VIP: {data['current_streak']}"
+        streak_text = f"\n🔥 Su racha VIP: {data['current_streak']}"
 
     # Información de descuento por racha
     discount_info = data.get('discount_info')
@@ -346,7 +355,7 @@ async def game_trivia_vip(callback: CallbackQuery):
             discount_text += f"\n• ⏱️ Tiempo restante: {discount_info['time_remaining']}"
 
         if discount_info.get('user_has_code'):
-            discount_text += f"\n• Tu código: <code>{discount_info['user_code']}</code>"
+            discount_text += f"\n• Su código: <code>{discount_info['user_code']}</code>"
 
     text = (
         f"<b>{data['title']}</b>{streak_text}\n\n"
@@ -384,6 +393,11 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
 
     # Caso especial: streak_continue + respuesta incorrecta = perder todo
     if is_streak_continue and not result['correct']:
+        data = await state.get_data()
+        config_id = data.get('current_config_id')
+        if config_id:
+            with get_service(GameService) as svc:
+                svc.invalidate_streak_code(user_id, config_id)
         await state.clear()
         keyboard = game_menu_keyboard()
         await callback.message.edit_text(message, reply_markup=keyboard)
@@ -415,15 +429,19 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
                 return
 
         data = await state.get_data()
-        current_streak = data.get('current_tier_streak', 0)
-        next_tier_streak = data.get('next_tier_streak', 0) or (current_streak + 5)
+        current_tier_streak = data.get('current_tier_streak', 0)
+        next_tier_streak = data.get('next_tier_streak', 0) or (current_tier_streak + 5)
+
+        # Incrementar streak acumulado en el estado
+        new_streak = current_tier_streak + 1
+        await state.update_data(current_tier_streak=new_streak)
 
         text = (
-            f"🎯 <b>Continúas en tu racha!</b>\n\n"
-            f"Llevas <b>{current_streak + 1}</b> respuestas correctas.\n"
-            f"Tu próximo objetivo: <b>{next_tier_streak}</b> para el "
+            f"🎯 <b>Continúa en su racha!</b>\n\n"
+            f"Ha acumulado <b>{new_streak}</b> respuestas correctas.\n"
+            f"Su próximo objetivo: <b>{next_tier_streak}</b> para el "
             f"<b>{data.get('next_tier_discount', 0)}%</b> de descuento.\n\n"
-            f"Cuidado: si fallas, perderás TODO el descuento acumulado.\n\n"
+            f"Cuidado: si falla, perderá TODO el descuento acumulado.\n\n"
             f"👑 <b>Pregunta Secreta:</b> {question['q']}"
         )
 
@@ -432,7 +450,7 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
         keyboard = trivia_vip_keyboard(question, question_idx)
         await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
-        logger.info(f"game_user_handlers - trivia_vip_answer - {user_id} - streak_continue_correct")
+        logger.info(f"game_user_handlers - trivia_vip_answer - {user_id} - streak_continue_correct:{new_streak}")
         return
 
     # Caso 1: Respuesta incorrecta (pierde TODO)
@@ -521,13 +539,16 @@ async def streak_retire(callback: CallbackQuery, state: FSMContext):
 
     with get_service(GameService) as service:
         discount = service._generate_tier_discount_code(user_id, config_id, discount_percentage)
+        # Romper racha para que si vuelve a jugar, empiece desde 1
+        game_type = 'trivia_vip' if data.get('vip_mode', False) else 'trivia'
+        service.reset_trivia_streak(user_id, game_type)
 
     await state.clear()
 
     if discount and discount.get('code'):
         message = (
             f"🎩 <b>Lucien:</b>\n\n"
-            f"Has asegurado tu descuento del <b>{discount_percentage}%</b>.\n\n"
+            f"Ha asegurado su descuento del <b>{discount_percentage}%</b>.\n\n"
             f"📋 <b>Código:</b> <code>{discount['code']}</code>\n"
             f"💰 <b>Descuento:</b> {discount_percentage}% en {discount['promotion_name']}\n\n"
             f"<i>Usa este código al comprar la promoción.</i>"
@@ -580,10 +601,10 @@ async def streak_continue(callback: CallbackQuery, state: FSMContext):
     next_discount = data.get('next_tier_discount', 0)
 
     text = (
-        f"🎯 <b>Continúas en tu racha!</b>\n\n"
-        f"Llevas <b>{next_streak}</b> respuestas correctas.\n"
-        f"Tu próximo objetivo: <b>{next_streak + 5}</b> para el <b>{next_discount}%</b> de descuento.\n\n"
-        f"Cuidado: si fallas, perderás TODO el descuento acumulado.\n\n"
+        f"🎯 <b>Continúa en su racha!</b>\n\n"
+        f"Ha acumulado <b>{next_streak}</b> respuestas correctas.\n"
+        f"Su próximo objetivo: <b>{next_streak + 5}</b> para el <b>{next_discount}%</b> de descuento.\n\n"
+        f"Cuidado: si falla, perderá TODO el descuento acumulado.\n\n"
         f"❓ <b>Pregunta:</b> {question['q']}"
     )
 
@@ -606,8 +627,8 @@ async def streak_final_win(callback: CallbackQuery):
     """Usuario gana 100% - solo confirmar"""
     await callback.message.edit_text(
         "🎩 <b>Lucien:</b>\n\n"
-        "<i>El destino ha sido kindness hacia ti. Tu código de descuento completo te espera.</i>\n\n"
-        "Puedes usarlo cuando desees para obtener el producto gratuitamente.",
+        "<i>El destino ha sido benevolent hacia usted. Su código de descuento completo le espera.</i>\n\n"
+        "Puede usarlo cuando desee para obtener el producto gratuitamente.",
         reply_markup=game_menu_keyboard()
     )
     await callback.answer()

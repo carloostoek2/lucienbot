@@ -838,6 +838,31 @@ class GameService:
             first_name=first_name
         )
 
+    def invalidate_streak_code(self, user_id: int, config_id: int) -> bool:
+        """Invalida el código activo del usuario para una config (por fallo en racha)"""
+        return self._trivia_discount_service.invalidate_user_code(user_id, config_id)
+
+    def reset_trivia_streak(self, user_id: int, game_type: str = 'trivia') -> bool:
+        """Invalida la última partida de trivia del usuario para romper racha (al retirarse)"""
+        try:
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            record = self.db.query(GameRecord).filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == game_type,
+                GameRecord.played_at >= today
+            ).order_by(GameRecord.played_at.desc()).first()
+
+            if record and record.payout > 0:
+                record.payout = 0
+                self.db.commit()
+                logger.info(f"game_service - reset_trivia_streak - {user_id}/{game_type} - streak_broken")
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"game_service - reset_trivia_streak - {user_id}/{game_type} - error: {e}")
+            return False
+
     def _get_trivia_discount_info(self, user_id: int) -> Optional[dict]:
         """Obtiene información de descuento para mostrar en menú de trivia"""
         config = self._get_active_trivia_promotion()
