@@ -17,6 +17,7 @@ from services.besito_service import BesitoService
 from services.user_service import UserService
 from services.vip_service import VIPService
 from services.trivia_discount_service import TriviaDiscountService
+from services.trivia_config_service import TriviaConfigService
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,7 @@ class GameService:
         self._user_service = UserService(self.db)
         self._vip_service = VIPService(self.db)
         self._trivia_discount_service = TriviaDiscountService()
+        self._trivia_config_service = TriviaConfigService(self.db)
         self._questions = None
         self._vip_questions = None
         # Instance-level cache tracking - each instance tracks its own loaded path
@@ -340,10 +342,11 @@ class GameService:
     def get_daily_limits(self, user_id: int) -> dict:
         """Obtiene límites diarios según tipo de usuario"""
         is_vip = self.is_user_vip(user_id)
+        trivia_config = self._trivia_config_service.get_config()
         return {
             'dice_limit': self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE,
-            'trivia_limit': self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE,
-            'trivia_vip_limit': self.DAILY_TRIVIA_VIP_LIMIT
+            'trivia_limit': trivia_config.daily_trivia_limit_vip if is_vip else trivia_config.daily_trivia_limit_free,
+            'trivia_vip_limit': trivia_config.daily_trivia_vip_limit
         }
 
     def get_menu_data(self, user_id: int) -> dict:
@@ -882,10 +885,12 @@ class GameService:
         Returns: (puede_jugar, jugadas_hoy, limite, mensaje)
         """
         if not self.is_user_vip(user_id):
-            return False, 0, self.DAILY_TRIVIA_VIP_LIMIT, "Esta trivia es exclusiva para miembros VIP."
+            config = self._trivia_config_service.get_config()
+            return False, 0, config.daily_trivia_vip_limit, "Esta trivia es exclusiva para miembros VIP."
 
         played = len(self._get_today_vip_trivia_records(user_id))
-        limit = self.DAILY_TRIVIA_VIP_LIMIT
+        config = self._trivia_config_service.get_config()
+        limit = config.daily_trivia_vip_limit
 
         if played >= limit:
             return False, played, limit, self._select_template(self.TRIVIA_VIP_TEMPLATES['limit_reached'])
