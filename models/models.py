@@ -1165,6 +1165,8 @@ class TriviaPromotionConfig(Base):
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     question_set_id = Column(Integer, ForeignKey("question_sets.id"), nullable=True)
+    # JSON con niveles de descuento: [{"streak": 5, "discount": 50}, {"streak": 10, "discount": 75}, ...]
+    discount_tiers = Column(Text, nullable=True)
 
     promotion = relationship("Promotion", back_populates="trivia_promotion_configs")
     question_set = relationship("QuestionSet")

@@ -4,11 +4,12 @@ Trivia Discount Service - Sistema de Promociones por Racha de Trivia
 Gestiona la configuración de promociones vinculadas a rachas de trivia
 y la generación de códigos de descuento.
 """
+import json
 import logging
 import secrets
 import string
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy.orm import Session, joinedload
 from models.models import (
@@ -460,6 +461,113 @@ class TriviaDiscountService:
             if not config:
                 return 0
             return max(0, config.max_codes - config.codes_claimed)
+
+    # ==================== TIERS DE DESCUENTO ====================
+
+    def parse_discount_tiers(self, config: TriviaPromotionConfig) -> List[dict]:
+        """Parse discount_tiers JSON y retorna lista de tiers ordenados por streak"""
+        if not config.discount_tiers:
+            # Fallback al método antiguo si no hay tiers
+            return [{'streak': config.required_streak, 'discount': config.discount_percentage}]
+        try:
+            tiers = json.loads(config.discount_tiers)
+            return sorted(tiers, key=lambda x: x['streak'])
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"trivia_discount_service - parse_discount_tiers - config {config.id} - invalid tiers format")
+            return [{'streak': config.required_streak, 'discount': config.discount_percentage}]
+
+    def get_tier_for_streak(self, config: TriviaPromotionConfig, streak: int) -> Optional[dict]:
+        """Obtiene el tier correspondiente a una racha dada"""
+        tiers = self.parse_discount_tiers(config)
+        # Buscar el tier más alto que corresponde a esta racha
+        for tier in reversed(tiers):
+            if streak >= tier['streak']:
+                return tier
+        return None
+
+    def get_next_tier(self, config: TriviaPromotionConfig, current_streak: int) -> Optional[dict]:
+        """Obtiene el siguiente tier después del streak actual"""
+        tiers = self.parse_discount_tiers(config)
+        for tier in tiers:
+            if tier['streak'] > current_streak:
+                return tier
+        return None
+
+    def generate_tiered_discount_code(
+        self,
+        user_id: int,
+        config_id: int,
+        discount_percentage: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None
+    ) -> Optional[dict]:
+        """Genera código de descuento con un porcentaje específico (para tiers)"""
+        with SessionLocal() as session:
+            try:
+                config = session.get(TriviaPromotionConfig, config_id)
+                if not config or not config.is_active:
+                    logger.warning(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - config not found or inactive")
+                    return None
+
+                # Verificar vigencia
+                now = datetime.utcnow()
+                if config.start_date and now < config.start_date:
+                    logger.warning(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - not started")
+                    return None
+                if config.end_date and now > config.end_date:
+                    logger.warning(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - expired")
+                    return None
+
+                # Verificar duración relativa
+                if config.duration_minutes and config.started_at:
+                    remaining = self.get_time_remaining(config_id)
+                    if remaining <= 0:
+                        logger.warning(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - expired by duration")
+                        return None
+
+                # Verificar códigos disponibles
+                available = config.max_codes - config.codes_claimed
+                if available <= 0:
+                    logger.warning(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - no codes available")
+                    return None
+
+                # Verificar que usuario no tenga ya código activo para esta configuración
+                existing = session.query(DiscountCode).filter(
+                    DiscountCode.user_id == user_id,
+                    DiscountCode.config_id == config_id,
+                    DiscountCode.status == DiscountCodeStatus.ACTIVE
+                ).first()
+                if existing:
+                    logger.warning(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - already has active code")
+                    return None
+
+                # Generar código único
+                code = _generate_trivia_code()
+
+                discount_code = DiscountCode(
+                    config_id=config_id,
+                    code=code,
+                    user_id=user_id,
+                    username=username,
+                    first_name=first_name,
+                    promotion_id=config.promotion_id,
+                    status=DiscountCodeStatus.ACTIVE
+                )
+                session.add(discount_code)
+                session.commit()
+                session.refresh(discount_code)
+
+                result = {
+                    'code': discount_code.code,
+                    'promotion_name': config.promotion.name if config.promotion else config.custom_description,
+                    'discount_percentage': discount_percentage
+                }
+                logger.info(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - success: {code} at {discount_percentage}%")
+                return result
+            except Exception as e:
+                session.rollback()
+                logger.error(f"trivia_discount_service - generate_tiered_discount_code - {user_id} - error: {e}")
+                return None
 
     # ==================== ESTADÍSTICAS ====================
 
