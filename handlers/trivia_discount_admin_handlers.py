@@ -1079,13 +1079,13 @@ async def verify_discount_codes(callback: CallbackQuery):
             for i, code in enumerate(active_codes, 1):
                 user_info = code.username or code.first_name or f"ID:{code.user_id}"
                 details = service.get_code_details_with_streak(code.id)
-                streak = details.get('max_streak', 0) if details else 0
+                correct = details.get('correct_answers', 0) if details else 0
                 discount = code.discount_percentage or config.discount_percentage
 
                 text_parts.append(f"\n{i}. <code>{code.code}</code>")
                 text_parts.append(f"   👤 {user_info}")
                 text_parts.append(f"   💰 Descuento: {discount}%")
-                text_parts.append(f"   🔥 Racha máxima: {streak}")
+                text_parts.append(f"   ✅ Correctas: {correct}")
                 text_parts.append(f"   📅 Generado: {format_date(code.generated_at)}")
                 text_parts.append(f"   ⏱️ Estado: ACTIVO")
 
@@ -1095,13 +1095,13 @@ async def verify_discount_codes(callback: CallbackQuery):
             for i, code in enumerate(used_codes, 1):
                 user_info = code.username or code.first_name or f"ID:{code.user_id}"
                 details = service.get_code_details_with_streak(code.id)
-                streak = details.get('max_streak', 0) if details else 0
+                correct = details.get('correct_answers', 0) if details else 0
                 discount = code.discount_percentage or config.discount_percentage
 
                 text_parts.append(f"\n{i}. <code>{code.code}</code>")
                 text_parts.append(f"   👤 {user_info}")
                 text_parts.append(f"   💰 Descuento: {discount}%")
-                text_parts.append(f"   🔥 Racha máxima: {streak}")
+                text_parts.append(f"   ✅ Correctas: {correct}")
                 text_parts.append(f"   📅 Generado: {format_date(code.generated_at)}")
                 text_parts.append(f"   📅 Usado: {format_date(code.used_at)}")
                 text_parts.append(f"   ⏱️ Estado: USADO")
@@ -1112,13 +1112,13 @@ async def verify_discount_codes(callback: CallbackQuery):
             for i, code in enumerate(other_codes, 1):
                 user_info = code.username or code.first_name or f"ID:{code.user_id}"
                 details = service.get_code_details_with_streak(code.id)
-                streak = details.get('max_streak', 0) if details else 0
+                correct = details.get('correct_answers', 0) if details else 0
                 discount = code.discount_percentage or config.discount_percentage
 
                 text_parts.append(f"\n{i}. <code>{code.code}</code>")
                 text_parts.append(f"   👤 {user_info}")
                 text_parts.append(f"   💰 Descuento: {discount}%")
-                text_parts.append(f"   🔥 Racha máxima: {streak}")
+                text_parts.append(f"   ✅ Correctas: {correct}")
                 text_parts.append(f"   ⏱️ Estado: {code.status.value.upper()}")
 
         text = "".join(text_parts)

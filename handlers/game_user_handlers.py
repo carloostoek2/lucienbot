@@ -181,11 +181,18 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
     if is_streak_continue and not result['correct']:
         data = await state.get_data()
         config_id = data.get('current_config_id')
+        tier_discount = data.get('current_tier_discount', 0)
         if config_id:
             with get_service(GameService) as svc:
                 svc.invalidate_streak_code(user_id, config_id)
         await state.clear()
         keyboard = game_menu_keyboard()
+        message = (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>El silencio de una respuesta incorrecta es ensordecedor.</i>\n\n"
+            f"Su descuento del <b>{tier_discount}%</b> se ha desvanecido.\n\n"
+            "<i>La próximas preguntas esperarán su regreso.</i>"
+        )
         await callback.message.edit_text(message, reply_markup=keyboard)
         await callback.answer()
         logger.info(f"game_user_handlers - trivia_answer - {user_id} - streak_continue_wrong")
@@ -274,10 +281,11 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
         else:
             # Caso 2b: Mostrar opciones de retirarse o continuar
             next_discount = next_tier['discount'] if next_tier else None
+            tier_index = tier_info.get('tier_index', 1)
 
-            message += f"\n\n🔥 <b>¡Racha de {current_streak}!</b>\n\n"
-            message += f"💰 Has unlocked <b>{current_discount}%</b> de descuento.\n\n"
-            message += "<i>¿Qué deseas hacer?</i>"
+            message += f"\n\n🔥 <b>Nivel de descuento {tier_index}</b>\n\n"
+            message += f"💰 Ha desbloqueado <b>{current_discount}%</b> de descuento.\n\n"
+            message += "<i>¿Qué desea hacer?</i>"
 
             # Guardar estado para cuando regrese
             await state.update_data(
@@ -286,11 +294,12 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
                 current_tier_discount=current_discount,
                 current_config_id=config_id,
                 next_tier_streak=next_tier['streak'] if next_tier else None,
-                next_tier_discount=next_tier['discount'] if next_tier else None
+                next_tier_discount=next_tier['discount'] if next_tier else None,
+                tier_index=tier_index
             )
             await state.set_state(TriviaStreakStates.waiting_streak_choice)
 
-            keyboard = streak_choice_keyboard(current_discount, next_discount)
+            keyboard = streak_choice_keyboard(current_discount)
 
         await callback.message.edit_text(message, reply_markup=keyboard)
         await callback.answer()
@@ -395,11 +404,18 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
     if is_streak_continue and not result['correct']:
         data = await state.get_data()
         config_id = data.get('current_config_id')
+        tier_discount = data.get('current_tier_discount', 0)
         if config_id:
             with get_service(GameService) as svc:
                 svc.invalidate_streak_code(user_id, config_id)
         await state.clear()
         keyboard = game_menu_keyboard()
+        message = (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>El silencio de una respuesta incorrecta es ensordecedor.</i>\n\n"
+            f"Su descuento del <b>{tier_discount}%</b> se ha desvanecido.\n\n"
+            "<i>La próximas preguntas esperarán su regreso.</i>"
+        )
         await callback.message.edit_text(message, reply_markup=keyboard)
         await callback.answer()
         logger.info(f"game_user_handlers - trivia_vip_answer - {user_id} - streak_continue_wrong")
@@ -487,10 +503,11 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
         else:
             # Caso 2b: Mostrar opciones
             next_discount = next_tier['discount'] if next_tier else None
+            tier_index = tier_info.get('tier_index', 1)
 
-            message += f"\n\n🔥 <b>¡Racha de {current_streak}!</b>\n\n"
-            message += f"💰 Has unlocked <b>{current_discount}%</b> de descuento.\n\n"
-            message += "<i>¿Qué deseas hacer?</i>"
+            message += f"\n\n🔥 <b>Nivel de descuento {tier_index}</b>\n\n"
+            message += f"💰 Ha desbloqueado <b>{current_discount}%</b> de descuento.\n\n"
+            message += "<i>¿Qué desea hacer?</i>"
 
             await state.update_data(
                 streak_mode=True,
@@ -499,11 +516,12 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
                 current_config_id=config_id,
                 next_tier_streak=next_tier['streak'] if next_tier else None,
                 next_tier_discount=next_tier['discount'] if next_tier else None,
+                tier_index=tier_index,
                 vip_mode=True
             )
             await state.set_state(TriviaStreakStates.waiting_streak_choice)
 
-            keyboard = streak_choice_keyboard(current_discount, next_discount)
+            keyboard = streak_choice_keyboard(current_discount)
 
         await callback.message.edit_text(message, reply_markup=keyboard)
         await callback.answer()
@@ -566,15 +584,42 @@ async def streak_retire(callback: CallbackQuery, state: FSMContext):
     logger.info(f"game_user_handlers - streak_retire - {user_id} - discount:{discount_percentage}%")
 
 
+@router.callback_query(F.data == "streak_exit", TriviaStreakStates.waiting_streak_choice)
+async def streak_exit(callback: CallbackQuery, state: FSMContext):
+    """Usuario elige salir sin reclamar su descuento"""
+    user_id = callback.from_user.id
+    data = await state.get_data()
+
+    tier_discount = data.get('current_tier_discount', 0)
+    tier_index = data.get('tier_index', 0)
+
+    await state.clear()
+
+    message = (
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"Su descuento del <b>{tier_discount}%</b> aguarda pacientemente.\n\n"
+        "<i>Podrá reclamarlo cuando lo desee desde el menú.</i>"
+    )
+    keyboard = game_menu_keyboard()
+
+    await callback.message.edit_text(message, reply_markup=keyboard)
+    await callback.answer()
+    logger.info(f"game_user_handlers - streak_exit - {user_id} - tier:{tier_index} discount:{tier_discount}%")
+
+
 @router.callback_query(F.data == "streak_continue", TriviaStreakStates.waiting_streak_choice)
 async def streak_continue(callback: CallbackQuery, state: FSMContext):
     """Usuario elige continuar para buscar mayor descuento"""
     user_id = callback.from_user.id
     data = await state.get_data()
+    is_vip = data.get('vip_mode', False)
 
     # Verificar que aún tiene oportunidades
     with get_service(GameService) as service:
-        entry_data = service.get_trivia_entry_data(user_id)
+        if is_vip:
+            entry_data = service.get_trivia_vip_entry_data(user_id)
+        else:
+            entry_data = service.get_trivia_entry_data(user_id)
 
         if not entry_data['can_play']:
             await callback.message.edit_text(
@@ -585,7 +630,7 @@ async def streak_continue(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             return
 
-        question, question_idx = service.get_random_question()
+        question, question_idx = service.get_random_vip_question() if is_vip else service.get_random_question()
 
         if question is None:
             await callback.message.edit_text(
@@ -611,7 +656,6 @@ async def streak_continue(callback: CallbackQuery, state: FSMContext):
     # Mantener el estado para la siguiente respuesta
     await state.set_state(TriviaStreakStates.streak_continue)
 
-    is_vip = data.get('vip_mode', False)
     if is_vip:
         keyboard = trivia_vip_keyboard(question, question_idx)
     else:

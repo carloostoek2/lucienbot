@@ -816,12 +816,17 @@ class GameService:
         # Obtener siguiente tier para mostrar al usuario
         next_tier = self._trivia_discount_service.get_next_tier(config, new_streak)
 
+        # Calcular el índice del tier (1, 2, 3...) para mostrar "Nivel de descuento"
+        tiers = self._trivia_discount_service.parse_discount_tiers(config)
+        tier_index = next((i + 1 for i, t in enumerate(tiers) if t['streak'] == tier['streak']), 1)
+
         return {
             'tier_reached': True,
             'current_tier': tier,
             'next_tier': next_tier,
             'config_id': config.id,
-            'is_final': next_tier is None  # True si no hay siguiente tier (100% gratis)
+            'is_final': next_tier is None,  # True si no hay siguiente tier (100% gratis)
+            'tier_index': tier_index
         }
 
     def _generate_tier_discount_code(self, user_id: int, config_id: int, discount_percentage: int) -> Optional[dict]:

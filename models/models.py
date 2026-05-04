@@ -1152,6 +1152,7 @@ class TriviaPromotionConfig(Base):
     is_active = Column(Boolean, default=True)
     discount_percentage = Column(Integer, nullable=False)
     required_streak = Column(Integer, default=5, nullable=False)
+    max_codes = Column(Integer, default=5)
     codes_claimed = Column(Integer, default=0)
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)

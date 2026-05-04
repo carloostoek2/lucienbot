@@ -683,38 +683,28 @@ class TriviaDiscountService:
             }
 
     def get_code_details_with_streak(self, code_id: int) -> Optional[dict]:
-        """Obtiene detalles de un código incluyendo streak máximo alcanzado"""
+        """Obtiene detalles de un código incluyendo total de respuestas correctas"""
         with SessionLocal() as session:
             code = session.get(DiscountCode, code_id)
             if not code:
                 return None
 
-            # Obtener streak máximo de los game_records asociados
+            # Contar respuestas correctas del usuario que ocurrieron ANTES de generar el código
+            # El código se genera al terminar la racha, así que todas las jugadas de esa
+            # racha tienen played_at < generated_at
             from models.models import GameRecord
-            records = session.query(GameRecord).filter(
-                GameRecord.discount_code_id == code_id,
+            query = session.query(GameRecord).filter(
+                GameRecord.user_id == code.user_id,
                 GameRecord.game_type.in_(['trivia', 'trivia_vip'])
-            ).all()
+            )
+            # Filtrar jugadas anteriores a la generación del código
+            if code.generated_at:
+                query = query.filter(GameRecord.played_at < code.generated_at)
 
-            max_streak = 0
-            for record in records:
-                # El streak se mide por victorias consecutivas
-                # Un GameRecord con payout > 0 indica victoria
-                if record.payout > 0:
-                    max_streak += 1
-                else:
-                    max_streak = 0
+            records = query.order_by(GameRecord.played_at.desc()).all()
 
-            # Calcular streak máximo de otra forma: buscar rachas consecutivas
-            # En lugar de lo anterior, buscamos el máximo consecutive wins
-            max_streak = 0
-            current_streak = 0
-            for record in records:
-                if record.payout > 0:
-                    current_streak += 1
-                    max_streak = max(max_streak, current_streak)
-                else:
-                    current_streak = 0
+            # Contar respuestas correctas (payout > 0)
+            correct_count = sum(1 for r in records if r.payout > 0)
 
             return {
                 'code_id': code.id,
@@ -724,7 +714,7 @@ class TriviaDiscountService:
                 'first_name': code.first_name,
                 'status': code.status.value,
                 'discount_percentage': code.discount_percentage,
-                'max_streak': max_streak,
+                'correct_answers': correct_count,
                 'generated_at': code.generated_at.isoformat() if code.generated_at else None,
                 'used_at': code.used_at.isoformat() if code.used_at else None,
                 'config_id': code.config_id
