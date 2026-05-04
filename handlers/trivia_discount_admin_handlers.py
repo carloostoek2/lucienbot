@@ -679,15 +679,17 @@ async def create_trivia_discount_confirm(callback: CallbackQuery, state: FSMCont
 
 @router.callback_query(F.data == "view_trivia_discounts", lambda cb: is_admin(cb.from_user.id))
 async def view_trivia_discounts(callback: CallbackQuery):
-    """Ver configuraciones activas"""
+    """Ver configuraciones (todas, activas e inactivas)"""
     service = TriviaDiscountService()
     try:
-        configs = service.get_active_trivia_promotion_configs()
+        # Obtener TODAS las configs (no solo activas)
+        all_configs = service.get_all_trivia_promotion_configs()
+        active_configs = [c for c in all_configs if c.is_active]
 
-        if not configs:
+        if not all_configs:
             await callback.message.edit_text(
                 "🎩 <b>Lucien:</b>\n\n"
-                "<i>No hay configuraciones activas.</i>",
+                "<i>No hay configuraciones creadas.</i>",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
                 ]),
@@ -696,37 +698,60 @@ async def view_trivia_discounts(callback: CallbackQuery):
             await callback.answer()
             return
 
-        for config in configs:
-            stats = service.get_discount_stats(config.id)
+        # Mostrar siempre la primera (índice 0 del message group)
+        config = all_configs[0]
+        stats = service.get_discount_stats(config.id)
 
-            # Construir botones según el tipo de vigencia
-            keyboard_buttons = [
-                [InlineKeyboardButton(
-                    text="📊 Ver códigos",
-                    callback_data=f"view_codes_{config.id}"
-                )]
-            ]
+        # Determinar estado
+        is_expired = False
+        if not config.is_active:
+            # Verificar si expiró por fecha fija
+            if config.end_date:
+                from datetime import datetime, timezone
+                if datetime.now(timezone.utc) > config.end_date:
+                    is_expired = True
+            status_text = "⏸️ Inactiva"
+        else:
+            status_text = "✅ Activa"
 
-            # Si es duración relativa, mostrar tiempo restante y botón de extender
-            if service.is_duration_based(config):
-                remaining = service.get_time_remaining_formatted(config.id)
-                # Info de ciclos de reinicio automático
-                if config.auto_reset_enabled and config.max_reset_cycles:
-                    cycles_info = f" | 🔄 Ciclo {config.reset_count}/{config.max_reset_cycles}"
-                elif config.auto_reset_enabled:
-                    cycles_info = f" | 🔄 Ciclo {config.reset_count}/∞"
-                else:
-                    cycles_info = ""
-                time_info = f"\n⏱️ Tiempo: {remaining}{cycles_info}"
+        # Construir botones según el tipo de vigencia
+        keyboard_buttons = [
+            [InlineKeyboardButton(
+                text="📊 Ver códigos",
+                callback_data=f"view_codes_{config.id}"
+            )]
+        ]
+
+        # Si es duración relativa, mostrar tiempo restante y botón de extender
+        if service.is_duration_based(config):
+            remaining = service.get_time_remaining_formatted(config.id)
+            # Info de ciclos de reinicio automático
+            if config.auto_reset_enabled and config.max_reset_cycles:
+                cycles_info = f" | 🔄 Ciclo {config.reset_count}/{config.max_reset_cycles}"
+            elif config.auto_reset_enabled:
+                cycles_info = f" | 🔄 Ciclo {config.reset_count}/∞"
+            else:
+                cycles_info = ""
+            time_info = f"\n⏱️ Tiempo: {remaining}{cycles_info}"
+            if config.is_active:
                 keyboard_buttons.append([
                     InlineKeyboardButton(
                         text="⏰ Extender",
                         callback_data=f"extend_duration_{config.id}"
                     )
                 ])
+        else:
+            # Mostrar fechas de vigencia
+            if config.start_date and config.end_date:
+                time_info = f"\n📅 {config.start_date.strftime('%Y-%m-%d')} - {config.end_date.strftime('%Y-%m-%d')}"
+            elif config.start_date:
+                time_info = f"\n📅 Desde {config.start_date.strftime('%Y-%m-%d')}"
+            elif config.end_date:
+                time_info = f"\n📅 Hasta {config.end_date.strftime('%Y-%m-%d')}"
             else:
                 time_info = ""
 
+        if config.is_active:
             keyboard_buttons.extend([
                 [InlineKeyboardButton(
                     text="⏸️ Pausar",
@@ -735,25 +760,34 @@ async def view_trivia_discounts(callback: CallbackQuery):
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
                     callback_data=f"delete_trivia_{config.id}"
-                )],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")]
+                )]
             ])
-
-            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-
-            promo = config.promotion
-            promo_info = f"🏪 {promo.name}" if promo else f"✨ {config.custom_description or 'N/A'}"
-            await callback.message.edit_text(
-                f"🎫 <b>{config.name}</b>\n\n"
-                f"📋 {promo_info}\n"
-                f"💰 Descuento: {config.discount_percentage}%\n"
-                f"🔥 Racha: {config.required_streak}\n"
-                f"🎫 Códigos: {stats['available']} disponibles / {config.max_codes} total\n"
-                f"📊 Usados: {stats['used']} ({stats['used_percentage']}%){time_info}",
-                reply_markup=keyboard,
-                parse_mode="HTML"
+        else:
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text="🗑️ Eliminar",
+                    callback_data=f"delete_trivia_{config.id}"
+                )]
             )
-            break
+
+        keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_trivia_discount")])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+        promo = config.promotion
+        promo_info = f"🏪 {promo.name}" if promo else f"✨ {config.custom_description or 'N/A'}"
+        status_line = f"\n📌 Estado: {status_text}" if status_text else ""
+
+        await callback.message.edit_text(
+            f"🎫 <b>{config.name}</b>{status_line}\n\n"
+            f"📋 {promo_info}\n"
+            f"💰 Descuento: {config.discount_percentage}%\n"
+            f"🔥 Racha: {config.required_streak}\n"
+            f"🎫 Códigos: {stats['available']} disponibles / {config.max_codes} total\n"
+            f"📊 Usados: {stats['used']} ({stats['used_percentage']}%){time_info}",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
     finally:
         pass
     await callback.answer()

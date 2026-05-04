@@ -30,10 +30,8 @@ Gestiona la configuración de promociones vinculadas a rachas de trivia y la gen
 ### Configuración
 - `create_trivia_promotion_config()` - Crea configuración de promoción
 - `get_trivia_promotion_config()` - Obtiene por ID
-- `get_active_trivia_promotion_configs()` - Lista activas
-- `update_trivia_promotion_config()` - Actualiza
-- `delete_trivia_promotion_config()` - Elimina
-- `pause_trivia_promotion_config()` - Pausa
+- `get_active_trivia_promotion_configs()` - Lista configs activas (is_active=True)
+- `get_all_trivia_promotion_configs()` - Lista TODAS las configs (activas e inactivas)
 
 ### Códigos
 - `generate_discount_code()` - Genera TRI-XXXXXX

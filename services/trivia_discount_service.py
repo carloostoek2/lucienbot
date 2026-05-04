@@ -105,6 +105,16 @@ class TriviaDiscountService:
             logger.info(f"trivia_discount_service - get_active_trivia_promotion_configs - count: {len(configs)}")
             return configs
 
+    def get_all_trivia_promotion_configs(self) -> list[TriviaPromotionConfig]:
+        """Obtiene todas las configuraciones (activas e inactivas)"""
+        with SessionLocal() as session:
+            configs = session.query(TriviaPromotionConfig).options(
+                joinedload(TriviaPromotionConfig.promotion),
+                joinedload(TriviaPromotionConfig.question_set)
+            ).order_by(TriviaPromotionConfig.created_at.desc()).all()
+            logger.info(f"trivia_discount_service - get_all_trivia_promotion_configs - count: {len(configs)}")
+            return configs
+
     def update_trivia_promotion_config(self, config_id: int, **kwargs) -> bool:
         """Actualiza configuración"""
         with SessionLocal() as session:
@@ -211,6 +221,13 @@ class TriviaDiscountService:
                         session.commit()
                         logger.info(f"trivia_discount_service - get_time_remaining - {config_id} - no cycles left, deactivated")
                         return 0
+
+                # Si tiempo expiró y no tiene reinicio automático, marcar inactiva
+                if remaining <= 0 and not config.auto_reset_enabled and config.is_active:
+                    config.is_active = False
+                    session.commit()
+                    logger.info(f"trivia_discount_service - get_time_remaining - {config_id} - duration expired, deactivated")
+                    return 0
 
                 return remaining
             except Exception as e:

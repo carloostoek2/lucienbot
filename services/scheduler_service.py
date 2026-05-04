@@ -252,6 +252,41 @@ def _is_config_active(config, now: datetime, check_started_at: bool = True) -> b
     return is_started and is_not_expired
 
 
+async def _expire_trivia_configs():
+    """Marca como inactivas las TriviaPromotionConfigs cuya fecha de expiración ya pasó.
+
+    Job programado cada 5 minutos. Detecta configs con end_date en el pasado
+    y marca is_active=False para que reflejen estado correcto en el panel admin.
+    """
+    from models.models import TriviaPromotionConfig
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        expired_configs = db.query(TriviaPromotionConfig).filter(
+            TriviaPromotionConfig.is_active == True,
+            TriviaPromotionConfig.end_date.isnot(None),
+            TriviaPromotionConfig.end_date < now
+        ).all()
+
+        count = 0
+        for config in expired_configs:
+            config.is_active = False
+            count += 1
+            logger.info(
+                f"[Scheduler] Expiró trivia_promotion_config id={config.id} "
+                f"'{config.name}' - end_date={config.end_date}"
+            )
+
+        if count > 0:
+            db.commit()
+            logger.info(f"[Scheduler] _expire_trivia_configs - {count} configs desactivadas")
+    except Exception as e:
+        logger.error(f"[Scheduler] Error en _expire_trivia_configs: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 async def _sync_question_sets():
     """Sincroniza el question set activo basándose en promociones activas.
 
@@ -445,6 +480,13 @@ class SchedulerService:
             trigger=IntervalTrigger(minutes=1),
             id="sync_question_sets",
             name="Sync active question set from promotions",
+            replace_existing=True,
+        )
+        self._scheduler.add_job(
+            _expire_trivia_configs,
+            trigger=IntervalTrigger(minutes=5),
+            id="expire_trivia_configs",
+            name="Expire trivia promotion configs past end_date",
             replace_existing=True,
         )
 
