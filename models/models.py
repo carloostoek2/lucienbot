@@ -1145,10 +1145,13 @@ class TriviaPromotionConfig(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
+    promotion_id = Column(Integer, ForeignKey("promotions.id"), nullable=True)
+    custom_description = Column(String(500), nullable=True)
     # Status: active, paused, expired, completed
     status = Column(String(20), default="active", nullable=False)
     is_active = Column(Boolean, default=True)
-    max_codes = Column(Integer, default=5)
+    discount_percentage = Column(Integer, nullable=False)
+    required_streak = Column(Integer, default=5, nullable=False)
     codes_claimed = Column(Integer, default=0)
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
