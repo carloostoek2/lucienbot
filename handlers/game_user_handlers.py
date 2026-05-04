@@ -111,42 +111,45 @@ async def game_trivia(callback: CallbackQuery):
 
         if question is None:
             await callback.message.edit_text(
-                "Las preguntas están en el taller de Lucien. Regresa más tarde.",
+                "🎩 Lucien:\n\n<i>Las preguntas están en el taller de Lucien.\nRegresa más tarde.</i>",
                 reply_markup=game_menu_keyboard()
             )
             await callback.answer()
             return
 
-    counter_text = data['counter_template'].format(
-        remaining=data['remaining'],
-        limit=data['limit']
-    )
+    # Construir header con barra decorativa
+    header = service._select_template(service.STREAK_TEMPLATES['entry_header'])
 
-    streak_text = ""
-    if data['current_streak'] > 0:
-        streak_text = f"\n🔥 Racha actual: {data['current_streak']}"
+    # Construir línea de stats
+    stats_line = f"🔥 Racha: {data['current_streak']}  •  📜 Intentos: {data['remaining']}/{data['limit']}"
 
-    # Información de descuento por racha
+    # Construir bloque de promoción si existe
     discount_info = data.get('discount_info')
-    discount_text = ""
-    if discount_info:
-        needed = max(0, discount_info['required_streak'] - data['current_streak'])
-        discount_text = f"\n\n🎁 <b>Promoción por racha:</b>\n"
-        discount_text += f"• Racha requerida: {discount_info['required_streak']} ({needed} más para desbloquear)\n"
-        discount_text += f"• Descuentos disponibles: {discount_info['available_codes']} de {discount_info['total_codes']}"
+    promotion_block = ""
+    if discount_info and discount_info.get('promotion_id'):
+        promo_header = service._select_template(service.STREAK_TEMPLATES['entry_promotion_bar'])
+        promo_progress = service._build_streak_promotion_text(
+            current_streak=data['current_streak'],
+            required_streak=discount_info['required_streak'],
+            discount=discount_info['discount_percentage'],
+            time_remaining=discount_info.get('time_remaining')
+        )
+        no_promo_text = service._select_template(service.STREAK_TEMPLATES['entry_no_promotion'])
+        promotion_block = f"\n{promo_header}\n{promo_progress}\n{no_promo_text}\n"
 
-        # Mostrar tiempo restante si es duración relativa
-        if discount_info.get('time_remaining') and discount_info.get('is_duration_based'):
-            discount_text += f"\n• ⏱️ Tiempo restante: {discount_info['time_remaining']}"
-
-        if discount_info.get('user_has_code'):
-            discount_text += f"\n• Su código: <code>{discount_info['user_code']}</code>"
+    # Construir texto final
+    question_text = service._select_template(
+        service.STREAK_TEMPLATES['entry_footer_question']
+    ).format(question=question['q'])
 
     text = (
-        f"<b>{data['title']}</b>{streak_text}\n\n"
-        f"{data['intro']}\n\n"
-        f"<i>{counter_text}</i>{discount_text}\n\n"
-        f"❓ <b>Pregunta:</b> {question['q']}"
+        f"{header}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{stats_line}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{promotion_block}"
+        f"────────────────────────────\n"
+        f"{question_text}"
     )
 
     await callback.message.edit_text(
