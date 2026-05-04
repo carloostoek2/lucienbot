@@ -66,7 +66,7 @@ async def admin_trivia_discount_menu(callback: CallbackQuery):
         keyboard.inline_keyboard.append([
             InlineKeyboardButton(
                 text="🔙 Volver",
-                callback_data="admin_gamification"
+                callback_data="admin_trivia_management"
             )
         ])
 

@@ -11,6 +11,7 @@ from config.settings import bot_config
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
 from services.channel_service import ChannelService
+from services.trivia_config_service import TriviaConfigService
 from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, cancel_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
@@ -61,8 +62,8 @@ async def admin_gamification_menu(callback: CallbackQuery):
             callback_data="admin_missions"
         )],
         [InlineKeyboardButton(
-            text="🎫 Promociones por racha",
-            callback_data="admin_trivia_discount"
+            text="🎯 Gestión de trivias",
+            callback_data="admin_trivia_management"
         )],
         [InlineKeyboardButton(
             text="🛒 Gestionar tienda",

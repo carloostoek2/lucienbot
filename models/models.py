@@ -1189,3 +1189,20 @@ class DiscountCode(Base):
     config = relationship("TriviaPromotionConfig", back_populates="discount_codes")
     promotion = relationship("Promotion")
     game_records = relationship("GameRecord", back_populates="discount_code")
+
+
+# ============================================================
+# FASE TRIVIA CONFIG: Configuración Editable de Intentos
+# ============================================================
+
+class TriviaConfig(Base):
+    """Configuración de límites de intentos de trivia"""
+    __tablename__ = "trivia_config"
+
+    id = Column(Integer, primary_key=True)
+    daily_trivia_limit_free = Column(Integer, default=7, nullable=False)
+    daily_trivia_limit_vip = Column(Integer, default=15, nullable=False)
+    daily_trivia_vip_limit = Column(Integer, default=5, nullable=False)
+    is_active = Column(Boolean, default=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_by = Column(BigInteger, nullable=True)

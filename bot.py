@@ -57,6 +57,8 @@ from handlers import (
     trivia_discount_admin_router,
     # Phase 17 - Question Sets
     question_set_admin_router,
+    # Phase 18 - Trivia Management
+    trivia_admin_router,
     # Phase 15 - Mochila
     backpack_router,
 )
@@ -278,6 +280,8 @@ async def main():
     dp.include_router(trivia_discount_admin_router)
     # Phase 17 - Question Sets
     dp.include_router(question_set_admin_router)
+    # Phase 18 - Trivia Management
+    dp.include_router(trivia_admin_router)
     # Phase 15 - Mochila
     dp.include_router(backpack_router)
 

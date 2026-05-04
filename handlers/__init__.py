@@ -34,6 +34,8 @@ from .game_user_handlers import router as game_user_router
 from .trivia_discount_admin_handlers import router as trivia_discount_admin_router
 # Phase 17 - Question Sets
 from .question_set_admin_handlers import router as question_set_admin_router
+# Phase 18 - Trivia Management
+from .trivia_admin_handlers import router as trivia_admin_router
 # Phase 15 - Mochila
 from .backpack_handler import router as backpack_router
 
@@ -74,6 +76,8 @@ __all__ = [
     'trivia_discount_admin_router',
     # Phase 17 - Question Sets
     'question_set_admin_router',
+    # Phase 18 - Trivia Management
+    'trivia_admin_router',
     # Phase 15 - Mochila
     'backpack_router'
 ]
