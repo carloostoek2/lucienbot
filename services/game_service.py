@@ -488,6 +488,39 @@ class GameService:
         logger.debug(f"game_service - _select_template - selected from {len(template_list)} variations")
         return selected
 
+    def _build_progress_bar(self, current: int, total: int, length: int = 10) -> str:
+        """Construye una barra de progreso ASCII"""
+        filled = int(length * current / total) if total > 0 else 0
+        bar = "▓" * filled + "░" * (length - filled)
+        return f" [{bar}]"
+
+    def _build_streak_promotion_text(
+        self,
+        current_streak: int,
+        required_streak: int,
+        discount: int,
+        time_remaining: str = None
+    ) -> str:
+        """Construye el bloque de promoción con barra de progreso"""
+        remaining = max(0, required_streak - current_streak)
+
+        # Barra de progreso
+        progress = self._build_progress_bar(current_streak, required_streak, 10)
+
+        # Template de progreso
+        progress_template = self._select_template(self.STREAK_TEMPLATES['entry_promotion_progress'])
+        progress_text = progress_template.format(
+            remaining_streak=remaining,
+            discount=discount
+        )
+
+        result = f"{progress} {progress_text}"
+
+        if time_remaining:
+            result += f"\n⏳ La oferta expira en: {time_remaining}"
+
+        return result
+
     def _is_near_miss(self, dice1: int, dice2: int) -> dict:
         """
         Detecta 'casi victorias' en dados.
