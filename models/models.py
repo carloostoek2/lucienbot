@@ -145,10 +145,11 @@ class PendingRequest(Base):
     channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
     username = Column(String(100), nullable=True)
     first_name = Column(String(100), nullable=True)
-    status = Column(String(20), default="pending")  # pending, approved, cancelled
+    status = Column(String(20), default="pending")  # pending, approved, cancelled, failed
     requested_at = Column(DateTime(timezone=True), server_default=func.now())
     scheduled_approval_at = Column(DateTime(timezone=True), nullable=False)
     approved_at = Column(DateTime(timezone=True), nullable=True)
+    approval_attempts = Column(Integer, default=0)  # Contador de intentos de aprobación
     
     # Relaciones
     channel = relationship("Channel", back_populates="pending_requests")

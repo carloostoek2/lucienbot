@@ -96,6 +96,7 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
 
 async def _process_pending_requests():
     """Procesa solicitudes pendientes listas para aprobar (llamado por APScheduler)."""
+    from telegram.error import TelegramError
     db = SessionLocal()
     try:
         channel_service = ChannelService(db)
@@ -103,6 +104,9 @@ async def _process_pending_requests():
         bot = _get_bot()
 
         for request in ready_requests:
+            request.approval_attempts = (request.approval_attempts or 0) + 1
+            attempt = request.approval_attempts
+
             try:
                 channel = request.channel
                 if not channel or not channel.is_active:
@@ -136,6 +140,25 @@ async def _process_pending_requests():
                     logger.error(f"Error enviando bienvenida a user={request.user_id}: {e}")
 
                 logger.info(f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}")
+
+            except TelegramError as e:
+                error_str = str(e).lower()
+                if "user_already_participant" in error_str:
+                    # El usuario ya es participante - marcar como aprobado y no retry
+                    request.status = "approved"
+                    request.approved_at = datetime.utcnow()
+                    db.commit()
+                    logger.info(f"Solicitud {request.id} marcada approved (ya era participante): user={request.user_id}")
+                elif attempt < 2:
+                    # Otro error Telegram - reintentar en siguiente ciclo
+                    logger.warning(f"Error Telegram aprobando solicitud {request.id} (intento {attempt}): {e}")
+                    db.rollback()
+                else:
+                    # 2+ intentos fallidos - marcar como failed
+                    request.status = "failed"
+                    db.commit()
+                    logger.error(f"Solicitud {request.id} marcada failed tras {attempt} intentos: {e}")
+                    db.rollback()
 
             except Exception as e:
                 logger.error(f"Error aprobando solicitud {request.id}: {e}")
