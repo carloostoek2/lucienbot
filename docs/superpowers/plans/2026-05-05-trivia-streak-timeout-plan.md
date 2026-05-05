@@ -27,7 +27,7 @@
 
 - [ ] **Step 1: Add constants**
 
-Find the `TRIVIA_WIN_BESITOS` constant around line 200. Add above it:
+Find `TRIVIA_WIN_BESITOS` around line 36. Add above it:
 
 ```python
 STREAK_TIMEOUT_SECONDS = 120  # 2 minutes max to answer all questions in a streak session
@@ -267,24 +267,65 @@ async def streak_retire(callback: CallbackQuery, state: FSMContext):
     # --- END TIMEOUT CHECK ---
 ```
 
-- [ ] **Step 2: Add timeout check to `streak_continue` handler**
+- [ ] **Step 2: Add timeout check to `streak_continue` handler (line 680)**
 
-Find the streak_continue handler. It should be after streak_retire. Add the same timeout check at the beginning.
+```python
+@router.callback_query(F.data == "streak_continue", TriviaStreakStates.waiting_streak_choice)
+async def streak_continue(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
 
-- [ ] **Step 3: Find `streak_exit` handler and add timeout check**
-
-```bash
-grep -n "streak_exit" handlers/game_user_handlers.py
+    # --- TIMEOUT CHECK ---
+    with get_service(GameService) as service:
+        data = await state.get_data()
+        if not service._check_streak_timeout(data):
+            service._handle_streak_timeout(user_id, data)
+            await state.clear()
+            timeout_msg = service._select_template(service.STREAK_TEMPLATES['timeout'])
+            message = f"{timeout_msg}\n\n<i>¿Qué desea hacer ahora?</i>"
+            await callback.message.edit_text(message, reply_markup=game_menu_keyboard())
+            await callback.answer()
+            logger.info(f"game_user_handlers - streak_continue - {user_id} - timeout_expired")
+            return
+    # --- END TIMEOUT CHECK ---
 ```
 
-Add the same timeout check pattern.
+- [ ] **Step 3: Add timeout check to `streak_exit` handler (line 652)**
+
+```python
+@router.callback_query(F.data == "streak_exit", TriviaStreakStates.waiting_streak_choice)
+async def streak_exit(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+
+    # --- TIMEOUT CHECK ---
+    with get_service(GameService) as service:
+        data = await state.get_data()
+        if not service._check_streak_timeout(data):
+            service._handle_streak_timeout(user_id, data)
+            await state.clear()
+            timeout_msg = service._select_template(service.STREAK_TEMPLATES['timeout'])
+            message = f"{timeout_msg}\n\n<i>¿Qué desea hacer ahora?</i>"
+            await callback.message.edit_text(message, reply_markup=game_menu_keyboard())
+            await callback.answer()
+            logger.info(f"game_user_handlers - streak_exit - {user_id} - timeout_expired")
+            return
+    # --- END TIMEOUT CHECK ---
+```
 
 - [ ] **Step 4: Verify all compile**
 
 Run: `cd /home/ubuntu/repos/lucienbot && python -c "from handlers.game_user_handlers import router; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add datetime import to game_user_handlers.py**
+
+Find the imports section (line 1-24). Add after `from datetime import datetime, timezone` (already imported in Task 4, Step 2):
+
+Verify `datetime` and `timezone` are imported at the top. If not, add:
+```python
+from datetime import datetime, timezone
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add handlers/game_user_handlers.py
