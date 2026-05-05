@@ -319,6 +319,7 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
         else:
             # Caso 2b: Mostrar opciones de retirarse o continuar
             next_discount = next_tier['discount'] if next_tier else None
+            next_streak = next_tier['streak'] if next_tier else None
             tier_index = tier_info.get('tier_index', 1)
 
             # Nuevo formato de nivel alcanzado

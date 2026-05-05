@@ -96,7 +96,6 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
 
 async def _process_pending_requests():
     """Procesa solicitudes pendientes listas para aprobar (llamado por APScheduler)."""
-    from telegram.error import TelegramError
     db = SessionLocal()
     try:
         channel_service = ChannelService(db)
@@ -141,7 +140,7 @@ async def _process_pending_requests():
 
                 logger.info(f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}")
 
-            except TelegramError as e:
+            except Exception as e:
                 error_str = str(e).lower()
                 if "user_already_participant" in error_str:
                     # El usuario ya es participante - marcar como aprobado y no retry
