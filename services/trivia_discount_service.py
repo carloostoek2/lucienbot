@@ -381,7 +381,7 @@ class TriviaDiscountService:
                     first_name=first_name,
                     promotion_id=config.promotion_id,
                     status=DiscountCodeStatus.ACTIVE,
-                    discount_percentage=discount_percentage
+                    discount_percentage=config.discount_percentage
                 )
                 session.add(discount_code)
                 session.commit()
@@ -391,7 +391,7 @@ class TriviaDiscountService:
                 result = {
                     'code': discount_code.code,
                     'promotion_name': config.promotion.name if config.promotion else config.custom_description,
-                    'discount_percentage': discount_percentage
+                    'discount_percentage': config.discount_percentage
                 }
                 logger.info(f"trivia_discount_service - generate_discount_code - {user_id} - success: {code}")
                 return result
