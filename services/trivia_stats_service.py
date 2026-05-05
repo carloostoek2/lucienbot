@@ -247,3 +247,138 @@ class TriviaStatsService:
         finally:
             if self._owns_session:
                 db.close()
+
+    # ─── Ranking Methods ───────────────────────────────────────────────────────
+
+    def _build_user_rank_entry(self, user_id: int, value: float) -> dict:
+        """Build a ranking entry dict with user info."""
+        db = self._get_db()
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            return {
+                'user_id': user_id,
+                'username': user.username if user else None,
+                'first_name': user.first_name if user else None,
+                'value': value
+            }
+        finally:
+            if self._owns_session:
+                db.close()
+
+    def _calc_max_streak_for_user(self, user_id: int) -> int:
+        """Calculate max streak for a user across trivia and trivia_vip."""
+        db = self._get_db()
+        try:
+            max_streak = 0
+            for game_type in ['trivia', 'trivia_vip']:
+                records = db.query(GameRecord).filter(
+                    GameRecord.user_id == user_id,
+                    GameRecord.game_type == game_type
+                ).order_by(GameRecord.played_at.asc()).all()
+                current = 0
+                for record in records:
+                    if record.payout > 0:
+                        current += 1
+                        max_streak = max(max_streak, current)
+                    else:
+                        current = 0
+            return max_streak
+        finally:
+            if self._owns_session:
+                db.close()
+
+    def get_top_scorers(self, limit: int = 10) -> list[dict]:
+        """Top users by total correct answers (trivia + trivia_vip combined)."""
+        db = self._get_db()
+        try:
+            rows = db.query(
+                GameRecord.user_id,
+                func.count(GameRecord.id).label('correct_count')
+            ).filter(
+                GameRecord.game_type.in_(['trivia', 'trivia_vip']),
+                GameRecord.payout > 0
+            ).group_by(
+                GameRecord.user_id
+            ).order_by(
+                func.count(GameRecord.id).desc()
+            ).limit(limit).all()
+
+            results = []
+            for rank, row in enumerate(rows, start=1):
+                entry = self._build_user_rank_entry(row.user_id, row.correct_count)
+                entry['rank'] = rank
+                results.append(entry)
+
+            logger.info(f"trivia_stats_service - get_top_scorers - returned {len(results)} entries")
+            return results
+        except Exception as e:
+            logger.error(f"trivia_stats_service - get_top_scorers - error: {e}")
+            return []
+        finally:
+            if self._owns_session:
+                db.close()
+
+    def get_top_streaks(self, limit: int = 10) -> list[dict]:
+        """Top users by max streak (trivia + trivia_vip combined)."""
+        db = self._get_db()
+        try:
+            # Get all unique user_ids who played trivia/trivia_vip
+            user_ids = db.query(GameRecord.user_id).filter(
+                GameRecord.game_type.in_(['trivia', 'trivia_vip'])
+            ).distinct().all()
+            user_ids = [uid[0] for uid in user_ids]
+
+            # Calculate max streak for each user
+            streak_data = []
+            for user_id in user_ids:
+                max_s = self._calc_max_streak_for_user(user_id)
+                streak_data.append((user_id, max_s))
+
+            # Sort by max_streak DESC
+            streak_data.sort(key=lambda x: x[1], reverse=True)
+            streak_data = streak_data[:limit]
+
+            results = []
+            for rank, (user_id, max_s) in enumerate(streak_data, start=1):
+                entry = self._build_user_rank_entry(user_id, max_s)
+                entry['rank'] = rank
+                results.append(entry)
+
+            logger.info(f"trivia_stats_service - get_top_streaks - returned {len(results)} entries")
+            return results
+        except Exception as e:
+            logger.error(f"trivia_stats_service - get_top_streaks - error: {e}")
+            return []
+        finally:
+            if self._owns_session:
+                db.close()
+
+    def get_top_codes_redeemed(self, limit: int = 10) -> list[dict]:
+        """Top users by used discount codes."""
+        db = self._get_db()
+        try:
+            rows = db.query(
+                DiscountCode.user_id,
+                func.count(DiscountCode.id).label('codes_count')
+            ).filter(
+                DiscountCode.status == DiscountCodeStatus.USED
+            ).group_by(
+                DiscountCode.user_id
+            ).order_by(
+                func.count(DiscountCode.id).desc()
+            ).limit(limit).all()
+
+            results = []
+            for rank, row in enumerate(rows, start=1):
+                entry = self._build_user_rank_entry(row.user_id, row.codes_count)
+                entry['rank'] = rank
+                results.append(entry)
+
+            logger.info(f"trivia_stats_service - get_top_codes_redeemed - returned {len(results)} entries")
+            return results
+        except Exception as e:
+            logger.error(f"trivia_stats_service - get_top_codes_redeemed - error: {e}")
+            return []
+        finally:
+            if self._owns_session:
+                db.close()
