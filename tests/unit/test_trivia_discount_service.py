@@ -93,7 +93,7 @@ class TestTriviaDiscountService:
         assert "streak" in msg
 
     def test_validate_discount_tiers_discount_not_increasing(self):
-        """Debe rechazar tiers con discount no creciente (excepto 100%)."""
+        """Debe rechazar tiers con discount no creciente."""
         service = TriviaDiscountService()
         tiers = [
             {"streak": 3, "discount": 50},
@@ -101,16 +101,6 @@ class TestTriviaDiscountService:
         ]
         is_valid, msg = service.validate_discount_tiers(tiers)
         assert is_valid is False
-
-    def test_validate_discount_tiers_100_final_allowed(self):
-        """Debe permitir que el tier final sea 100% (aunque no creciente)."""
-        service = TriviaDiscountService()
-        tiers = [
-            {"streak": 5, "discount": 50},
-            {"streak": 10, "discount": 100},
-        ]
-        is_valid, msg = service.validate_discount_tiers(tiers)
-        assert is_valid is True
 
     def test_validate_discount_tiers_invalid_discount_range(self):
         """Debe rechazar discount fuera de 0-100."""

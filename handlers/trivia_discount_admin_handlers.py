@@ -247,7 +247,7 @@ async def tier_mode_multi(callback: CallbackQuery, state: FSMContext):
         "• streak: respuestas correctas para desbloquear\n"
         "• discount: porcentaje de descuento (0-100)\n"
         "• Ordene por streak ascendente\n"
-        "• El último tier DEBE ser 100%",
+        "• El último tier es el máximo descuento de la promoción",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_trivia_discount")]
         ]),

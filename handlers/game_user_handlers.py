@@ -18,6 +18,7 @@ from keyboards.inline_keyboards import (
     trivia_vip_result_keyboard,
     discount_claim_keyboard,
     streak_choice_keyboard,
+    streak_continue_keyboard,
     streak_final_keyboard
 )
 from services import get_service, GameService
@@ -333,8 +334,7 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
 
             message = (
                 f"🎩 Lucien hace una reverencia... medida.\n\n"
-                f'"{current_streak}. Ha llegado a {current_streak}.\n'
-                f'Debo admitir que no lo tenía del todo previsto."\n\n'
+                f"✨ <b>¡Correcto!</b> Lleva {current_streak} aciertos consecutivos.\n\n"
                 f"{header_template.format(tier=tier_index)}\n"
                 f"{bar_template}\n"
                 f"  {icon_template} {unlock_template.format(discount=current_discount)}\n"
@@ -357,7 +357,7 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
             )
             await state.set_state(TriviaStreakStates.waiting_streak_choice)
 
-            keyboard = streak_choice_keyboard(current_discount)
+            keyboard = streak_continue_keyboard()
 
         await callback.message.edit_text(message, reply_markup=keyboard)
         await callback.answer()
@@ -583,8 +583,7 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
 
             message = (
                 f"🎩 Lucien hace una reverencia... medida.\n\n"
-                f'"{current_streak}. Ha llegado a {current_streak}.\n'
-                f'Debo admitir que no lo tenía del todo previsto."\n\n'
+                f"✨ <b>¡Correcto!</b> Lleva {current_streak} aciertos consecutivos.\n\n"
                 f"{header_template.format(tier=tier_index)}\n"
                 f"{bar_template}\n"
                 f"  {icon_template} {unlock_template.format(discount=current_discount)}\n"
@@ -607,7 +606,7 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
             )
             await state.set_state(TriviaStreakStates.waiting_streak_choice)
 
-            keyboard = streak_choice_keyboard(current_discount)
+            keyboard = streak_continue_keyboard()
 
         await callback.message.edit_text(message, reply_markup=keyboard)
         await callback.answer()
@@ -809,12 +808,13 @@ async def streak_continue(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "streak_final_win")
 async def streak_final_win(callback: CallbackQuery):
-    """Usuario gana 100% - solo confirmar"""
+    """Usuario alcanza el último tier - solo confirmar"""
     await callback.message.edit_text(
         "🎩 <b>Lucien:</b>\n\n"
-        "<i>El destino ha sido benevolent hacia usted. Su código de descuento completo le espera.</i>\n\n"
-        "Puede usarlo cuando desee para obtener el producto gratuitamente.",
+        "<i>El destino ha sido benevolent hacia usted. Su código de descuento le espera.</i>\n\n"
+        "🎫 Pero la fortuna es voluble: tiene <b>2 horas</b> para canjearlo antes de que caduque.\n"
+        "No lo deje esperar. Lucien tampoco lo haría.",
         reply_markup=game_menu_keyboard()
     )
     await callback.answer()
-    logger.info(f"game_user_handlers - streak_final_win - {callback.from_user.id} - complete_win")
+    logger.info(f"game_user_handlers - streak_final_win - {callback.from_user.id} - final_tier_reached")

@@ -532,8 +532,8 @@ class TriviaDiscountService:
             if streak <= prev_streak:
                 return False, f"Tier {i+1}: streak debe ser mayor que el anterior ({prev_streak})"
 
-            if discount <= prev_discount and discount != 100:
-                return False, f"Tier {i+1}: discount debe ser mayor que el anterior ({prev_discount}) o 100%"
+            if discount <= prev_discount:
+                return False, f"Tier {i+1}: discount debe ser mayor que el anterior ({prev_discount})"
 
             prev_streak = streak
             prev_discount = discount

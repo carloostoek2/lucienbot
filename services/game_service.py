@@ -424,12 +424,12 @@ class GameService:
         ],
 
         # ========================================
-        # FINAL WIN (100% DESC)
+        # FINAL WIN — ÚLTIMO TIER ALCANZADO
         # ========================================
         'final_win_header': [
-            "🏆 ¡DESCUENTO COMPLETO! 🏆",
+            "🏆 ¡DESCUENTO MÁXIMO! 🏆",
             "✦✦✦ {discount}% DESBLOQUEADO ✦✦✦",
-            "🎉 ¡HAS GANADO EL JUEGO! 🎉"
+            "🎉 ¡HAS ALCANZADO EL ÚLTIMO NIVEL! 🎉"
         ],
         'final_win_code': [
             "📋 <b>Código:</b> <code>{code}</code>",
