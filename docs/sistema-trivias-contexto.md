@@ -111,8 +111,8 @@ Puede estar vinculada a `TriviaPromotionConfig` y/o a un `QuestionSet`.
 
 3. **Lógica de racha**:
    - **Correcta** → `streak += 1`
-     - Si alcanza tier intermedio → modo `streak_continue` (teclado: “Retirarme con X%” / “Continuar”)
-     - Si alcanza tier final (100%) → código generado automáticamente.
+     - Si alcanza tier intermedio → modo `streak_continue` (teclado: “Continuar” / “Salir”)
+     - Si alcanza tier final → código generado automáticamente con el descuento máximo del tier.
    - **Incorrecta** → `streak = 0` + `invalidate_streak_code()` (código activo → CANCELLED).
 
 4. **Besitos ganados**:
@@ -140,7 +140,7 @@ Puede estar vinculada a `TriviaPromotionConfig` y/o a un `QuestionSet`.
 | 3    | waiting_discount_percentage     | % de descuento (0-100) |
 | 4    | waiting_required_streak         | Racha mínima (≥3) |
 | 5    | waiting_tier_mode               | Single-tier o Multi-tier |
-| 6    | waiting_discount_tiers          | JSON de tiers (último streak = 100) |
+| 6    | waiting_discount_tiers          | JSON de tiers (el último tier es el descuento máximo) |
 | 7    | waiting_max_codes               | Cantidad máxima de códigos |
 | 8    | waiting_duration                | Fechas fijas o duración relativa |
 | 9-10 | waiting_start_date / end_date   | Fechas |
@@ -170,7 +170,7 @@ Puede estar vinculada a `TriviaPromotionConfig` y/o a un `QuestionSet`.
 2. **Racha** — Solo incrementa con respuestas correctas consecutivas.
 3. **Reset diario de racha** — Scheduler diario; **no afecta** códigos ya generados.
 4. **Invalidación** — Error rompe racha y cancela código activo (`invalidate_streak_code`).
-5. **Multi-tier** — JSON con último streak = 100%.
+5. **Multi-tier** — JSON donde el último tier contiene el descuento máximo (no necesariamente 100%).
 6. **Duración relativa + auto-reset** — Al expirar: 25% de duración original por ciclo (si habilitado).
 7. **Question Sets** — `is_override=True` reemplaza todo; sino se usa por promoción.
 8. **Códigos únicos** — Solo un código `ACTIVE` por usuario por `TriviaPromotionConfig`.
@@ -222,9 +222,10 @@ Puede estar vinculada a `TriviaPromotionConfig` y/o a un `QuestionSet`.
 - `docs/preguntas_mayo.json`, `preguntas_test.json`, etc.
 
 ### Keyboards (`keyboards/inline_keyboards.py`)
-- `streak_choice_keyboard`
-- `streak_final_keyboard`
-- `discount_claim_keyboard`
+- `streak_choice_keyboard` — Continuar / Retirarse / Salir (solo al alcanzar un tier)
+- `streak_continue_keyboard` — Continuar / Salir (entre niveles)
+- `streak_final_keyboard` — Teclado final con descuento máximo
+- `discount_claim_keyboard` — Copiar código de descuento
 
 ---
 
