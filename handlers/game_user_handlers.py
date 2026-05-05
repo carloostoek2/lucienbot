@@ -334,7 +334,7 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
 
             message = (
                 f"🎩 Lucien hace una reverencia... medida.\n\n"
-                f"✨ <b>¡Correcto!</b> Lleva {current_streak} aciertos consecutivos.\n\n"
+                f"✨ <b>¡Correcto!</b> Lleva {result['new_streak']} aciertos consecutivos.\n\n"
                 f"{header_template.format(tier=tier_index)}\n"
                 f"{bar_template}\n"
                 f"  {icon_template} {unlock_template.format(discount=current_discount)}\n"
@@ -347,7 +347,7 @@ async def trivia_answer(callback: CallbackQuery, state: FSMContext):
             # Guardar estado para cuando regrese
             await state.update_data(
                 streak_mode=True,
-                current_tier_streak=current_streak,
+                current_tier_streak=result['new_streak'],
                 current_tier_discount=current_discount,
                 current_config_id=config_id,
                 next_tier_streak=next_tier['streak'] if next_tier else None,
@@ -583,7 +583,7 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
 
             message = (
                 f"🎩 Lucien hace una reverencia... medida.\n\n"
-                f"✨ <b>¡Correcto!</b> Lleva {current_streak} aciertos consecutivos.\n\n"
+                f"✨ <b>¡Correcto!</b> Lleva {result['new_streak']} aciertos consecutivos.\n\n"
                 f"{header_template.format(tier=tier_index)}\n"
                 f"{bar_template}\n"
                 f"  {icon_template} {unlock_template.format(discount=current_discount)}\n"
@@ -596,7 +596,7 @@ async def trivia_vip_answer(callback: CallbackQuery, state: FSMContext):
             # Guardar estado para cuando regrese
             await state.update_data(
                 streak_mode=True,
-                current_tier_streak=current_streak,
+                current_tier_streak=result['new_streak'],
                 current_tier_discount=current_discount,
                 current_config_id=config_id,
                 next_tier_streak=next_tier['streak'] if next_tier else None,
