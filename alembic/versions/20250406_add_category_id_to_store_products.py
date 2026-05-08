@@ -46,14 +46,17 @@ def upgrade() -> None:
         op.add_column('store_products', sa.Column('category_id', sa.Integer(), nullable=True))
         op.create_index('ix_store_products_category_id', 'store_products', ['category_id'])
 
-        # Agregar foreign key
-        op.create_foreign_key('fk_store_products_category_id', 'store_products', 'categories',
-                           ['category_id'], ['id'])
+        # Only for PostgreSQL — SQLite uses ForeignKey in model only
+        if conn.dialect.name != 'sqlite':
+            op.create_foreign_key('fk_store_products_category_id', 'store_products', 'categories',
+                               ['category_id'], ['id'])
 
 
 def downgrade() -> None:
-    # Eliminar foreign key primero
-    op.drop_constraint('fk_store_products_category_id', 'store_products', type_='foreignkey')
+    # Only for PostgreSQL — SQLite uses ForeignKey in model only
+    conn = op.get_bind()
+    if conn.dialect.name != 'sqlite':
+        op.drop_constraint('fk_store_products_category_id', 'store_products', type_='foreignkey')
 
     # Eliminar índice en category_id
     op.drop_index('ix_store_products_category_id', table_name='store_products')
