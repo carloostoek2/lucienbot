@@ -88,20 +88,32 @@ class RewardService:
     def get_reward(self, reward_id: int) -> Optional[Reward]:
         """Obtiene una recompensa por ID"""
         return self.db.query(Reward).filter(Reward.id == reward_id).first()
-    
+
     def get_all_rewards(self, active_only: bool = True) -> List[Reward]:
         """Obtiene todas las recompensas"""
         query = self.db.query(Reward)
         if active_only:
             query = query.filter(Reward.is_active == True)
         return query.order_by(desc(Reward.created_at)).all()
-    
+
     def get_rewards_by_type(self, reward_type: RewardType) -> List[Reward]:
         """Obtiene recompensas por tipo"""
         return self.db.query(Reward).filter(
             Reward.reward_type == reward_type,
             Reward.is_active == True
         ).all()
+
+    # ==================== UI HELPERS ====================
+
+    def get_reward_emoji(self, reward: Reward) -> tuple[str, str]:
+        """Retorna (emoji, description) según tipo de recompensa"""
+        if reward.reward_type == RewardType.BESITOS:
+            return "💋", f"{reward.besito_amount} besitos"
+        elif reward.reward_type == RewardType.PACKAGE:
+            return "📦", f"Paquete exclusivo: {reward.name}"
+        elif reward.reward_type == RewardType.VIP_ACCESS:
+            return "👑", f"Acceso VIP: {reward.name}"
+        return "🎁", ""
     
     # ==================== ACTUALIZACION Y ELIMINACION ====================
     

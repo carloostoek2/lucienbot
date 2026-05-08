@@ -17,6 +17,7 @@ from redis.asyncio import Redis
 
 from config.settings import bot_config
 from models.database import init_db
+from middlewares.error_handler import ErrorHandlerMiddleware
 from services.scheduler_service import get_scheduler
 from handlers import (
     common_router,
@@ -222,6 +223,10 @@ async def main():
     bot = Bot(token=bot_config.TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     storage = create_storage()
     dp = Dispatcher(storage=storage)
+
+    # Middleware global de error — capturar excepciones no manejadas
+    dp.message.middleware(ErrorHandlerMiddleware())
+    dp.callback_query.middleware(ErrorHandlerMiddleware())
 
     # Registrar routers
     dp.include_router(common_router)

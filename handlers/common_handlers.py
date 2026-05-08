@@ -243,9 +243,9 @@ async def back_to_main(callback: CallbackQuery):
         vip_service.close()
     try:
         await callback.answer()
-    except Exception:
+    except Exception as e:
         # Callback query expired, ignore
-        pass
+        logger.debug(f"callback.answer() expirada en back_to_main para user {user.id}: {e}")
 
 
 @router.callback_query(F.data == "back_to_admin")

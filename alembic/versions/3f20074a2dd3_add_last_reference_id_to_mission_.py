@@ -9,6 +9,9 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # revision identifiers, used by Alembic.
@@ -28,8 +31,8 @@ def upgrade() -> None:
         try:
             with op.batch_alter_table('broadcast_reactions', schema=None) as batch_op:
                 batch_op.drop_constraint(batch_op.f('uq_broadcast_user_reaction'), type_='unique')
-        except Exception:
-            pass  # Constraint no existe o ya fue eliminada
+        except Exception as e:
+            logger.debug(f"Migration broadcast_reactions: constraint drop skipped (may not exist): {e}")
 
     # categories: modificar is_active (solo si es necesario), no crear índice en id (ya existe por PK)
     try:
@@ -38,8 +41,8 @@ def upgrade() -> None:
                    existing_type=sa.BOOLEAN(),
                    server_default=None,
                    existing_nullable=True)
-    except Exception:
-        pass  # Ya tiene el valor correcto o no necesita cambio
+    except Exception as e:
+        logger.debug(f"Migration categories: is_active alter skipped (may already be correct): {e}")
 
     # promotions: modificar is_vip_exclusive
     try:
@@ -48,8 +51,8 @@ def upgrade() -> None:
                    existing_type=sa.BOOLEAN(),
                    server_default=None,
                    existing_nullable=False)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Migration promotions: is_vip_exclusive alter skipped: {e}")
 
     # user_mission_progress: agregar last_reference_id si no existe
     column_exists = False

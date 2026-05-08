@@ -163,6 +163,34 @@ class MissionService:
 
         return result
 
+    def get_available_rewards_for_user(self, user_id: int) -> List[dict]:
+        """
+        Obtiene recompensas disponibles para un usuario con sus misiones asociadas.
+        Retorna lista de dicts con mission, reward, y progress.
+        """
+        db = self._get_db()
+        available_missions = self.get_available_missions()
+        result = []
+
+        for mission in available_missions:
+            if not mission.reward_id:
+                continue
+
+            progress = self.get_user_progress(user_id, mission.id)
+            if progress and progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+                continue
+
+            reward_service = RewardService(db)
+            reward = reward_service.get_reward(mission.reward_id)
+            if reward and reward.is_active:
+                result.append({
+                    'mission': mission,
+                    'reward': reward,
+                    'progress': progress
+                })
+
+        return result
+
     # ==================== ACTUALIZACION DE PROGRESO ====================
 
     def increment_progress(self, user_id: int, mission_type: MissionType,
