@@ -30,6 +30,11 @@ async def game_menu(callback: CallbackQuery):
 
     with get_service(GameService) as service:
         data = service.get_menu_data(user_id)
+        tematica_info = service.get_active_tematica_info()
+
+    tematica_button = None
+    if tematica_info:
+        tematica_button = (tematica_info['display_name'], "game_trivia_tematica")
 
     text = (
         f"🎩 Lucien: <b>{data['title']}</b>\n\n"
@@ -41,9 +46,14 @@ async def game_menu(callback: CallbackQuery):
         f"{data['footer']}"
     )
 
-    await callback.message.edit_text(text, reply_markup=game_menu_keyboard())
+    await callback.message.edit_text(
+        text, reply_markup=game_menu_keyboard(tematica_button=tematica_button)
+    )
     await callback.answer()
-    logger.info(f"game_user_handlers - game_menu - {user_id} - shown")
+    if tematica_info:
+        logger.info(f"game_user_handlers - game_menu - {user_id} - shown with tematica:{tematica_info['category_id']}")
+    else:
+        logger.info(f"game_user_handlers - game_menu - {user_id} - shown")
 
 
 @router.callback_query(lambda c: c.data == "game_dice")
