@@ -270,9 +270,19 @@ Plans:
 4. Ver archivos: envío de álbumes Telegram para paquetes comprados ✓
 5. Voz de Lucien en todas las interfaces ✓
 
+### Phase 16: Trivias Temáticas
+
+**Goal:** Sistema de trivia temática con preguntas organizadas por categorías, mazo de preguntas y recompensas por racha de respuestas correctas
+**Requirements**: TBD
+**Depends on:** Phase 15
+**Plans:** 1/1 plans complete
+
+Plans:
+- [ ] TBD (run `/gsd-plan-phase 16` to break down)
+
 ---
 
 *Roadmap created: 2026-03-30 from codebase analysis and git history*
 *Updated: 2026-04-06 — Phase 14 Minijuegos added*
 *Updated: 2026-04-08 — Phase 15 Sistema de Mochila added*
-*Updated: 2026-04-08 — Phase 15 COMPLETE*
+*Updated: 2026-05-09 — Phase 16 Trivias Temáticas added*
