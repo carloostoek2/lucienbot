@@ -37,6 +37,17 @@ class GameService:
     # Límites trivia VIP
     DAILY_TRIVIA_VIP_LIMIT = 5
 
+    # Limites trivia tematica (Phase 16)
+    DAILY_TRIVIA_TEMATICA_LIMIT_FREE = 5
+    DAILY_TRIVIA_TEMATICA_LIMIT_VIP = 10
+
+    # Recompensas trivia tematica
+    TRIVIA_TEMATICA_WIN_BESITOS = 2
+    TRIVIA_TEMATICA_VIP_WIN_BESITOS = 4
+
+    # Hitos de racha (D-09): {streak: bonus_base}
+    STREAK_MILESTONES = {3: 2, 5: 5, 7: 10, 10: 20}
+
     # ==================== TEMPLATES DE COPY ====================
 
     MENU_TEMPLATES = {
@@ -200,6 +211,51 @@ class GameService:
         ]
     }
 
+    TRIVIA_TEMATICA_TEMPLATES = {
+        'entry_title': [
+            "\U0001f3ad La Trivia Tematica de Diana",
+            "\U0001f3ad El Desafio Especial",
+            "\U0001f3ad Donde el Conocimiento se Viste de Ocasion"
+        ],
+        'entry_intro': [
+            "Diana ha preparado un desafio especial para esta ocasion...",
+            "Una dinamica especial aguarda a quienes prestan atencion.",
+            "El conocimiento tematico revela devotos verdaderos."
+        ],
+        'counter': [
+            "Oportunidades tematicas restantes: {remaining} de {limit}",
+            "Tiene {remaining} caminos tematicos de {limit} disponibles...",
+            "{remaining} de {limit} intentos especiales aguardan."
+        ],
+        'correct': [
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Respuesta correcta! La tematica le favorece...</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Exacto! Diana aprecia su conocimiento tematico.</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Perfecto! Ha demostrado dominio del tema.</i>"
+        ],
+        'incorrect': [
+            "\U0001f3a9 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso en temas especiales se puede errar.</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El conocimiento tematico requiere dedicacion.</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un error, pero la tematica siempre ensena algo.</i>"
+        ],
+        'streak_messages': {
+            2: ["\U0001f525 La tematica comienza a revelarse...", "\U0001f525 Diana nota su interes por el tema..."],
+            3: ["⚡ ¡Racha tematica de {streak}! El conocimiento fluye.", "⚡ {streak} aciertos tematicos... admirable."],
+            5: ["\U0001f31f ¡Experto tematico! {streak} respuestas perfectas.", "\U0001f31f La tematica se rinde ante su sabiduria."],
+            7: ["\U0001f3a9 ¡Maestro tematico! {streak} aciertos.", "\U0001f3a9 Los espiritus del tema le observan con respeto."],
+            10: ["✨ ¡LEYENDA TEMATICA! {streak} respuestas perfectas.", "✨ Es uno con la esencia del tema."]
+        },
+        'limit_reached': [
+            "Ha agotado sus preguntas tematicas por hoy. La dinamica especial continuara manana.",
+            "El desafio tematico ha terminado... por ahora. Regrese manana.",
+            "Diana guarda el conocimiento tematico para manana. Sepa esperar."
+        ],
+        'deck_exhausted': [
+            "Ha respondido todas las preguntas tematicas disponibles hoy. El conocimiento se renueva al amanecer.",
+            "El mazo tematico esta completo por hoy. Regrese manana para mas desafios.",
+            "Ha agotado el saber tematico de esta jornada. El alba traera nuevas preguntas."
+        ]
+    }
+
     def __init__(self, db: Session = None):
         self.db = db or SessionLocal()
         self.besito_service = BesitoService(self.db)
@@ -207,6 +263,7 @@ class GameService:
         self._vip_service = VIPService(self.db)
         self._questions = None
         self._vip_questions = None
+        self._tematica_questions = {}  # {category_id: [questions]}
 
     def close(self):
         """Cierra la sesión de base de datos"""
