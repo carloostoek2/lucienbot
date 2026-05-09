@@ -1,8 +1,8 @@
 """
-Handlers de Administracion de Trivias Tematicas - Lucien Bot
+Handlers de Administracion de Trivias Especiales - Lucien Bot
 
 Handlers para gestion de categorias de trivia desde el panel admin.
-Fase 16 - Trivias Tematicas.
+Fase 16 - Trivias Especiales.
 """
 import logging
 from aiogram import Router, F
@@ -59,7 +59,7 @@ async def admin_trivia_categories_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("trivia_cat_activate_"), lambda cb: is_admin(cb.from_user.id))
 async def trivia_category_activate(callback: CallbackQuery):
-    """Activa una categoria tematica."""
+    """Activa una categoria especial."""
     category_id = callback.data.replace("trivia_cat_activate_", "")
     with get_service(TriviaCategoryService) as service:
         service.activate(category_id)

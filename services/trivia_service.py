@@ -1,7 +1,7 @@
 """
-Servicio de Trivias Tematicas - Lucien Bot
+Servicio de Trivias Especiales - Lucien Bot
 
-Gestiona categorias tematicas de trivia: activacion, desactivacion,
+Gestiona categorias especiales de trivia: activacion, desactivacion,
 descubrimiento de archivos JSON y consulta de estado.
 """
 import json
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class TriviaCategoryService:
-    """Servicio para gestion del estado de categorias tematicas de trivia."""
+    """Servicio para gestion del estado de categorias especiales de trivia."""
 
     QUESTIONS_DIR = Path("docs")
 

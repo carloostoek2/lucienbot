@@ -56,7 +56,7 @@ from handlers import (
     game_user_router,
     # Phase 15 - Mochila
     backpack_router,
-    # Phase 16 - Trivias Tematicas
+    # Phase 16 - Trivias Especiales
     trivia_admin_router,
 )
 
@@ -267,7 +267,7 @@ async def main():
     dp.include_router(game_user_router)
     # Phase 15 - Mochila
     dp.include_router(backpack_router)
-    # Phase 16 - Trivias Tematicas
+    # Phase 16 - Trivias Especiales
     dp.include_router(trivia_admin_router)
 
     # Configurar eventos de startup/shutdown

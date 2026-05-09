@@ -425,13 +425,13 @@ def admin_anonymous_notification_keyboard(message_id: int) -> InlineKeyboardMark
 
 # ==================== MINIJUEGOS (PHASE 14) ====================
 
-def game_menu_keyboard(is_vip: bool = False, tematica_button: tuple = None) -> InlineKeyboardMarkup:
-    """Menú de selección de juegos. Si tematica_button = (label, callback), anade boton extra."""
+def game_menu_keyboard(is_vip: bool = False, special_button: tuple = None) -> InlineKeyboardMarkup:
+    """Menú de selección de juegos. Si special_button = (label, callback), anade boton extra."""
     buttons = [
         [InlineKeyboardButton(text="🎲 Lanzar los dados del destino", callback_data="game_dice")],
     ]
-    if tematica_button:
-        label, cb_data = tematica_button
+    if special_button:
+        label, cb_data = special_button
         buttons.append([InlineKeyboardButton(text=label, callback_data=cb_data)])
     buttons.append([InlineKeyboardButton(text="❓ El examen de Diana", callback_data="game_trivia")])
     buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")])
@@ -486,13 +486,13 @@ def trivia_vip_result_keyboard(back_callback: str = "vip_area") -> InlineKeyboar
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def trivia_tematica_keyboard(question: dict, question_idx: int) -> InlineKeyboardMarkup:
-    """Teclado con opciones de trivia tematica."""
+def trivia_simple_keyboard(question: dict, question_idx: int) -> InlineKeyboardMarkup:
+    """Teclado con opciones de trivia especial."""
     buttons = []
     for idx, opt_text in enumerate(question['opts']):
         buttons.append([InlineKeyboardButton(
             text=opt_text,
-            callback_data=f"trivia_tematica_answer_{idx}_{question_idx}"
+            callback_data=f"trivia_simple_answer_{idx}_{question_idx}"
         )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver al menu de juegos",
@@ -501,10 +501,10 @@ def trivia_tematica_keyboard(question: dict, question_idx: int) -> InlineKeyboar
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def trivia_tematica_result_keyboard() -> InlineKeyboardMarkup:
-    """Teclado para resultado de trivia tematica."""
+def trivia_simple_result_keyboard() -> InlineKeyboardMarkup:
+    """Teclado para resultado de trivia especial."""
     buttons = [
-        [InlineKeyboardButton(text="🔄 Otra pregunta tematica", callback_data="game_trivia_tematica")],
+        [InlineKeyboardButton(text="🔄 Otra pregunta especial", callback_data="game_trivia_simple")],
         [InlineKeyboardButton(text="🔙 Menu de juegos", callback_data="game_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

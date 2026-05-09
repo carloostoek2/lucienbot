@@ -32,7 +32,7 @@ from .anonymous_message_admin_handlers import router as anonymous_message_admin_
 from .game_user_handlers import router as game_user_router
 # Phase 15 - Mochila
 from .backpack_handler import router as backpack_router
-# Phase 16 - Trivias Tematicas
+# Phase 16 - Trivias Especiales
 from .trivia_admin_handlers import router as trivia_admin_router
 
 __all__ = [
@@ -70,6 +70,6 @@ __all__ = [
     'game_user_router',
     # Phase 15 - Mochila
     'backpack_router',
-    # Phase 16 - Trivias Tematicas
+    # Phase 16 - Trivias Especiales
     'trivia_admin_router'
 ]

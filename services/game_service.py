@@ -37,13 +37,13 @@ class GameService:
     # Límites trivia VIP
     DAILY_TRIVIA_VIP_LIMIT = 5
 
-    # Limites trivia tematica (Phase 16)
-    DAILY_TRIVIA_TEMATICA_LIMIT_FREE = 5
-    DAILY_TRIVIA_TEMATICA_LIMIT_VIP = 10
+    # Limites trivia simple (Phase 16)
+    DAILY_TRIVIA_SIMPLE_LIMIT_FREE = 5
+    DAILY_TRIVIA_SIMPLE_LIMIT_VIP = 10
 
-    # Recompensas trivia tematica
-    TRIVIA_TEMATICA_WIN_BESITOS = 2
-    TRIVIA_TEMATICA_VIP_WIN_BESITOS = 4
+    # Recompensas trivia simple
+    TRIVIA_SIMPLE_WIN_BESITOS = 2
+    TRIVIA_SIMPLE_VIP_WIN_BESITOS = 4
 
     # Hitos de racha (D-09): {streak: bonus_base}
     STREAK_MILESTONES = {3: 2, 5: 5, 7: 10, 10: 20}
@@ -211,48 +211,48 @@ class GameService:
         ]
     }
 
-    TRIVIA_TEMATICA_TEMPLATES = {
+    TRIVIA_SIMPLE_TEMPLATES = {
         'entry_title': [
-            "\U0001f3ad La Trivia Tematica de Diana",
-            "\U0001f3ad El Desafio Especial",
+            "\U0001f3ad La Trivia Especial de Diana",
+            "\U0001f3ad El Desafío del Momento",
             "\U0001f3ad Donde el Conocimiento se Viste de Ocasion"
         ],
         'entry_intro': [
             "Diana ha preparado un desafio especial para esta ocasion...",
             "Una dinamica especial aguarda a quienes prestan atencion.",
-            "El conocimiento tematico revela devotos verdaderos."
+            "El conocimiento especial revela devotos verdaderos."
         ],
         'counter': [
-            "Oportunidades tematicas restantes: {remaining} de {limit}",
-            "Tiene {remaining} caminos tematicos de {limit} disponibles...",
+            "Oportunidades restantes: {remaining} de {limit}",
+            "Tiene {remaining} oportunidades de {limit} disponibles...",
             "{remaining} de {limit} intentos especiales aguardan."
         ],
         'correct': [
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Respuesta correcta! La tematica le favorece...</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Exacto! Diana aprecia su conocimiento tematico.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Perfecto! Ha demostrado dominio del tema.</i>"
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Respuesta correcta! El momento le favorece...</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Exacto! Diana aprecia su conocimiento.</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Perfecto! Ha demostrado dominio.</i>"
         ],
         'incorrect': [
-            "\U0001f3a9 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso en temas especiales se puede errar.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El conocimiento tematico requiere dedicacion.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un error, pero la tematica siempre ensena algo.</i>"
+            "\U0001f3a9 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso en momentos especiales se puede errar.</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El conocimiento especial requiere dedicacion.</i>",
+            "\U0001f3a9 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un error, pero el momento siempre ensena algo.</i>"
         ],
         'streak_messages': {
-            2: ["\U0001f525 La tematica comienza a revelarse...", "\U0001f525 Diana nota su interes por el tema..."],
-            3: ["⚡ ¡Racha tematica de {streak}! El conocimiento fluye.", "⚡ {streak} aciertos tematicos... admirable."],
-            5: ["\U0001f31f ¡Experto tematico! {streak} respuestas perfectas.", "\U0001f31f La tematica se rinde ante su sabiduria."],
-            7: ["\U0001f3a9 ¡Maestro tematico! {streak} aciertos.", "\U0001f3a9 Los espiritus del tema le observan con respeto."],
-            10: ["✨ ¡LEYENDA TEMATICA! {streak} respuestas perfectas.", "✨ Es uno con la esencia del tema."]
+            2: ["\U0001f525 La racha comienza a revelarse...", "\U0001f525 Diana nota su interes..."],
+            3: ["⚡ ¡Racha de {streak}! El conocimiento fluye.", "⚡ {streak} aciertos... admirable."],
+            5: ["\U0001f31f ¡Experto! {streak} respuestas perfectas.", "\U0001f31f El momento se rinde ante su sabiduria."],
+            7: ["\U0001f3a9 ¡Maestro! {streak} aciertos.", "\U0001f3a9 Los espiritus del momento le observan con respeto."],
+            10: ["✨ ¡LEYENDA! {streak} respuestas perfectas.", "✨ Es uno con la esencia del momento."]
         },
         'limit_reached': [
-            "Ha agotado sus preguntas tematicas por hoy. La dinamica especial continuara manana.",
-            "El desafio tematico ha terminado... por ahora. Regrese manana.",
-            "Diana guarda el conocimiento tematico para manana. Sepa esperar."
+            "Ha agotado sus oportunidades por hoy. La dinamica especial continuara manana.",
+            "El desafio especial ha terminado... por ahora. Regrese manana.",
+            "Diana guarda el saber para manana. Sepa esperar."
         ],
         'deck_exhausted': [
-            "Ha respondido todas las preguntas tematicas disponibles hoy. El conocimiento se renueva al amanecer.",
-            "El mazo tematico esta completo por hoy. Regrese manana para mas desafios.",
-            "Ha agotado el saber tematico de esta jornada. El alba traera nuevas preguntas."
+            "Ha respondido todas las preguntas disponibles hoy. El conocimiento se renueva al amanecer.",
+            "El mazo esta completo por hoy. Regrese manana para mas desafios.",
+            "Ha agotado el saber de esta jornada. El alba traera nuevas preguntas."
         ]
     }
 
@@ -263,7 +263,7 @@ class GameService:
         self._vip_service = VIPService(self.db)
         self._questions = None
         self._vip_questions = None
-        self._tematica_questions = {}  # {category_id: [questions]}
+        self._simple_questions = {}  # {category_id: [questions]}
 
     def close(self):
         """Cierra la sesión de base de datos"""
@@ -381,7 +381,7 @@ class GameService:
             'dice_limit': self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE,
             'trivia_limit': self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE,
             'trivia_vip_limit': self.DAILY_TRIVIA_VIP_LIMIT,
-            'trivia_tematica_limit': self.DAILY_TRIVIA_TEMATICA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_TEMATICA_LIMIT_FREE
+            'trivia_simple_limit': self.DAILY_TRIVIA_SIMPLE_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_SIMPLE_LIMIT_FREE
         }
 
     def get_menu_data(self, user_id: int) -> dict:
@@ -427,8 +427,8 @@ class GameService:
         limits = self.get_daily_limits(user_id)
         if game_type == 'dice':
             limit = limits['dice_limit']
-        elif game_type == 'trivia_tematica':
-            limit = limits['trivia_tematica_limit']
+        elif game_type == 'trivia_simple':
+            limit = limits['trivia_simple_limit']
         else:
             limit = limits['trivia_limit']
         played = self.get_today_play_count(user_id, game_type)
@@ -1092,14 +1092,14 @@ class GameService:
             lines.extend(['', parts['encouragement']])
         return '\n'.join(lines)
 
-    # ==================== TRIVIA TEMATICA (PHASE 16) ====================
+    # ==================== TRIVIA ESPECIAL (PHASE 16) ====================
 
-    def _get_today_tematica_trivia_records(self, user_id: int) -> list:
-        """Obtiene registros de trivia tematica de hoy ordenados por tiempo DESC."""
+    def _get_today_simple_trivia_records(self, user_id: int) -> list:
+        """Obtiene registros de trivia temática de hoy ordenados por tiempo DESC."""
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         records = self.db.query(GameRecord).filter(
             GameRecord.user_id == user_id,
-            GameRecord.game_type == 'trivia_tematica',
+            GameRecord.game_type == 'trivia_simple',
             GameRecord.played_at >= today
         ).order_by(GameRecord.played_at.desc()).all()
         return records
@@ -1115,43 +1115,43 @@ class GameService:
         indices = set()
         for rec in records:
             result_str = rec.result or ""
-            if result_str.startswith("tematica_question_"):
+            if result_str.startswith("simple_question_"):
                 try:
-                    idx = int(result_str.replace("tematica_question_", ""))
+                    idx = int(result_str.replace("simple_question_", ""))
                     indices.add(idx)
                 except ValueError:
                     continue
         return indices
 
-    def load_trivia_tematica_questions(self, category_id: str) -> list:
-        """Carga preguntas tematicas desde docs/preguntas_{category_id}.json."""
-        if category_id in self._tematica_questions:
-            return self._tematica_questions[category_id]
+    def load_trivia_simple_questions(self, category_id: str) -> list:
+        """Carga preguntas simples desde docs/preguntas_{category_id}.json."""
+        if category_id in self._simple_questions:
+            return self._simple_questions[category_id]
 
         questions_path = Path(f"docs/preguntas_{category_id}.json")
         if not questions_path.exists():
-            logger.warning(f"trivia tematica questions file not found: {questions_path}")
+            logger.warning(f"trivia simple questions file not found: {questions_path}")
             return []
 
         try:
             with open(questions_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 questions = data if isinstance(data, list) else data.get('questions', [])
-                self._tematica_questions[category_id] = questions
+                self._simple_questions[category_id] = questions
         except Exception as e:
-            logger.error(f"Error loading trivia tematica questions: {e}")
-            self._tematica_questions[category_id] = []
+            logger.error(f"Error loading trivia simple questions: {e}")
+            self._simple_questions[category_id] = []
 
-        return self._tematica_questions[category_id]
+        return self._simple_questions[category_id]
 
-    def get_random_tematica_question(self, user_id: int, category_id: str) -> tuple:
-        """Retorna (question_dict, index) de pregunta tematica no respondida hoy.
+    def get_random_simple_question(self, user_id: int, category_id: str) -> tuple:
+        """Retorna (question_dict, index) de pregunta simple no respondida hoy.
         Returns (None, -1) si no hay preguntas, (None, -2) si todas respondidas."""
-        questions = self.load_trivia_tematica_questions(category_id)
+        questions = self.load_trivia_simple_questions(category_id)
         if not questions:
             return None, -1
 
-        answered = self._get_answered_today_indices(user_id, 'trivia_tematica')
+        answered = self._get_answered_today_indices(user_id, 'trivia_simple')
         available = [i for i in range(len(questions)) if i not in answered]
         if not available:
             return None, -2
@@ -1159,9 +1159,9 @@ class GameService:
         idx = random.choice(available)
         return questions[idx], idx
 
-    def _get_tematica_trivia_streak(self, user_id: int) -> int:
-        """Calcula racha actual de victorias en trivia tematica (solo hoy)."""
-        records = self._get_today_tematica_trivia_records(user_id)
+    def _get_simple_trivia_streak(self, user_id: int) -> int:
+        """Calcula racha actual de victorias en trivia simple (solo hoy)."""
+        records = self._get_today_simple_trivia_records(user_id)
         streak = 0
         for record in records:
             if record.payout > 0:
@@ -1170,15 +1170,15 @@ class GameService:
                 break
         return streak
 
-    def get_question_by_tematica_index(self, index: int, category_id: str) -> Optional[dict]:
-        """Retorna pregunta tematica por indice y categoria."""
-        questions = self.load_trivia_tematica_questions(category_id)
+    def get_question_by_simple_index(self, index: int, category_id: str) -> Optional[dict]:
+        """Retorna pregunta simple por indice y categoria."""
+        questions = self.load_trivia_simple_questions(category_id)
         if 0 <= index < len(questions):
             return questions[index]
         return None
 
-    def _get_tematica_streak_message(self, streak: int) -> Optional[str]:
-        """Obtiene mensaje de racha tematica segun nivel alcanzado."""
+    def _get_simple_streak_message(self, streak: int) -> Optional[str]:
+        """Obtiene mensaje de racha actual segun nivel alcanzado."""
         if streak < 2:
             return None
         if streak >= 10:
@@ -1191,44 +1191,44 @@ class GameService:
             level = 3
         else:
             level = 2
-        templates = self.TRIVIA_TEMATICA_TEMPLATES['streak_messages'].get(level, ["!Racha de {streak}!"])
+        templates = self.TRIVIA_SIMPLE_TEMPLATES['streak_messages'].get(level, ["!Racha de {streak}!"])
         return self._select_template(templates).format(streak=streak)
 
-    def get_trivia_tematica_entry_data(self, user_id: int) -> dict:
-        """Obtiene datos enriquecidos para la entrada de trivia tematica."""
+    def get_trivia_simple_entry_data(self, user_id: int) -> dict:
+        """Obtiene datos enriquecidos para la entrada de trivia simple."""
         limits = self.get_daily_limits(user_id)
-        played = len(self._get_today_tematica_trivia_records(user_id))
-        remaining = max(0, limits['trivia_tematica_limit'] - played)
-        streak = self._get_tematica_trivia_streak(user_id)
+        played = len(self._get_today_simple_trivia_records(user_id))
+        remaining = max(0, limits['trivia_simple_limit'] - played)
+        streak = self._get_simple_trivia_streak(user_id)
 
         can_play = remaining > 0
         limit_message = None
         if not can_play:
-            limit_message = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['limit_reached'])
+            limit_message = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['limit_reached'])
 
-        logger.info(f"game_service - get_trivia_tematica_entry_data - {user_id} - remaining:{remaining}, streak:{streak}")
+        logger.info(f"game_service - get_trivia_simple_entry_data - {user_id} - remaining:{remaining}, streak:{streak}")
 
         return {
-            'title': self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['entry_title']),
-            'intro': self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['entry_intro']),
-            'counter_template': self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['counter']),
+            'title': self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['entry_title']),
+            'intro': self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['entry_intro']),
+            'counter_template': self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['counter']),
             'remaining': remaining,
-            'limit': limits['trivia_tematica_limit'],
+            'limit': limits['trivia_simple_limit'],
             'current_streak': streak,
             'is_vip': self.is_user_vip(user_id),
             'can_play': can_play,
             'limit_message': limit_message
         }
 
-    def play_trivia_tematica(self, user_id: int, question_idx: int,
+    def play_trivia_simple(self, user_id: int, question_idx: int,
                              answer_idx: int, category_id: str) -> Dict[str, Any]:
         """
-        Procesa respuesta de trivia tematica con rachas y bonus.
+        Procesa respuesta de trivia simple con rachas y bonus.
         Returns: {correct, besitos, streak_bonus, message, ...}
         """
-        can_play, played, limit, limit_msg = self.can_play(user_id, 'trivia_tematica')
+        can_play, played, limit, limit_msg = self.can_play(user_id, 'trivia_simple')
         if not can_play:
-            limit_template = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['limit_reached'])
+            limit_template = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['limit_reached'])
             full_message = limit_template + "\n\n" + limit_msg
             return {
                 'correct': False, 'besitos': 0, 'streak_bonus': 0,
@@ -1237,16 +1237,16 @@ class GameService:
                 'remaining_after': 0, 'limit_reached': True
             }
 
-        question = self.get_question_by_tematica_index(question_idx, category_id)
+        question = self.get_question_by_simple_index(question_idx, category_id)
         if not question:
             return {
                 'correct': False, 'besitos': 0, 'streak_bonus': 0,
                 'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': "Pregunta tematica no encontrada.", 'message_parts': {},
+                'message': "Pregunta simple no encontrada.", 'message_parts': {},
                 'remaining_after': max(0, limit - played), 'limit_reached': False
             }
 
-        previous_streak = self._get_tematica_trivia_streak(user_id)
+        previous_streak = self._get_simple_trivia_streak(user_id)
         is_correct = self.check_trivia_answer(question, answer_idx)
 
         if is_correct:
@@ -1256,18 +1256,18 @@ class GameService:
 
         streak_message = None
         if is_correct:
-            streak_message = self._get_tematica_streak_message(new_streak)
+            streak_message = self._get_simple_streak_message(new_streak)
 
         besitos = 0
         if is_correct:
-            besitos = self.TRIVIA_TEMATICA_WIN_BESITOS
+            besitos = self.TRIVIA_SIMPLE_WIN_BESITOS
             if self.is_user_vip(user_id):
-                besitos = self.TRIVIA_TEMATICA_VIP_WIN_BESITOS
+                besitos = self.TRIVIA_SIMPLE_VIP_WIN_BESITOS
             self.besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia tematica (racha: {new_streak})"
+                description=f"Victoria en trivia simple (racha: {new_streak})"
             )
 
         streak_bonus = 0
@@ -1278,13 +1278,13 @@ class GameService:
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia tematica"
+                description=f"Bonus por racha de {new_streak} en trivia simple"
             )
 
         record = GameRecord(
             user_id=user_id,
-            game_type='trivia_tematica',
-            result=f"tematica_question_{question_idx}",
+            game_type='trivia_simple',
+            result=f"simple_question_{question_idx}",
             payout=besitos + streak_bonus
         )
         self.db.add(record)
@@ -1292,12 +1292,12 @@ class GameService:
 
         remaining_after = max(0, limit - (played + 1))
 
-        message_parts = self._build_trivia_tematica_message_parts(
+        message_parts = self._build_trivia_simple_message_parts(
             is_correct, question, besitos, streak_message, streak_bonus, remaining_after
         )
-        message = self._build_trivia_tematica_message(message_parts)
+        message = self._build_trivia_simple_message(message_parts)
 
-        logger.info(f"game_service - play_trivia_tematica - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
+        logger.info(f"game_service - play_trivia_simple - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
 
         return {
             'correct': is_correct,
@@ -1313,17 +1313,17 @@ class GameService:
             'limit_reached': False
         }
 
-    def _build_trivia_tematica_message_parts(self, is_correct: bool, question: dict,
+    def _build_trivia_simple_message_parts(self, is_correct: bool, question: dict,
                                               besitos: int, streak_message: Optional[str],
                                               streak_bonus: int, remaining: int) -> dict:
-        """Construye las partes del mensaje de trivia tematica."""
+        """Construye las partes del mensaje de trivia simple."""
         correct_letter = ["A", "B", "C", "D"][question['answer']]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
 
         if is_correct:
-            header = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['correct'])
+            header = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['correct'])
         else:
-            header_template = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['incorrect'])
+            header_template = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['incorrect'])
             header = header_template.format(correct_answer=correct_answer_text)
 
         reward_text = None
@@ -1336,9 +1336,9 @@ class GameService:
 
         encouragement = None
         if remaining > 0:
-            encouragement = f"Oportunidades tematicas restantes: {remaining}"
+            encouragement = f"Oportunidades simples restantes: {remaining}"
         else:
-            encouragement = "Ha agotado sus preguntas tematicas por hoy."
+            encouragement = "Ha agotado sus preguntas simples por hoy."
 
         return {
             'header': header,
@@ -1347,8 +1347,8 @@ class GameService:
             'encouragement': encouragement
         }
 
-    def _build_trivia_tematica_message(self, parts: dict) -> str:
-        """Construye mensaje final de trivia tematica."""
+    def _build_trivia_simple_message(self, parts: dict) -> str:
+        """Construye mensaje final de trivia simple."""
         lines = [parts['header']]
         if parts.get('reward_text'):
             lines.extend(['', parts['reward_text']])
@@ -1358,7 +1358,7 @@ class GameService:
             lines.extend(['', parts['encouragement']])
         return '\n'.join(lines)
 
-    def get_active_tematica_info(self) -> Optional[dict]:
+    def get_active_special_info(self) -> Optional[dict]:
         """Consulta categoria activa y retorna {category_id, display_name} o None."""
         from services.trivia_service import TriviaCategoryService
         tcs = TriviaCategoryService(self.db)

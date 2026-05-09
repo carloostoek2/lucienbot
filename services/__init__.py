@@ -16,7 +16,7 @@ from .reward_service import RewardService
 from .store_service import StoreService
 # Fase 15 - Mochila
 from .backpack_service import BackpackService
-# Fase 16 - Trivias Tematicas
+# Fase 16 - Trivias Especiales
 from .trivia_service import TriviaCategoryService
 
 __all__ = [
@@ -31,7 +31,7 @@ __all__ = [
     'StoreService',
     # Fase 15 - Mochila
     'BackpackService',
-    # Fase 16 - Trivias Tematicas
+    # Fase 16 - Trivias Especiales
     'TriviaCategoryService',
     'get_service'
 ]
