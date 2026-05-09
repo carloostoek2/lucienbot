@@ -12,7 +12,9 @@ from keyboards.inline_keyboards import (
     dice_play_keyboard,
     trivia_keyboard,
     trivia_vip_keyboard,
-    trivia_vip_result_keyboard
+    trivia_vip_result_keyboard,
+    trivia_tematica_keyboard,
+    trivia_tematica_result_keyboard
 )
 from services import get_service, GameService
 
@@ -220,3 +222,115 @@ async def trivia_vip_answer(callback: CallbackQuery):
     )
     await callback.answer()
     logger.info(f"game_user_handlers - trivia_vip_answer - {user_id} - correct:{result['correct']}, besitos:{result['besitos']}")
+
+
+# ==================== TRIVIA TEMATICA (PHASE 16) ====================
+
+@router.callback_query(lambda c: c.data == "game_trivia_tematica")
+async def game_trivia_tematica(callback: CallbackQuery):
+    """Inicia trivia tematica con pregunta aleatoria de categoria activa."""
+    user_id = callback.from_user.id
+
+    with get_service(GameService) as service:
+        tematica_info = service.get_active_tematica_info()
+
+        if not tematica_info:
+            await callback.message.edit_text(
+                "No hay dinamicas tematicas activas en este momento.",
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+
+        category_id = tematica_info['category_id']
+        data = service.get_trivia_tematica_entry_data(user_id)
+
+        if not data['can_play']:
+            await callback.message.edit_text(
+                data['limit_message'],
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+
+        question, question_idx = service.get_random_tematica_question(user_id, category_id)
+
+        if question is None:
+            await callback.message.edit_text(
+                "Los pergaminos tematicos estan en el taller de Lucien.",
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+        if question_idx == -2:
+            exhausted_msg = service._select_template(
+                service.TRIVIA_TEMATICA_TEMPLATES['deck_exhausted']
+            )
+            await callback.message.edit_text(
+                exhausted_msg,
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+
+    counter_text = data['counter_template'].format(
+        remaining=data['remaining'],
+        limit=data['limit']
+    )
+
+    streak_text = ""
+    if data['current_streak'] > 0:
+        streak_text = f"\n🔥 Racha tematica: {data['current_streak']}"
+
+    text = (
+        f"<b>{tematica_info['display_name']}</b>{streak_text}\n\n"
+        f"{data['intro']}\n\n"
+        f"<i>{counter_text}</i>\n\n"
+        f"\U0001f3ad <b>Pregunta Tematica:</b> {question['q']}"
+    )
+
+    await callback.message.edit_text(
+        text=text,
+        reply_markup=trivia_tematica_keyboard(question, question_idx)
+    )
+    await callback.answer()
+    logger.info(f"game_user_handlers - game_trivia_tematica - {user_id} - shown - category:{category_id}")
+
+
+@router.callback_query(lambda c: c.data.startswith("trivia_tematica_answer_"))
+async def trivia_tematica_answer(callback: CallbackQuery):
+    """Procesa respuesta de trivia tematica."""
+    user_id = callback.from_user.id
+
+    parts = callback.data.split("_")
+    answer_idx = int(parts[3])
+    question_idx = int(parts[4])
+
+    if answer_idx < 0 or answer_idx > 3:
+        await callback.answer("Opcion invalida.", show_alert=True)
+        return
+
+    with get_service(GameService) as service:
+        tematica_info = service.get_active_tematica_info()
+        if not tematica_info:
+            await callback.message.edit_text(
+                "La dinamica tematica ha finalizado.",
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+
+        result = service.play_trivia_tematica(
+            user_id, question_idx, answer_idx, tematica_info['category_id']
+        )
+
+    await callback.message.edit_text(
+        result['message'],
+        reply_markup=trivia_tematica_result_keyboard()
+    )
+    await callback.answer()
+    logger.info(
+        f"game_user_handlers - trivia_tematica_answer - {user_id} - "
+        f"correct:{result['correct']}, besitos:{result['besitos']}, "
+        f"bonus:{result.get('streak_bonus', 0)}"
+    )
