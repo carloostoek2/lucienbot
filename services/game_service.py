@@ -380,7 +380,8 @@ class GameService:
         return {
             'dice_limit': self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE,
             'trivia_limit': self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE,
-            'trivia_vip_limit': self.DAILY_TRIVIA_VIP_LIMIT
+            'trivia_vip_limit': self.DAILY_TRIVIA_VIP_LIMIT,
+            'trivia_tematica_limit': self.DAILY_TRIVIA_TEMATICA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_TEMATICA_LIMIT_FREE
         }
 
     def get_menu_data(self, user_id: int) -> dict:
@@ -424,7 +425,12 @@ class GameService:
         Returns: (puede_jugar, jugadas_hoy, limite, mensaje)
         """
         limits = self.get_daily_limits(user_id)
-        limit = limits['dice_limit'] if game_type == 'dice' else limits['trivia_limit']
+        if game_type == 'dice':
+            limit = limits['dice_limit']
+        elif game_type == 'trivia_tematica':
+            limit = limits['trivia_tematica_limit']
+        else:
+            limit = limits['trivia_limit']
         played = self.get_today_play_count(user_id, game_type)
 
         if played >= limit:
@@ -1152,6 +1158,220 @@ class GameService:
 
         idx = random.choice(available)
         return questions[idx], idx
+
+    def _get_tematica_trivia_streak(self, user_id: int) -> int:
+        """Calcula racha actual de victorias en trivia tematica (solo hoy)."""
+        records = self._get_today_tematica_trivia_records(user_id)
+        streak = 0
+        for record in records:
+            if record.payout > 0:
+                streak += 1
+            else:
+                break
+        return streak
+
+    def get_question_by_tematica_index(self, index: int, category_id: str) -> Optional[dict]:
+        """Retorna pregunta tematica por indice y categoria."""
+        questions = self.load_trivia_tematica_questions(category_id)
+        if 0 <= index < len(questions):
+            return questions[index]
+        return None
+
+    def _get_tematica_streak_message(self, streak: int) -> Optional[str]:
+        """Obtiene mensaje de racha tematica segun nivel alcanzado."""
+        if streak < 2:
+            return None
+        if streak >= 10:
+            level = 10
+        elif streak >= 7:
+            level = 7
+        elif streak >= 5:
+            level = 5
+        elif streak >= 3:
+            level = 3
+        else:
+            level = 2
+        templates = self.TRIVIA_TEMATICA_TEMPLATES['streak_messages'].get(level, ["!Racha de {streak}!"])
+        return self._select_template(templates).format(streak=streak)
+
+    def get_trivia_tematica_entry_data(self, user_id: int) -> dict:
+        """Obtiene datos enriquecidos para la entrada de trivia tematica."""
+        limits = self.get_daily_limits(user_id)
+        played = len(self._get_today_tematica_trivia_records(user_id))
+        remaining = max(0, limits['trivia_tematica_limit'] - played)
+        streak = self._get_tematica_trivia_streak(user_id)
+
+        can_play = remaining > 0
+        limit_message = None
+        if not can_play:
+            limit_message = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['limit_reached'])
+
+        logger.info(f"game_service - get_trivia_tematica_entry_data - {user_id} - remaining:{remaining}, streak:{streak}")
+
+        return {
+            'title': self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['entry_title']),
+            'intro': self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['entry_intro']),
+            'counter_template': self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['counter']),
+            'remaining': remaining,
+            'limit': limits['trivia_tematica_limit'],
+            'current_streak': streak,
+            'is_vip': self.is_user_vip(user_id),
+            'can_play': can_play,
+            'limit_message': limit_message
+        }
+
+    def play_trivia_tematica(self, user_id: int, question_idx: int,
+                             answer_idx: int, category_id: str) -> Dict[str, Any]:
+        """
+        Procesa respuesta de trivia tematica con rachas y bonus.
+        Returns: {correct, besitos, streak_bonus, message, ...}
+        """
+        can_play, played, limit, limit_msg = self.can_play(user_id, 'trivia_tematica')
+        if not can_play:
+            limit_template = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['limit_reached'])
+            full_message = limit_template + "\n\n" + limit_msg
+            return {
+                'correct': False, 'besitos': 0, 'streak_bonus': 0,
+                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
+                'message': full_message, 'message_parts': {},
+                'remaining_after': 0, 'limit_reached': True
+            }
+
+        question = self.get_question_by_tematica_index(question_idx, category_id)
+        if not question:
+            return {
+                'correct': False, 'besitos': 0, 'streak_bonus': 0,
+                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
+                'message': "Pregunta tematica no encontrada.", 'message_parts': {},
+                'remaining_after': max(0, limit - played), 'limit_reached': False
+            }
+
+        previous_streak = self._get_tematica_trivia_streak(user_id)
+        is_correct = self.check_trivia_answer(question, answer_idx)
+
+        if is_correct:
+            new_streak = previous_streak + 1
+        else:
+            new_streak = 0
+
+        streak_message = None
+        if is_correct:
+            streak_message = self._get_tematica_streak_message(new_streak)
+
+        besitos = 0
+        if is_correct:
+            besitos = self.TRIVIA_TEMATICA_WIN_BESITOS
+            if self.is_user_vip(user_id):
+                besitos = self.TRIVIA_TEMATICA_VIP_WIN_BESITOS
+            self.besito_service.credit_besitos(
+                user_id=user_id,
+                amount=besitos,
+                source=TransactionSource.TRIVIA,
+                description=f"Victoria en trivia tematica (racha: {new_streak})"
+            )
+
+        streak_bonus = 0
+        if is_correct and new_streak in self.STREAK_MILESTONES:
+            bonus = self.STREAK_MILESTONES[new_streak]
+            streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
+            self.besito_service.credit_besitos(
+                user_id=user_id,
+                amount=streak_bonus,
+                source=TransactionSource.TRIVIA,
+                description=f"Bonus por racha de {new_streak} en trivia tematica"
+            )
+
+        record = GameRecord(
+            user_id=user_id,
+            game_type='trivia_tematica',
+            result=f"tematica_question_{question_idx}",
+            payout=besitos + streak_bonus
+        )
+        self.db.add(record)
+        self.db.commit()
+
+        remaining_after = max(0, limit - (played + 1))
+
+        message_parts = self._build_trivia_tematica_message_parts(
+            is_correct, question, besitos, streak_message, streak_bonus, remaining_after
+        )
+        message = self._build_trivia_tematica_message(message_parts)
+
+        logger.info(f"game_service - play_trivia_tematica - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
+
+        return {
+            'correct': is_correct,
+            'besitos': besitos,
+            'streak_bonus': streak_bonus,
+            'besitos_total': besitos + streak_bonus,
+            'previous_streak': previous_streak,
+            'new_streak': new_streak,
+            'streak_message': streak_message,
+            'message': message,
+            'message_parts': message_parts,
+            'remaining_after': remaining_after,
+            'limit_reached': False
+        }
+
+    def _build_trivia_tematica_message_parts(self, is_correct: bool, question: dict,
+                                              besitos: int, streak_message: Optional[str],
+                                              streak_bonus: int, remaining: int) -> dict:
+        """Construye las partes del mensaje de trivia tematica."""
+        correct_letter = ["A", "B", "C", "D"][question['answer']]
+        correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
+
+        if is_correct:
+            header = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['correct'])
+        else:
+            header_template = self._select_template(self.TRIVIA_TEMATICA_TEMPLATES['incorrect'])
+            header = header_template.format(correct_answer=correct_answer_text)
+
+        reward_text = None
+        if is_correct:
+            reward_text = f"+{besitos} besitos \U0001f48b"
+            if streak_bonus > 0:
+                reward_text += f"\n+BONUS racha: +{streak_bonus} besitos"
+
+        streak_text = streak_message
+
+        encouragement = None
+        if remaining > 0:
+            encouragement = f"Oportunidades tematicas restantes: {remaining}"
+        else:
+            encouragement = "Ha agotado sus preguntas tematicas por hoy."
+
+        return {
+            'header': header,
+            'reward_text': reward_text,
+            'streak_text': streak_text,
+            'encouragement': encouragement
+        }
+
+    def _build_trivia_tematica_message(self, parts: dict) -> str:
+        """Construye mensaje final de trivia tematica."""
+        lines = [parts['header']]
+        if parts.get('reward_text'):
+            lines.extend(['', parts['reward_text']])
+        if parts.get('streak_text'):
+            lines.extend(['', parts['streak_text']])
+        if parts.get('encouragement'):
+            lines.extend(['', parts['encouragement']])
+        return '\n'.join(lines)
+
+    def get_active_tematica_info(self) -> Optional[dict]:
+        """Consulta categoria activa y retorna {category_id, display_name} o None."""
+        from services.trivia_service import TriviaCategoryService
+        tcs = TriviaCategoryService(self.db)
+        try:
+            active = tcs.get_active_category()
+            if not active:
+                return None
+            return {
+                'category_id': active['category_id'],
+                'display_name': active['display_name']
+            }
+        finally:
+            tcs.close()
 
     def __del__(self):
         """Cierra la sesión"""
