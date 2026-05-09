@@ -727,12 +727,24 @@ class GameService:
                 description=f"Victoria en trivia (racha: {new_streak})"
             )
 
+        # 7b. Verificar hito de racha (D-09, D-10)
+        streak_bonus = 0
+        if is_correct and new_streak in self.STREAK_MILESTONES:
+            bonus = self.STREAK_MILESTONES[new_streak]
+            streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
+            self.besito_service.credit_besitos(
+                user_id=user_id,
+                amount=streak_bonus,
+                source=TransactionSource.TRIVIA,
+                description=f"Bonus por racha de {new_streak} en trivia"
+            )
+
         # 8. Registrar jugada
         record = GameRecord(
             user_id=user_id,
             game_type='trivia',
             result=f"question_{question_idx}",
-            payout=besitos
+            payout=besitos + streak_bonus
         )
         self.db.add(record)
         self.db.commit()
@@ -748,14 +760,16 @@ class GameService:
         # 11. Construir mensaje final
         message = self._build_trivia_message(message_parts)
 
-        logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}")
+        logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}, bonus:{streak_bonus}")
 
         return {
             'correct': is_correct,
             'besitos': besitos,
+            'besitos_total': besitos + streak_bonus,
             'previous_streak': previous_streak,
             'new_streak': new_streak,
             'streak_message': streak_message,
+            'streak_bonus': streak_bonus,
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
@@ -975,12 +989,24 @@ class GameService:
                 description=f"Victoria en trivia VIP (racha: {new_streak})"
             )
 
+        # 7b. Verificar hito de racha (D-09, D-10)
+        streak_bonus = 0
+        if is_correct and new_streak in self.STREAK_MILESTONES:
+            bonus = self.STREAK_MILESTONES[new_streak]
+            streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
+            self.besito_service.credit_besitos(
+                user_id=user_id,
+                amount=streak_bonus,
+                source=TransactionSource.TRIVIA,
+                description=f"Bonus por racha de {new_streak} en trivia VIP"
+            )
+
         # 8. Registrar jugada
         record = GameRecord(
             user_id=user_id,
             game_type='trivia_vip',
             result=f"vip_question_{question_idx}",
-            payout=besitos
+            payout=besitos + streak_bonus
         )
         self.db.add(record)
         self.db.commit()
@@ -996,14 +1022,16 @@ class GameService:
         # 11. Construir mensaje final
         message = self._build_trivia_vip_message(message_parts)
 
-        logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}")
+        logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
 
         return {
             'correct': is_correct,
             'besitos': besitos,
+            'besitos_total': besitos + streak_bonus,
             'previous_streak': previous_streak,
             'new_streak': new_streak,
             'streak_message': streak_message,
+            'streak_bonus': streak_bonus,
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
