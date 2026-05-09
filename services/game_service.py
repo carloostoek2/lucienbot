@@ -1086,6 +1086,73 @@ class GameService:
             lines.extend(['', parts['encouragement']])
         return '\n'.join(lines)
 
+    # ==================== TRIVIA TEMATICA (PHASE 16) ====================
+
+    def _get_today_tematica_trivia_records(self, user_id: int) -> list:
+        """Obtiene registros de trivia tematica de hoy ordenados por tiempo DESC."""
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        records = self.db.query(GameRecord).filter(
+            GameRecord.user_id == user_id,
+            GameRecord.game_type == 'trivia_tematica',
+            GameRecord.played_at >= today
+        ).order_by(GameRecord.played_at.desc()).all()
+        return records
+
+    def _get_answered_today_indices(self, user_id: int, game_type: str) -> set:
+        """Retorna set de indices de preguntas ya respondidas hoy para un game_type."""
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        records = self.db.query(GameRecord).filter(
+            GameRecord.user_id == user_id,
+            GameRecord.game_type == game_type,
+            GameRecord.played_at >= today
+        ).all()
+        indices = set()
+        for rec in records:
+            result_str = rec.result or ""
+            if result_str.startswith("tematica_question_"):
+                try:
+                    idx = int(result_str.replace("tematica_question_", ""))
+                    indices.add(idx)
+                except ValueError:
+                    continue
+        return indices
+
+    def load_trivia_tematica_questions(self, category_id: str) -> list:
+        """Carga preguntas tematicas desde docs/preguntas_{category_id}.json."""
+        if category_id in self._tematica_questions:
+            return self._tematica_questions[category_id]
+
+        questions_path = Path(f"docs/preguntas_{category_id}.json")
+        if not questions_path.exists():
+            logger.warning(f"trivia tematica questions file not found: {questions_path}")
+            return []
+
+        try:
+            with open(questions_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                questions = data if isinstance(data, list) else data.get('questions', [])
+                self._tematica_questions[category_id] = questions
+        except Exception as e:
+            logger.error(f"Error loading trivia tematica questions: {e}")
+            self._tematica_questions[category_id] = []
+
+        return self._tematica_questions[category_id]
+
+    def get_random_tematica_question(self, user_id: int, category_id: str) -> tuple:
+        """Retorna (question_dict, index) de pregunta tematica no respondida hoy.
+        Returns (None, -1) si no hay preguntas, (None, -2) si todas respondidas."""
+        questions = self.load_trivia_tematica_questions(category_id)
+        if not questions:
+            return None, -1
+
+        answered = self._get_answered_today_indices(user_id, 'trivia_tematica')
+        available = [i for i in range(len(questions)) if i not in answered]
+        if not available:
+            return None, -2
+
+        idx = random.choice(available)
+        return questions[idx], idx
+
     def __del__(self):
         """Cierra la sesión"""
         self.close()
