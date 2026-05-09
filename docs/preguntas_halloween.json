@@ -1,0 +1,7 @@
+[
+  {"q": "¿Qué tradición de Halloween involucra tallar calabazas?", "opts": ["Trick or treat", "Jack-o'-lantern", "Dulce o travesura"], "answer": 1},
+  {"q": "¿En qué país se originó la celebración de Halloween?", "opts": ["Estados Unidos", "México", "Irlanda"], "answer": 2},
+  {"q": "¿Qué fruta se usaba originalmente para tallar antes de la calabaza?", "opts": ["Nabo", "Sandía", "Melón"], "answer": 0},
+  {"q": "¿Cómo se llama la celebración mexicana que coincide con Halloween?", "opts": ["Día de Muertos", "Navidad", "Cinco de Mayo"], "answer": 0},
+  {"q": "¿Qué color NO es tradicional de Halloween?", "opts": ["Naranja", "Negro", "Verde"], "answer": 2}
+]

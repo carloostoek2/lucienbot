@@ -1,0 +1,7 @@
+[
+  {"q": "¿En qué mes se celebra la Navidad?", "opts": ["Noviembre", "Diciembre", "Enero"], "answer": 1},
+  {"q": "¿Quién trae los regalos según la tradición navideña?", "opts": ["El Conejo de Pascua", "Santa Claus", "Cupido"], "answer": 1},
+  {"q": "¿Cuál es la flor típica de la Navidad en México?", "opts": ["Rosa", "Nochebuena", "Girasol"], "answer": 1},
+  {"q": "¿Cuántos renos tira del trineo de Santa?", "opts": ["6", "9", "8"], "answer": 1},
+  {"q": "¿Qué se celebra el 25 de diciembre?", "opts": ["Año Nuevo", "Navidad", "Acción de Gracias"], "answer": 1}
+]
