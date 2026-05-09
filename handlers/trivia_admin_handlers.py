@@ -1,0 +1,78 @@
+"""
+Handlers de Administracion de Trivias Tematicas - Lucien Bot
+
+Handlers para gestion de categorias de trivia desde el panel admin.
+Fase 16 - Trivias Tematicas.
+"""
+import logging
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from config.settings import bot_config
+from services import get_service, TriviaCategoryService
+
+logger = logging.getLogger(__name__)
+router = Router()
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id in bot_config.ADMIN_IDS
+
+
+@router.callback_query(F.data == "admin_trivia_categories", lambda cb: is_admin(cb.from_user.id))
+async def admin_trivia_categories_menu(callback: CallbackQuery):
+    """Menu principal de gestion de categorias de trivia."""
+    with get_service(TriviaCategoryService) as service:
+        categories = service.discover_categories()
+        active = service.get_active_category()
+
+    text = "\U0001f3af <b>Mazos de Trivia</b>\n\n"
+    if active:
+        text += f"✨ <b>Activa:</b> {active['display_name']}\n\n"
+    else:
+        text += "\U0001f4ed <b>Sin categoria activa.</b> Usando mazo general.\n\n"
+
+    buttons = []
+    for cat in categories:
+        is_active = active and active['category_id'] == cat['category_id']
+        btn_text = f"{'✅ ' if is_active else ''}{cat['display_name']} ({cat['question_count']} preguntas)"
+        cb_data = f"trivia_cat_activate_{cat['category_id']}"
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=cb_data)])
+
+    if active:
+        buttons.append([InlineKeyboardButton(
+            text="⛔ Desactivar categoria activa",
+            callback_data="trivia_cat_deactivate"
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="\U0001f519 Panel de administracion",
+        callback_data="back_to_admin"
+    )])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+    logger.info(f"trivia_admin_handlers - admin_trivia_categories_menu - {callback.from_user.id} - shown")
+
+
+@router.callback_query(F.data.startswith("trivia_cat_activate_"), lambda cb: is_admin(cb.from_user.id))
+async def trivia_category_activate(callback: CallbackQuery):
+    """Activa una categoria tematica."""
+    category_id = callback.data.replace("trivia_cat_activate_", "")
+    with get_service(TriviaCategoryService) as service:
+        service.activate(category_id)
+    await callback.answer(f"Categoria activada: {category_id}", show_alert=True)
+    await admin_trivia_categories_menu(callback)
+    logger.info(f"trivia_admin_handlers - trivia_category_activate - {callback.from_user.id} - category:{category_id}")
+
+
+@router.callback_query(F.data == "trivia_cat_deactivate", lambda cb: is_admin(cb.from_user.id))
+async def trivia_category_deactivate(callback: CallbackQuery):
+    """Desactiva la categoria activa."""
+    with get_service(TriviaCategoryService) as service:
+        service.deactivate()
+    await callback.answer("Categoria desactivada. Usando mazo general.", show_alert=True)
+    await admin_trivia_categories_menu(callback)
+    logger.info(f"trivia_admin_handlers - trivia_category_deactivate - {callback.from_user.id} - deactivated")
