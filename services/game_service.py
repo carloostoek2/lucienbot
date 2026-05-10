@@ -364,6 +364,8 @@ class GameService:
             lines.extend(['', parts['reward_text']])
         if parts.get('streak_text'):
             lines.extend(['', parts['streak_text']])
+        if parts.get('promo_code_line'):
+            lines.extend(['', parts['promo_code_line']])
         if parts.get('encouragement'):
             lines.extend(['', parts['encouragement']])
         return '\n'.join(lines)
@@ -745,6 +747,21 @@ class GameService:
                 description=f"Bonus por racha de {new_streak} en trivia"
             )
 
+        # Phase 17: Streak Promotion check
+        promo_code_info = None
+        if is_correct:
+            from services.streak_promotion_service import StreakPromotionService
+            promo_service = StreakPromotionService(self.db)
+            try:
+                promo_code_info = promo_service.claim_for_streak(
+                    user_id=user_id,
+                    game_type='trivia',
+                    streak=new_streak,
+                    category_id=None,
+                )
+            finally:
+                promo_service.close()
+
         # 8. Registrar jugada
         record = GameRecord(
             user_id=user_id,
@@ -760,7 +777,8 @@ class GameService:
 
         # 10. Construir partes del mensaje
         message_parts = self._build_trivia_message_parts(
-            is_correct, question, besitos, streak_message, remaining_after
+            is_correct, question, besitos, streak_message, remaining_after,
+            promo_code=promo_code_info
         )
 
         # 11. Construir mensaje final
@@ -776,6 +794,7 @@ class GameService:
             'new_streak': new_streak,
             'streak_message': streak_message,
             'streak_bonus': streak_bonus,
+            'promo_code': promo_code_info,
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
@@ -784,7 +803,8 @@ class GameService:
 
     def _build_trivia_message_parts(self, is_correct: bool, question: dict,
                                      besitos: int, streak_message: Optional[str],
-                                     remaining: int) -> dict:
+                                     remaining: int,
+                                     promo_code: Optional[dict] = None) -> dict:
         """Construye las partes del mensaje de trivia"""
         # Respuesta correcta (para formatear templates)
         letters = ["A", "B", "C", "D"]
@@ -813,12 +833,22 @@ class GameService:
         # Mensaje de racha
         streak_text = streak_message
 
-        # Mensaje de oportunidades/ánimo
+        # Animo / oportunidades
         encouragement = None
         if remaining > 0:
             encouragement = f"Oportunidades restantes: {remaining}"
         else:
             encouragement = "Ha agotado sus preguntas por hoy."
+
+        # Phase 17: Promo code line
+        promo_code_line = None
+        if promo_code and promo_code.get('code'):
+            code = promo_code['code']
+            promo_code_line = (
+                f"\U0001f39f️ <b>¡Código de descuento ganado!</b>\n"
+                f"<i>Su racha le ha otorgado: <code>{code}</code></i>\n"
+                f"<i>Lucien guarda registro de este código en su archivo personal.</i>"
+            )
 
         return {
             'header': header,
@@ -826,7 +856,8 @@ class GameService:
             'correct_answer': correct_answer,
             'reward_text': reward_text,
             'streak_text': streak_text,
-            'encouragement': encouragement
+            'encouragement': encouragement,
+            'promo_code_line': promo_code_line,
         }
 
     # ==================== TRIVIA VIP ====================
@@ -1007,6 +1038,21 @@ class GameService:
                 description=f"Bonus por racha de {new_streak} en trivia VIP"
             )
 
+        # Phase 17: Streak Promotion check
+        promo_code_info = None
+        if is_correct:
+            from services.streak_promotion_service import StreakPromotionService
+            promo_service = StreakPromotionService(self.db)
+            try:
+                promo_code_info = promo_service.claim_for_streak(
+                    user_id=user_id,
+                    game_type='trivia_vip',
+                    streak=new_streak,
+                    category_id=None,
+                )
+            finally:
+                promo_service.close()
+
         # 8. Registrar jugada
         record = GameRecord(
             user_id=user_id,
@@ -1022,7 +1068,8 @@ class GameService:
 
         # 10. Construir partes del mensaje
         message_parts = self._build_trivia_vip_message_parts(
-            is_correct, question, besitos, streak_message, remaining_after
+            is_correct, question, besitos, streak_message, remaining_after,
+            promo_code=promo_code_info
         )
 
         # 11. Construir mensaje final
@@ -1038,6 +1085,7 @@ class GameService:
             'new_streak': new_streak,
             'streak_message': streak_message,
             'streak_bonus': streak_bonus,
+            'promo_code': promo_code_info,
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
@@ -1046,7 +1094,8 @@ class GameService:
 
     def _build_trivia_vip_message_parts(self, is_correct: bool, question: dict,
                                         besitos: int, streak_message: Optional[str],
-                                        remaining: int) -> dict:
+                                        remaining: int,
+                                        promo_code: Optional[dict] = None) -> dict:
         """Construye las partes del mensaje de trivia VIP"""
         correct_letter = ["A", "B", "C", "D"][question['answer']]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
@@ -1072,13 +1121,24 @@ class GameService:
         else:
             encouragement = "Ha agotado sus preguntas secretas por hoy."
 
+        # Phase 17: Promo code line
+        promo_code_line = None
+        if promo_code and promo_code.get('code'):
+            code = promo_code['code']
+            promo_code_line = (
+                f"\U0001f39f️ <b>¡Código de descuento ganado!</b>\n"
+                f"<i>Su racha le ha otorgado: <code>{code}</code></i>\n"
+                f"<i>Lucien guarda registro de este código en su archivo personal.</i>"
+            )
+
         return {
             'header': header,
             'result_text': result_text,
             'correct_answer': correct_answer,
             'reward_text': reward_text,
             'streak_text': streak_text,
-            'encouragement': encouragement
+            'encouragement': encouragement,
+            'promo_code_line': promo_code_line,
         }
 
     def _build_trivia_vip_message(self, parts: dict) -> str:
@@ -1088,6 +1148,8 @@ class GameService:
             lines.extend(['', parts['reward_text']])
         if parts.get('streak_text'):
             lines.extend(['', parts['streak_text']])
+        if parts.get('promo_code_line'):
+            lines.extend(['', parts['promo_code_line']])
         if parts.get('encouragement'):
             lines.extend(['', parts['encouragement']])
         return '\n'.join(lines)
@@ -1281,6 +1343,21 @@ class GameService:
                 description=f"Bonus por racha de {new_streak} en trivia simple"
             )
 
+        # Phase 17: Streak Promotion check
+        promo_code_info = None
+        if is_correct:
+            from services.streak_promotion_service import StreakPromotionService
+            promo_service = StreakPromotionService(self.db)
+            try:
+                promo_code_info = promo_service.claim_for_streak(
+                    user_id=user_id,
+                    game_type='trivia_simple',
+                    streak=new_streak,
+                    category_id=category_id,
+                )
+            finally:
+                promo_service.close()
+
         record = GameRecord(
             user_id=user_id,
             game_type='trivia_simple',
@@ -1293,7 +1370,8 @@ class GameService:
         remaining_after = max(0, limit - (played + 1))
 
         message_parts = self._build_trivia_simple_message_parts(
-            is_correct, question, besitos, streak_message, streak_bonus, remaining_after
+            is_correct, question, besitos, streak_message, streak_bonus,
+            remaining_after, promo_code=promo_code_info
         )
         message = self._build_trivia_simple_message(message_parts)
 
@@ -1307,6 +1385,7 @@ class GameService:
             'previous_streak': previous_streak,
             'new_streak': new_streak,
             'streak_message': streak_message,
+            'promo_code': promo_code_info,
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
@@ -1315,7 +1394,8 @@ class GameService:
 
     def _build_trivia_simple_message_parts(self, is_correct: bool, question: dict,
                                               besitos: int, streak_message: Optional[str],
-                                              streak_bonus: int, remaining: int) -> dict:
+                                              streak_bonus: int, remaining: int,
+                                              promo_code: Optional[dict] = None) -> dict:
         """Construye las partes del mensaje de trivia simple."""
         correct_letter = ["A", "B", "C", "D"][question['answer']]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
@@ -1340,11 +1420,22 @@ class GameService:
         else:
             encouragement = "Ha agotado sus preguntas simples por hoy."
 
+        # Phase 17: Promo code line
+        promo_code_line = None
+        if promo_code and promo_code.get('code'):
+            code = promo_code['code']
+            promo_code_line = (
+                f"\U0001f39f️ <b>¡Código de descuento ganado!</b>\n"
+                f"<i>Su racha le ha otorgado: <code>{code}</code></i>\n"
+                f"<i>Lucien guarda registro de este código en su archivo personal.</i>"
+            )
+
         return {
             'header': header,
             'reward_text': reward_text,
             'streak_text': streak_text,
-            'encouragement': encouragement
+            'encouragement': encouragement,
+            'promo_code_line': promo_code_line,
         }
 
     def _build_trivia_simple_message(self, parts: dict) -> str:
@@ -1354,6 +1445,8 @@ class GameService:
             lines.extend(['', parts['reward_text']])
         if parts.get('streak_text'):
             lines.extend(['', parts['streak_text']])
+        if parts.get('promo_code_line'):
+            lines.extend(['', parts['promo_code_line']])
         if parts.get('encouragement'):
             lines.extend(['', parts['encouragement']])
         return '\n'.join(lines)
