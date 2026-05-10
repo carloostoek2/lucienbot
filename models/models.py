@@ -1099,7 +1099,7 @@ class GameRecord(Base):
 
 
 class TriviaCategory(Base):
-    """Estado de categorias tematicas de trivia."""
+    """Estado de categorias especiales de trivia."""
     __tablename__ = "trivia_categories"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1109,3 +1109,99 @@ class TriviaCategory(Base):
     activated_at = Column(DateTime(timezone=True), nullable=True)
     scheduled_end = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class StreakPromotionStatus(str, enum.Enum):
+    """States for a streak promotion lifecycle."""
+    PENDING = "pending"
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    PAUSED = "paused"
+
+
+class StreakPromotionCodeStatus(str, enum.Enum):
+    """States for a streak promotion discount code."""
+    AVAILABLE = "available"
+    DELIVERED = "delivered"
+    USED = "used"
+
+
+class StreakPromotion(Base):
+    """Promocion por racha: recompensa a usuarios que mantienen rachas en trivia."""
+    __tablename__ = "streak_promotions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    duration_mode = Column(String(10), default="dates")  # 'dates' or 'relative'
+    start_date = Column(DateTime(timezone=True), nullable=True)
+    end_date = Column(DateTime(timezone=True), nullable=True)
+    duration_hours = Column(Integer, nullable=True)
+
+    category_id = Column(String(50), nullable=True)  # null = general deck
+    status = Column(Enum(StreakPromotionStatus), default=StreakPromotionStatus.PENDING)
+    is_active = Column(Boolean, default=False)
+    include_general = Column(Boolean, default=True)
+    include_vip = Column(Boolean, default=False)
+    include_simple = Column(Boolean, default=True)
+
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    levels = relationship(
+        "StreakPromotionLevel",
+        back_populates="promotion",
+        cascade="all, delete-orphan",
+        order_by="StreakPromotionLevel.consecutive_required"
+    )
+
+
+class StreakPromotionLevel(Base):
+    """Nivel dentro de una promocion por racha: umbral de racha y recompensa."""
+    __tablename__ = "streak_promotion_levels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    promotion_id = Column(Integer, ForeignKey("streak_promotions.id"), nullable=False)
+    consecutive_required = Column(Integer, nullable=False)
+    discount_pct = Column(Integer, nullable=False)
+    codes_available = Column(Integer, nullable=False)
+
+    promotion = relationship("StreakPromotion", back_populates="levels")
+    codes = relationship(
+        "StreakPromotionCode",
+        back_populates="level",
+        cascade="all, delete-orphan"
+    )
+
+
+class StreakPromotionCode(Base):
+    """Codigo de descuento individual generado para un nivel de promocion por racha."""
+    __tablename__ = "streak_promotion_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    level_id = Column(Integer, ForeignKey("streak_promotion_levels.id"), nullable=False)
+    code_value = Column(String(50), unique=True, nullable=False, index=True)
+    status = Column(Enum(StreakPromotionCodeStatus), default=StreakPromotionCodeStatus.AVAILABLE)
+    user_id = Column(BigInteger, nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    used_by_admin = Column(BigInteger, nullable=True)
+
+    level = relationship("StreakPromotionLevel", back_populates="codes")
+
+
+class StreakPromotionRedemption(Base):
+    """Registro de canje de un codigo de descuento por un usuario en un nivel."""
+    __tablename__ = "streak_promotion_redemptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    level_id = Column(Integer, ForeignKey("streak_promotion_levels.id"), nullable=False)
+    code_id = Column(Integer, ForeignKey("streak_promotion_codes.id"), nullable=False)
+    streak_achieved = Column(Integer, nullable=False)
+    redeemed_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "level_id", name="uq_streak_redemption_user_level"),
+    )
