@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from models.models import (
     StreakPromotion,
     StreakPromotionLevel,
@@ -51,16 +52,30 @@ class StreakPromotionService:
         """Genera todos los codigos para un nivel de promocion de forma anticipada."""
         count = level.codes_available
         db = self._get_db()
-        for _ in range(count):
+        generated = 0
+        max_attempts = count * 3
+        attempt = 0
+        while generated < count and attempt < max_attempts:
+            attempt = attempt + 1
+            code_value = self._generate_code(prefix)
             code = StreakPromotionCode(
                 level_id=level.id,
-                code_value=self._generate_code(prefix),
+                code_value=code_value,
                 status=StreakPromotionCodeStatus.AVAILABLE,
             )
             db.add(code)
+            try:
+                db.flush()
+                generated = generated + 1
+            except IntegrityError:
+                db.rollback()
+                logger.warning(
+                    f"streak_promotion_service - _pre_generate_codes - "
+                    f"level_id:{level.id} - code collision, retrying"
+                )
         logger.info(
             f"streak_promotion_service - _pre_generate_codes - "
-            f"level_id:{level.id} - count:{count}"
+            f"level_id:{level.id} - count:{generated}"
         )
 
     def create_promotion(self, name: str, description: str, levels: list,
@@ -139,6 +154,7 @@ class StreakPromotionService:
                 StreakPromotionRedemption.user_id == user_id,
                 StreakPromotionRedemption.level_id == level_id,
             )
+            .with_for_update()
             .first()
         )
         return existing is not None
@@ -291,8 +307,11 @@ class StreakPromotionService:
             scheduler = get_scheduler()
             if scheduler:
                 scheduler.remove_streak_promotion_jobs(promo_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"streak_promotion_service - delete_promotion - "
+                f"promo_id:{promo_id} - failed to remove jobs: {e}"
+            )
 
         logger.info(
             f"streak_promotion_service - delete_promotion - "

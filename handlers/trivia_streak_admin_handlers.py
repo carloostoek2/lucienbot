@@ -500,6 +500,9 @@ async def streak_promo_toggle_game_type(callback: CallbackQuery, state: FSMConte
     flag = callback.data.replace("streak_promo_gt_", "")
 
     if flag == "done":
+        if not any(gt_flag.values()):
+            await callback.answer("Seleccione al menos un tipo de juego.", show_alert=True)
+            return
         await state.update_data(game_types=gt_flag)
         await state.set_state(StreakPromotionStates.waiting_confirmation)
         summary_text = streak_promo_build_summary(data, gt_flag)

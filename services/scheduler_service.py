@@ -375,8 +375,8 @@ class SchedulerService:
         for job_id in (f"streak_promo_activate_{promo_id}", f"streak_promo_deactivate_{promo_id}"):
             try:
                 self._scheduler.remove_job(job_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"scheduler_service - remove_streak_promotion_jobs - job:{job_id} - error:{e}")
         logger.info(f"scheduler_service - remove_streak_promotion_jobs - promo_id:{promo_id} - removed")
 
     async def stop(self):
