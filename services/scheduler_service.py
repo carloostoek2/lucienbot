@@ -216,6 +216,36 @@ async def _process_expired_subscriptions():
         db.close()
 
 
+async def _activate_streak_promotion(promo_id: int):
+    """Activa una promocion por racha en su fecha de inicio (DateTrigger job)."""
+    db = SessionLocal()
+    try:
+        from services.streak_promotion_service import StreakPromotionService
+
+        service = StreakPromotionService(db)
+        service.activate(promo_id)
+        logger.info(f"Scheduler activated streak promotion: promo_id={promo_id}")
+    except Exception as e:
+        logger.error(f"Error activating streak promotion {promo_id}: {e}")
+    finally:
+        db.close()
+
+
+async def _deactivate_streak_promotion(promo_id: int):
+    """Desactiva una promocion por racha en su fecha de expiracion (DateTrigger job)."""
+    db = SessionLocal()
+    try:
+        from services.streak_promotion_service import StreakPromotionService
+
+        service = StreakPromotionService(db)
+        service.deactivate(promo_id)
+        logger.info(f"Scheduler deactivated streak promotion: promo_id={promo_id}")
+    except Exception as e:
+        logger.error(f"Error deactivating streak promotion {promo_id}: {e}")
+    finally:
+        db.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SchedulerService — solo maneja el ciclo de vida de APScheduler
 # ─────────────────────────────────────────────────────────────────────────────
@@ -311,6 +341,43 @@ class SchedulerService:
             kwargs={"user_id": user_id, "channel_id": channel_id},
         )
         logger.info(f"Scheduled free welcome job: user={user_id}, channel={channel_id}, run_at={run_date}")
+
+    def schedule_streak_promotion(self, promo_id: int, start_date=None, end_date=None):
+        """Programa jobs de activacion/desactivacion automatica para una promocion por racha.
+
+        Usa DateTrigger para ejecutar en fechas especificas de inicio y fin.
+        """
+        if start_date:
+            self._scheduler.add_job(
+                _activate_streak_promotion,
+                trigger=DateTrigger(run_date=start_date),
+                id=f"streak_promo_activate_{promo_id}",
+                replace_existing=True,
+                kwargs={"promo_id": promo_id},
+            )
+            logger.info(f"Scheduled streak promotion activation: promo_id={promo_id}, at={start_date}")
+        if end_date:
+            self._scheduler.add_job(
+                _deactivate_streak_promotion,
+                trigger=DateTrigger(run_date=end_date),
+                id=f"streak_promo_deactivate_{promo_id}",
+                replace_existing=True,
+                kwargs={"promo_id": promo_id},
+            )
+            logger.info(f"Scheduled streak promotion deactivation: promo_id={promo_id}, at={end_date}")
+        logger.info(
+            f"scheduler_service - schedule_streak_promotion - "
+            f"promo_id:{promo_id} - start:{start_date} - end:{end_date}"
+        )
+
+    def remove_streak_promotion_jobs(self, promo_id: int):
+        """Remueve jobs de activacion/desactivacion para una promocion por racha."""
+        for job_id in (f"streak_promo_activate_{promo_id}", f"streak_promo_deactivate_{promo_id}"):
+            try:
+                self._scheduler.remove_job(job_id)
+            except Exception:
+                pass
+        logger.info(f"scheduler_service - remove_streak_promotion_jobs - promo_id:{promo_id} - removed")
 
     async def stop(self):
         """Detiene el scheduler."""
