@@ -9,7 +9,7 @@ import secrets
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from models.models import (
     StreakPromotion,
@@ -112,13 +112,19 @@ class StreakPromotionService:
     def get_promotion(self, promo_id: int) -> Optional[StreakPromotion]:
         """Obtiene una promocion por su ID."""
         db = self._get_db()
-        return db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
+        return (
+            db.query(StreakPromotion)
+            .options(joinedload(StreakPromotion.levels))
+            .filter(StreakPromotion.id == promo_id)
+            .first()
+        )
 
     def get_all_promotions(self) -> list[StreakPromotion]:
         """Retorna todas las promociones ordenadas por creacion descendente."""
         db = self._get_db()
         return (
             db.query(StreakPromotion)
+            .options(joinedload(StreakPromotion.levels))
             .order_by(StreakPromotion.created_at.desc())
             .all()
         )
@@ -128,7 +134,9 @@ class StreakPromotionService:
     ) -> list[StreakPromotion]:
         """Retorna promociones activas, opcionalmente filtradas por tipo y categoria."""
         db = self._get_db()
-        query = db.query(StreakPromotion).filter(
+        query = db.query(StreakPromotion).options(
+            joinedload(StreakPromotion.levels)
+        ).filter(
             StreakPromotion.is_active == True,
             StreakPromotion.status == StreakPromotionStatus.ACTIVE,
         )
@@ -348,6 +356,7 @@ class StreakPromotionService:
         db = self._get_db()
         promotion = (
             db.query(StreakPromotion)
+            .options(joinedload(StreakPromotion.levels).joinedload(StreakPromotionLevel.codes))
             .filter(StreakPromotion.id == promo_id)
             .first()
         )
