@@ -1,7 +1,7 @@
 # Roadmap: Lucien Bot
 
 **Created:** 2026-03-30
-**Phases completed:** 8 of 11
+**Phases completed:** 10 of 11
 **Milestone:** v1.0 — Core bot functionality
 
 ## Summary
@@ -21,6 +21,9 @@
 | 12 | Mejorar tienda | 5/5 | Complete    | 2026-04-05 |
 | 13 | El Mapa del Deseo | 3/3 | Complete    | 2026-04-05 |
 | 14 | Minijuegos | Sistema de dados y trivia para ganar besitos | Complete    | 2026-04-06 |
+| 15 | Sistema de Mochila | Inventario de recompensas, compras y archivos | Complete    | 2026-04-08 |
+| 16 | Trivias Temáticas | Categorías de trivia, racha, bonus por hitos | COMPLETE | 2026-05-10 |
+| 17 | Promos de Trivias | Códigos por racha en trivia | COMPLETE | 2026-05-10 |
 
 ## Phase Details
 
@@ -273,22 +276,30 @@ Plans:
 ### Phase 16: Trivias Temáticas
 
 **Goal:** Sistema de trivia temática con preguntas organizadas por categorías, mazo de preguntas y recompensas por racha de respuestas correctas
-**Requirements**: TBD
+**Requirements**: TRIVIA-01 a TRIVIA-08
 **Depends on:** Phase 15
+**Status:** ✅ COMPLETE (2026-05-10)
+**Score:** 9/9 must-haves verified
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] TBD (run `/gsd-plan-phase 16` to break down)
+- [x] 16-01-PLAN.md — TriviaCategory models, service, GameService extensions, handlers, keyboards
 
-### Phase 17: 17 promos de trivias
+### Phase 17: Promos de Trivias (Streak Promotions)
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Sistema de promociones basadas en rachas de trivia que otorgan códigos de descuento al alcanzar objetivos de rachas consecutivas
+**Requirements**: STREAK-PROMO-01 a STREAK-PROMO-04
 **Depends on:** Phase 16
+**Status:** ✅ COMPLETE (2026-05-10)
+**Score:** 30/30 must-haves verified
+**Blockers Fixed:** CR-01 (interleaved commit), CR-02 (null description crash)
 **Plans:** 4/4 plans complete
 
 Plans:
-- [x] TBD (run /gsd-plan-phase 17 to break down) (completed 2026-05-10)
+- [x] 17-01-PLAN.md — Models + Alembic migration (StreakPromotion, StreakPromotionLevel, StreakPromotionCode, StreakPromotionRedemption)
+- [x] 17-02-PLAN.md — StreakPromotionService (CRUD + claim logic) + Scheduler integration
+- [x] 17-03-PLAN.md — Admin handlers + GameService hook
+- [x] 17-04-PLAN.md — Test coverage (unit + integration)
 
 ---
 

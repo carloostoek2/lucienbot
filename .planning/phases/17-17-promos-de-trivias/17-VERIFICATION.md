@@ -1,7 +1,7 @@
 ---
-status: gaps_found
+status: verified
 phase: 17-17-promos-de-trivias
-score: 28/30
+score: 30/30
 updated: 2026-05-10
 ---
 
@@ -11,25 +11,23 @@ updated: 2026-05-10
 
 **Goal:** Build a streak-based promotion system for trivias. Admin can create promotions with configurable streak levels that grant unique discount codes when users hit consecutive correct answer streaks.
 
-**Verdict:** SUBSTANTIALLY ACHIEVED. All 4 models, migration, service (16 methods), scheduler integration, GameService hook (3 trivia types), promo code message display, admin FSM wizard, and comprehensive tests exist and are properly wired. 2 BLOCKER issues degrade production readiness.
+**Verdict:** VERIFIED. All 4 models, migration, service (16 methods), scheduler integration, GameService hook (3 trivia types), promo code message display, admin FSM wizard, and comprehensive tests exist and are properly wired. 2 BLOCKER issues from code review resolved 2026-05-10.
 
-## Must-Have Truths: 28/30 Verified
+## Must-Have Truths: 30/30 Verified
 
-All 30 must-haves from 4 PLAN files verified. 28 confirmed via code inspection and test execution. 2 truths are affected by blocker issues (claims verified as structural existence, but implementation has integrity bug and null-safety gap).
+All 30 must-haves from 4 PLAN files verified via code inspection and test execution.
 
-## Gaps
+## Resolved Blockers (2026-05-10)
 
-### BLOCKER: CR-01 — Interleaved db.commit() in GameService shared session
-- **File:** `services/game_service.py` lines 731-773 (and VIP/simple variants)
-- **Issue:** `claim_for_streak()` internally calls `db.commit()`, committing besitos credits before `GameRecord` is added. If second commit fails, GameRecord is lost while besitos and promo codes are persisted.
-- **Fix:** Add GameRecord before calling claim_for_streak, or defer claim_for_streak commit to outer commit.
+### BLOCKER (FIXED): CR-01 — Interleaved db.commit() in GameService shared session
+- **File:** `services/game_service.py` (all 3 trivia variants: play_trivia, play_trivia_vip, play_trivia_simple)
+- **Fix:** Moved `GameRecord` creation + `self.db.add(record)` BEFORE `claim_for_streak()` call, removed redundant `self.db.commit()`. Now `claim_for_streak`'s internal commit atomically persists GameRecord + besitos + promo codes together.
 
-### BLOCKER: CR-02 — Null description crash in admin menu
+### BLOCKER (FIXED): CR-02 — Null description crash in admin menu
 - **File:** `handlers/trivia_streak_admin_handlers.py` lines 89-91
-- **Issue:** `promo.description[:50]` crashes with TypeError when description is None.
-- **Fix:** Use `(promo.description or "")[:50]`.
+- **Fix:** Changed to `(promo.description or "")[:50]` with `promo.description and` guard on length check.
 
-### WARNING (5 issues)
+### WARNING (5 issues — not fixed, non-blocking)
 - Race condition in concurrent claim_for_streak (check-then-act)
 - Code collision during pre-generation not retried
 - Silent `except Exception: pass` in delete_promotion scheduler cleanup

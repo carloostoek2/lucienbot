@@ -49,3 +49,9 @@ ENV/
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# GSD artifacts
+.coverage
+
+# GSD artifacts
+.planning/config.json

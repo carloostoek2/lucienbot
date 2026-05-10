@@ -747,6 +747,15 @@ class GameService:
                 description=f"Bonus por racha de {new_streak} en trivia"
             )
 
+        # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
+        record = GameRecord(
+            user_id=user_id,
+            game_type='trivia',
+            result=f"question_{question_idx}",
+            payout=besitos + streak_bonus
+        )
+        self.db.add(record)
+
         # Phase 17: Streak Promotion check
         promo_code_info = None
         if is_correct:
@@ -761,16 +770,6 @@ class GameService:
                 )
             finally:
                 promo_service.close()
-
-        # 8. Registrar jugada
-        record = GameRecord(
-            user_id=user_id,
-            game_type='trivia',
-            result=f"question_{question_idx}",
-            payout=besitos + streak_bonus
-        )
-        self.db.add(record)
-        self.db.commit()
 
         # 9. Calcular oportunidades restantes
         remaining_after = max(0, limit - (played + 1))
@@ -1038,6 +1037,15 @@ class GameService:
                 description=f"Bonus por racha de {new_streak} en trivia VIP"
             )
 
+        # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
+        record = GameRecord(
+            user_id=user_id,
+            game_type='trivia_vip',
+            result=f"vip_question_{question_idx}",
+            payout=besitos + streak_bonus
+        )
+        self.db.add(record)
+
         # Phase 17: Streak Promotion check
         promo_code_info = None
         if is_correct:
@@ -1052,16 +1060,6 @@ class GameService:
                 )
             finally:
                 promo_service.close()
-
-        # 8. Registrar jugada
-        record = GameRecord(
-            user_id=user_id,
-            game_type='trivia_vip',
-            result=f"vip_question_{question_idx}",
-            payout=besitos + streak_bonus
-        )
-        self.db.add(record)
-        self.db.commit()
 
         # 9. Calcular oportunidades restantes
         remaining_after = max(0, limit - (played + 1))
@@ -1343,6 +1341,15 @@ class GameService:
                 description=f"Bonus por racha de {new_streak} en trivia simple"
             )
 
+        # Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
+        record = GameRecord(
+            user_id=user_id,
+            game_type='trivia_simple',
+            result=f"simple_question_{question_idx}",
+            payout=besitos + streak_bonus
+        )
+        self.db.add(record)
+
         # Phase 17: Streak Promotion check
         promo_code_info = None
         if is_correct:
@@ -1357,15 +1364,6 @@ class GameService:
                 )
             finally:
                 promo_service.close()
-
-        record = GameRecord(
-            user_id=user_id,
-            game_type='trivia_simple',
-            result=f"simple_question_{question_idx}",
-            payout=besitos + streak_bonus
-        )
-        self.db.add(record)
-        self.db.commit()
 
         remaining_after = max(0, limit - (played + 1))
 

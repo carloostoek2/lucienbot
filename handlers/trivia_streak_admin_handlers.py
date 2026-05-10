@@ -86,8 +86,8 @@ def _build_promotions_list(promotions) -> tuple:
             f"{l.consecutive_required}r/{l.discount_pct}%({l.codes_available}cod)"
             for l in promo.levels
         )
-        desc_short = promo.description[:50]
-        if len(promo.description) > 50:
+        desc_short = (promo.description or "")[:50]
+        if promo.description and len(promo.description) > 50:
             desc_short += "..."
         text += (
             f"{icon} <b>{promo.name}</b>\n"
