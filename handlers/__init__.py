@@ -34,6 +34,8 @@ from .game_user_handlers import router as game_user_router
 from .backpack_handler import router as backpack_router
 # Phase 16 - Trivias Especiales
 from .trivia_admin_handlers import router as trivia_admin_router
+# Phase 17 - Promociones por Racha
+from .trivia_streak_admin_handlers import router as trivia_streak_admin_router
 
 __all__ = [
     'common_router',
@@ -71,5 +73,7 @@ __all__ = [
     # Phase 15 - Mochila
     'backpack_router',
     # Phase 16 - Trivias Especiales
-    'trivia_admin_router'
+    'trivia_admin_router',
+    # Phase 17 - Promociones por Racha
+    'trivia_streak_admin_router',
 ]

@@ -88,6 +88,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin_trivia_categories"
         )],
         [InlineKeyboardButton(
+            text="🏆 Promos de Racha",
+            callback_data="admin_streak_promotions"
+        )],
+        [InlineKeyboardButton(
             text="👑 El Diván de Diana (VIP)",
             callback_data="admin_vip"
         )],
