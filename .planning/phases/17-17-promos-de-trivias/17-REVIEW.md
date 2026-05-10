@@ -16,7 +16,7 @@ findings:
   warning: 5
   info: 2
   total: 7
-status: issues_found
+status: fixed
 ---
 
 # Phase 17: Code Review Report
@@ -132,3 +132,19 @@ def close(self):
 _Reviewed: 2026-05-10T06:30:00Z
 _Reviewer: Claude (gsd-code-reviewer)
 _Depth: standard_
+
+## Fixes Applied
+
+All warning-level issues have been resolved:
+
+1. **WR-01 (Race condition):** Added `with_for_update()` row lock in `_has_claimed_level()` to prevent concurrent claim race conditions between the check and redemption insert.
+
+2. **WR-02 (Code collision):** Added retry loop with `max_attempts` in `_pre_generate_codes()` to handle `IntegrityError` from duplicate code collisions gracefully instead of aborting the entire transaction.
+
+3. **WR-03 (Silent exception):** Added logging for exceptions in `delete_promotion()` instead of silent `pass` to help diagnose scheduler cleanup issues.
+
+4. **WR-04 (Silent exception):** Added logging for exceptions in `remove_streak_promotion_jobs()` instead of silent `pass`.
+
+5. **WR-05 (Missing validation):** Added validation in game type selection step to ensure at least one game type is selected before allowing promotion creation.
+
+**Commit:** `ea07231`
