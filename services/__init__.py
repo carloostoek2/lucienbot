@@ -18,6 +18,8 @@ from .store_service import StoreService
 from .backpack_service import BackpackService
 # Fase 16 - Trivias Especiales
 from .trivia_service import TriviaCategoryService
+# Phase 17 - Promociones por Racha
+from .streak_promotion_service import StreakPromotionService
 
 __all__ = [
     'ChannelService', 'VIPService', 'UserService', 'SchedulerService',
@@ -33,6 +35,8 @@ __all__ = [
     'BackpackService',
     # Fase 16 - Trivias Especiales
     'TriviaCategoryService',
+    # Phase 17 - Promociones por Racha
+    'StreakPromotionService',
     'get_service'
 ]
 
