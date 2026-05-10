@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: milestone_complete
-last_updated: "2026-05-09T23:49:03.109Z"
+last_updated: "2026-05-10T02:19:05.240Z"
 progress:
   total_phases: 18
   completed_phases: 7
@@ -22,7 +22,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Crear una experiencia premium y gamificada que incentiva el compromiso de la comunidad con Diana a través de un sistema de recompensas, acceso exclusivo VIP y narrativa inmersiva.
-**Current focus:** Phase 16 — 16-trivias-tem-ticas
+**Current focus:** Phase 17 — 17-promos-de-trivias
 
 ## Milestone
 
