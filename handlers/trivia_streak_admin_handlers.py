@@ -115,8 +115,8 @@ async def admin_streak_promotions_menu(callback: CallbackQuery):
             callback_data="streak_promo_create"
         )],
         [InlineKeyboardButton(
-            text="\U0001f519 Regresar al sanctum",
-            callback_data="back_to_admin"
+            text="\U0001f519 Volver a Trivias",
+            callback_data="admin_trivia"
         )],
     ])
 

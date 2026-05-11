@@ -1,0 +1,22 @@
+[
+  {"q": "¿Qué evento histórico internacional dio origen al Día del Trabajo el 1 de mayo?", "opts": ["Revolución Francesa", "Huelga de Cananea", "Revuelta de Haymarket", "Tratado de Versalles"], "answer": 1},
+  {"q": "¿En qué ciudad ocurrió la Revuelta de Haymarket?", "opts": ["Nueva York", "Chicago", "Boston", "Filadelfia"], "answer": 1},
+  {"q": "¿En qué año ocurrieron los eventos de Haymarket?", "opts": ["1876", "1886", "1896", "1906"], "answer": 1},
+  {"q": "¿Cuál era la principal demanda de los trabajadores en Haymarket?", "opts": ["Aumento salarial", "Jornada de 8 horas", "Derecho a huelga", "Seguro social"], "answer": 1},
+  {"q": "¿Qué presidente mexicano decretó oficialmente el 1 de mayo como día conmemorativo?", "opts": ["Porfirio Díaz", "Venustiano Carranza", "Álvaro Obregón", "Lázaro Cárdenas"], "answer": 1},
+  {"q": "¿En qué año se celebró por primera vez el Día del Trabajo en México?", "opts": ["1900", "1913", "1915", "1920"], "answer": 1},
+  {"q": "¿Qué organización tuvo gran influencia en el movimiento obrero mexicano temprano?", "opts": ["CTM", "CROM", "SNTE", "UNT"], "answer": 1},
+  {"q": "¿Qué significa la sigla CROM?", "opts": ["Confederación Regional Obrera Mexicana", "Central Revolucionaria Obrera Mexicana", "Coalición Regional Obrera Mexicana", "Confederación Revolucionaria Obrera Mexicana"], "answer": 1},
+  {"q": "¿Qué artículo de la Constitución Mexicana regula los derechos laborales?", "opts": ["Artículo 3", "Artículo 27", "Artículo 123", "Artículo 130"], "answer": 1},
+  {"q": "¿Qué derecho laboral NO está contemplado en el Artículo 123?", "opts": ["Jornada máxima de trabajo", "Derecho a huelga", "Educación gratuita", "Salario mínimo"], "answer": 1},
+
+  {"q": "¿Qué país invadió México en 1862, provocando la Batalla del 5 de mayo?", "opts": ["España", "Francia", "Estados Unidos", "Inglaterra"], "answer": 1},
+  {"q": "¿Qué emperador francés ordenó la intervención en México?", "opts": ["Napoleón I", "Napoleón II", "Napoleón III", "Luis XVI"], "answer": 1},
+  {"q": "¿Quién era el presidente de México durante la Batalla de Puebla?", "opts": ["Porfirio Díaz", "Benito Juárez", "Antonio López de Santa Anna", "Ignacio Comonfort"], "answer": 1},
+  {"q": "¿Quién comandó al ejército mexicano en la Batalla de Puebla?", "opts": ["Porfirio Díaz", "Ignacio Zaragoza", "Vicente Guerrero", "Mariano Escobedo"], "answer": 1},
+  {"q": "¿En qué año ocurrió la Batalla de Puebla?", "opts": ["1857", "1862", "1867", "1876"], "answer": 1},
+  {"q": "¿Qué fuerte fue clave en la defensa mexicana durante la batalla?", "opts": ["Chapultepec", "San Juan de Ulúa", "Loreto y Guadalupe", "San Diego"], "answer": 1},
+  {"q": "¿Cuál era la principal ventaja del ejército francés?", "opts": ["Mayor número de tropas", "Mejor armamento y entrenamiento", "Conocimiento del terreno", "Apoyo indígena"], "answer": 1},
+  {"q": "¿Cuál era la situación del ejército mexicano frente al francés?", "opts": ["Superior en número", "Mejor equipado", "Inferior en recursos", "Neutral"], "answer": 1},
+  {"q": "¿Qué general mexicano también participó en la defensa de Puebla?", "opts": ["Emiliano Zapata", "Porfirio Díaz", "Pancho Villa", "Felipe Ángeles"], "answer": 1}
+]

@@ -84,12 +84,8 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin_channels"
         )],
         [InlineKeyboardButton(
-            text="🎯 Mazos de Trivia",
-            callback_data="admin_trivia_categories"
-        )],
-        [InlineKeyboardButton(
-            text="🏆 Promos de Racha",
-            callback_data="admin_streak_promotions"
+            text="🎯 Trivias",
+            callback_data="admin_trivia"
         )],
         [InlineKeyboardButton(
             text="👑 El Diván de Diana (VIP)",
@@ -122,6 +118,29 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="⚙️ Calibración del reino",
             callback_data="admin_settings"
+        )]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def trivia_admin_keyboard() -> InlineKeyboardMarkup:
+    """Menú de administración de Trivias"""
+    buttons = [
+        [InlineKeyboardButton(
+            text="🎯 Mazos de preguntas",
+            callback_data="admin_trivia_categories"
+        )],
+        [InlineKeyboardButton(
+            text="🏆 Promos por rachas",
+            callback_data="admin_streak_promotions"
+        )],
+        [InlineKeyboardButton(
+            text="⚙️ Configuración de trivias",
+            callback_data="admin_trivia_config"
+        )],
+        [InlineKeyboardButton(
+            text="🔙 Panel de administración",
+            callback_data="back_to_admin"
         )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

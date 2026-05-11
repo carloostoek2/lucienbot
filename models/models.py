@@ -293,6 +293,22 @@ class DailyGiftClaim(Base):
     )
 
 
+class TriviaConfig(Base):
+    """Configuración de límites de trivia y minijuegos"""
+    __tablename__ = "trivia_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dice_limit_free = Column(Integer, default=10, nullable=False)
+    dice_limit_vip = Column(Integer, default=20, nullable=False)
+    trivia_limit_free = Column(Integer, default=5, nullable=False)
+    trivia_limit_vip = Column(Integer, default=10, nullable=False)
+    trivia_vip_limit = Column(Integer, default=5, nullable=False)
+    trivia_simple_limit_free = Column(Integer, default=5, nullable=False)
+    trivia_simple_limit_vip = Column(Integer, default=10, nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_by = Column(BigInteger, nullable=True)
+
+
 # ============================================================
 # FASE 2: PAQUETES (COMPONENTE COMPARTIDO)
 # ============================================================

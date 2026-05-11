@@ -60,6 +60,8 @@ from handlers import (
     trivia_admin_router,
     # Phase 17 - Promociones por Racha
     trivia_streak_admin_router,
+    # Configuracion de Trivias
+    trivia_config_admin_router,
 )
 
 # Configurar logging
@@ -273,6 +275,8 @@ async def main():
     dp.include_router(trivia_admin_router)
     # Phase 17 - Promociones por Racha
     dp.include_router(trivia_streak_admin_router)
+    # Configuracion de Trivias
+    dp.include_router(trivia_config_admin_router)
 
     # Configurar eventos de startup/shutdown
     dp.startup.register(on_startup)

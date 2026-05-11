@@ -44,8 +44,8 @@ async def admin_trivia_categories_menu(callback: CallbackQuery):
             callback_data="trivia_cat_deactivate"
         )])
     buttons.append([InlineKeyboardButton(
-        text="\U0001f519 Panel de administracion",
-        callback_data="back_to_admin"
+        text="\U0001f519 Volver a Trivias",
+        callback_data="admin_trivia"
     )])
 
     await callback.message.edit_text(

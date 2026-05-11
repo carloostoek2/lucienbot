@@ -36,6 +36,8 @@ from .backpack_handler import router as backpack_router
 from .trivia_admin_handlers import router as trivia_admin_router
 # Phase 17 - Promociones por Racha
 from .trivia_streak_admin_handlers import router as trivia_streak_admin_router
+# Configuracion de Trivias y menu principal
+from .trivia_config_admin_handlers import router as trivia_config_admin_router
 
 __all__ = [
     'common_router',
@@ -76,4 +78,6 @@ __all__ = [
     'trivia_admin_router',
     # Phase 17 - Promociones por Racha
     'trivia_streak_admin_router',
+    # Configuracion de Trivias
+    'trivia_config_admin_router',
 ]

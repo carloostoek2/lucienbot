@@ -377,13 +377,23 @@ class GameService:
         return self._vip_service.is_user_vip(user_id)
 
     def get_daily_limits(self, user_id: int) -> dict:
-        """Obtiene límites diarios según tipo de usuario"""
+        """Obtiene límites diarios según tipo de usuario y configuración en BD"""
         is_vip = self.is_user_vip(user_id)
+        try:
+            from services.trivia_config_service import TriviaConfigService
+            config_svc = TriviaConfigService(self.db)
+            config = config_svc.get_config()
+        except Exception:
+            config = {}
+
         return {
-            'dice_limit': self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE,
-            'trivia_limit': self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE,
-            'trivia_vip_limit': self.DAILY_TRIVIA_VIP_LIMIT,
-            'trivia_simple_limit': self.DAILY_TRIVIA_SIMPLE_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_SIMPLE_LIMIT_FREE
+            'dice_limit': config.get('dice_limit_vip' if is_vip else 'dice_limit_free',
+                                     self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE),
+            'trivia_limit': config.get('trivia_limit_vip' if is_vip else 'trivia_limit_free',
+                                       self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE),
+            'trivia_vip_limit': config.get('trivia_vip_limit', self.DAILY_TRIVIA_VIP_LIMIT),
+            'trivia_simple_limit': config.get('trivia_simple_limit_vip' if is_vip else 'trivia_simple_limit_free',
+                                              self.DAILY_TRIVIA_SIMPLE_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_SIMPLE_LIMIT_FREE)
         }
 
     def get_menu_data(self, user_id: int) -> dict:
@@ -785,6 +795,9 @@ class GameService:
 
         logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}, bonus:{streak_bonus}")
 
+        # Commit del registro de jugadapara asegurar persistencia
+        self.db.commit()
+
         return {
             'correct': is_correct,
             'besitos': besitos,
@@ -1074,6 +1087,9 @@ class GameService:
         message = self._build_trivia_vip_message(message_parts)
 
         logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
+
+        # Commit del registro de jugadapara asegurar persistencia
+        self.db.commit()
 
         return {
             'correct': is_correct,
@@ -1374,6 +1390,9 @@ class GameService:
         message = self._build_trivia_simple_message(message_parts)
 
         logger.info(f"game_service - play_trivia_simple - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
+
+        # Commit del registro dejugada
+        self.db.commit()
 
         return {
             'correct': is_correct,
