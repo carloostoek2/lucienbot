@@ -301,6 +301,16 @@ Plans:
 - [x] 17-03-PLAN.md — Admin handlers + GameService hook
 - [x] 17-04-PLAN.md — Test coverage (unit + integration)
 
+### Phase 18: Protección De Rachas
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 17
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 18 to break down)
+
 ---
 
 *Roadmap created: 2026-03-30 from codebase analysis and git history*

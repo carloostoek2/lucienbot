@@ -51,6 +51,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 | 15: Sistema de Mochila | ✓ Complete | d8331ce |
 | 16: Trivias Temáticas | 🔲 Pending | — |
 | 17: 17 promos de trivias | 🔲 Pending | — |
+| 18: Protección De Rachas | 🔲 Pending | — |
 
 ## Current Phase
 
@@ -96,6 +97,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 → Phase 15 COMPLETE — Sistema de Mochila implementado
 → Phase 16 PENDING — Trivias Temáticas
 → Phase 17 PENDING — 17 promos de trivias
+→ Phase 18 PENDING — Protección De Rachas
 → Milestone v1.0 ✅ COMPLETE (100%)
 
 ### Quick Tasks Completed
@@ -133,6 +135,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ### Roadmap Evolution
 
 - Phase 17 added: 17 promos de trivias
+- Phase 18 added: Protección De Rachas
 
 ## Notes
 

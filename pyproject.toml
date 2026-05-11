@@ -64,7 +64,6 @@ select = [
     "F",   # Pyflakes
     "I",   # isort
     "N",   # pep8-naming
-    "W",   # pycodestyle warnings
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
     "C4",  # flake8-comprehensions
