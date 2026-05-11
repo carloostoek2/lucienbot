@@ -114,7 +114,10 @@ class StreakPromotionService:
         db = self._get_db()
         return (
             db.query(StreakPromotion)
-            .options(joinedload(StreakPromotion.levels))
+            .options(
+                joinedload(StreakPromotion.levels)
+                .joinedload(StreakPromotionLevel.codes)
+            )
             .filter(StreakPromotion.id == promo_id)
             .first()
         )
@@ -124,7 +127,10 @@ class StreakPromotionService:
         db = self._get_db()
         return (
             db.query(StreakPromotion)
-            .options(joinedload(StreakPromotion.levels))
+            .options(
+                joinedload(StreakPromotion.levels)
+                .joinedload(StreakPromotionLevel.codes)
+            )
             .order_by(StreakPromotion.created_at.desc())
             .all()
         )
@@ -136,6 +142,7 @@ class StreakPromotionService:
         db = self._get_db()
         query = db.query(StreakPromotion).options(
             joinedload(StreakPromotion.levels)
+            .joinedload(StreakPromotionLevel.codes)
         ).filter(
             StreakPromotion.is_active == True,
             StreakPromotion.status == StreakPromotionStatus.ACTIVE,
