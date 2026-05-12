@@ -16,6 +16,7 @@ from keyboards.inline_keyboards import (
     vip_entry_continue_keyboard, vip_entry_ready_keyboard
 )
 from utils.lucien_voice import LucienVoice
+from keyboards.callback_data import SelectTariffCallback, CopyTokenCallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -200,10 +201,11 @@ async def generate_token_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(TokenStates.selecting_tariff, F.data.startswith("select_tariff_"))
-async def generate_token(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(TokenStates.selecting_tariff, SelectTariffCallback.filter())
+async def generate_token(callback: CallbackQuery, state: FSMContext, callback_data: SelectTariffCallback):
     """Genera el token para la tarifa seleccionada"""
-    tariff_id = int(callback.data.replace("select_tariff_", ""))
+    tariff_id = callback_data.tariff_id
+    logger.info(f"{__name__} | generar_token | user_id={callback.from_user.id} | tariff_id={tariff_id}")
 
     vip_service = VIPService()
     try:
@@ -307,7 +309,7 @@ async def list_tokens(callback: CallbackQuery):
             if token.status.value == "active":
                 buttons.append([InlineKeyboardButton(
                     text=f"{status_emoji} {token.tariff.name} - Copiar",
-                    callback_data=f"copy_token_{token.id}"
+                    callback_data=CopyTokenCallback(token_id=token.id).pack()
                 )])
 
         buttons.append([InlineKeyboardButton(
@@ -327,10 +329,11 @@ async def list_tokens(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("copy_token_"))
-async def copy_token(callback: CallbackQuery):
+@router.callback_query(CopyTokenCallback.filter())
+async def copy_token(callback: CallbackQuery, callback_data: CopyTokenCallback):
     """Copia el enlace del token"""
-    token_id = int(callback.data.replace("copy_token_", ""))
+    token_id = callback_data.token_id
+    logger.info(f"{__name__} | copy_token | user_id={callback.from_user.id} | token_id={token_id}")
 
     vip_service = VIPService()
     try:

@@ -5,16 +5,27 @@ Gestion de promociones comerciales, intereses de usuarios y bloqueos.
 Con la voz caracteristica de Lucien.
 """
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.enums import ParseMode
 from config.settings import bot_config
 from services import get_service
 from services.promotion_service import PromotionService
-from services import get_service
 from services.package_service import PackageService
-from models.models import PromotionStatus, InterestStatus
+from models.models import InterestStatus
+from keyboards.callback_data import (
+    SelectPkgPromoCallback, PromoDetailCallback, TogglePromoCallback,
+    PromoDeleteCallback, InterestDetailCallback, MarkAttendedCallback,
+    BlockInterestCallback, PromoInterestsCallback, BlockedUserDetailCallback,
+    UnblockUserCallback
+)
+from keyboards.inline_keyboards import (
+    promotion_admin_keyboard, promotion_source_keyboard, packages_for_promotion_keyboard,
+    promotion_dates_keyboard, promotion_confirmation_keyboard,
+    promotion_detail_keyboard, promotion_confirm_delete_keyboard,
+    interest_detail_keyboard, blocked_users_keyboard, block_user_confirm_keyboard
+)
 from datetime import datetime
 import logging
 
@@ -49,31 +60,24 @@ def is_admin(user_id: int) -> bool:
 async def admin_promotions_menu(callback: CallbackQuery):
     """Menu de administracion de promociones - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
-            stats = promotion_service.get_promotion_stats()
+        stats = promotion_service.get_promotion_stats()
 
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Forjar nueva experiencia", callback_data="create_promotion")],
-                [InlineKeyboardButton(text="📋 Ver el Gabinete", callback_data="list_promotions")],
-                [InlineKeyboardButton(text="🔔 Expresiones pendientes", callback_data="promo_pending_interests")],
-                [InlineKeyboardButton(text="🚫 Visitantes restringidos", callback_data="promo_blocked_users")],
-                [InlineKeyboardButton(text="📊 Observar el pulso", callback_data="promo_stats")],
-                [InlineKeyboardButton(text="🔙 Volver al sanctum", callback_data="admin_gamification")]
-            ])
+        keyboard = promotion_admin_keyboard()
 
-            text = ("🎩 <b>Lucien:</b>\n\n"
-                    "<i>Ah... el Gabinete de Oportunidades Comerciales.</i>\n\n"
-                    "Aqui es donde Diana selecciona las experiencias que se ofrecen "
-                    "a quienes desean... invertir en momentos exclusivos.\n\n"
-                    f"📊 <b>El estado del Gabinete:</b>\n"
-                    f"   • Experiencias activas: {stats['active_promotions']}\n"
-                    f"   • Total de experiencias: {stats['total_promotions']}\n"
-                    f"   • Expresiones pendientes: {stats['pending_interests']}\n"
-                    f"   • Expresiones atendidas: {stats['attended_interests']}\n"
-                    f"   • Visitantes restringidos: {stats['blocked_users']}\n\n"
-                    "<i>Que aspecto del Gabinete requiere su atencion?</i>")
+        text = ("🎩 <b>Lucien:</b>\n\n"
+                "<i>Ah... el Gabinete de Oportunidades Comerciales.</i>\n\n"
+                "Aqui es donde Diana selecciona las experiencias que se ofrecen "
+                "a quienes desean... invertir en momentos exclusivos.\n\n"
+                f"📊 <b>El estado del Gabinete:</b>\n"
+                f"   • Experiencias activas: {stats['active_promotions']}\n"
+                f"   • Total de experiencias: {stats['total_promotions']}\n"
+                f"   • Expresiones pendientes: {stats['pending_interests']}\n"
+                f"   • Expresiones atendidas: {stats['attended_interests']}\n"
+                f"   • Visitantes restringidos: {stats['blocked_users']}\n\n"
+                "<i>Que aspecto del Gabinete requiere su atencion?</i>")
 
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            await callback.answer()
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await callback.answer()
 
 
         # ==================== WIZARD CREAR PROMOCION ====================
@@ -126,11 +130,7 @@ async def process_promotion_description(message: Message, state: FSMContext):
     description = None if message.text == "/skip" else message.text.strip()
     await state.update_data(description=description)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📦 Seleccionar coleccion existente", callback_data="promo_select_package")],
-        [InlineKeyboardButton(text="📝 Definir archivos manualmente", callback_data="promo_manual_files")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
-    ])
+    keyboard = promotion_source_keyboard()
 
     text = ("🎩 <b>Lucien:</b>\n\n"
             "<b>Paso 3 de 5:</b> Definir el contenido\n\n"
@@ -158,22 +158,13 @@ async def select_package_source(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         return
 
-    buttons = []
-    for pkg in packages:
-        if pkg.is_active:
-            file_count = len(pkg.files) if pkg.files else 0
-            buttons.append([InlineKeyboardButton(
-                text=f"{pkg.name} ({file_count} archivos)",
-                callback_data=f"select_pkg_promo_{pkg.id}"
-            )])
-
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
+    keyboard = packages_for_promotion_keyboard(packages)
 
     text = ("🎩 <b>Lucien:</b>\n\n"
             "<b>Paso 3 de 5:</b> Seleccionar la coleccion\n\n"
             "Elija que coleccion formara parte de esta experiencia:")
 
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     await state.set_state(PromotionWizardStates.selecting_package)
     await callback.answer()
 
@@ -225,9 +216,11 @@ async def process_manual_files(message: Message, state: FSMContext):
 async def select_package_for_promotion(callback: CallbackQuery, state: FSMContext):
     """Selecciona paquete para la promocion - Voz de Lucien"""
     try:
-        package_id = int(callback.data.replace("select_pkg_promo_", ""))
-    except ValueError:
+        callback_data = SelectPkgPromoCallback.parse(callback.data)
+        package_id = callback_data["pkg_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
+        return
         return
 
     await state.update_data(package_id=package_id, manual_file_count=None)
@@ -418,150 +411,113 @@ async def confirm_create_promotion(callback: CallbackQuery, state: FSMContext):
 async def list_promotions(callback: CallbackQuery):
     """Lista todas las promociones - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
-            promotions = promotion_service.get_all_promotions()
+        promotions = promotion_service.get_all_promotions()
 
-            if not promotions:
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]
-                ])
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>El Gabinete esta vacio...</i>\n\n"
-                        "Aun no se han forjado experiencias.")
-                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-                await callback.answer()
-                return
-
-            text = "🎩 <b>Lucien:</b>\n\n"
-            text += "<i>Las experiencias en el Gabinete:</i>\n\n"
-            buttons = []
-
-            for promo in promotions:
-                status = "✅" if promo.is_active else "❌"
-                text += f"{status} <b>{promo.name}</b>\n"
-                text += f"   💰 {promo.price_display}\n\n"
-
-                buttons.append([InlineKeyboardButton(
-                    text=f"{status} {promo.name[:30]}",
-                    callback_data=f"promo_admin_detail_{promo.id}"
-                )])
-
-            buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
-
-            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+        if not promotions:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]
+            ])
+            text = ("🎩 <b>Lucien:</b>\n\n"
+                    "<i>El Gabinete esta vacio...</i>\n\n"
+                    "Aun no se han forjado experiencias.")
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
+            return
+
+        keyboard = promotions_list_keyboard(promotions)
+
+        text = "🎩 <b>Lucien:</b>\n\n"
+        text += "<i>Las experiencias en el Gabinete:</i>\n\n"
+
+        for promo in promotions:
+            status = "✅" if promo.is_active else "❌"
+            text += f"{status} <b>{promo.name}</b>\n"
+            text += f"   💰 {promo.price_display}\n\n"
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await callback.answer()
 
 
-@router.callback_query(F.data.startswith("promo_admin_detail_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("promo_detail:"), lambda cb: is_admin(cb.from_user.id))
 async def promotion_admin_detail(callback: CallbackQuery):
     """Muestra detalles de una promocion - Voz de Lucien"""
     try:
-        promo_id = int(callback.data.replace("promo_admin_detail_", ""))
-    except ValueError:
+        callback_data = PromoDetailCallback.parse(callback.data)
+        promo_id = callback_data["promo_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
     with get_service(PromotionService) as promotion_service:
-            promo = promotion_service.get_promotion(promo_id)
+        promo = promotion_service.get_promotion(promo_id)
 
-            if not promo:
-                await callback.answer("Experiencia no encontrada", show_alert=True)
-                return
+        if not promo:
+            await callback.answer("Experiencia no encontrada", show_alert=True)
+            return
 
-            status = "✅ Activa" if promo.is_active else "❌ Inactiva"
-            available = "🟢 Disponible" if promo.is_available else "🔴 No disponible"
+        status = "✅ Activa" if promo.is_active else "❌ Inactiva"
+        available = "🟢 Disponible" if promo.is_available else "🔴 No disponible"
 
-            # Contar intereses
-            total_interests = len(promo.interests) if promo.interests else 0
-            pending_interests = len([i for i in promo.interests if i.status == InterestStatus.PENDING]) if promo.interests else 0
+        # Contar intereses
+        total_interests = len(promo.interests) if promo.interests else 0
+        pending_interests = len([i for i in promo.interests if i.status == InterestStatus.PENDING]) if promo.interests else 0
 
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=f"{'Desactivar' if promo.is_active else 'Activar'}",
-                    callback_data=f"toggle_promo_{promo_id}"
-                )],
-                [InlineKeyboardButton(
-                    text="📊 Ver expresiones de interes",
-                    callback_data=f"promo_interests_{promo_id}"
-                )],
-                [InlineKeyboardButton(
-                    text="🗑️ Eliminar",
-                    callback_data=f"delete_promo_{promo_id}"
-                )],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="list_promotions")]
-            ])
+        keyboard = promotion_detail_keyboard(promo_id, promo.is_active)
 
-            text = (f"🎩 <b>Lucien:</b>\n\n"
-                    f"✨ <b>{promo.name}</b>\n\n"
-                    f"📝 {promo.description or 'Sin descripcion'}\n\n"
-                    f"💰 <b>Inversion:</b> {promo.price_display}\n"
-                    f"Estado: {status}\n"
-                    f"Disponibilidad: {available}\n"
-                    f"📦 Archivos: {promo.file_count}\n\n"
-                    f"📊 <b>Expresiones de interes:</b>\n"
-                    f"   • Total: {total_interests}\n"
-                    f"   • Pendientes: {pending_interests}\n\n"
-                    "<i>Que desea hacer con esta experiencia?</i>")
+        text = (f"🎩 <b>Lucien:</b>\n\n"
+                f"✨ <b>{promo.name}</b>\n\n"
+                f"📝 {promo.description or 'Sin descripcion'}\n\n"
+                f"💰 <b>Inversion:</b> {promo.price_display}\n"
+                f"Estado: {status}\n"
+                f"Disponibilidad: {available}\n"
+                f"📦 Archivos: {promo.file_count}\n\n"
+                f"📊 <b>Expresiones de interes:</b>\n"
+                f"   • Total: {total_interests}\n"
+                f"   • Pendientes: {pending_interests}\n\n"
+                "<i>Que desea hacer con esta experiencia?</i>")
 
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            await callback.answer()
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await callback.answer()
 
 
-@router.callback_query(F.data.startswith("toggle_promo_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("toggle_promo:"), lambda cb: is_admin(cb.from_user.id))
 async def toggle_promotion(callback: CallbackQuery):
     """Activa/desactiva una promocion - Voz de Lucien"""
     try:
-        promo_id = int(callback.data.replace("toggle_promo_", ""))
-    except ValueError:
+        callback_data = TogglePromoCallback.parse(callback.data)
+        promo_id = callback_data["promo_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
     with get_service(PromotionService) as promotion_service:
-            promo = promotion_service.get_promotion(promo_id)
+        promo = promotion_service.get_promotion(promo_id)
 
-            if not promo:
-                await callback.answer("Experiencia no encontrada", show_alert=True)
-                return
+        if not promo:
+            await callback.answer("Experiencia no encontrada", show_alert=True)
+            return
 
-            promotion_service.update_promotion(promo_id, is_active=not promo.is_active)
+        promotion_service.update_promotion(promo_id, is_active=not promo.is_active)
 
-            status = "activada" if not promo.is_active else "desactivada"
-            await callback.answer(f"Experiencia {status}")
-            await promotion_admin_detail(callback)
+        status = "activada" if not promo.is_active else "desactivada"
+        await callback.answer(f"Experiencia {status}")
+        await promotion_admin_detail(callback)
 
 
-@router.callback_query(F.data.startswith("delete_promo_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("promo_del:"), lambda cb: is_admin(cb.from_user.id))
 async def delete_promotion_confirm(callback: CallbackQuery):
     """Confirma eliminacion de promocion - Voz de Lucien"""
     try:
-        promo_id = int(callback.data.replace("delete_promo_", ""))
-    except ValueError:
+        callback_data = PromoDeleteCallback.parse(callback.data)
+        promo_id = callback_data["promo_id"]
+        confirmed = callback_data.get("confirmed", False)
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=f"confirm_delete_promo_{promo_id}")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"promo_admin_detail_{promo_id}")]
-    ])
-
-    text = ("🎩 <b>Lucien:</b>\n\n"
-            "<i>Esta seguro de eliminar esta experiencia?</i>\n\n"
-            "Esta accion no se puede deshacer. "
-            "Las expresiones de interes asociadas tambien se perderan...")
-
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("confirm_delete_promo_"), lambda cb: is_admin(cb.from_user.id))
-async def confirm_delete_promotion(callback: CallbackQuery):
-    """Elimina la promocion - Voz de Lucien"""
-    try:
-        promo_id = int(callback.data.replace("confirm_delete_promo_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-
-    with get_service(PromotionService) as promotion_service:
+    if confirmed:
+        # Ejecutar eliminación
+        with get_service(PromotionService) as promotion_service:
             success = promotion_service.delete_promotion(promo_id)
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -577,6 +533,18 @@ async def confirm_delete_promotion(callback: CallbackQuery):
 
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
+        return
+
+    # Mostrar confirmación
+    keyboard = promotion_confirm_delete_keyboard(promo_id)
+
+    text = ("🎩 <b>Lucien:</b>\n\n"
+            "<i>Esta seguro de eliminar esta experiencia?</i>\n\n"
+            "Esta accion no se puede deshacer. "
+            "Las expresiones de interes asociadas tambien se perderan...")
+
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+    await callback.answer()
 
 
         # ==================== INTERESES ====================
@@ -585,219 +553,246 @@ async def confirm_delete_promotion(callback: CallbackQuery):
 async def show_pending_interests(callback: CallbackQuery):
     """Muestra intereses pendientes de todas las promociones - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
-            pending = promotion_service.get_pending_interests()
+        pending = promotion_service.get_pending_interests()
 
-            if not pending:
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]
-                ])
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>No hay expresiones de interes pendientes...</i>\n\n"
-                        "El Gabinete espera nuevas curiosidades.")
-                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-                await callback.answer()
-                return
-
-            text = f"🎩 <b>Lucien:</b>\n\n"
-            text += f"🔔 <b>Expresiones pendientes: {len(pending)}</b>\n\n"
-
-            buttons = []
-            for interest in pending[:20]:  # Limitar a 20 para no sobrecargar
-                promo_name = interest.promotion.name if interest.promotion else "Desconocida"
-                user_display = interest.username or interest.first_name or f"Visitante {interest.user_id}"
-                text += f"• {user_display} - {promo_name[:20]}\n"
-
-                buttons.append([InlineKeyboardButton(
-                    text=f"{user_display[:20]} - {promo_name[:15]}",
-                    callback_data=f"interest_detail_{interest.id}"
-                )])
-
-            buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
-
-            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+        if not pending:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]
+            ])
+            text = ("🎩 <b>Lucien:</b>\n\n"
+                    "<i>No hay expresiones de interes pendientes...</i>\n\n"
+                    "El Gabinete espera nuevas curiosidades.")
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
+            return
+
+        text = f"🎩 <b>Lucien:</b>\n\n"
+        text += f"🔔 <b>Expresiones pendientes: {len(pending)}</b>\n\n"
+
+        buttons = []
+        for interest in pending[:20]:  # Limitar a 20 para no sobrecargar
+            promo_name = interest.promotion.name if interest.promotion else "Desconocida"
+            user_display = interest.username or interest.first_name or f"Visitante {interest.user_id}"
+            text += f"• {user_display} - {promo_name[:20]}\n"
+
+            buttons.append([InlineKeyboardButton(
+                text=f"{user_display[:20]} - {promo_name[:15]}",
+                callback_data=InterestDetailCallback(interest_id=interest.id).pack()
+            )])
+
+        buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
+
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+        await callback.answer()
 
 
-@router.callback_query(F.data.startswith("promo_interests_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("promo_interests:"), lambda cb: is_admin(cb.from_user.id))
 async def show_promotion_interests(callback: CallbackQuery):
     """Muestra intereses de una promocion especifica - Voz de Lucien"""
     try:
-        promo_id = int(callback.data.replace("promo_interests_", ""))
-    except ValueError:
+        callback_data = PromoInterestsCallback.parse(callback.data)
+        promo_id = callback_data["promo_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
     with get_service(PromotionService) as promotion_service:
-            promo = promotion_service.get_promotion(promo_id)
+        promo = promotion_service.get_promotion(promo_id)
 
-            if not promo:
-                await callback.answer("Experiencia no encontrada", show_alert=True)
-                return
+        if not promo:
+            await callback.answer("Experiencia no encontrada", show_alert=True)
+            return
 
-            pending = [i for i in promo.interests if i.status == InterestStatus.PENDING] if promo.interests else []
+        pending = [i for i in promo.interests if i.status == InterestStatus.PENDING] if promo.interests else []
 
-            if not pending:
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data=f"promo_admin_detail_{promo_id}")]
-                ])
-                text = (f"🎩 <b>Lucien:</b>\n\n"
-                        f"<i>No hay expresiones pendientes para '{promo.name}'...</i>")
-                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-                await callback.answer()
-                return
-
-            text = f"🎩 <b>Lucien:</b>\n\n"
-            text += f"✨ <b>{promo.name}</b>\n"
-            text += f"🔔 <b>Expresiones pendientes: {len(pending)}</b>\n\n"
-
-            buttons = []
-            for interest in pending[:15]:
-                user_display = interest.username or interest.first_name or f"Visitante {interest.user_id}"
-                text += f"• {user_display}\n"
-
-                buttons.append([InlineKeyboardButton(
-                    text=f"{user_display[:25]}",
-                    callback_data=f"interest_detail_{interest.id}"
-                )])
-
-            buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data=f"promo_admin_detail_{promo_id}")])
-
-            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+        if not pending:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data=PromoDetailCallback(promo_id=promo_id).pack())]
+            ])
+            text = (f"🎩 <b>Lucien:</b>\n\n"
+                    f"<i>No hay expresiones pendientes para '{promo.name}'...</i>")
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
+            return
+
+        text = f"🎩 <b>Lucien:</b>\n\n"
+        text += f"✨ <b>{promo.name}</b>\n"
+        text += f"🔔 <b>Expresiones pendientes: {len(pending)}</b>\n\n"
+
+        buttons = []
+        for interest in pending[:15]:
+            user_display = interest.username or interest.first_name or f"Visitante {interest.user_id}"
+            text += f"• {user_display}\n"
+
+            buttons.append([InlineKeyboardButton(
+                text=f"{user_display[:25]}",
+                callback_data=InterestDetailCallback(interest_id=interest.id).pack()
+            )])
+
+        buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data=PromoDetailCallback(promo_id=promo_id).pack())])
+
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode=ParseMode.HTML)
+        await callback.answer()
 
 
-@router.callback_query(F.data.startswith("interest_detail_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("interest_detail:"), lambda cb: is_admin(cb.from_user.id))
 async def show_interest_detail(callback: CallbackQuery):
     """Muestra detalle de un interes con botones de accion - Voz de Lucien"""
     try:
-        interest_id = int(callback.data.replace("interest_detail_", ""))
-    except ValueError:
+        callback_data = InterestDetailCallback.parse(callback.data)
+        interest_id = callback_data["interest_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
     with get_service(PromotionService) as promotion_service:
-            interest = promotion_service.get_interest(interest_id)
+        interest = promotion_service.get_interest(interest_id)
 
-            if not interest:
-                await callback.answer("Expresion no encontrada", show_alert=True)
-                return
+        if not interest:
+            await callback.answer("Expresion no encontrada", show_alert=True)
+            return
 
-            promo = interest.promotion
-            promo_name = promo.name if promo else "Desconocida"
+        promo = interest.promotion
+        promo_name = promo.name if promo else "Desconocida"
 
-            # Construir nombre de usuario
-            user_display = interest.username or interest.first_name or "Visitante"
-            if interest.first_name and interest.last_name:
-                user_display = f"{interest.first_name} {interest.last_name}"
-            elif interest.first_name:
-                user_display = interest.first_name
+        # Construir nombre de usuario
+        user_display = interest.username or interest.first_name or "Visitante"
+        if interest.first_name and interest.last_name:
+            user_display = f"{interest.first_name} {interest.last_name}"
+        elif interest.first_name:
+            user_display = interest.first_name
 
-            user_link = f"tg://user?id={interest.user_id}"
+        user_link = f"tg://user?id={interest.user_id}"
 
-            status_emoji = {
-                InterestStatus.PENDING: "⏳",
-                InterestStatus.ATTENDED: "✅",
-                InterestStatus.BLOCKED: "🚫"
-            }.get(interest.status, "❓")
+        status_emoji = {
+            InterestStatus.PENDING: "⏳",
+            InterestStatus.ATTENDED: "✅",
+            InterestStatus.BLOCKED: "🚫"
+        }.get(interest.status, "❓")
 
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        keyboard = interest_detail_keyboard(interest_id, interest.user_id, interest.status == InterestStatus.PENDING)
 
-            # Solo mostrar acciones si esta pendiente
-            if interest.status == InterestStatus.PENDING:
-                keyboard.inline_keyboard.extend([
-                    [InlineKeyboardButton(
-                        text="💬 Contactar al visitante",
-                        url=user_link
-                    )],
-                    [InlineKeyboardButton(
-                        text="✅ Marcar como atendido",
-                        callback_data=f"mark_attended_{interest_id}"
-                    )],
-                    [InlineKeyboardButton(
-                        text="🚫 Restringir visitante",
-                        callback_data=f"block_interest_user_{interest_id}"
-                    )]
-                ])
+        text = (f"🎩 <b>Lucien:</b>\n\n"
+                f"📋 <b>Detalle de la expresion:</b>\n\n"
+                f"👤 <b>Visitante:</b> {user_display}\n"
+                f"   ID: <code>{interest.user_id}</code>\n"
+                f"   Username: @{interest.username or 'N/A'}\n\n"
+                f"✨ <b>Experiencia:</b> {promo_name}\n"
+                f"💰 <b>Inversion:</b> {promo.price_display if promo else 'N/A'}\n\n"
+                f"{status_emoji} <b>Estado:</b> {interest.status.value.title()}\n"
+                f"📅 <b>Fecha:</b> {interest.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+                "<i>Acciones disponibles:</i>")
 
-            keyboard.inline_keyboard.append([InlineKeyboardButton(
-                text="🔙 Volver",
-                callback_data="promo_pending_interests"
-            )])
-
-            text = (f"🎩 <b>Lucien:</b>\n\n"
-                    f"📋 <b>Detalle de la expresion:</b>\n\n"
-                    f"👤 <b>Visitante:</b> {user_display}\n"
-                    f"   ID: <code>{interest.user_id}</code>\n"
-                    f"   Username: @{interest.username or 'N/A'}\n\n"
-                    f"✨ <b>Experiencia:</b> {promo_name}\n"
-                    f"💰 <b>Inversion:</b> {promo.price_display if promo else 'N/A'}\n\n"
-                    f"{status_emoji} <b>Estado:</b> {interest.status.value.title()}\n"
-                    f"📅 <b>Fecha:</b> {interest.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
-                    "<i>Acciones disponibles:</i>")
-
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            await callback.answer()
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await callback.answer()
 
 
-@router.callback_query(F.data.startswith("mark_attended_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("adm_attended:"), lambda cb: is_admin(cb.from_user.id))
 async def mark_interest_attended(callback: CallbackQuery):
     """Marca un interes como atendido - Voz de Lucien"""
     try:
-        interest_id = int(callback.data.replace("mark_attended_", ""))
-    except ValueError:
+        callback_data = MarkAttendedCallback.parse(callback.data)
+        interest_id = callback_data["interest_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
     with get_service(PromotionService) as promotion_service:
-            success = promotion_service.mark_interest_attended(interest_id, callback.from_user.id)
+        success = promotion_service.mark_interest_attended(interest_id, callback.from_user.id)
 
-            if success:
-                await callback.answer("✅ Marcado como atendido")
-                await show_pending_interests(callback)
-            else:
-                await callback.answer("Error al marcar como atendido", show_alert=True)
+        if success:
+            await callback.answer("✅ Marcado como atendido")
+            await show_pending_interests(callback)
+        else:
+            await callback.answer("Error al marcar como atendido", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("block_interest_user_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("block_int:"), lambda cb: is_admin(cb.from_user.id))
 async def block_interest_user(callback: CallbackQuery, state: FSMContext):
     """Inicia proceso de bloqueo de usuario - Voz de Lucien"""
     try:
-        interest_id = int(callback.data.replace("block_interest_user_", ""))
-    except ValueError:
+        callback_data = BlockInterestCallback.parse(callback.data)
+        user_id = callback_data["user_id"]
+        confirmed = callback_data.get("confirmed", False)
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
-    with get_service(PromotionService) as promotion_service:
-            interest = promotion_service.get_interest(interest_id)
+    # Obtener interest_id del estado
+    data = await state.get_data()
+    interest_id = data.get("interest_id")
 
-            if not interest:
-                await callback.answer("Expresion no encontrada", show_alert=True)
-                return
+    if confirmed and interest_id:
+        # Ejecutar bloqueo
+        with get_service(PromotionService) as promotion_service:
+            try:
+                blocked = promotion_service.block_user(
+                    user_id=user_id,
+                    blocked_by=callback.from_user.id,
+                    reason=data.get("block_reason"),
+                    is_permanent=True,
+                    username=data.get("block_username"),
+                    first_name=data.get("block_first_name"),
+                    last_name=data.get("block_last_name")
+                )
 
-            # Guardar datos para el bloqueo
-            await state.update_data(
-                block_user_id=interest.user_id,
-                block_username=interest.username,
-                block_first_name=interest.first_name,
-                block_last_name=interest.last_name,
-                interest_id=interest_id
-            )
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")]
+                ])
 
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"interest_detail_{interest_id}")]
-            ])
+                text = ("🎩 <b>Lucien:</b>\n\n"
+                        "<i>El visitante ha sido restringido del Gabinete.</i>\n\n"
+                        "Ya no podra expresar interes en las experiencias.")
 
-            user_display = interest.username or interest.first_name or str(interest.user_id)
+                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+                logger.info(f"Visitante {user_id} restringido por custodio {callback.from_user.id}")
 
-            text = (f"🎩 <b>Lucien:</b>\n\n"
-                    f"<i>Va a restringir al visitante {user_display}...</i>\n\n"
-                    f"Indique la razon de esta restriccion (opcional):\n"
-                    f"<i>Ejemplo: Comportamiento inapropiado, spam, etc.</i>\n\n"
-                    f"Envie /skip para omitir la razon.")
+            except Exception as e:
+                logger.error(f"Error restringiendo visitante: {e}")
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")]
+                ])
+                text = ("🎩 <b>Lucien:</b>\n\n"
+                        "<i>Hmm... no se pudo restringir al visitante.</i>")
+                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            await state.set_state(BlockUserStates.waiting_reason)
+            await state.clear()
             await callback.answer()
+        return
+
+    # Obtener el interés por user_id
+    with get_service(PromotionService) as promotion_service:
+        pending = promotion_service.get_pending_interests()
+        interest = next((i for i in pending if i.user_id == user_id), None)
+
+        if not interest:
+            await callback.answer("Expresion no encontrada", show_alert=True)
+            return
+
+        # Guardar datos para el bloqueo
+        await state.update_data(
+            block_user_id=interest.user_id,
+            block_username=interest.username,
+            block_first_name=interest.first_name,
+            block_last_name=interest.last_name,
+            interest_id=interest.id
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data=InterestDetailCallback(interest_id=interest.id).pack())]
+        ])
+
+        user_display = interest.username or interest.first_name or str(interest.user_id)
+
+        text = (f"🎩 <b>Lucien:</b>\n\n"
+                f"<i>Va a restringir al visitante {user_display}...</i>\n\n"
+                f"Indique la razon de esta restriccion (opcional):\n"
+                f"<i>Ejemplo: Comportamiento inapropiado, spam, etc.</i>\n\n"
+                f"Envie /skip para omitir la razon.")
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await state.set_state(BlockUserStates.waiting_reason)
+        await callback.answer()
 
 
 @router.message(BlockUserStates.waiting_reason)
@@ -811,7 +806,7 @@ async def process_block_reason(message: Message, state: FSMContext):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Si, restringir", callback_data="confirm_block_user")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"interest_detail_{data.get('interest_id')}")]
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=InterestDetailCallback(interest_id=data.get('interest_id')).pack())]
     ])
 
     text = (f"🎩 <b>Lucien:</b>\n\n"
@@ -829,39 +824,39 @@ async def confirm_block_user(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     with get_service(PromotionService) as promotion_service:
 
-            try:
-                blocked = promotion_service.block_user(
-                    user_id=data.get('block_user_id'),
-                    blocked_by=callback.from_user.id,
-                    reason=data.get('block_reason'),
-                    is_permanent=True,
-                    username=data.get('block_username'),
-                    first_name=data.get('block_first_name'),
-                    last_name=data.get('block_last_name')
-                )
+        try:
+            blocked = promotion_service.block_user(
+                user_id=data.get('block_user_id'),
+                blocked_by=callback.from_user.id,
+                reason=data.get('block_reason'),
+                is_permanent=True,
+                username=data.get('block_username'),
+                first_name=data.get('block_first_name'),
+                last_name=data.get('block_last_name')
+            )
 
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")]
-                ])
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")]
+            ])
 
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>El visitante ha sido restringido del Gabinete.</i>\n\n"
-                        "Ya no podra expresar interes en las experiencias.")
+            text = ("🎩 <b>Lucien:</b>\n\n"
+                    "<i>El visitante ha sido restringido del Gabinete.</i>\n\n"
+                    "Ya no podra expresar interes en las experiencias.")
 
-                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-                logger.info(f"Visitante {data.get('block_user_id')} restringido por custodio {callback.from_user.id}")
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+            logger.info(f"Visitante {data.get('block_user_id')} restringido por custodio {callback.from_user.id}")
 
-            except Exception as e:
-                logger.error(f"Error restringiendo visitante: {e}")
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")]
-                ])
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>Hmm... no se pudo restringir al visitante.</i>")
-                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Error restringiendo visitante: {e}")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")]
+            ])
+            text = ("🎩 <b>Lucien:</b>\n\n"
+                    "<i>Hmm... no se pudo restringir al visitante.</i>")
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
-            await state.clear()
-            await callback.answer()
+        await state.clear()
+        await callback.answer()
 
 
         # ==================== USUARIOS BLOQUEADOS ====================
@@ -893,7 +888,7 @@ async def show_blocked_users(callback: CallbackQuery):
 
                 buttons.append([InlineKeyboardButton(
                     text=f"{user_display[:25]}",
-                    callback_data=f"blocked_user_detail_{user.user_id}"
+                    callback_data=BlockedUserDetailCallback(user_id=user.user_id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
@@ -902,12 +897,13 @@ async def show_blocked_users(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("blocked_user_detail_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("blocked_user_detail:"), lambda cb: is_admin(cb.from_user.id))
 async def show_blocked_user_detail(callback: CallbackQuery):
     """Muestra detalle de un usuario bloqueado - Voz de Lucien"""
     try:
-        user_id = int(callback.data.replace("blocked_user_detail_", ""))
-    except ValueError:
+        callback_data = BlockedUserDetailCallback.parse(callback.data)
+        user_id = callback_data["user_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
@@ -923,7 +919,7 @@ async def show_blocked_user_detail(callback: CallbackQuery):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text="✅ Levantar restriccion",
-                    callback_data=f"unblock_user_{user_id}"
+                    callback_data=UnblockUserCallback(user_id=user_id).pack()
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="promo_blocked_users")]
             ])
@@ -942,23 +938,24 @@ async def show_blocked_user_detail(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("unblock_user_"), lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(F.data.startswith("unblock_user:"), lambda cb: is_admin(cb.from_user.id))
 async def unblock_user(callback: CallbackQuery):
     """Desbloquea un usuario - Voz de Lucien"""
     try:
-        user_id = int(callback.data.replace("unblock_user_", ""))
-    except ValueError:
+        callback_data = UnblockUserCallback.parse(callback.data)
+        user_id = callback_data["user_id"]
+    except Exception:
         await callback.answer("ID invalido", show_alert=True)
         return
 
     with get_service(PromotionService) as promotion_service:
-            success = promotion_service.unblock_user(user_id)
+        success = promotion_service.unblock_user(user_id)
 
-            if success:
-                await callback.answer("✅ Restriccion levantada")
-                await show_blocked_users(callback)
-            else:
-                await callback.answer("Error al levantar restriccion", show_alert=True)
+        if success:
+            await callback.answer("✅ Restriccion levantada")
+            await show_blocked_users(callback)
+        else:
+            await callback.answer("Error al levantar restriccion", show_alert=True)
 
 
         # ==================== ESTADISTICAS ====================

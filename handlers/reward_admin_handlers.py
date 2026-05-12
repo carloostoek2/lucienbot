@@ -14,6 +14,7 @@ from services import get_service
 from services.package_service import PackageService
 from services.vip_service import VIPService
 from models.models import RewardType
+from keyboards.callback_data import SelectTariffCallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -524,9 +525,9 @@ Crea una tarifa primero desde el panel VIP.""",
     for tariff in tariffs:
         buttons.append([InlineKeyboardButton(
             text=f"{tariff.name} ({tariff.duration_days} dias)",
-            callback_data=f"select_tariff_{tariff.id}"
+            callback_data=SelectTariffCallback(tariff_id=tariff.id).pack()
         )])
-    
+
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
     
     await callback.message.edit_text(
@@ -540,15 +541,12 @@ Elige la tarifa para el acceso VIP:""",
     await state.set_state(RewardWizardStates.selecting_tariff)
 
 
-@router.callback_query(RewardWizardStates.selecting_tariff, F.data.startswith("select_tariff_"))
-async def select_tariff_for_reward(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(RewardWizardStates.selecting_tariff, SelectTariffCallback.filter())
+async def select_tariff_for_reward(callback: CallbackQuery, state: FSMContext, callback_data: SelectTariffCallback):
     """Selecciona tarifa para recompensa VIP"""
-    try:
-        tariff_id = int(callback.data.replace("select_tariff_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
+    tariff_id = callback_data.tariff_id
+    logger.info(f"{__name__} | select_tariff_for_reward | user_id={callback.from_user.id} | tariff_id={tariff_id}")
+
     await state.update_data(tariff_id=tariff_id)
     await show_reward_confirmation(callback, state)
     await callback.answer()

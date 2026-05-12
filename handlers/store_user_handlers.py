@@ -12,6 +12,13 @@ from services.store_service import StoreService
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from keyboards.inline_keyboards import back_keyboard
+from keyboards.callback_data import (
+    ProductDetailCallback,
+    DirectBuyCallback,
+    ConfirmDirectBuyCallback,
+    StoreCategoryCallback,
+    ProductPreviewCallback,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -105,7 +112,7 @@ async def store_catalog(callback: CallbackQuery):
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=f"product_detail_{product.id}"
+            callback_data=ProductDetailCallback(product_id=product.id)
         ))
 
         # 2 botones por fila
@@ -159,7 +166,7 @@ async def store_categories(callback: CallbackQuery):
         package_count = len([p for p in category.packages if p.is_active]) if category.packages else 0
         buttons.append([InlineKeyboardButton(
             text=f"📁 {category.name} ({package_count})",
-            callback_data=f"store_category_{category.id}"
+            callback_data=StoreCategoryCallback(category_id=category.id)
         )])
 
     buttons.append([InlineKeyboardButton(
@@ -177,14 +184,11 @@ async def store_categories(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("store_category_"))
+@router.callback_query(StoreCategoryCallback.filter())
 async def store_category_products(callback: CallbackQuery):
     """Muestra productos de una categoria con botones minimalistas"""
-    try:
-        category_id = int(callback.data.replace("store_category_", ""))
-    except ValueError:
-        await callback.answer("Error: ID invalido", show_alert=True)
-        return
+    cb = StoreCategoryCallback.parse(callback.data)
+    category_id = cb.category_id
 
     package_service = PackageService()
     store_service = StoreService()
@@ -223,7 +227,7 @@ async def store_category_products(callback: CallbackQuery):
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=f"product_detail_{product.id}"
+            callback_data=ProductDetailCallback(product_id=product.id)
         ))
 
         # 2 botones por fila
@@ -249,14 +253,11 @@ async def store_category_products(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("product_detail_"))
+@router.callback_query(ProductDetailCallback.filter())
 async def product_detail(callback: CallbackQuery):
     """Muestra detalle de un producto sin preview automatico"""
-    try:
-        product_id = int(callback.data.replace("product_detail_", ""))
-    except ValueError:
-        await callback.answer("Error: ID invalido", show_alert=True)
-        return
+    cb = ProductDetailCallback.parse(callback.data)
+    product_id = cb.product_id
 
     store_service = StoreService()
     package_service = PackageService()
@@ -304,14 +305,14 @@ async def product_detail(callback: CallbackQuery):
     # First row: Preview button and Buy button (if available)
     row.append(InlineKeyboardButton(
         text="👁️ Preview",
-        callback_data=f"product_preview_{product.id}"
+        callback_data=ProductPreviewCallback(product_id=product.id)
     ))
 
     if is_available:
         if balance >= product.price:
             row.append(InlineKeyboardButton(
                 text="💋 Comprar ahora",
-                callback_data=f"direct_buy_{product.id}"
+                callback_data=DirectBuyCallback(product_id=product.id)
             ))
         else:
             row.append(InlineKeyboardButton(
@@ -346,14 +347,11 @@ async def product_detail(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("product_preview_"))
+@router.callback_query(ProductPreviewCallback.filter())
 async def product_preview(callback: CallbackQuery):
     """Envía el preview del producto bajo demanda y vuelve a mostrar la tarjeta"""
-    try:
-        product_id = int(callback.data.replace("product_preview_", ""))
-    except ValueError:
-        await callback.answer("Error: ID invalido", show_alert=True)
-        return
+    cb = ProductPreviewCallback.parse(callback.data)
+    product_id = cb.product_id
 
     store_service = StoreService()
     package_service = PackageService()
@@ -424,7 +422,7 @@ async def product_preview(callback: CallbackQuery):
         if balance >= product.price:
             row.append(InlineKeyboardButton(
                 text="💋 Comprar ahora",
-                callback_data=f"direct_buy_{product.id}"
+                callback_data=DirectBuyCallback(product_id=product.id)
             ))
         else:
             row.append(InlineKeyboardButton(
@@ -460,14 +458,11 @@ async def product_preview(callback: CallbackQuery):
 
 # ==================== COMPRA DIRECTA ====================
 
-@router.callback_query(F.data.startswith("direct_buy_"))
+@router.callback_query(DirectBuyCallback.filter())
 async def direct_buy(callback: CallbackQuery):
     """Muestra confirmacion de compra directa"""
-    try:
-        product_id = int(callback.data.replace("direct_buy_", ""))
-    except ValueError:
-        await callback.answer("Error: ID invalido", show_alert=True)
-        return
+    cb = DirectBuyCallback.parse(callback.data)
+    product_id = cb.product_id
 
     store_service = StoreService()
     besito_service = BesitoService()
@@ -494,11 +489,11 @@ async def direct_buy(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="✅ Confirmar",
-            callback_data=f"confirm_direct_buy_{product_id}"
+            callback_data=ConfirmDirectBuyCallback(product_id=product_id)
         )],
         [InlineKeyboardButton(
             text="❌ Cancelar",
-            callback_data=f"product_detail_{product_id}"
+            callback_data=ProductDetailCallback(product_id=product_id)
         )]
     ])
 
@@ -506,14 +501,11 @@ async def direct_buy(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("confirm_direct_buy_"))
+@router.callback_query(ConfirmDirectBuyCallback.filter())
 async def confirm_direct_buy(callback: CallbackQuery, bot: Bot):
     """Procesa la compra directa"""
-    try:
-        product_id = int(callback.data.replace("confirm_direct_buy_", ""))
-    except ValueError:
-        await callback.answer("Error: ID invalido", show_alert=True)
-        return
+    cb = ConfirmDirectBuyCallback.parse(callback.data)
+    product_id = cb.product_id
 
     store_service = StoreService()
     user_id = callback.from_user.id
@@ -651,7 +643,7 @@ async def process_search_query(message: Message, state: FSMContext):
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=f"product_detail_{product.id}"
+            callback_data=ProductDetailCallback(product_id=product.id)
         ))
 
         if len(row) == 2:
@@ -772,7 +764,7 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=f"product_detail_{product.id}"
+            callback_data=ProductDetailCallback(product_id=product.id)
         ))
 
         if len(row) == 2:

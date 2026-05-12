@@ -4,6 +4,7 @@
 Teclados personalizados con la estética elegante de Diana.
 """
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from keyboards.callback_data import SelectTariffCallback, CopyTokenCallback
 from typing import List, Optional
 from models.models import Channel, Tariff
 
@@ -251,7 +252,7 @@ def tariffs_keyboard(tariffs: List[Tariff], for_selection: bool = False) -> Inli
         text = f"{status} {tariff.name} - {tariff.duration_days}d - {tariff.price}"
         
         if for_selection:
-            callback = f"select_tariff_{tariff.id}"
+            callback = SelectTariffCallback(tariff_id=tariff.id).pack()
         else:
             callback = f"edit_tariff_{tariff.id}"
         
@@ -374,7 +375,7 @@ def token_actions_keyboard(token_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
             text="📋 Copiar enlace",
-            callback_data=f"copy_token_{token_id}"
+            callback_data=CopyTokenCallback(token_id=token_id).pack()
         )],
         [InlineKeyboardButton(
             text="🗑️ Revocar token",
@@ -530,4 +531,214 @@ def trivia_simple_result_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔄 Otra pregunta especial", callback_data="game_trivia_simple")],
         [InlineKeyboardButton(text="🔙 Menu de juegos", callback_data="game_menu")]
     ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# ==================== REACCIONES BROADCAST ====================
+
+def reactions_keyboard_with_counts(
+    broadcast_id: int,
+    emojis: list[tuple[int, str]],
+    emoji_counts: dict[int, int]
+) -> InlineKeyboardMarkup:
+    """Genera teclado de reacciones con conteos para un broadcast.
+
+    Args:
+        broadcast_id: ID del broadcast
+        emojis: Lista de (emoji_id, emoji_char)
+        emoji_counts: Diccionario {emoji_id: conteo}
+    """
+    from keyboards.callback_data import ReactionCallback
+    buttons = []
+    for emoji_id, emoji_char in emojis:
+        count = emoji_counts.get(emoji_id, 0)
+        # Mostrar el emoji con el conteo (o solo el emoji si no hay conteo)
+        text = f"{emoji_char} {count}" if count > 0 else emoji_char
+        buttons.append(InlineKeyboardButton(
+            text=text,
+            callback_data=ReactionCallback(broadcast_id=broadcast_id, emoji_id=emoji_id).pack()
+        ))
+    return InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
+
+
+# ==================== PROMOTIONS ====================
+
+def promotion_admin_keyboard() -> InlineKeyboardMarkup:
+    """Menú de administración de promociones"""
+    buttons = [
+        [InlineKeyboardButton(text="➕ Forjar nueva experiencia", callback_data="create_promotion")],
+        [InlineKeyboardButton(text="📋 Ver el Gabinete", callback_data="list_promotions")],
+        [InlineKeyboardButton(text="🔔 Expresiones pendientes", callback_data="promo_pending_interests")],
+        [InlineKeyboardButton(text="🚫 Visitantes restringidos", callback_data="promo_blocked_users")],
+        [InlineKeyboardButton(text="📊 Observar el pulso", callback_data="promo_stats")],
+        [InlineKeyboardButton(text="🔙 Volver al sanctum", callback_data="admin_gamification")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promotions_list_keyboard(promotions: list, show_active: bool = True) -> InlineKeyboardMarkup:
+    """Lista de promociones con botones"""
+    from keyboards.callback_data import PromoDetailCallback
+    buttons = []
+    for promo in promotions:
+        status = "✅" if promo.is_active else "❌"
+        buttons.append([InlineKeyboardButton(
+            text=f"{status} {promo.name[:30]}",
+            callback_data=PromoDetailCallback(promo_id=promo.id).pack()
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promotion_detail_keyboard(promo_id: int, is_active: bool) -> InlineKeyboardMarkup:
+    """Teclado de detalle de promoción"""
+    from keyboards.callback_data import TogglePromoCallback, PromoInterestsCallback, PromoDeleteCallback
+    buttons = [
+        [InlineKeyboardButton(
+            text=f"{'Desactivar' if is_active else 'Activar'}",
+            callback_data=TogglePromoCallback(promo_id=promo_id, enabled=not is_active).pack()
+        )],
+        [InlineKeyboardButton(
+            text="📊 Ver expresiones de interes",
+            callback_data=PromoInterestsCallback(promo_id=promo_id).pack()
+        )],
+        [InlineKeyboardButton(
+            text="🗑️ Eliminar",
+            callback_data=PromoDeleteCallback(promo_id=promo_id, confirmed=False).pack()
+        )],
+        [InlineKeyboardButton(text="🔙 Volver", callback_data="list_promotions")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promotion_confirm_delete_keyboard(promo_id: int) -> InlineKeyboardMarkup:
+    """Confirmación de eliminación de promoción"""
+    from keyboards.callback_data import PromoDeleteCallback
+    buttons = [
+        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=PromoDeleteCallback(promo_id=promo_id, confirmed=True).pack())],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=PromoDetailCallback(promo_id=promo_id).pack())]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promotion_source_keyboard() -> InlineKeyboardMarkup:
+    """Selección de fuente de contenido"""
+    buttons = [
+        [InlineKeyboardButton(text="📦 Seleccionar coleccion existente", callback_data="promo_select_package")],
+        [InlineKeyboardButton(text="📝 Definir archivos manualmente", callback_data="promo_manual_files")],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def packages_for_promotion_keyboard(packages: list) -> InlineKeyboardMarkup:
+    """Lista de paquetes para crear promoción"""
+    from keyboards.callback_data import SelectPkgPromoCallback
+    buttons = []
+    for pkg in packages:
+        if pkg.is_active:
+            file_count = len(pkg.files) if pkg.files else 0
+            buttons.append([InlineKeyboardButton(
+                text=f"{pkg.name} ({file_count} archivos)",
+                callback_data=SelectPkgPromoCallback(pkg_id=pkg.id).pack()
+            )])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promotion_dates_keyboard() -> InlineKeyboardMarkup:
+    """Teclado para fechas de vigencia"""
+    buttons = [
+        [InlineKeyboardButton(text="📅 Sin fechas", callback_data="promo_no_dates")],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promotion_confirmation_keyboard() -> InlineKeyboardMarkup:
+    """Confirmación de crear promoción"""
+    buttons = [
+        [InlineKeyboardButton(text="✅ Forjar experiencia", callback_data="confirm_create_promotion")],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_promotions")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def interest_detail_keyboard(interest_id: int, user_id: int, is_pending: bool = True) -> InlineKeyboardMarkup:
+    """Teclado de detalle de interés"""
+    from keyboards.callback_data import MarkAttendedCallback, BlockInterestCallback
+    buttons = []
+    if is_pending:
+        user_link = f"tg://user?id={user_id}"
+        buttons.extend([
+            [InlineKeyboardButton(text="💬 Contactar al visitante", url=user_link)],
+            [InlineKeyboardButton(
+                text="✅ Marcar como atendido",
+                callback_data=MarkAttendedCallback(interest_id=interest_id).pack()
+            )],
+            [InlineKeyboardButton(
+                text="🚫 Restringir visitante",
+                callback_data=BlockInterestCallback(user_id=user_id, confirmed=False).pack()
+            )]
+        ])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="promo_pending_interests")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def blocked_users_keyboard(blocked_users: list) -> InlineKeyboardMarkup:
+    """Lista de usuarios bloqueados"""
+    from keyboards.callback_data import BlockedUserDetailCallback
+    buttons = []
+    for user in blocked_users:
+        user_display = user.username or user.first_name or f"Visitante {user.user_id}"
+        buttons.append([InlineKeyboardButton(
+            text=f"{user_display[:25]}",
+            callback_data=BlockedUserDetailCallback(user_id=user.user_id).pack()
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def block_user_confirm_keyboard(user_id: int, interest_id: int = None) -> InlineKeyboardMarkup:
+    """Confirmar bloqueo de usuario"""
+    from keyboards.callback_data import InterestDetailCallback
+    buttons = [
+        [InlineKeyboardButton(text="✅ Si, restringir", callback_data="confirm_block_user")],
+        [InlineKeyboardButton(
+            text="❌ Cancelar",
+            callback_data=InterestDetailCallback(interest_id=interest_id).pack() if interest_id else "promo_blocked_users"
+        )]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def user_offers_keyboard(promotions: list, is_blocked: bool = False) -> InlineKeyboardMarkup:
+    """Catálogo de ofertas para usuario"""
+    from keyboards.callback_data import ViewOfferCallback
+    buttons = []
+    for promo in promotions:
+        buttons.append([InlineKeyboardButton(
+            text=f"👁️ Examinar: {promo.name[:25]}",
+            callback_data=ViewOfferCallback(promo_id=promo.id).pack()
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="offers")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def offer_detail_keyboard(promo_id: int, has_interest: bool, is_blocked: bool) -> InlineKeyboardMarkup:
+    """Detalle de oferta para usuario"""
+    from keyboards.callback_data import OfferInterestCallback
+    buttons = []
+    if has_interest:
+        buttons.append([InlineKeyboardButton(
+            text="📜 Ver sus expresiones de interes",
+            callback_data="my_offers_history"
+        )])
+    elif not is_blocked:
+        buttons.append([InlineKeyboardButton(
+            text="💕 Me interesa",
+            callback_data=OfferInterestCallback(promo_id=promo_id).pack()
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver al Gabinete", callback_data="offers_catalog")])
+    buttons.append([InlineKeyboardButton(text="🏠 Menu principal", callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
