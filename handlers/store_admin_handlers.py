@@ -5,9 +5,18 @@ Gestion de productos y estadisticas de la tienda.
 """
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from config.settings import bot_config
+from keyboards.callback_data import (
+    RestockProductCallback,
+    SelectPkgProductCallback,
+    ProductAdminDetailCallback,
+    ConfigStockAlertCallback,
+    ToggleProductCallback,
+    DeleteProductCallback,
+)
 from services import get_service
 from services.store_service import StoreService
 from services import get_service
@@ -108,7 +117,7 @@ async def stock_alerts(callback: CallbackQuery):
                     text += f"   ❌ {product.name}\n"
                     buttons.append([InlineKeyboardButton(
                         text=f"📝 Reabastecer: {product.name[:25]}",
-                        callback_data=f"restock_product_{product.id}"
+                        callback_data=RestockProductCallback(product_id=product.id)
                     )])
                 text += "\n"
 
@@ -119,7 +128,7 @@ async def stock_alerts(callback: CallbackQuery):
                     text += f"   ⚠️ {product.name} ({stock_status})\n"
                     buttons.append([InlineKeyboardButton(
                         text=f"📝 Reabastecer: {product.name[:25]}",
-                        callback_data=f"restock_product_{product.id}"
+                        callback_data=RestockProductCallback(product_id=product.id)
                     )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
@@ -128,14 +137,10 @@ async def stock_alerts(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("restock_product_"), lambda cb: is_admin(cb.from_user.id))
-async def restock_product(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(RestockProductCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def restock_product(callback: CallbackQuery, state: FSMContext, callback_data: RestockProductCallback):
     """Inicia reabastecimiento de producto"""
-    try:
-        product_id = int(callback.data.replace("restock_product_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
             product = store_service.get_product(product_id)
@@ -293,7 +298,7 @@ async def process_product_description(message: Message, state: FSMContext):
         stock_text = "∞" if pkg.store_stock == -1 else str(pkg.store_stock)
         buttons.append([InlineKeyboardButton(
             text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
-            callback_data=f"select_pkg_product_{pkg.id}"
+            callback_data=SelectPkgProductCallback(product_id=pkg.id)
         )])
 
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
@@ -307,14 +312,10 @@ async def process_product_description(message: Message, state: FSMContext):
     await state.set_state(ProductWizardStates.selecting_package)
 
 
-@router.callback_query(ProductWizardStates.selecting_package, F.data.startswith("select_pkg_product_"))
-async def select_package_for_product(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ProductWizardStates.selecting_package, SelectPkgProductCallback.filter())
+async def select_package_for_product(callback: CallbackQuery, state: FSMContext, callback_data: SelectPkgProductCallback):
     """Selecciona paquete para el producto"""
-    try:
-        package_id = int(callback.data.replace("select_pkg_product_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    package_id = callback_data.product_id
 
     await state.update_data(package_id=package_id)
 
@@ -511,7 +512,7 @@ async def list_products(callback: CallbackQuery):
 
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {product.name[:30]}",
-                    callback_data=f"product_admin_detail_{product.id}"
+                    callback_data=ProductAdminDetailCallback(product_id=product.id)
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
@@ -520,14 +521,10 @@ async def list_products(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("product_admin_detail_"), lambda cb: is_admin(cb.from_user.id))
-async def product_admin_detail(callback: CallbackQuery):
+@router.callback_query(ProductAdminDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAdminDetailCallback):
     """Muestra detalles de un producto"""
-    try:
-        product_id = int(callback.data.replace("product_admin_detail_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
             product = store_service.get_product(product_id)
@@ -542,19 +539,19 @@ async def product_admin_detail(callback: CallbackQuery):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if product.is_active else 'Activar'}",
-                    callback_data=f"toggle_product_{product_id}"
+                    callback_data=ToggleProductCallback(product_id=product_id)
                 )],
                 [InlineKeyboardButton(
                     text="📝 Reabastecer",
-                    callback_data=f"restock_product_{product_id}"
+                    callback_data=RestockProductCallback(product_id=product_id)
                 )],
                 [InlineKeyboardButton(
                     text="⚙️ Configurar alerta",
-                    callback_data=f"config_stock_alert_{product_id}"
+                    callback_data=ConfigStockAlertCallback(product_id=product_id)
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
-                    callback_data=f"delete_product_{product_id}"
+                    callback_data=DeleteProductCallback(product_id=product_id)
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")]
             ])
@@ -572,14 +569,10 @@ async def product_admin_detail(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("config_stock_alert_"), lambda cb: is_admin(cb.from_user.id))
-async def config_stock_alert(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ConfigStockAlertCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def config_stock_alert(callback: CallbackQuery, state: FSMContext, callback_data: ConfigStockAlertCallback):
     """Configura umbral de alerta de stock"""
-    try:
-        product_id = int(callback.data.replace("config_stock_alert_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
             product = store_service.get_product(product_id)
@@ -642,14 +635,10 @@ async def process_stock_threshold(message: Message, state: FSMContext):
             await state.clear()
 
 
-@router.callback_query(F.data.startswith("toggle_product_"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_product(callback: CallbackQuery):
+@router.callback_query(ToggleProductCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_product(callback: CallbackQuery, callback_data: ToggleProductCallback):
     """Activa/desactiva un producto"""
-    try:
-        product_id = int(callback.data.replace("toggle_product_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
             product = store_service.get_product(product_id)
@@ -665,36 +654,25 @@ async def toggle_product(callback: CallbackQuery):
             await product_admin_detail(callback)
 
 
-@router.callback_query(F.data.startswith("delete_product_"), lambda cb: is_admin(cb.from_user.id))
-async def delete_product_confirm(callback: CallbackQuery):
-    """Confirma eliminacion de producto"""
-    try:
-        product_id = int(callback.data.replace("delete_product_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+@router.callback_query(DeleteProductCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def handle_delete_product(callback: CallbackQuery, callback_data: DeleteProductCallback):
+    """Maneja eliminacion de producto (confirm/execute)"""
+    product_id = callback_data.product_id
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=f"confirm_delete_product_{product_id}")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"product_admin_detail_{product_id}")]
-    ])
+    if not callback_data.confirmed:
+        # Show confirmation
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=DeleteProductCallback(product_id=product_id, confirmed=True))],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data=ProductAdminDetailCallback(product_id=product_id))]
+        ])
 
-    await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Estas seguro de eliminar este producto?\n\n"
-        "Esta accion no se puede deshacer.",
-        reply_markup=keyboard
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("confirm_delete_product_"), lambda cb: is_admin(cb.from_user.id))
-async def confirm_delete_product(callback: CallbackQuery):
-    """Elimina el producto"""
-    try:
-        product_id = int(callback.data.replace("confirm_delete_product_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
+        await callback.message.edit_text(
+            "🎩 Lucien:\n\n"
+            "Estas seguro de eliminar este producto?\n\n"
+            "Esta accion no se puede deshacer.",
+            reply_markup=keyboard
+        )
+        await callback.answer()
         return
 
     with get_service(StoreService) as store_service:

@@ -76,6 +76,37 @@ class ProductPreviewCallback(CallbackData, prefix="product_preview"):
     product_id: int
 
 
+class RestockProductCallback(CallbackData, prefix="restock_prod"):
+    """Reabastecer producto"""
+    product_id: int
+
+
+class SelectPkgProductCallback(CallbackData, prefix="sel_pkg_prod"):
+    """Seleccionar paquete para producto"""
+    product_id: int
+
+
+class ProductAdminDetailCallback(CallbackData, prefix="prod_admin_detail"):
+    """Detalle de producto (admin)"""
+    product_id: int
+
+
+class ConfigStockAlertCallback(CallbackData, prefix="config_stock_alert"):
+    """Configurar alerta de stock"""
+    product_id: int
+
+
+class ToggleProductCallback(CallbackData, prefix="toggle_prod"):
+    """Activar/desactivar producto"""
+    product_id: int
+
+
+class DeleteProductCallback(CallbackData, prefix="del_prod"):
+    """Eliminar producto"""
+    product_id: int
+    confirmed: bool = False
+
+
 # ==================== PROMOTIONS ====================
 
 class SelectPkgPromoCallback(CallbackData, prefix="promo_select_pkg"):
