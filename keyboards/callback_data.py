@@ -186,3 +186,71 @@ class DeleteChannelCallback(CallbackData, prefix="delete_channel"):
 class ConfirmDeleteChannelCallback(CallbackData, prefix="confirm_delete_channel"):
     """Eliminar canal confirmado"""
     channel_id: int
+
+
+# ==================== PACKAGE ====================
+
+class PackageListCallback(CallbackData, prefix="pkg_list"):
+    """Navigación de lista de paquetes"""
+    list_type: str = "active"  # "active" | "all"
+
+
+class PackageDetailCallback(CallbackData, prefix="pkg_detail"):
+    """Detalle de paquete"""
+    package_id: int
+
+
+class TogglePackageCallback(CallbackData, prefix="toggle_pkg"):
+    """Activar/desactivar paquete"""
+    package_id: int
+
+
+class DeletePackageCallback(CallbackData, prefix="del_pkg"):
+    """Eliminar paquete"""
+    package_id: int
+    confirmed: bool = False
+
+
+class ViewPackageFilesCallback(CallbackData, prefix="view_pkg_files"):
+    """Ver archivos de paquete"""
+    package_id: int
+
+
+class DeletePackageFilesCallback(CallbackData, prefix="del_pkg_files"):
+    """Iniciar eliminación de archivos de paquete"""
+    package_id: int
+
+
+class SendPackageSelectCallback(CallbackData, prefix="send_pkg"):
+    """Selección de paquete para enviar"""
+    package_id: int
+
+
+class UpdatePackageSelectCallback(CallbackData, prefix="upd_pkg"):
+    """Selección de paquete para actualizar"""
+    package_id: int
+
+
+class DeleteFilePkgCallback(CallbackData, prefix="delfile_pkg"):
+    """Selección de paquete para eliminar archivos"""
+    package_id: int
+
+
+class ConfirmDeleteFileCallback(CallbackData, prefix="confirm_delfile"):
+    """Confirmar eliminación de archivo"""
+    file_id: int
+
+
+class ExecuteDeleteFileCallback(CallbackData, prefix="exec_delfile"):
+    """Ejecutar eliminación de archivo"""
+    file_id: int
+
+
+class ContinueDeleteFilesCallback(CallbackData, prefix="cont_delfile"):
+    """Continuar eliminación de archivos"""
+    package_id: int
+
+
+class FinishDeleteFilesCallback(CallbackData, prefix="finish_delfile"):
+    """Finalizar eliminación de archivos"""
+    package_id: int

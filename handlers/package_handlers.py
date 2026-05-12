@@ -4,6 +4,7 @@ Handlers de Paquetes - Lucien Bot
 Wizard de creación y gestión de paquetes de contenido.
 """
 from aiogram import Router, F, Bot
+from aiogram.filters.callback_data import CallbackData
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -11,6 +12,21 @@ from config.settings import bot_config
 from services import get_service
 from services.package_service import PackageService
 from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, cancel_keyboard
+from keyboards.callback_data import (
+    PackageListCallback,
+    PackageDetailCallback,
+    TogglePackageCallback,
+    DeletePackageCallback,
+    ViewPackageFilesCallback,
+    DeletePackageFilesCallback,
+    SendPackageSelectCallback,
+    UpdatePackageSelectCallback,
+    DeleteFilePkgCallback,
+    ConfirmDeleteFileCallback,
+    ExecuteDeleteFileCallback,
+    ContinueDeleteFilesCallback,
+    FinishDeleteFilesCallback,
+)
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -83,11 +99,11 @@ async def manage_packages_menu(callback: CallbackQuery):
                 )],
                 [InlineKeyboardButton(
                     text="📋 Ver paquetes activos",
-                    callback_data="list_packages_active"
+                    callback_data=PackageListCallback(list_type="active")
                 )],
                 [InlineKeyboardButton(
                     text="📋 Ver todos los paquetes",
-                    callback_data="list_packages_all"
+                    callback_data=PackageListCallback(list_type="all")
                 )],
                 [InlineKeyboardButton(
                     text="🔙 Volver",
@@ -116,10 +132,10 @@ async def manage_packages_menu(callback: CallbackQuery):
 
         # ==================== LISTAR PAQUETES ====================
 
-@router.callback_query(F.data.startswith("list_packages_"), lambda cb: is_admin(cb.from_user.id))
-async def list_packages(callback: CallbackQuery):
+@router.callback_query(PackageListCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def list_packages(callback: CallbackQuery, callback_data: PackageListCallback):
     """Lista los paquetes"""
-    list_type = callback.data.replace("list_packages_", "")
+    list_type = callback_data.list_type
     active_only = list_type == "active"
     
     with get_service(PackageService) as package_service:
@@ -157,7 +173,7 @@ async def list_packages(callback: CallbackQuery):
         
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {pkg.name[:30]}",
-                    callback_data=f"package_detail_{pkg.id}"
+                    callback_data=PackageDetailCallback(package_id=pkg.id)
                 )])
     
             buttons.append([InlineKeyboardButton(
@@ -171,10 +187,10 @@ async def list_packages(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("package_detail_"), lambda cb: is_admin(cb.from_user.id))
-async def package_detail(callback: CallbackQuery):
+@router.callback_query(PackageDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def package_detail(callback: CallbackQuery, callback_data: PackageDetailCallback):
     """Muestra detalles de un paquete"""
-    package_id = int(callback.data.replace("package_detail_", ""))
+    package_id = callback_data.package_id
     
     with get_service(PackageService) as package_service:
             package = package_service.get_package(package_id)
@@ -192,23 +208,23 @@ async def package_detail(callback: CallbackQuery):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text="👁️ Ver archivos",
-                    callback_data=f"view_package_files_{package_id}"
+                    callback_data=ViewPackageFilesCallback(package_id=package_id)
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar archivos",
-                    callback_data=f"delete_package_files_{package_id}"
+                    callback_data=DeletePackageFilesCallback(package_id=package_id)
                 )],
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if package.is_active else 'Activar'}",
-                    callback_data=f"toggle_package_{package_id}"
+                    callback_data=TogglePackageCallback(package_id=package_id)
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar paquete",
-                    callback_data=f"delete_package_{package_id}"
+                    callback_data=DeletePackageCallback(package_id=package_id, confirmed=False)
                 )],
                 [InlineKeyboardButton(
                     text="🔙 Volver",
-                    callback_data="list_packages_all"
+                    callback_data=PackageListCallback(list_type="all")
                 )]
             ])
     
@@ -235,10 +251,10 @@ async def package_detail(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("toggle_package_"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_package(callback: CallbackQuery):
+@router.callback_query(TogglePackageCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_package(callback: CallbackQuery, callback_data: TogglePackageCallback):
     """Activa/desactiva un paquete"""
-    package_id = int(callback.data.replace("toggle_package_", ""))
+    package_id = callback_data.package_id
     
     with get_service(PackageService) as package_service:
             package = package_service.get_package(package_id)
@@ -254,22 +270,25 @@ async def toggle_package(callback: CallbackQuery):
             await package_detail(callback)
 
 
-@router.callback_query(F.data.startswith("delete_package_"), lambda cb: is_admin(cb.from_user.id) and not cb.data.startswith("delete_package_files_"))
-async def delete_package_confirm(callback: CallbackQuery):
+@router.callback_query(DeletePackageCallback.filter(F.confirmed == False))
+async def delete_package_confirm(callback: CallbackQuery, callback_data: DeletePackageCallback):
     """Confirma eliminación de paquete"""
-    package_id = int(callback.data.replace("delete_package_", ""))
-    
+    if not is_admin(callback.from_user.id):
+        await callback.answer("No autorizado", show_alert=True)
+        return
+    package_id = callback_data.package_id
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="✅ Sí, eliminar",
-            callback_data=f"confirm_delete_package_{package_id}"
+            callback_data=DeletePackageCallback(package_id=package_id, confirmed=True)
         )],
         [InlineKeyboardButton(
             text="❌ Cancelar",
-            callback_data=f"package_detail_{package_id}"
+            callback_data=PackageDetailCallback(package_id=package_id)
         )]
     ])
-    
+
     await callback.message.edit_text(
         f"""🎩 <b>Lucien:</b>
 
@@ -284,31 +303,34 @@ Los archivos asociados también serán eliminados.""",
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("confirm_delete_package_"), lambda cb: is_admin(cb.from_user.id))
-async def confirm_delete_package(callback: CallbackQuery):
+@router.callback_query(DeletePackageCallback.filter(F.confirmed == True))
+async def confirm_delete_package(callback: CallbackQuery, callback_data: DeletePackageCallback):
     """Elimina el paquete"""
-    package_id = int(callback.data.replace("confirm_delete_package_", ""))
-    
+    if not is_admin(callback.from_user.id):
+        await callback.answer("No autorizado", show_alert=True)
+        return
+    package_id = callback_data.package_id
+
     with get_service(PackageService) as package_service:
-            success = package_service.delete_package(package_id)
-    
-            if success:
-                await callback.message.edit_text(
-                    f"""🎩 <b>Lucien:</b>
+        success = package_service.delete_package(package_id)
+
+        if success:
+            await callback.message.edit_text(
+                f"""🎩 <b>Lucien:</b>
 
         <i>El paquete ha sido removido de los archivos de Diana...</i>
 
         ✅ <b>Paquete eliminado correctamente.</b>""",
-                    reply_markup=back_keyboard("manage_packages"),
-                    parse_mode="HTML"
-                )
-            else:
-                await callback.message.edit_text(
-                    LucienVoice.error_message("la eliminación del paquete"),
-                    reply_markup=back_keyboard("manage_packages"),
-                    parse_mode="HTML"
-                )
-            await callback.answer()
+                reply_markup=back_keyboard("manage_packages"),
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.edit_text(
+                LucienVoice.error_message("la eliminación del paquete"),
+                reply_markup=back_keyboard("manage_packages"),
+                parse_mode="HTML"
+            )
+        await callback.answer()
 
 
         # ==================== WIZARD DE CREACIÓN DE PAQUETE ====================
@@ -753,7 +775,7 @@ async def send_package_to_user_start(callback: CallbackQuery, state: FSMContext)
             for pkg in packages:
                 buttons.append([InlineKeyboardButton(
                     text=f"{pkg.name} ({pkg.file_count} archivos)",
-                    callback_data=f"sendpkg_select_{pkg.id}"
+                    callback_data=SendPackageSelectCallback(package_id=pkg.id)
                 )])
     
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="manage_packages")])
@@ -770,26 +792,22 @@ async def send_package_to_user_start(callback: CallbackQuery, state: FSMContext)
             await callback.answer()
 
 
-@router.callback_query(SendPackageStates.selecting_package, F.data.startswith("sendpkg_select_"))
-async def select_package_to_send(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(SendPackageStates.selecting_package, SendPackageSelectCallback.filter())
+async def select_package_to_send(callback: CallbackQuery, state: FSMContext, callback_data: SendPackageSelectCallback):
     """Selecciona paquete y pide ID de usuario"""
-    try:
-        package_id = int(callback.data.replace("sendpkg_select_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
+    package_id = callback_data.package_id
+
     with get_service(PackageService) as package_service:
-            package = package_service.get_package(package_id)
-    
-            if not package:
-                await callback.answer("Paquete no encontrado", show_alert=True)
-                return
-    
-            await state.update_data(package_id=package_id, package_name=package.name)
-    
-            await callback.message.edit_text(
-                f"""🎩 Lucien:
+        package = package_service.get_package(package_id)
+
+        if not package:
+            await callback.answer("Paquete no encontrado", show_alert=True)
+            return
+
+        await state.update_data(package_id=package_id, package_name=package.name)
+
+    await callback.message.edit_text(
+        f"""🎩 Lucien:
 
         Paquete seleccionado: {package.name}
 
@@ -798,12 +816,13 @@ async def select_package_to_send(callback: CallbackQuery, state: FSMContext):
         Ejemplo: 123456789
 
         (Obtén el ID desde @userinfobot)""",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="manage_packages")]
-                ])
-            )
-            await state.set_state(SendPackageStates.waiting_user_id)
-            await callback.answer()
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="manage_packages")]
+        ])
+    )
+
+    await state.set_state(SendPackageStates.waiting_user_id)
+    await callback.answer()
 
 
 @router.message(SendPackageStates.waiting_user_id)
@@ -846,10 +865,10 @@ async def process_user_id_for_package(message: Message, state: FSMContext, bot: 
 
         # ==================== VER ARCHIVOS DE PAQUETE (CON PREVIEW) ====================
 
-@router.callback_query(F.data.startswith("view_package_files_"), lambda cb: is_admin(cb.from_user.id))
-async def view_package_files(callback: CallbackQuery, bot: Bot):
+@router.callback_query(ViewPackageFilesCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def view_package_files(callback: CallbackQuery, bot: Bot, callback_data: ViewPackageFilesCallback):
     """Muestra los archivos de un paquete con preview"""
-    package_id = int(callback.data.replace("view_package_files_", ""))
+    package_id = callback_data.package_id
     
     with get_service(PackageService) as package_service:
             package = package_service.get_package(package_id)
@@ -868,7 +887,7 @@ async def view_package_files(callback: CallbackQuery, bot: Bot):
         Total: {len(files)} archivo(s)
 
         Enviando previews...""",
-                reply_markup=back_keyboard(f"package_detail_{package_id}")
+                reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).serialize())
             )
             await callback.answer()
     
@@ -935,7 +954,7 @@ async def update_package_start(callback: CallbackQuery, state: FSMContext):
                 status = "✅" if pkg.is_active else "❌"
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {pkg.name[:35]} ({pkg.file_count} archivos)",
-                    callback_data=f"updatepkg_select_{pkg.id}"
+                    callback_data=UpdatePackageSelectCallback(package_id=pkg.id)
                 )])
 
             buttons.append([InlineKeyboardButton(
@@ -958,14 +977,10 @@ async def update_package_start(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
 
 
-@router.callback_query(UpdatePackageStates.selecting_package, F.data.startswith("updatepkg_select_"))
-async def select_package_to_update(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(UpdatePackageStates.selecting_package, UpdatePackageSelectCallback.filter())
+async def select_package_to_update(callback: CallbackQuery, state: FSMContext, callback_data: UpdatePackageSelectCallback):
     """Selecciona el paquete a actualizar y pide archivos"""
-    try:
-        package_id = int(callback.data.replace("updatepkg_select_", ""))
-    except ValueError:
-        await callback.answer("ID de paquete inválido", show_alert=True)
-        return
+    package_id = callback_data.package_id
 
     with get_service(PackageService) as package_service:
             package = package_service.get_package(package_id)
@@ -1213,7 +1228,7 @@ async def pkgfiles_delete_menu(callback: CallbackQuery, state: FSMContext):
                 if file_count > 0:  # Solo mostrar paquetes con archivos
                     buttons.append([InlineKeyboardButton(
                         text=f"{pkg.name[:30]} ({file_count} archivos)",
-                        callback_data=f"delfile_pkg_{pkg.id}"
+                        callback_data=DeleteFilePkgCallback(package_id=pkg.id)
                     )])
 
             if not buttons:
@@ -1249,10 +1264,10 @@ async def pkgfiles_delete_menu(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("delete_package_files_"), lambda cb: is_admin(cb.from_user.id))
-async def delete_package_files_start(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(DeletePackageFilesCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def delete_package_files_start(callback: CallbackQuery, state: FSMContext, callback_data: DeletePackageFilesCallback):
     """Inicia el flujo de eliminar archivos desde el detalle del paquete"""
-    package_id = int(callback.data.replace("delete_package_files_", ""))
+    package_id = callback_data.package_id
 
     with get_service(PackageService) as package_service:
             package = package_service.get_package(package_id)
@@ -1269,7 +1284,7 @@ async def delete_package_files_start(callback: CallbackQuery, state: FSMContext)
         <i>Este paquete no tiene archivos...</i>
 
         👉 <i>No hay nada que eliminar.</i>""",
-                    reply_markup=back_keyboard(f"package_detail_{package_id}"),
+                    reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).serialize()),
                     parse_mode="HTML"
                 )
                 await callback.answer()
@@ -1294,14 +1309,10 @@ async def delete_package_files_start(callback: CallbackQuery, state: FSMContext)
             await show_files_for_deletion(callback, state, bot=callback.bot)
 
 
-@router.callback_query(DeleteFileStates.selecting_package, F.data.startswith("delfile_pkg_"))
-async def select_package_for_delete_files(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(DeleteFileStates.selecting_package, DeleteFilePkgCallback.filter())
+async def select_package_for_delete_files(callback: CallbackQuery, state: FSMContext, callback_data: DeleteFilePkgCallback):
     """Selecciona el paquete para eliminar archivos"""
-    try:
-        package_id = int(callback.data.replace("delfile_pkg_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    package_id = callback_data.package_id
 
     with get_service(PackageService) as package_service:
             package = package_service.get_package(package_id)
@@ -1359,7 +1370,7 @@ async def show_files_for_deletion(callback: CallbackQuery, state: FSMContext, bo
         <i>El paquete ya no tiene archivos...</i>
 
         ✅ <b>Todos los archivos han sido eliminados.</b>""",
-                    reply_markup=back_keyboard(f"package_detail_{package_id}"),
+                    reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).serialize()),
                     parse_mode="HTML"
                 )
                 await state.clear()
@@ -1386,11 +1397,11 @@ async def show_files_for_deletion(callback: CallbackQuery, state: FSMContext, bo
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(
                             text="🗑️ Eliminar este archivo",
-                            callback_data=f"confirm_delfile_{file_entry.id}"
+                            callback_data=ConfirmDeleteFileCallback(file_id=file_entry.id)
                         )],
                         [InlineKeyboardButton(
                             text="✅ Terminar",
-                            callback_data=f"finish_delfile_{package_id}"
+                            callback_data=FinishDeleteFilesCallback(package_id=package_id)
                         )]
                     ])
 
@@ -1432,14 +1443,10 @@ async def show_files_for_deletion(callback: CallbackQuery, state: FSMContext, bo
                     )
 
 
-@router.callback_query(DeleteFileStates.deleting_files, F.data.startswith("confirm_delfile_"))
-async def confirm_delete_file(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(DeleteFileStates.deleting_files, ConfirmDeleteFileCallback.filter())
+async def confirm_delete_file(callback: CallbackQuery, state: FSMContext, callback_data: ConfirmDeleteFileCallback):
     """Muestra confirmación antes de eliminar el archivo"""
-    try:
-        file_id = int(callback.data.replace("confirm_delfile_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    file_id = callback_data.file_id
 
     data = await state.get_data()
     package_id = data.get('package_id')
@@ -1447,11 +1454,11 @@ async def confirm_delete_file(callback: CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="✅ Sí, eliminar",
-            callback_data=f"execute_delfile_{file_id}"
+            callback_data=ExecuteDeleteFileCallback(file_id=file_id)
         )],
         [InlineKeyboardButton(
             text="❌ Cancelar",
-            callback_data=f"continue_delfile_{package_id}"
+            callback_data=ContinueDeleteFilesCallback(package_id=package_id)
         )]
     ])
 
@@ -1463,14 +1470,10 @@ async def confirm_delete_file(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(DeleteFileStates.deleting_files, F.data.startswith("execute_delfile_"))
-async def execute_delete_file(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(DeleteFileStates.deleting_files, ExecuteDeleteFileCallback.filter())
+async def execute_delete_file(callback: CallbackQuery, state: FSMContext, callback_data: ExecuteDeleteFileCallback):
     """Ejecuta la eliminación del archivo"""
-    try:
-        file_id = int(callback.data.replace("execute_delfile_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    file_id = callback_data.file_id
 
     data = await state.get_data()
     package_id = data.get('package_id')
@@ -1487,11 +1490,11 @@ async def execute_delete_file(callback: CallbackQuery, state: FSMContext):
                         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                             [InlineKeyboardButton(
                                 text="🗑️ Eliminar más archivos",
-                                callback_data=f"continue_delfile_{package_id}"
+                                callback_data=ContinueDeleteFilesCallback(package_id=package_id)
                             )],
                             [InlineKeyboardButton(
                                 text="✅ Terminar",
-                                callback_data=f"finish_delfile_{package_id}"
+                                callback_data=FinishDeleteFilesCallback(package_id=package_id)
                             )]
                         ]),
                         parse_mode="HTML"
@@ -1505,27 +1508,19 @@ async def execute_delete_file(callback: CallbackQuery, state: FSMContext):
                 await callback.answer("Error al eliminar el archivo", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("continue_delfile_"))
-async def continue_delete_files(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ContinueDeleteFilesCallback.filter())
+async def continue_delete_files(callback: CallbackQuery, state: FSMContext, callback_data: ContinueDeleteFilesCallback):
     """Continúa mostrando archivos para eliminar"""
-    try:
-        package_id = int(callback.data.replace("continue_delfile_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    package_id = callback_data.package_id
 
     await callback.message.delete()
     await show_files_for_deletion(callback, state, bot=callback.bot)
 
 
-@router.callback_query(F.data.startswith("finish_delfile_"))
-async def finish_delete_files(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(FinishDeleteFilesCallback.filter())
+async def finish_delete_files(callback: CallbackQuery, state: FSMContext, callback_data: FinishDeleteFilesCallback):
     """Termina el flujo de eliminación de archivos"""
-    try:
-        package_id = int(callback.data.replace("finish_delfile_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    package_id = callback_data.package_id
 
     await state.clear()
 
@@ -1534,7 +1529,7 @@ async def finish_delete_files(callback: CallbackQuery, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="📦 Ver paquete",
-                callback_data=f"package_detail_{package_id}"
+                callback_data=PackageDetailCallback(package_id=package_id)
             )],
             [InlineKeyboardButton(
                 text="🔙 Menú de paquetes",
