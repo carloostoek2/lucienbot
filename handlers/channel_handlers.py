@@ -14,6 +14,13 @@ from keyboards.inline_keyboards import (
     channel_management_keyboard, confirmation_keyboard,
     wait_time_keyboard, back_keyboard
 )
+from keyboards.callback_data import (
+    ChannelTypeCallback, ChannelDetailCallback,
+    ConfigWaitCallback, WaitTimeCallback,
+    ConfigInviteCallback, PendingReqCallback,
+    ApproveAllCallback, DeleteChannelCallback,
+    ConfirmDeleteChannelCallback
+)
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -98,10 +105,10 @@ async def confirm_channel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(ChannelStates.selecting_channel_type, F.data.startswith("channel_type_"))
-async def set_channel_type(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ChannelStates.selecting_channel_type, ChannelTypeCallback.filter())
+async def set_channel_type(callback: CallbackQuery, state: FSMContext, callback_data: ChannelTypeCallback):
     """Establece el tipo de canal y registra"""
-    channel_type = callback.data.replace("channel_type_", "")
+    channel_type = callback_data.action
     data = await state.get_data()
 
     channel_service = ChannelService()
@@ -156,12 +163,13 @@ async def list_channels(callback: CallbackQuery):
 
         # Agregar botones para cada canal
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        from keyboards.callback_data import ChannelDetailCallback
         buttons = []
         for ch in channels:
             emoji = "🚪" if ch.channel_type.value == "free" else "👑"
             buttons.append([InlineKeyboardButton(
                 text=f"{emoji} {ch.channel_name or 'Sin nombre'}",
-                callback_data=f"channel_detail_{ch.id}"
+                callback_data=ChannelDetailCallback(channel_id=ch.id).pack()
             )])
 
         buttons.append([InlineKeyboardButton(
@@ -181,10 +189,10 @@ async def list_channels(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("channel_detail_"))
-async def channel_detail(callback: CallbackQuery):
+@router.callback_query(ChannelDetailCallback.filter())
+async def channel_detail(callback: CallbackQuery, callback_data: ChannelDetailCallback):
     """Muestra detalles y acciones de un canal"""
-    channel_id = int(callback.data.replace("channel_detail_", ""))
+    channel_id = callback_data.channel_id
 
     channel_service = ChannelService()
     try:
@@ -226,10 +234,10 @@ async def channel_detail(callback: CallbackQuery):
 
 # ==================== CONFIGURAR TIEMPO DE ESPERA ====================
 
-@router.callback_query(F.data.startswith("config_wait_"))
-async def config_wait_time(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ConfigWaitCallback.filter())
+async def config_wait_time(callback: CallbackQuery, state: FSMContext, callback_data: ConfigWaitCallback):
     """Configura tiempo de espera para canal Free"""
-    channel_id = int(callback.data.replace("config_wait_", ""))
+    channel_id = callback_data.channel_id
     await state.update_data(channel_id=channel_id)
     
     await callback.message.edit_text(
@@ -243,10 +251,10 @@ async def config_wait_time(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(ChannelStates.configuring_wait_time, F.data.startswith("wait_"))
-async def set_wait_time(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ChannelStates.configuring_wait_time, WaitTimeCallback.filter())
+async def set_wait_time(callback: CallbackQuery, state: FSMContext, callback_data: WaitTimeCallback):
     """Establece el tiempo de espera"""
-    data = callback.data.replace("wait_", "")
+    data = callback_data.minutes
 
     if data == "custom":
         await callback.message.edit_text(
@@ -268,7 +276,7 @@ async def set_wait_time(callback: CallbackQuery, state: FSMContext):
 
         await callback.message.edit_text(
             LucienVoice.admin_wait_time_updated(minutes),
-            reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+            reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
             parse_mode="HTML"
         )
     finally:
@@ -279,10 +287,10 @@ async def set_wait_time(callback: CallbackQuery, state: FSMContext):
 
 # ==================== CONFIGURAR ENLACE DE INVITACIÓN ====================
 
-@router.callback_query(F.data.startswith("config_invite_"))
-async def config_invite_link_start(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ConfigInviteCallback.filter())
+async def config_invite_link_start(callback: CallbackQuery, state: FSMContext, callback_data: ConfigInviteCallback):
     """Inicia la configuración del enlace de invitación"""
-    channel_id = int(callback.data.replace("config_invite_", ""))
+    channel_id = callback_data.channel_id
 
     channel_service = ChannelService()
     try:
@@ -299,7 +307,7 @@ async def config_invite_link_start(callback: CallbackQuery, state: FSMContext):
             f"<code>https://t.me/+ABC123xyz</code>\n"
             f"<code>https://t.me/srtakinky</code>{current}\n\n"
             f"<i>Envíe el enlace o escriba \"quitar\" para eliminarlo.</i>",
-            reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+            reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
             parse_mode="HTML"
         )
     finally:
@@ -334,7 +342,7 @@ async def process_invite_link(message: Message, state: FSMContext):
                 f"<i>El enlace de invitación para <b>{name}</b> ha sido actualizado.</i>\n\n"
                 f"🔗 <code>{link}</code>\n\n"
                 f"<i>Este enlace se enviará a los visitantes al ser aprobados.</i>",
-                reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+                reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
                 parse_mode="HTML"
             )
         else:
@@ -342,7 +350,7 @@ async def process_invite_link(message: Message, state: FSMContext):
                 f"🎩 <b>Lucien:</b>\n\n"
                 f"<i>El enlace de invitación para <b>{name}</b> ha sido eliminado.</i>\n\n"
                 f"<i>Los visitantes no recibirán enlace al ser aprobados.</i>",
-                reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+                reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
                 parse_mode="HTML"
             )
     finally:
@@ -353,10 +361,10 @@ async def process_invite_link(message: Message, state: FSMContext):
 
 # ==================== APROBAR SOLICITUDES PENDIENTES ====================
 
-@router.callback_query(F.data.startswith("pending_req_"))
-async def view_pending_requests(callback: CallbackQuery):
+@router.callback_query(PendingReqCallback.filter())
+async def view_pending_requests(callback: CallbackQuery, callback_data: PendingReqCallback):
     """Ver solicitudes pendientes de un canal"""
-    channel_id = int(callback.data.replace("pending_req_", ""))
+    channel_id = callback_data.channel_id
 
     channel_service = ChannelService()
     try:
@@ -365,7 +373,7 @@ async def view_pending_requests(callback: CallbackQuery):
 
         await callback.message.edit_text(
             LucienVoice.admin_pending_requests(count, requests),
-            reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+            reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
             parse_mode="HTML"
         )
     finally:
@@ -373,10 +381,10 @@ async def view_pending_requests(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("approve_all_"))
-async def approve_all_requests(callback: CallbackQuery):
+@router.callback_query(ApproveAllCallback.filter())
+async def approve_all_requests(callback: CallbackQuery, callback_data: ApproveAllCallback):
     """Aprueba todas las solicitudes pendientes de un canal"""
-    channel_id = int(callback.data.replace("approve_all_", ""))
+    channel_id = callback_data.channel_id
 
     channel_service = ChannelService()
     try:
@@ -384,7 +392,7 @@ async def approve_all_requests(callback: CallbackQuery):
 
         await callback.message.edit_text(
             LucienVoice.admin_requests_cleared(count),
-            reply_markup=back_keyboard(f"channel_detail_{channel_id}"),
+            reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
             parse_mode="HTML"
         )
     finally:
@@ -394,25 +402,28 @@ async def approve_all_requests(callback: CallbackQuery):
 
 # ==================== ELIMINAR CANAL ====================
 
-@router.callback_query(F.data.startswith("delete_channel_"))
-async def delete_channel_confirm(callback: CallbackQuery):
+@router.callback_query(DeleteChannelCallback.filter())
+async def delete_channel_confirm(callback: CallbackQuery, callback_data: DeleteChannelCallback):
     """Confirma eliminación de canal"""
-    channel_id = int(callback.data.replace("delete_channel_", ""))
+    channel_id = callback_data.channel_id
     
     await callback.message.edit_text(
         f"🎩 <b>Lucien:</b>\n\n"
         f"<i>¿Está seguro de que desea remover este dominio de los archivos de Diana?</i>\n\n"
         f"⚠️ <b>Esta acción no se puede deshacer.</b>",
-        reply_markup=confirmation_keyboard(f"confirm_delete_channel_{channel_id}", f"channel_detail_{channel_id}"),
+        reply_markup=confirmation_keyboard(
+            ConfirmDeleteChannelCallback(channel_id=channel_id).pack(),
+            ChannelDetailCallback(channel_id=channel_id).pack()
+        ),
         parse_mode="HTML"
     )
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("confirm_delete_channel_"))
-async def delete_channel(callback: CallbackQuery):
+@router.callback_query(ConfirmDeleteChannelCallback.filter())
+async def delete_channel(callback: CallbackQuery, callback_data: ConfirmDeleteChannelCallback):
     """Elimina el canal"""
-    channel_id = int(callback.data.replace("confirm_delete_channel_", ""))
+    channel_id = callback_data.channel_id
 
     channel_service = ChannelService()
     try:

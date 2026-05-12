@@ -4,7 +4,12 @@
 Teclados personalizados con la estética elegante de Diana.
 """
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from keyboards.callback_data import SelectTariffCallback, CopyTokenCallback
+from keyboards.callback_data import (
+    SelectTariffCallback, CopyTokenCallback,
+    ChannelDetailCallback, ConfigWaitCallback, ConfigInviteCallback,
+    PendingReqCallback, ApproveAllCallback, DeleteChannelCallback,
+    ConfirmDeleteChannelCallback, WaitTimeCallback
+)
 from typing import List, Optional
 from models.models import Channel, Tariff
 
@@ -168,14 +173,15 @@ def channel_management_keyboard() -> InlineKeyboardMarkup:
 
 def channel_type_keyboard() -> InlineKeyboardMarkup:
     """Selección de tipo de canal"""
+    from keyboards.callback_data import ChannelTypeCallback
     buttons = [
         [InlineKeyboardButton(
             text="🚪 Vestíbulo (Free)",
-            callback_data="channel_type_free"
+            callback_data=ChannelTypeCallback(action="free").pack()
         )],
         [InlineKeyboardButton(
             text="👑 El Diván (VIP)",
-            callback_data="channel_type_vip"
+            callback_data=ChannelTypeCallback(action="vip").pack()
         )],
         [InlineKeyboardButton(
             text="🔙 Cancelar",
@@ -188,16 +194,16 @@ def channel_type_keyboard() -> InlineKeyboardMarkup:
 def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboardMarkup:
     """Acciones disponibles para un canal"""
     buttons = []
-    
+
     if channel_type == "free":
         buttons.extend([
             [InlineKeyboardButton(
                 text="⏱️ Configurar tiempo de espera",
-                callback_data=f"config_wait_{channel_id}"
+                callback_data=ConfigWaitCallback(channel_id=channel_id).pack()
             )],
             [InlineKeyboardButton(
                 text="🔗 Configurar enlace de invitación",
-                callback_data=f"config_invite_{channel_id}"
+                callback_data=ConfigInviteCallback(channel_id=channel_id).pack()
             )],
             [InlineKeyboardButton(
                 text="📨 Configurar mensajes",
@@ -205,11 +211,11 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
             )],
             [InlineKeyboardButton(
                 text="👥 Ver solicitudes pendientes",
-                callback_data=f"pending_req_{channel_id}"
+                callback_data=PendingReqCallback(channel_id=channel_id).pack()
             )],
             [InlineKeyboardButton(
                 text="✅ Aprobar todas las pendientes",
-                callback_data=f"approve_all_{channel_id}"
+                callback_data=ApproveAllCallback(channel_id=channel_id).pack()
             )]
         ])
     else:  # VIP
@@ -227,16 +233,16 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
                 callback_data=f"list_subscribers_{channel_id}"
             )]
         ])
-    
+
     buttons.append([InlineKeyboardButton(
         text="🗑️ Eliminar dominio",
-        callback_data=f"delete_channel_{channel_id}"
+        callback_data=DeleteChannelCallback(channel_id=channel_id).pack()
     )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver",
         callback_data="list_channels"
     )])
-    
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -274,20 +280,21 @@ def tariffs_keyboard(tariffs: List[Tariff], for_selection: bool = False) -> Inli
 
 def wait_time_keyboard() -> InlineKeyboardMarkup:
     """Opciones de tiempo de espera"""
+    from keyboards.callback_data import WaitTimeCallback
     buttons = [
         [
-            InlineKeyboardButton(text="2 min", callback_data="wait_2"),
-            InlineKeyboardButton(text="3 min", callback_data="wait_3"),
-            InlineKeyboardButton(text="5 min", callback_data="wait_5")
+            InlineKeyboardButton(text="2 min", callback_data=WaitTimeCallback(minutes="2").pack()),
+            InlineKeyboardButton(text="3 min", callback_data=WaitTimeCallback(minutes="3").pack()),
+            InlineKeyboardButton(text="5 min", callback_data=WaitTimeCallback(minutes="5").pack())
         ],
         [
-            InlineKeyboardButton(text="10 min", callback_data="wait_10"),
-            InlineKeyboardButton(text="15 min", callback_data="wait_15"),
-            InlineKeyboardButton(text="30 min", callback_data="wait_30")
+            InlineKeyboardButton(text="10 min", callback_data=WaitTimeCallback(minutes="10").pack()),
+            InlineKeyboardButton(text="15 min", callback_data=WaitTimeCallback(minutes="15").pack()),
+            InlineKeyboardButton(text="30 min", callback_data=WaitTimeCallback(minutes="30").pack())
         ],
         [InlineKeyboardButton(
             text="⌨️ Personalizado",
-            callback_data="wait_custom"
+            callback_data=WaitTimeCallback(minutes="custom").pack()
         )],
         [InlineKeyboardButton(
             text="🔙 Cancelar",

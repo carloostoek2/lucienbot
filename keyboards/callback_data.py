@@ -139,3 +139,50 @@ class ViewOfferCallback(CallbackData, prefix="view_offer"):
 class OfferInterestCallback(CallbackData, prefix="offer_interest"):
     """Expresar interés en oferta"""
     promo_id: int
+
+
+# ==================== CHANNEL ====================
+
+class ChannelTypeCallback(CallbackData, prefix="channel_type"):
+    """Selección de tipo de canal"""
+    action: str
+
+
+class ChannelDetailCallback(CallbackData, prefix="channel_detail"):
+    """Detalle de canal"""
+    channel_id: int
+
+
+class ConfigWaitCallback(CallbackData, prefix="config_wait"):
+    """Configurar tiempo de espera"""
+    channel_id: int
+
+
+class WaitTimeCallback(CallbackData, prefix="wait"):
+    """Selección de tiempo de espera"""
+    minutes: str
+
+
+class ConfigInviteCallback(CallbackData, prefix="config_invite"):
+    """Configurar enlace de invitación"""
+    channel_id: int
+
+
+class PendingReqCallback(CallbackData, prefix="pending_req"):
+    """Ver solicitudes pendientes"""
+    channel_id: int
+
+
+class ApproveAllCallback(CallbackData, prefix="approve_all"):
+    """Aprobar todas las solicitudes"""
+    channel_id: int
+
+
+class DeleteChannelCallback(CallbackData, prefix="delete_channel"):
+    """Confirmar eliminación de canal"""
+    channel_id: int
+
+
+class ConfirmDeleteChannelCallback(CallbackData, prefix="confirm_delete_channel"):
+    """Eliminar canal confirmado"""
+    channel_id: int
