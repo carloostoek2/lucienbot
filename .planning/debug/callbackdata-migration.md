@@ -9,7 +9,7 @@ agents:
   - arch-enforcer: Verificación de reglas arquitectónicas
   - test-guardian: Tests de integración
 status: in_progress
-progress: 64/95 instancias (67%)
+progress: 106/160+ instancias (66%)
 ---
 
 # Migración CallbackData
@@ -33,31 +33,36 @@ Cada dominio se migra siguiendo este flujo estructurado:
 - **VIP (select_tariff, copy_token)** - 5 instancias ✅
 - **Store User** - 21 instancias ✅
 - **Promotion (admin + user)** - 37 instancias ✅
+- **Channel** - 9 instancias ✅
+- **Package** - 14 instancias ✅
+- **Story Admin** - 7 instancias ✅
+- **Store Admin** - 7 instancias ✅
+- **Reward Admin** - 5 instancias ✅
 
 ### Pendiente
-- 58 instancias restantes
+- ~66 instancias restantes
 
 ## Dominios Pendientes (por prioridad)
 | Dominio | Instancias | Prioridad |
 |--------|-----------|----------|
-| Channel | 9 | ALTA |
-| Package | 14 | CRÍTICA |
-| Story Admin | 12 | ALTA |
-| Mission Admin | 8 | MEDIA |
-| Trivia Streak Admin | 7 | MEDIA |
-| Store Admin | 7 | ALTA |
-| Reward Admin | 7 | ALTA |
 | Category Admin | 6 | ALTA |
-| Gamification Admin | 4 | BAJA |
 | Anonymous Message Admin | 4 | ALTA |
+| Gamification Admin | 4 | BAJA |
 | Story User | 3 | BAJA |
 | Game | 3 | BAJA |
 | Broadcast | 3 | MEDIA |
+| Store User | 5 | ALTA |
+| Inventario (Backpack) | 5 | MEDIA |
 | Promotion User | 2 | MEDIA |
+| Mission Admin | 8 | MEDIA |
+| Trivia Streak Admin | 7 | MEDIA |
+| VIP | 2 | ALTA |
+| VIP User | 2 | ALTA |
 | Trivia Config Admin | 1 | MEDIA |
 | Trivia Admin | 1 | MEDIA |
 | Mission User Handlers | 1 | MEDIA |
 | Reward User Handlers | 1 | MEDIA |
+| Promotion Admin | 11 | ALTA |
 
 ## Optimizaciones Aplicadas
 - **Colapsar confirm/execute pairs**: Usar campo `confirmed: bool` en lugar de 2 clases
@@ -68,11 +73,11 @@ Cada dominio se migra siguiendo este flujo estructurado:
 - `keyboards/callback_data.py` - Definiciones CallbackData
 
 ## Siguiente Paso
-- **Channel domain** - 9 instancias, ALTA prioridad
+- **Category Admin** - 6 instancias, ALTA prioridad
 
 ## Documentación
 - `.planning/callbackdata-migration-PROGRESS.md` - Estado detallado
 
 ---
 *Última actualización: 2026-05-12*
-*Migración completada: 64/95 instancias (67%)*
+*Migración completada: 106/160+ instancias (66%)*
