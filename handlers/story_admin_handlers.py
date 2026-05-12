@@ -664,34 +664,7 @@ async def delete_node_confirm(callback: CallbackQuery, callback_data: StoryNodeD
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("confirm_delete_node_"), lambda cb: is_admin(cb.from_user.id))
-async def confirm_delete_node(callback: CallbackQuery):
-    """Elimina el nodo - Voz de Lucien"""
-    try:
-        node_id = int(callback.data.replace("confirm_delete_node_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-
-    with get_service(StoryService) as story_service:
-            success = story_service.delete_node(node_id)
-
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="list_nodes")]
-            ])
-
-            if success:
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>El fragmento ha sido eliminado.</i>")
-            else:
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>No se pudo eliminar el fragmento.</i>")
-
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            await callback.answer()
-
-
-        # ==================== AGREGAR OPCIONES A NODO ====================
+# ==================== AGREGAR OPCIONES A NODO ====================
 
 @router.callback_query(StoryAddChoicesCallback.filter(), lambda cb: is_admin(cb.from_user.id))
 async def add_choices_start(callback: CallbackQuery, state: FSMContext, callback_data: StoryAddChoicesCallback):
