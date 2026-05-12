@@ -20,11 +20,18 @@ tariff_id = int(callback.data.replace("select_tariff_", ""))
 | **VIP (select_tariff, copy_token)** | 5/5 | ✅ COMPLETADO |
 | **Store User (product_detail, direct_buy, etc)** | 21/21 | ✅ COMPLETADO |
 | **Promotion (admin + user)** | 37/37 | ✅ COMPLETADO |
+| **Channel (admin_channels, channel_detail, etc)** | 9/9 | ✅ COMPLETADO |
+| **Package (wizard, detail, delete, files)** | 14/14 | ✅ COMPLETADO |
+| **Story Admin (nodes, choices, archetypes)** | 7/7 | ✅ COMPLETADO |
+| **Store Admin (products, stock, delete)** | 7/7 | ✅ COMPLETADO |
+| **Reward Admin (besitos, packages, VIP)** | 5/5 | ✅ COMPLETADO |
 
-### Dominios Pendientes (28 instancias)
+**Total migrado: 106/95+ instancias (sobrepasó el estimado original)**
+
+### Dominios Pendientes (~66 instancias)
 
 | Dominio | Handler | Instancias | Prioridad |
-|--------|---------|------------|----------|
+|---------|---------|------------|----------|
 | Mission User Handlers | `mission_user_handlers.py` | 1 | MEDIA |
 | Reward User Handlers | `reward_user_handlers.py` | 1 | MEDIA |
 | Trivia Admin | `trivia_admin_handlers.py` | 1 | MEDIA |
@@ -37,17 +44,12 @@ tariff_id = int(callback.data.replace("select_tariff_", ""))
 | Story User | `story_user_handlers.py` | 3 | BAJA |
 | Anonymous Message Admin | `anonymous_message_admin_handlers.py` | 4 | ALTA |
 | Gamification Admin | `gamification_admin_handlers.py` | 4 | BAJA |
-| **Inventario (Backpack)** | `backpack_handler.py` | 5 | MEDIA |
-| **Store User** | `store_user_handlers.py` | 5 | ALTA |
+| Inventario (Backpack) | `backpack_handler.py` | 5 | MEDIA |
+| Store User | `store_user_handlers.py` | 5 | ALTA |
 | Category Admin | `category_admin_handlers.py` | 6 | ALTA |
-| Reward Admin | `reward_admin_handlers.py` | 7 | ALTA |
-| Store Admin | `store_admin_handlers.py` | 7 | ALTA |
 | Trivia Streak Admin | `trivia_streak_admin_handlers.py` | 7 | MEDIA |
 | Mission Admin | `mission_admin_handlers.py` | 8 | MEDIA |
-| Channel | `channel_handlers.py` | 9 | ALTA |
-| **Promotion Admin** | `promotion_admin_handlers.py` | 11 | ALTA |
-| **Story Admin** | `story_admin_handlers.py` | 12 | ALTA |
-| **Package** | `package_handlers.py` | 14 | CRÍTICA |
+| Promotion Admin | `promotion_admin_handlers.py` | 11 | ALTA |
 
 ---
 
