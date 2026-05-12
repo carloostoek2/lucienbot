@@ -318,3 +318,26 @@ class StoryChoiceNextCallback(CallbackData, prefix="story_choice_next"):
 class ArchetypeDetailCallback(CallbackData, prefix="archetype_detail"):
     """Detalle de arquetipo"""
     archetype: str
+
+
+# ==================== REWARD ====================
+
+class RewardSelectPkgCallback(CallbackData, prefix="reward_sel_pkg"):
+    """Seleccionar paquete para recompensa"""
+    pkg_id: int
+
+
+class RewardAdminDetailCallback(CallbackData, prefix="reward_admin_detail"):
+    """Detalle de recompensa (admin)"""
+    reward_id: int
+
+
+class RewardToggleCallback(CallbackData, prefix="reward_toggle"):
+    """Activar/desactivar recompensa"""
+    reward_id: int
+
+
+class RewardDeleteCallback(CallbackData, prefix="reward_del"):
+    """Eliminar recompensa"""
+    reward_id: int
+    confirmed: bool = False

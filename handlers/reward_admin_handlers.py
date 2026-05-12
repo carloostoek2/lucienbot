@@ -14,7 +14,7 @@ from services import get_service
 from services.package_service import PackageService
 from services.vip_service import VIPService
 from models.models import RewardType
-from keyboards.callback_data import SelectTariffCallback
+from keyboards.callback_data import SelectTariffCallback, RewardSelectPkgCallback, RewardAdminDetailCallback, RewardToggleCallback, RewardDeleteCallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -179,17 +179,17 @@ async def show_package_selection(callback: CallbackQuery, state: FSMContext):
     """Muestra seleccion de paquetes"""
     package_service = PackageService()
     packages = package_service.get_available_packages_for_rewards()
-    
+
     buttons = []
-    
+
     if packages:
         for pkg in packages:
             stock_text = "∞" if pkg.reward_stock == -1 else str(pkg.reward_stock)
             buttons.append([InlineKeyboardButton(
                 text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
-                callback_data=f"select_pkg_{pkg.id}"
+                callback_data=RewardSelectPkgCallback(pkg_id=pkg.id).pack()
             )])
-    
+
     buttons.append([InlineKeyboardButton(
         text="➕ Crear nuevo paquete",
         callback_data="create_package_for_reward"
@@ -215,15 +215,11 @@ Debes crear uno nuevo:"""
     await state.set_state(RewardWizardStates.selecting_package)
 
 
-@router.callback_query(RewardWizardStates.selecting_package, F.data.startswith("select_pkg_"))
-async def select_package_for_reward(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(RewardWizardStates.selecting_package, RewardSelectPkgCallback.filter())
+async def select_package_for_reward(callback: CallbackQuery, state: FSMContext, callback_data: RewardSelectPkgCallback):
     """Selecciona paquete para recompensa"""
-    try:
-        package_id = int(callback.data.replace("select_pkg_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
+    package_id = callback_data.pkg_id
+
     await state.update_data(package_id=package_id)
     await show_reward_confirmation(callback, state)
     await callback.answer()
@@ -670,7 +666,7 @@ async def list_rewards(callback: CallbackQuery):
     """Lista todas las recompensas"""
     with get_service(RewardService) as reward_service:
             rewards = reward_service.get_all_rewards(active_only=False)
-    
+
             if not rewards:
                 await callback.message.edit_text(
                     "No hay recompensas registradas.",
@@ -680,44 +676,40 @@ async def list_rewards(callback: CallbackQuery):
                 )
                 await callback.answer()
                 return
-    
+
             text = "🎩 Lucien:\n\nRecompensas registradas:\n\n"
             buttons = []
-    
+
             for reward in rewards:
                 status = "✅" if reward.is_active else "❌"
                 text += f"{status} {reward.name} ({reward.reward_type.value})\n"
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {reward.name[:30]}",
-                    callback_data=f"reward_admin_detail_{reward.id}"
+                    callback_data=RewardAdminDetailCallback(reward_id=reward.id).pack()
                 )])
-    
+
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")])
-    
+
             await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
             await callback.answer()
 
 
         # ==================== VER DETALLE DE RECOMPENSA ====================
 
-@router.callback_query(F.data.startswith("reward_admin_detail_"), lambda cb: is_admin(cb.from_user.id))
-async def reward_admin_detail(callback: CallbackQuery):
+@router.callback_query(RewardAdminDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def reward_admin_detail(callback: CallbackQuery, callback_data: RewardAdminDetailCallback):
     """Muestra detalles de una recompensa"""
-    try:
-        reward_id = int(callback.data.replace("reward_admin_detail_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
+    reward_id = callback_data.reward_id
+
     with get_service(RewardService) as reward_service:
             reward = reward_service.get_reward(reward_id)
-    
+
             if not reward:
                 await callback.answer("Recompensa no encontrada", show_alert=True)
                 return
-    
+
             status = "✅ Activo" if reward.is_active else "❌ Inactivo"
-    
+
             # Contenido segun tipo
             content_text = ""
             if reward.reward_type.value == "besitos":
@@ -726,15 +718,15 @@ async def reward_admin_detail(callback: CallbackQuery):
                 content_text = f"Paquete: {reward.package.name}"
             elif reward.reward_type.value == "vip_access" and reward.tariff:
                 content_text = f"VIP: {reward.tariff.name}"
-    
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if reward.is_active else 'Activar'}",
-                    callback_data=f"toggle_reward_{reward_id}"
+                    callback_data=RewardToggleCallback(reward_id=reward_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
-                    callback_data=f"delete_reward_{reward_id}"
+                    callback_data=RewardDeleteCallback(reward_id=reward_id).pack()
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="list_rewards")]
             ])
@@ -757,64 +749,40 @@ async def reward_admin_detail(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("toggle_reward_"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_reward(callback: CallbackQuery):
+@router.callback_query(RewardToggleCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_reward(callback: CallbackQuery, callback_data: RewardToggleCallback):
     """Activa/desactiva una recompensa"""
-    try:
-        reward_id = int(callback.data.replace("toggle_reward_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
+    reward_id = callback_data.reward_id
+
     with get_service(RewardService) as reward_service:
             reward = reward_service.get_reward(reward_id)
-    
+
             if not reward:
                 await callback.answer("Recompensa no encontrada", show_alert=True)
                 return
-    
+
             reward_service.update_reward(reward_id, is_active=not reward.is_active)
-    
+
             status = "activada" if not reward.is_active else "desactivada"
             await callback.answer(f"Recompensa {status}")
-            await reward_admin_detail(callback)
+
+            # Show updated detail
+            new_reward = reward_service.get_reward(reward_id)
+            if new_reward:
+                await show_reward_detail(callback, new_reward)
+            await callback.answer()
 
 
-@router.callback_query(F.data.startswith("delete_reward_"), lambda cb: is_admin(cb.from_user.id))
-async def delete_reward_confirm(callback: CallbackQuery):
-    """Confirma eliminacion de recompensa"""
-    try:
-        reward_id = int(callback.data.replace("delete_reward_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=f"confirm_delete_reward_{reward_id}")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"reward_admin_detail_{reward_id}")]
-    ])
-    
-    await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Estas seguro de eliminar esta recompensa?\n\n"
-        "Esta accion no se puede deshacer.",
-        reply_markup=keyboard
-    )
-    await callback.answer()
+@router.callback_query(RewardDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def delete_reward_confirm(callback: CallbackQuery, callback_data: RewardDeleteCallback):
+    """Confirma o ejecuta eliminacion de recompensa"""
+    reward_id = callback_data.reward_id
 
-
-@router.callback_query(F.data.startswith("confirm_delete_reward_"), lambda cb: is_admin(cb.from_user.id))
-async def confirm_delete_reward(callback: CallbackQuery):
-    """Elimina la recompensa"""
-    try:
-        reward_id = int(callback.data.replace("confirm_delete_reward_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
-    
     with get_service(RewardService) as reward_service:
+        if callback_data.confirmed:
+            # Execute deletion
             success = reward_service.delete_reward(reward_id)
-    
+
             if success:
                 await callback.message.edit_text(
                     "🎩 Lucien:\n\n"
@@ -831,3 +799,18 @@ async def confirm_delete_reward(callback: CallbackQuery):
                     ])
                 )
             await callback.answer()
+            return
+
+    # Show confirmation keyboard
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=RewardDeleteCallback(reward_id=reward_id, confirmed=True).pack())],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=RewardAdminDetailCallback(reward_id=reward_id).pack())]
+    ])
+
+    await callback.message.edit_text(
+        "🎩 Lucien:\n\n"
+        "Estas seguro de eliminar esta recompensa?\n\n"
+        "Esta accion no se puede deshacer.",
+        reply_markup=keyboard
+    )
+    await callback.answer()
