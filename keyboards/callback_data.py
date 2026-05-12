@@ -254,3 +254,36 @@ class ContinueDeleteFilesCallback(CallbackData, prefix="cont_delfile"):
 class FinishDeleteFilesCallback(CallbackData, prefix="finish_delfile"):
     """Finalizar eliminación de archivos"""
     package_id: int
+
+
+# ==================== STORY ====================
+
+class StoryNodeDetailCallback(CallbackData, prefix="story_node_detail"):
+    """Detalle de nodo de historia"""
+    node_id: int
+
+
+class StoryNodeToggleCallback(CallbackData, prefix="story_node_toggle"):
+    """Activar/desactivar nodo"""
+    node_id: int
+
+
+class StoryNodeDeleteCallback(CallbackData, prefix="story_node_delete"):
+    """Eliminar nodo"""
+    node_id: int
+    confirmed: bool = False
+
+
+class StoryAddChoicesCallback(CallbackData, prefix="story_add_choices"):
+    """Agregar opciones a nodo"""
+    node_id: int
+
+
+class StoryChoiceNextCallback(CallbackData, prefix="story_choice_next"):
+    """Seleccionar siguiente nodo para opción"""
+    node_id: int
+
+
+class ArchetypeDetailCallback(CallbackData, prefix="archetype_detail"):
+    """Detalle de arquetipo"""
+    archetype: str

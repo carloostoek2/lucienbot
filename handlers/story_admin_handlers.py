@@ -14,6 +14,14 @@ from config.settings import bot_config
 from services import get_service
 from services.story_service import StoryService
 from models.models import NodeType, ArchetypeType
+from keyboards.callback_data import (
+    StoryNodeDetailCallback,
+    StoryNodeToggleCallback,
+    StoryNodeDeleteCallback,
+    StoryAddChoicesCallback,
+    StoryChoiceNextCallback,
+    ArchetypeDetailCallback,
+)
 from utils.helpers import is_admin
 import logging
 
@@ -329,7 +337,7 @@ async def confirm_create_node(callback: CallbackQuery, state: FSMContext):
                 )
 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="➕ Agregar opciones", callback_data=f"add_choices_{node.id}")],
+                    [InlineKeyboardButton(text="➕ Agregar opciones", callback_data=StoryAddChoicesCallback(node_id=node.id).pack())],
                     [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_narrative")]
                 ])
 
@@ -398,7 +406,7 @@ async def list_nodes(callback: CallbackQuery):
 
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {node.title[:35]}",
-                    callback_data=f"node_detail_{node.id}"
+                    callback_data=StoryNodeDetailCallback(node_id=node.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_narrative")])
@@ -455,7 +463,7 @@ async def manage_archetypes(callback: CallbackQuery):
             for archetype in archetypes:
                 buttons.append([InlineKeyboardButton(
                     text=f"🎭 {archetype.name}",
-                    callback_data=f"archetype_detail_{archetype.archetype_type.value}"
+                    callback_data=ArchetypeDetailCallback(archetype=archetype.archetype_type.value).pack()
                 )])
 
             # Opcion para crear nuevo
@@ -519,7 +527,7 @@ async def manage_choices(callback: CallbackQuery):
             for node in decision_nodes:
                 buttons.append([InlineKeyboardButton(
                     text=f"🎭 {node.title[:35]}",
-                    callback_data=f"add_choices_{node.id}"
+                    callback_data=StoryAddChoicesCallback(node_id=node.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_narrative")])
@@ -533,14 +541,10 @@ async def manage_choices(callback: CallbackQuery):
 
         # ==================== VER DETALLE DE NODO ====================
 
-@router.callback_query(F.data.startswith("node_detail_"), lambda cb: is_admin(cb.from_user.id))
-async def node_detail(callback: CallbackQuery):
+@router.callback_query(StoryNodeDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def node_detail(callback: CallbackQuery, callback_data: StoryNodeDetailCallback):
     """Muestra detalle de un nodo - Voz de Lucien"""
-    try:
-        node_id = int(callback.data.replace("node_detail_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    node_id = callback_data.node_id
 
     with get_service(StoryService) as story_service:
             node = story_service.get_node(node_id)
@@ -580,17 +584,17 @@ async def node_detail(callback: CallbackQuery):
             if node.node_type == NodeType.DECISION:
                 keyboard.inline_keyboard.append([InlineKeyboardButton(
                     text="➕ Agregar opcion",
-                    callback_data=f"add_choices_{node.id}"
+                    callback_data=StoryAddChoicesCallback(node_id=node.id).pack()
                 )])
 
             keyboard.inline_keyboard.extend([
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if node.is_active else 'Activar'}",
-                    callback_data=f"toggle_node_{node.id}"
+                    callback_data=StoryNodeToggleCallback(node_id=node.id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
-                    callback_data=f"delete_node_{node.id}"
+                    callback_data=StoryNodeDeleteCallback(node_id=node.id).pack()
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="list_nodes")]
             ])
@@ -599,14 +603,10 @@ async def node_detail(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("toggle_node_"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_node(callback: CallbackQuery):
+@router.callback_query(StoryNodeToggleCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_node(callback: CallbackQuery, callback_data: StoryNodeToggleCallback):
     """Activa/desactiva un nodo - Voz de Lucien"""
-    try:
-        node_id = int(callback.data.replace("toggle_node_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    node_id = callback_data.node_id
 
     with get_service(StoryService) as story_service:
             node = story_service.get_node(node_id)
@@ -619,21 +619,40 @@ async def toggle_node(callback: CallbackQuery):
 
             status = "activado" if not node.is_active else "desactivado"
             await callback.answer(f"Fragmento {status}")
-            await node_detail(callback)
+            # Refresh the detail view
+            callback_data = StoryNodeDetailCallback(node_id=node_id)
+            await node_detail(callback, callback_data)
 
 
-@router.callback_query(F.data.startswith("delete_node_"), lambda cb: is_admin(cb.from_user.id))
-async def delete_node_confirm(callback: CallbackQuery):
+@router.callback_query(StoryNodeDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def delete_node_confirm(callback: CallbackQuery, callback_data: StoryNodeDeleteCallback):
     """Confirma eliminacion de nodo - Voz de Lucien"""
-    try:
-        node_id = int(callback.data.replace("delete_node_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
+    node_id = callback_data.node_id
+
+    # If already confirmed, execute delete
+    if callback_data.confirmed:
+        with get_service(StoryService) as story_service:
+            success = story_service.delete_node(node_id)
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="list_nodes")]
+            ])
+
+            if success:
+                text = ("🎩 <b>Lucien:</b>\n\n"
+                        "<i>El fragmento ha sido eliminado.</i>")
+            else:
+                text = ("🎩 <b>Lucien:</b>\n\n"
+                        "<i>No se pudo eliminar el fragmento.</i>")
+
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+            await callback.answer()
         return
 
+    # Show confirmation
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=f"confirm_delete_node_{node_id}")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"node_detail_{node_id}")]
+        [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=StoryNodeDeleteCallback(node_id=node_id, confirmed=True).pack())],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=StoryNodeDetailCallback(node_id=node_id).pack())]
     ])
 
     text = ("🎩 <b>Lucien:</b>\n\n"
@@ -674,14 +693,10 @@ async def confirm_delete_node(callback: CallbackQuery):
 
         # ==================== AGREGAR OPCIONES A NODO ====================
 
-@router.callback_query(F.data.startswith("add_choices_"), lambda cb: is_admin(cb.from_user.id))
-async def add_choices_start(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(StoryAddChoicesCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def add_choices_start(callback: CallbackQuery, state: FSMContext, callback_data: StoryAddChoicesCallback):
     """Inicia wizard para agregar opcion a nodo - Voz de Lucien"""
-    try:
-        node_id = int(callback.data.replace("add_choices_", ""))
-    except ValueError:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    node_id = callback_data.node_id
 
     with get_service(StoryService) as story_service:
             node = story_service.get_node(node_id)
@@ -693,7 +708,7 @@ async def add_choices_start(callback: CallbackQuery, state: FSMContext):
             await state.update_data(choice_node_id=node_id)
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"node_detail_{node_id}")]
+                [InlineKeyboardButton(text="❌ Cancelar", callback_data=StoryNodeDetailCallback(node_id=node_id).pack())]
             ])
 
             text = (f"🎩 <b>Lucien:</b>\n\n"
@@ -724,10 +739,10 @@ async def process_choice_text(message: Message, state: FSMContext):
             for node in nodes:
                 buttons.append([InlineKeyboardButton(
                     text=f"📖 {node.title[:35]}",
-                    callback_data=f"choice_next_{node.id}"
+                    callback_data=StoryChoiceNextCallback(node_id=node.id).pack()
                 )])
 
-            buttons.append([InlineKeyboardButton(text="🏁 Fin de historia", callback_data="choice_next_none")])
+            buttons.append([InlineKeyboardButton(text="🏁 Fin de historia", callback_data=StoryChoiceNextCallback(node_id=0).pack())])
             buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_narrative")])
 
             text_msg = ("🎩 <b>Lucien:</b>\n\n"
@@ -738,16 +753,10 @@ async def process_choice_text(message: Message, state: FSMContext):
             await state.set_state(ChoiceWizardStates.selecting_next_node)
 
 
-@router.callback_query(ChoiceWizardStates.selecting_next_node, F.data.startswith("choice_next_"))
-async def select_choice_next_node(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ChoiceWizardStates.selecting_next_node, StoryChoiceNextCallback.filter())
+async def select_choice_next_node(callback: CallbackQuery, state: FSMContext, callback_data: StoryChoiceNextCallback):
     """Selecciona el siguiente nodo - Voz de Lucien"""
-    next_node_id = None
-    if callback.data != "choice_next_none":
-        try:
-            next_node_id = int(callback.data.replace("choice_next_", ""))
-        except ValueError:
-            await callback.answer("ID invalido", show_alert=True)
-            return
+    next_node_id = callback_data.node_id
 
     await state.update_data(choice_next_node_id=next_node_id)
 
@@ -827,8 +836,8 @@ async def confirm_create_choice(callback: CallbackQuery, state: FSMContext):
                 )
 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="➕ Agregar otra opcion", callback_data=f"add_choices_{data.get('choice_node_id')}")],
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data=f"node_detail_{data.get('choice_node_id')}")]
+                    [InlineKeyboardButton(text="➕ Agregar otra opcion", callback_data=StoryAddChoicesCallback(node_id=data.get('choice_node_id')).pack())],
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data=StoryNodeDetailCallback(node_id=data.get('choice_node_id')).pack())]
                 ])
 
                 text = ("🎩 <b>Lucien:</b>\n\n"
@@ -1047,12 +1056,11 @@ async def confirm_create_archetype(callback: CallbackQuery, state: FSMContext):
 
         # ==================== VER DETALLE DE ARQUETIPO ====================
 
-@router.callback_query(F.data.startswith("archetype_detail_"), lambda cb: is_admin(cb.from_user.id))
-async def archetype_detail(callback: CallbackQuery):
+@router.callback_query(ArchetypeDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def archetype_detail(callback: CallbackQuery, callback_data: ArchetypeDetailCallback):
     """Muestra detalle de un arquetipo - Voz de Lucien"""
     try:
-        archetype_value = callback.data.replace("archetype_detail_", "")
-        archetype_type = ArchetypeType(archetype_value)
+        archetype_type = ArchetypeType(callback_data.archetype)
     except (ValueError, KeyError):
         await callback.answer("Arquetipo no valido", show_alert=True)
         return
