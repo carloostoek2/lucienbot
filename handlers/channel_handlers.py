@@ -120,6 +120,8 @@ async def set_channel_type(callback: CallbackQuery, state: FSMContext, callback_
             channel_type=channel_type
         )
 
+        logger.info(f"Canal registrado: {channel.channel_name} (ID: {channel.id}) por admin {callback.from_user.id}")
+
         await callback.message.edit_text(
             LucienVoice.admin_channel_registered(data['channel_name'], channel_type),
             reply_markup=channel_management_keyboard(),
@@ -432,6 +434,7 @@ async def delete_channel(callback: CallbackQuery, callback_data: ConfirmDeleteCh
         if channel:
             channel_name = channel.channel_name
             channel_service.delete_channel(channel_id)
+            logger.info(f"Canal eliminado: {channel_name} (ID: {channel_id}) por admin {callback.from_user.id}")
 
             await callback.message.edit_text(
                 LucienVoice.admin_channel_deleted(channel_name),
