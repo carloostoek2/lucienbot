@@ -3,11 +3,14 @@ Servicio de Canales - Lucien Bot
 
 Gestiona la lógica de canales Free y VIP.
 """
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from models.models import Channel, ChannelType, PendingRequest, User
 from models.database import SessionLocal
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelService:
