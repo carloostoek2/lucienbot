@@ -10,6 +10,7 @@ from services.mission_service import MissionService
 from services import get_service
 from services.reward_service import RewardService
 from keyboards.inline_keyboards import back_keyboard
+from keyboards.callback_data import MissionDetailCallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ async def show_my_missions(callback: CallbackQuery):
                 if not progress.is_completed:
                     buttons.append([InlineKeyboardButton(
                         text=f"Ver: {mission.name[:25]}",
-                        callback_data=f"mission_detail_{mission.id}"
+                        callback_data=MissionDetailCallback(mission_id=mission.id).pack()
                     )])
     
             buttons.append([InlineKeyboardButton(
@@ -78,10 +79,10 @@ async def show_my_missions(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("mission_detail_"))
-async def mission_detail(callback: CallbackQuery):
+@router.callback_query(MissionDetailCallback.filter())
+async def mission_detail(callback: CallbackQuery, callback_data: MissionDetailCallback):
     """Muestra detalles de una mision"""
-    mission_id = int(callback.data.replace("mission_detail_", ""))
+    mission_id = callback_data.mission_id
     user_id = callback.from_user.id
     
     with get_service(MissionService) as mission_service:

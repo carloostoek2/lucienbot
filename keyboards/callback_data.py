@@ -15,6 +15,16 @@ class ReactionCallback(CallbackData, prefix="react"):
     emoji_id: int
 
 
+class EditEmojiCallback(CallbackData, prefix="edit_emoji"):
+    """Editar emoji existente"""
+    emoji_id: int
+
+
+class ToggleEmojiCallback(CallbackData, prefix="toggle_emoji"):
+    """Activar/desactivar emoji"""
+    emoji_id: int
+
+
 class BalanceCallback(CallbackData, prefix="bal"):
     """Consulta de saldo de besitos"""
     action: str = "view"
@@ -47,6 +57,16 @@ class SelectTariffCallback(CallbackData, prefix="select_tariff"):
 class CopyTokenCallback(CallbackData, prefix="copy_token"):
     """Copiar token de acceso"""
     token_id: int
+
+
+class VipPromoDetailCallback(CallbackData, prefix="vip_promo_detail"):
+    """Detalle de promoción VIP exclusiva"""
+    promo_id: int
+
+
+class VipPromoInterestCallback(CallbackData, prefix="vip_promo_interest"):
+    """Expresar interés en promoción VIP"""
+    promo_id: int
 
 
 # ==================== STORE ====================
@@ -289,6 +309,26 @@ class FinishDeleteFilesCallback(CallbackData, prefix="finish_delfile"):
 
 # ==================== STORY ====================
 
+class StoryChoiceCallback(CallbackData, prefix="story_choice"):
+    """Seleccionar opción de historia"""
+    choice_id: int
+
+
+class ContinueStoryCallback(CallbackData, prefix="story_continue"):
+    """Continuar a nodo específico"""
+    node_id: int
+
+
+class QuizAnswerCallback(CallbackData, prefix="quiz_answer"):
+    """Respuesta a pregunta de cuestionario"""
+    answer_idx: int
+
+
+class ArchetypeSelectCallback(CallbackData, prefix="archetype_select"):
+    """Seleccionar arquetipo"""
+    archetype: str
+
+
 class StoryNodeDetailCallback(CallbackData, prefix="story_node_detail"):
     """Detalle de nodo de historia"""
     node_id: int
@@ -341,3 +381,177 @@ class RewardDeleteCallback(CallbackData, prefix="reward_del"):
     """Eliminar recompensa"""
     reward_id: int
     confirmed: bool = False
+
+
+# ==================== CATEGORY ====================
+
+class CategoryAdminDetailCallback(CallbackData, prefix="cat_adm_detail"):
+    """Detalle de categoría (admin)"""
+    category_id: int
+
+
+class CategoryAdminToggleCallback(CallbackData, prefix="cat_adm_toggle"):
+    """Activar/desactivar categoría"""
+    category_id: int
+
+
+class CategoryAdminDeleteCallback(CallbackData, prefix="cat_adm_delete"):
+    """Eliminar categoría"""
+    category_id: int
+
+
+class CategoryAdminConfirmDeleteCallback(CallbackData, prefix="cat_adm_confirm_del"):
+    """Confirmar eliminación de categoría"""
+    category_id: int
+
+
+class CategoryAssignCallback(CallbackData, prefix="cat_assign"):
+    """Seleccionar categoría para asignar paquete"""
+    category_id: int
+
+
+class PackageAssignCallback(CallbackData, prefix="pkg_assign"):
+    """Seleccionar paquete para asignar"""
+    package_id: int
+
+
+# ==================== BROADCAST ====================
+
+class BroadcastChannelCallback(CallbackData, prefix="bc_channel"):
+    """Selección de canal para broadcast"""
+    channel_id: int
+
+
+class ToggleReactionCallback(CallbackData, prefix="bc_reaction"):
+    """Toggle selección de emoji en broadcast"""
+    emoji_id: int
+
+
+class BroadcastProtectCallback(CallbackData, prefix="bc_protect"):
+    """Protección del mensaje broadcast"""
+    action: str  # "yes" | "no"
+
+
+# ==================== ANONYMOUS MESSAGE ====================
+
+class AnonUnreadCallback(CallbackData, prefix="anon_unread"):
+    """Mensajes no leídos"""
+    pass
+
+
+class AnonAllCallback(CallbackData, prefix="anon_all"):
+    """Todos los mensajes"""
+    pass
+
+
+class AnonViewCallback(CallbackData, prefix="anon_view"):
+    """Ver mensaje anónimo"""
+    message_id: int
+
+
+class AnonReplyCallback(CallbackData, prefix="anon_reply"):
+    """Responder a mensaje anónimo"""
+    message_id: int
+
+
+class AnonRevealCallback(CallbackData, prefix="anon_reveal"):
+    """Revelar remitente de mensaje anónimo"""
+    message_id: int
+
+
+class AnonDeleteCallback(CallbackData, prefix="anon_delete"):
+    """Eliminar mensaje anónimo"""
+    message_id: int
+
+
+# ==================== MISSION ====================
+
+class MissionDetailCallback(CallbackData, prefix="mission_detail"):
+    """Detalle de misión (admin)"""
+    mission_id: int
+
+
+class MissionToggleCallback(CallbackData, prefix="toggle_mission"):
+    """Activar/desactivar misión"""
+    mission_id: int
+
+
+class MissionDeleteCallback(CallbackData, prefix="delete_mission"):
+    """Eliminar misión"""
+    mission_id: int
+    confirmed: bool = False
+
+
+class MissionStatsCallback(CallbackData, prefix="mission_stats"):
+    """Estadísticas de misión"""
+    mission_id: int
+
+
+class SelectRewardMissionCallback(CallbackData, prefix="select_reward_mission"):
+    """Seleccionar recompensa para misión"""
+    reward_id: int
+
+
+class ConfirmCreateMissionCallback(CallbackData, prefix="confirm_create_mission"):
+    """Confirmar creación de misión"""
+    pass
+
+
+# ==================== TRIVIA CONFIG ====================
+
+class TriviaConfigFieldCallback(CallbackData, prefix="trivia_cfg_field"):
+    """Selección de campo de configuración de trivia"""
+    field_key: str  # "dice" | "trivia" | "trivia_vip" | "trivia_simple"
+
+
+class TriviaCategoryActivateCallback(CallbackData, prefix="trivia_cat_activate"):
+    """Activar categoría de trivia"""
+    category_id: int
+
+
+# ==================== MISSION USER ====================
+
+class MissionUserDetailCallback(CallbackData, prefix="mission_user_detail"):
+    """Detalle de misión (usuario)"""
+    mission_id: int
+
+
+# ==================== REWARD USER ====================
+
+class RewardUserDetailCallback(CallbackData, prefix="reward_user_detail"):
+    """Detalle de recompensa (usuario)"""
+    mission_id: int
+
+class TriviaStreakDetailCallback(CallbackData, prefix="streak_detail"):
+    """Detalle de promoción por racha"""
+    promo_id: int
+
+
+class TriviaStreakToggleCallback(CallbackData, prefix="streak_toggle"):
+    """Activar/desactivar promoción por racha"""
+    promo_id: int
+
+
+class TriviaStreakDeleteCallback(CallbackData, prefix="streak_delete"):
+    """Eliminar promoción por racha"""
+    promo_id: int
+
+
+class TriviaStreakConfirmDeleteCallback(CallbackData, prefix="streak_confirm_del"):
+    """Confirmar eliminación de promoción por racha"""
+    promo_id: int
+
+
+class TriviaStreakRedemptionsCallback(CallbackData, prefix="streak_redemptions"):
+    """Ver canjes de promoción por racha"""
+    promo_id: int
+
+
+class TriviaStreakCategoryCallback(CallbackData, prefix="streak_promo_cat"):
+    """Selección de categoría para promoción por racha"""
+    category: str  # "none" o ID numérico
+
+
+class TriviaStreakGoalTypeCallback(CallbackData, prefix="streak_promo_gt"):
+    """Selección de tipo de juego para promoción por racha"""
+    goal_type: str  # "general" | "simple" | "vip" | "done"

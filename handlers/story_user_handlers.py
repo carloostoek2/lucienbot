@@ -14,6 +14,11 @@ from services import get_service
 from services.story_service import StoryService
 from services.vip_service import VIPService
 from models.models import NodeType, ArchetypeType
+from keyboards.callback_data import (
+    StoryChoiceCallback,
+    ContinueStoryCallback,
+    QuizAnswerCallback,
+)
 import json
 import logging
 
@@ -210,7 +215,7 @@ async def show_node(callback: CallbackQuery, node_id: int):
                         btn_text += f" ({choice.additional_cost} 💋)"
                     buttons.append([InlineKeyboardButton(
                         text=btn_text,
-                        callback_data=f"story_choice_{choice.id}"
+                        callback_data=StoryChoiceCallback(choice_id=choice.id)
                     )])
             else:
                 # Nodo narrativo sin opciones - boton para continuar
@@ -221,7 +226,7 @@ async def show_node(callback: CallbackQuery, node_id: int):
                     next_node = next_nodes[current_idx + 1]
                     buttons.append([InlineKeyboardButton(
                         text="Continuar...",
-                        callback_data=f"story_node_{next_node.id}"
+                        callback_data=ContinueStoryCallback(node_id=next_node.id)
                     )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Menu de Fragmentos", callback_data="narrative")])
@@ -231,26 +236,16 @@ async def show_node(callback: CallbackQuery, node_id: int):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("story_node_"))
-async def go_to_node(callback: CallbackQuery):
+@router.callback_query(ContinueStoryCallback.filter())
+async def go_to_node(callback: CallbackQuery, callback_data: ContinueStoryCallback):
     """Navega a un nodo especifico"""
-    try:
-        node_id = int(callback.data.replace("story_node_", ""))
-    except ValueError:
-        await callback.answer("Fragmento no valido", show_alert=True)
-        return
-
-    await show_node(callback, node_id)
+    await show_node(callback, callback_data.node_id)
 
 
-@router.callback_query(F.data.startswith("story_choice_"))
-async def make_choice(callback: CallbackQuery):
+@router.callback_query(StoryChoiceCallback.filter())
+async def make_choice(callback: CallbackQuery, callback_data: StoryChoiceCallback):
     """Procesa la eleccion del usuario"""
-    try:
-        choice_id = int(callback.data.replace("story_choice_", ""))
-    except ValueError:
-        await callback.answer("Opcion no valida", show_alert=True)
-        return
+    choice_id = callback_data.choice_id
 
     with get_service(StoryService) as story_service:
             vip_service = VIPService()
@@ -334,7 +329,7 @@ async def show_quiz_question(callback: CallbackQuery, state: FSMContext):
             for i, option in enumerate(question['options']):
                 buttons.append([InlineKeyboardButton(
                     text=option['text'],
-                    callback_data=f"quiz_answer_{i}"
+                    callback_data=QuizAnswerCallback(answer_idx=i)
                 )])
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -342,14 +337,10 @@ async def show_quiz_question(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("quiz_answer_"))
-async def process_quiz_answer(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(QuizAnswerCallback.filter())
+async def process_quiz_answer(callback: CallbackQuery, state: FSMContext, callback_data: QuizAnswerCallback):
     """Procesa la respuesta del cuestionario"""
-    try:
-        answer_idx = int(callback.data.replace("quiz_answer_", ""))
-    except ValueError:
-        await callback.answer("Respuesta no valida", show_alert=True)
-        return
+    answer_idx = callback_data.answer_idx
 
     data = await state.get_data()
     answers = data.get('quiz_answers', [])

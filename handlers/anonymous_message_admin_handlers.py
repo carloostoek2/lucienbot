@@ -11,6 +11,10 @@ from config.settings import bot_config
 from services.anonymous_message_service import AnonymousMessageService
 from services.user_service import UserService
 from keyboards.inline_keyboards import back_keyboard, admin_menu_keyboard
+from keyboards.callback_data import (
+    AnonUnreadCallback, AnonAllCallback, AnonViewCallback,
+    AnonReplyCallback, AnonRevealCallback, AnonDeleteCallback
+)
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -33,11 +37,11 @@ def anonymous_messages_menu_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
             text="📨 Mensajes no leídos",
-            callback_data="anon_unread"
+            callback_data=AnonUnreadCallback().pack()
         )],
         [InlineKeyboardButton(
             text="📋 Todos los mensajes",
-            callback_data="anon_all"
+            callback_data=AnonAllCallback().pack()
         )],
         [InlineKeyboardButton(
             text="🔙 Volver al sanctum",
@@ -52,19 +56,19 @@ def anonymous_message_actions_keyboard(message_id: int, show_reveal: bool = True
     buttons = [
         [InlineKeyboardButton(
             text="💬 Responder",
-            callback_data=f"anon_reply_{message_id}"
+            callback_data=AnonReplyCallback(message_id=message_id).pack()
         )]
     ]
 
     if show_reveal:
         buttons.append([InlineKeyboardButton(
             text="👁️ Revelar remitente",
-            callback_data=f"anon_reveal_{message_id}"
+            callback_data=AnonRevealCallback(message_id=message_id).pack()
         )])
 
     buttons.append([InlineKeyboardButton(
         text="🗑️ Eliminar mensaje",
-        callback_data=f"anon_delete_{message_id}"
+        callback_data=AnonDeleteCallback(message_id=message_id).pack()
     )])
 
     buttons.append([InlineKeyboardButton(
@@ -92,7 +96,7 @@ def anonymous_messages_list_keyboard(messages: list, show_sender: bool = False) 
 
         buttons.append([InlineKeyboardButton(
             text=text,
-            callback_data=f"anon_view_{msg.id}"
+            callback_data=AnonViewCallback(message_id=msg.id).pack()
         )])
 
     buttons.append([InlineKeyboardButton(
@@ -135,8 +139,8 @@ async def admin_anonymous_messages_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "anon_unread", lambda cb: is_admin(cb.from_user.id))
-async def show_unread_messages(callback: CallbackQuery):
+@router.callback_query(AnonUnreadCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def show_unread_messages(callback: CallbackQuery, callback_data: AnonUnreadCallback):
     """Muestra mensajes no leídos"""
     anon_service = AnonymousMessageService()
     try:
@@ -171,8 +175,8 @@ async def show_unread_messages(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "anon_all", lambda cb: is_admin(cb.from_user.id))
-async def show_all_messages(callback: CallbackQuery):
+@router.callback_query(AnonAllCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def show_all_messages(callback: CallbackQuery, callback_data: AnonAllCallback):
     """Muestra todos los mensajes"""
     anon_service = AnonymousMessageService()
     try:
@@ -207,10 +211,10 @@ async def show_all_messages(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("anon_view_"), lambda cb: is_admin(cb.from_user.id))
-async def view_anonymous_message(callback: CallbackQuery):
+@router.callback_query(AnonViewCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def view_anonymous_message(callback: CallbackQuery, callback_data: AnonViewCallback):
     """Muestra el contenido completo de un mensaje"""
-    message_id = int(callback.data.replace("anon_view_", ""))
+    message_id = callback_data.message_id
     admin_id = callback.from_user.id
 
     anon_service = AnonymousMessageService()
@@ -257,10 +261,10 @@ async def view_anonymous_message(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("anon_reveal_"), lambda cb: is_admin(cb.from_user.id))
-async def reveal_anonymous_sender(callback: CallbackQuery):
+@router.callback_query(AnonRevealCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def reveal_anonymous_sender(callback: CallbackQuery, callback_data: AnonRevealCallback):
     """Revela la identidad del remitente (solo para casos delicados)"""
-    message_id = int(callback.data.replace("anon_reveal_", ""))
+    message_id = callback_data.message_id
 
     anon_service = AnonymousMessageService()
     try:
@@ -293,7 +297,7 @@ async def reveal_anonymous_sender(callback: CallbackQuery):
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="🔙 Volver al mensaje",
-                callback_data=f"anon_view_{message_id}"
+                callback_data=AnonViewCallback(message_id=message_id).pack()
             )]
         ])
 
@@ -307,10 +311,10 @@ async def reveal_anonymous_sender(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("anon_reply_"), lambda cb: is_admin(cb.from_user.id))
-async def start_anonymous_reply(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(AnonReplyCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def start_anonymous_reply(callback: CallbackQuery, callback_data: AnonReplyCallback, state: FSMContext):
     """Inicia el flujo de respuesta a un mensaje anónimo"""
-    message_id = int(callback.data.replace("anon_reply_", ""))
+    message_id = callback_data.message_id
 
     await state.update_data(reply_message_id=message_id)
 
@@ -319,7 +323,7 @@ async def start_anonymous_reply(callback: CallbackQuery, state: FSMContext):
         f"<i>Escriba su respuesta al mensaje anónimo...</i>\n\n"
         f"💬 Esta respuesta será enviada al remitente.\n"
         f"Escriba su mensaje a continuación:",
-        reply_markup=back_keyboard(f"anon_view_{message_id}"),
+        reply_markup=back_keyboard(AnonViewCallback(message_id=message_id).pack()),
         parse_mode="HTML"
     )
     await state.set_state(AnonymousReplyStates.waiting_reply)
@@ -350,7 +354,7 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
             f"🎩 <b>Lucien:</b>\n\n"
             f"<i>La respuesta está vacía...</i>\n\n"
             f"Por favor, escriba una respuesta.",
-            reply_markup=back_keyboard(f"anon_view_{message_id}"),
+            reply_markup=back_keyboard(AnonViewCallback(message_id=message_id).pack()),
             parse_mode="HTML"
         )
         return
@@ -424,10 +428,10 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
     await state.clear()
 
 
-@router.callback_query(F.data.startswith("anon_delete_"), lambda cb: is_admin(cb.from_user.id))
-async def delete_anonymous_message(callback: CallbackQuery):
+@router.callback_query(AnonDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def delete_anonymous_message(callback: CallbackQuery, callback_data: AnonDeleteCallback):
     """Elimina un mensaje anónimo"""
-    message_id = int(callback.data.replace("anon_delete_", ""))
+    message_id = callback_data.message_id
 
     anon_service = AnonymousMessageService()
     try:

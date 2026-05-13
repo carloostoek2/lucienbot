@@ -12,6 +12,10 @@ from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
 from services.channel_service import ChannelService
 from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, cancel_keyboard
+from keyboards.callback_data import (
+    EditEmojiCallback,
+    ToggleEmojiCallback,
+)
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -109,7 +113,7 @@ async def config_besitos_menu(callback: CallbackQuery):
         
         keyboard_buttons.append([InlineKeyboardButton(
             text=f"{emoji.emoji} Editar",
-            callback_data=f"edit_emoji_{emoji.id}"
+            callback_data=EditEmojiCallback(emoji_id=emoji.id).pack()
         )])
     
     keyboard_buttons.extend([
@@ -232,10 +236,10 @@ async def process_emoji_value(message: Message, state: FSMContext):
     await state.clear()
 
 
-@router.callback_query(F.data.startswith("edit_emoji_"), lambda cb: is_admin(cb.from_user.id))
-async def edit_emoji(callback: CallbackQuery):
+@router.callback_query(EditEmojiCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def edit_emoji(callback: CallbackQuery, callback_data: EditEmojiCallback):
     """Editar un emoji existente"""
-    emoji_id = int(callback.data.replace("edit_emoji_", ""))
+    emoji_id = callback_data.emoji_id
     
     broadcast_service = BroadcastService()
     emoji = broadcast_service.get_reaction_emoji(emoji_id)
@@ -247,11 +251,11 @@ async def edit_emoji(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"Valor: {emoji.besito_value} besitos",
-            callback_data=f"change_emoji_value_{emoji_id}"
+            callback_data=EditEmojiCallback(emoji_id=emoji_id).pack()
         )],
         [InlineKeyboardButton(
             text=f"{'Desactivar' if emoji.is_active else 'Activar'}",
-            callback_data=f"toggle_emoji_{emoji_id}"
+            callback_data=ToggleEmojiCallback(emoji_id=emoji_id).pack()
         )],
         [InlineKeyboardButton(
             text="🗑️ Eliminar",
@@ -277,18 +281,18 @@ async def edit_emoji(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("toggle_emoji_"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_emoji(callback: CallbackQuery):
+@router.callback_query(ToggleEmojiCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_emoji(callback: CallbackQuery, callback_data: ToggleEmojiCallback):
     """Activa/desactiva un emoji"""
-    emoji_id = int(callback.data.replace("toggle_emoji_", ""))
+    emoji_id = callback_data.emoji_id
     
     broadcast_service = BroadcastService()
     success = broadcast_service.toggle_emoji(emoji_id)
     
     if success:
         await callback.answer("Estado actualizado")
-        # Reconstruir callback.data para editar el emoji
-        callback.data = f"edit_emoji_{emoji_id}"
+        # Reconstruir callback para volver a editar el emoji
+        callback.data = EditEmojiCallback(emoji_id=emoji_id).pack()
         await edit_emoji(callback)
     else:
         await callback.answer("Error al actualizar", show_alert=True)

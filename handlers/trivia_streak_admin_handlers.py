@@ -10,6 +10,15 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from keyboards.callback_data import (
+    TriviaStreakDetailCallback,
+    TriviaStreakToggleCallback,
+    TriviaStreakDeleteCallback,
+    TriviaStreakConfirmDeleteCallback,
+    TriviaStreakRedemptionsCallback,
+    TriviaStreakCategoryCallback,
+    TriviaStreakGoalTypeCallback,
+)
 from config.settings import bot_config
 from services import get_service, StreakPromotionService
 from services.trivia_service import TriviaCategoryService
@@ -44,15 +53,15 @@ def streak_promotion_action_keyboard(promo_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
             text="\U0001f4cb Ver canjes",
-            callback_data=f"streak_promo_redemptions_{promo_id}"
+            callback_data=TriviaStreakRedemptionsCallback(promo_id=promo_id).pack()
         )],
         [InlineKeyboardButton(
             text="\U000023f8️ Pausar / ▶️ Activar",
-            callback_data=f"streak_promo_toggle_{promo_id}"
+            callback_data=TriviaStreakToggleCallback(promo_id=promo_id).pack()
         )],
         [InlineKeyboardButton(
             text="\U0001f5d1️ Eliminar",
-            callback_data=f"streak_promo_delete_{promo_id}"
+            callback_data=TriviaStreakDeleteCallback(promo_id=promo_id).pack()
         )],
         [InlineKeyboardButton(
             text="\U0001f519 Volver",
@@ -96,7 +105,7 @@ def _build_promotions_list(promotions) -> tuple:
         )
         buttons.append([InlineKeyboardButton(
             text=f"{icon} {promo.name}",
-            callback_data=f"streak_promo_view_{promo.id}"
+            callback_data=TriviaStreakDetailCallback(promo_id=promo.id).pack()
         )])
     return text, buttons
 
@@ -351,12 +360,12 @@ async def streak_promo_get_category(message, state: FSMContext):
 
     buttons = [[InlineKeyboardButton(
         text="\U0001f3b0 Mazo general",
-        callback_data="streak_promo_cat_none"
+        callback_data=TriviaStreakCategoryCallback(category="none")
     )]]
     for cat in categories:
         buttons.append([InlineKeyboardButton(
             text=f"{cat['display_name']} ({cat['question_count']} preguntas)",
-            callback_data=f"streak_promo_cat_{cat['category_id']}"
+            callback_data=TriviaStreakCategoryCallback(category=str(cat['category_id']))
         )])
 
     await message.answer(
@@ -406,12 +415,12 @@ async def streak_promo_duration_hours_got(message, state: FSMContext):
 
     buttons = [[InlineKeyboardButton(
         text="\U0001f3b0 Mazo general",
-        callback_data="streak_promo_cat_none"
+        callback_data=TriviaStreakCategoryCallback(category="none")
     )]]
     for cat in categories:
         buttons.append([InlineKeyboardButton(
             text=f"{cat['display_name']} ({cat['question_count']} preguntas)",
-            callback_data=f"streak_promo_cat_{cat['category_id']}"
+            callback_data=TriviaStreakCategoryCallback(category=str(cat['category_id']))
         )])
 
     await message.answer(
@@ -421,12 +430,11 @@ async def streak_promo_duration_hours_got(message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("streak_promo_cat_"),
+@router.callback_query(TriviaStreakCategoryCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_choose_game_types(callback: CallbackQuery, state: FSMContext):
+async def streak_promo_choose_game_types(callback: CallbackQuery, callback_data: TriviaStreakCategoryCallback, state: FSMContext):
     """Guarda la categoria y pregunta por tipos de juego."""
-    cat_raw = callback.data.replace("streak_promo_cat_", "")
-    category_id = None if cat_raw == "none" else cat_raw
+    category_id = None if callback_data.category == "none" else callback_data.category
 
     await state.update_data(category_id=category_id)
     await state.set_state(StreakPromotionStates.waiting_game_types)
@@ -434,19 +442,19 @@ async def streak_promo_choose_game_types(callback: CallbackQuery, state: FSMCont
     buttons = [
         [InlineKeyboardButton(
             text="✅ General (trivia clasica)",
-            callback_data="streak_promo_gt_general"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="general")
         )],
         [InlineKeyboardButton(
             text="✅ Simple (trivia especial)",
-            callback_data="streak_promo_gt_simple"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="simple")
         )],
         [InlineKeyboardButton(
             text="❌ VIP (trivia exclusiva)",
-            callback_data="streak_promo_gt_vip"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="vip")
         )],
         [InlineKeyboardButton(
             text="\U0001f6d1 Continuar",
-            callback_data="streak_promo_gt_done"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="done")
         )],
     ]
     await callback.message.edit_text(
@@ -473,31 +481,31 @@ def _build_game_type_selection_keyboard(gt_flag: dict) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
             text=f"{'✅' if gt_flag['general'] else '❌'} General (trivia clasica)",
-            callback_data="streak_promo_gt_general"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="general")
         )],
         [InlineKeyboardButton(
             text=f"{'✅' if gt_flag['simple'] else '❌'} Simple (trivia especial)",
-            callback_data="streak_promo_gt_simple"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="simple")
         )],
         [InlineKeyboardButton(
             text=f"{'✅' if gt_flag['vip'] else '❌'} VIP (trivia exclusiva)",
-            callback_data="streak_promo_gt_vip"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="vip")
         )],
         [InlineKeyboardButton(
             text="\U0001f6d1 Continuar",
-            callback_data="streak_promo_gt_done"
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="done")
         )],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-@router.callback_query(F.data.startswith("streak_promo_gt_"),
+@router.callback_query(TriviaStreakGoalTypeCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_toggle_game_type(callback: CallbackQuery, state: FSMContext):
+async def streak_promo_toggle_game_type(callback: CallbackQuery, callback_data: TriviaStreakGoalTypeCallback, state: FSMContext):
     """Alterna la seleccion de tipos de juego."""
     data = await state.get_data()
     gt_flag = data.get("game_types", {"general": True, "vip": False, "simple": True})
-    flag = callback.data.replace("streak_promo_gt_", "")
+    flag = callback_data.goal_type
 
     if flag == "done":
         if not any(gt_flag.values()):
@@ -641,11 +649,11 @@ async def streak_promo_confirm_create(callback: CallbackQuery, state: FSMContext
 # ==================== VIEW PROMOTION ====================
 
 
-@router.callback_query(F.data.startswith("streak_promo_view_"),
+@router.callback_query(TriviaStreakDetailCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_view(callback: CallbackQuery):
+async def streak_promo_view(callback: CallbackQuery, callback_data: TriviaStreakDetailCallback):
     """Muestra los detalles de una promocion."""
-    promo_id = int(callback.data.replace("streak_promo_view_", ""))
+    promo_id = callback_data.promo_id
     with get_service(StreakPromotionService) as service:
         promo = service.get_promotion(promo_id)
         if not promo:
@@ -698,11 +706,11 @@ def _build_promotion_detail_text(promo) -> str:
 # ==================== PAUSE / ACTIVATE ====================
 
 
-@router.callback_query(F.data.startswith("streak_promo_toggle_"),
+@router.callback_query(TriviaStreakToggleCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_toggle(callback: CallbackQuery):
+async def streak_promo_toggle(callback: CallbackQuery, callback_data: TriviaStreakToggleCallback):
     """Alterna entre pausar y activar una promocion."""
-    promo_id = int(callback.data.replace("streak_promo_toggle_", ""))
+    promo_id = callback_data.promo_id
     with get_service(StreakPromotionService) as service:
         promo = service.get_promotion(promo_id)
         if not promo:
@@ -716,7 +724,7 @@ async def streak_promo_toggle(callback: CallbackQuery):
             service.activate(promo_id)
             await callback.answer("✅ Promocion activada.", show_alert=True)
 
-    await streak_promo_view(callback)
+    await streak_promo_view(callback, TriviaStreakDetailCallback(promo_id=promo_id))
     logger.info(
         f"trivia_streak_admin_handlers - streak_promo_toggle - "
         f"{callback.from_user.id} - promo_id:{promo_id}"
@@ -726,19 +734,19 @@ async def streak_promo_toggle(callback: CallbackQuery):
 # ==================== DELETE ====================
 
 
-@router.callback_query(F.data.startswith("streak_promo_delete_"),
+@router.callback_query(TriviaStreakDeleteCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_delete_confirm(callback: CallbackQuery):
+async def streak_promo_delete_confirm(callback: CallbackQuery, callback_data: TriviaStreakDeleteCallback):
     """Pide confirmacion antes de eliminar una promocion."""
-    promo_id = int(callback.data.replace("streak_promo_delete_", ""))
+    promo_id = callback_data.promo_id
     buttons = [
         [InlineKeyboardButton(
             text="✅ Si, eliminar permanentemente",
-            callback_data=f"streak_promo_delete_confirm_{promo_id}"
+            callback_data=TriviaStreakConfirmDeleteCallback(promo_id=promo_id).pack()
         )],
         [InlineKeyboardButton(
             text="❌ No, conservar",
-            callback_data=f"streak_promo_view_{promo_id}"
+            callback_data=TriviaStreakDetailCallback(promo_id=promo_id).pack()
         )],
     ]
     await callback.message.edit_text(
@@ -751,11 +759,11 @@ async def streak_promo_delete_confirm(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("streak_promo_delete_confirm_"),
+@router.callback_query(TriviaStreakConfirmDeleteCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_delete_execute(callback: CallbackQuery):
+async def streak_promo_delete_execute(callback: CallbackQuery, callback_data: TriviaStreakConfirmDeleteCallback):
     """Ejecuta la eliminacion de la promocion."""
-    promo_id = int(callback.data.replace("streak_promo_delete_confirm_", ""))
+    promo_id = callback_data.promo_id
     with get_service(StreakPromotionService) as service:
         success = service.delete_promotion(promo_id)
 
@@ -783,11 +791,11 @@ async def streak_promo_delete_execute(callback: CallbackQuery):
 # ==================== VIEW REDEMPTIONS ====================
 
 
-@router.callback_query(F.data.startswith("streak_promo_redemptions_"),
+@router.callback_query(TriviaStreakRedemptionsCallback.filter(),
                        lambda cb: is_admin(cb.from_user.id))
-async def streak_promo_redemptions(callback: CallbackQuery):
+async def streak_promo_redemptions(callback: CallbackQuery, callback_data: TriviaStreakRedemptionsCallback):
     """Muestra los canjes realizados para una promocion."""
-    promo_id = int(callback.data.replace("streak_promo_redemptions_", ""))
+    promo_id = callback_data.promo_id
     with get_service(StreakPromotionService) as service:
         stats = service.get_redemption_stats(promo_id)
 
@@ -812,7 +820,7 @@ async def streak_promo_redemptions(callback: CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="\U0001f519 Volver",
-                callback_data=f"streak_promo_view_{promo_id}"
+                callback_data=TriviaStreakDetailCallback(promo_id=promo_id).pack()
             )],
         ]),
         parse_mode="HTML"

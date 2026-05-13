@@ -11,6 +11,7 @@ from config.settings import bot_config
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
 from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, cancel_keyboard, broadcast_back_keyboard
+from keyboards.callback_data import BroadcastChannelCallback, ToggleReactionCallback, BroadcastProtectCallback
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -65,7 +66,7 @@ async def send_broadcast_start(callback: CallbackQuery, state: FSMContext):
         emoji = "🚪" if ch.channel_type.value == "free" else "👑"
         buttons.append([InlineKeyboardButton(
             text=f"{emoji} {ch.channel_name or 'Sin nombre'}",
-            callback_data=f"broadcast_channel_{ch.channel_id}"
+            callback_data=BroadcastChannelCallback(channel_id=ch.channel_id)
         )])
     
     buttons.append([InlineKeyboardButton(
@@ -88,10 +89,10 @@ async def send_broadcast_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(BroadcastStates.selecting_channel, F.data.startswith("broadcast_channel_"))
-async def select_channel_for_broadcast(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(BroadcastStates.selecting_channel, BroadcastChannelCallback.filter())
+async def select_channel_for_broadcast(callback: CallbackQuery, state: FSMContext, callback_data: BroadcastChannelCallback):
     """Canal seleccionado, pedir texto"""
-    channel_id = int(callback.data.replace("broadcast_channel_", ""))
+    channel_id = callback_data.channel_id
 
     channel_service = ChannelService()
     try:
@@ -377,7 +378,7 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
         check = "✅ " if is_selected else "⬜ "
         buttons.append([InlineKeyboardButton(
             text=f"{check}{emoji.emoji} = {emoji.besito_value} besitos",
-            callback_data=f"toggle_reaction_{emoji.id}"
+            callback_data=ToggleReactionCallback(emoji_id=emoji.id)
         )])
     
     buttons.append([InlineKeyboardButton(
@@ -446,10 +447,10 @@ Los usuarios podrán reaccionar y recibir besitos.""",
     await callback.answer()
 
 
-@router.callback_query(BroadcastStates.selecting_reactions, F.data.startswith("toggle_reaction_"))
-async def toggle_reaction_selection(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(BroadcastStates.selecting_reactions, ToggleReactionCallback.filter())
+async def toggle_reaction_selection(callback: CallbackQuery, state: FSMContext, callback_data: ToggleReactionCallback):
     """Toggle selección de emoji"""
-    emoji_id = int(callback.data.replace("toggle_reaction_", ""))
+    emoji_id = callback_data.emoji_id
     data = await state.get_data()
     selected = data.get('selected_emojis', [])
     
@@ -488,8 +489,8 @@ async def skip_reactions(callback: CallbackQuery, state: FSMContext):
 async def ask_for_protection(target, state: FSMContext):
     """Pregunta por protección del mensaje"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data="protect_yes")],
-        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data="protect_no")],
+        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes"))],
+        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no"))],
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
     ])
@@ -518,10 +519,10 @@ async def ask_for_protection(target, state: FSMContext):
     await state.set_state(BroadcastStates.waiting_protection_decision)
 
 
-@router.callback_query(BroadcastStates.waiting_protection_decision, F.data.startswith("protect_"))
-async def set_protection(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(BroadcastStates.waiting_protection_decision, BroadcastProtectCallback.filter())
+async def set_protection(callback: CallbackQuery, state: FSMContext, callback_data: BroadcastProtectCallback):
     """Establece protección y muestra preview"""
-    is_protected = callback.data == "protect_yes"
+    is_protected = callback_data.action == "yes"
     await state.update_data(is_protected=is_protected)
     
     await show_broadcast_preview(callback, state)
@@ -623,8 +624,8 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
 async def back_from_preview(callback: CallbackQuery, state: FSMContext):
     """Regresar desde preview a protección"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data="protect_yes")],
-        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data="protect_no")],
+        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes"))],
+        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no"))],
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
     ])

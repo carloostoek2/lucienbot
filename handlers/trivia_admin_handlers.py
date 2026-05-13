@@ -9,7 +9,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from config.settings import bot_config
 from services import get_service, TriviaCategoryService
-
+from keyboards.callback_data import TriviaCategoryActivateCallback
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -35,7 +35,7 @@ async def admin_trivia_categories_menu(callback: CallbackQuery):
     for cat in categories:
         is_active = active and active['category_id'] == cat['category_id']
         btn_text = f"{'✅ ' if is_active else ''}{cat['display_name']} ({cat['question_count']} preguntas)"
-        cb_data = f"trivia_cat_activate_{cat['category_id']}"
+        cb_data = TriviaCategoryActivateCallback(category_id=cat['category_id']).pack()
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=cb_data)])
 
     if active:
@@ -57,10 +57,10 @@ async def admin_trivia_categories_menu(callback: CallbackQuery):
     logger.info(f"trivia_admin_handlers - admin_trivia_categories_menu - {callback.from_user.id} - shown")
 
 
-@router.callback_query(F.data.startswith("trivia_cat_activate_"), lambda cb: is_admin(cb.from_user.id))
-async def trivia_category_activate(callback: CallbackQuery):
+@router.callback_query(TriviaCategoryActivateCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def trivia_category_activate(callback: CallbackQuery, callback_data: TriviaCategoryActivateCallback):
     """Activa una categoria especial."""
-    category_id = callback.data.replace("trivia_cat_activate_", "")
+    category_id = callback_data.category_id
     with get_service(TriviaCategoryService) as service:
         service.activate(category_id)
     await callback.answer(f"Categoria activada: {category_id}", show_alert=True)

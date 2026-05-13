@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from services.mission_service import MissionService
 from services.reward_service import RewardService
 from keyboards.inline_keyboards import back_keyboard
+from keyboards.callback_data import MissionDetailCallback, RewardUserDetailCallback
 from middlewares.idempotency import idempotency_cache
 import logging
 
@@ -96,14 +97,14 @@ async def show_available_rewards(callback: CallbackQuery):
         reward_service.close()
 
 
-@router.callback_query(F.data.startswith("reward_detail_"))
-async def reward_detail(callback: CallbackQuery):
+@router.callback_query(RewardUserDetailCallback.filter())
+async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetailCallback):
     """Muestra detalles de una recompensa y su mision asociada"""
     if idempotency_cache.is_duplicate(callback.id):
         await callback.answer()
         return
 
-    mission_id = int(callback.data.replace("reward_detail_", ""))
+    mission_id = callback_data.mission_id
     user_id = callback.from_user.id
     mission_service = MissionService()
     reward_service = RewardService()
@@ -135,7 +136,7 @@ async def reward_detail(callback: CallbackQuery):
         )
 
         buttons = [
-            [InlineKeyboardButton(text="🎯 Ver mision", callback_data=f"mission_detail_{mission.id}")],
+            [InlineKeyboardButton(text="🎯 Ver mision", callback_data=MissionDetailCallback(mission_id=mission.id).pack())],
             [InlineKeyboardButton(text="🔙 Volver a recompensas", callback_data="rewards_list")]
         ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -157,7 +158,7 @@ def _build_rewards_buttons(rewards_data: list) -> list:
         status_emoji = "🔒" if item['progress'] and item['progress'].is_completed else "✨"
         buttons.append([InlineKeyboardButton(
             text=f"{status_emoji} {reward_emoji} {reward.name[:30]}",
-            callback_data=f"reward_detail_{mission.id}"
+            callback_data=RewardUserDetailCallback(mission_id=mission.id).pack()
         )])
     return buttons
 

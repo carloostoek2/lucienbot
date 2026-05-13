@@ -25,8 +25,19 @@ tariff_id = int(callback.data.replace("select_tariff_", ""))
 | **Story Admin (nodes, choices, archetypes)** | 7/7 | ✅ COMPLETADO |
 | **Store Admin (products, stock, delete)** | 7/7 | ✅ COMPLETADO |
 | **Reward Admin (besitos, packages, VIP)** | 5/5 | ✅ COMPLETADO |
+| **Anonymous Message Admin** | 4/4 | ✅ COMPLETADO |
+| **VIP User** | 2/2 | ✅ COMPLETADO |
+| **Broadcast** | 3/3 | ✅ COMPLETADO |
+| **Gamification Admin** | 2/2 | ✅ COMPLETADO |
+| **Mission Admin** | 6/6 | ✅ COMPLETADO |
+| **Story User** | 3/3 | ✅ COMPLETADO |
+| **Trivia Streak Admin** | 7/7 | ✅ COMPLETADO |
+| **Mission User** | 1/1 | ✅ COMPLETADO |
+| **Reward User** | 1/1 | ✅ COMPLETADO |
+| **Trivia Admin** | 1/1 | ✅ COMPLETADO |
+| **Trivia Config Admin** | 1/1 | ✅ COMPLETADO |
 
-**Total migrado: 106/95+ instancias (sobrepasó el estimado original)**
+**Total migrado: 137/95+ instancias (sobrepasó el estimado original)**
 
 ### Dominios Pendientes (~66 instancias)
 

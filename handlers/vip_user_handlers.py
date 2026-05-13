@@ -15,6 +15,7 @@ from services.besito_service import BesitoService
 from services.promotion_service import PromotionService
 from models.models import TransactionSource
 from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard, admin_anonymous_notification_keyboard
+from keyboards.callback_data import VipPromoDetailCallback, VipPromoInterestCallback
 from utils.lucien_voice import LucienVoice
 from handlers.promotion_user_handlers import notify_admins_about_interest
 import logging
@@ -154,7 +155,7 @@ async def show_map_of_desire(callback: CallbackQuery):
             for promo in vip_promos:
                 buttons.append([InlineKeyboardButton(
                     text=f"✨ {promo.name}",
-                    callback_data=f"view_vip_promo_{promo.id}"
+                    callback_data=VipPromoDetailCallback(promo_id=promo.id)
                 )])
 
             buttons.append([InlineKeyboardButton(
@@ -172,14 +173,10 @@ async def show_map_of_desire(callback: CallbackQuery):
         vip_service.close()
 
 
-@router.callback_query(F.data.startswith("view_vip_promo_"))
-async def view_vip_promotion_detail(callback: CallbackQuery):
+@router.callback_query(VipPromoDetailCallback.filter())
+async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipPromoDetailCallback):
     """Muestra detalle de una promoción VIP exclusiva"""
-    try:
-        promo_id = int(callback.data.replace("view_vip_promo_", ""))
-    except ValueError:
-        await callback.answer("Algo inesperado ha ocurrido...", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     promotion_service = PromotionService()
     try:
@@ -212,7 +209,7 @@ async def view_vip_promotion_detail(callback: CallbackQuery):
             text += "<i>Si esta experiencia despierta su curiosidad...</i>\n"
             buttons.append([InlineKeyboardButton(
                 text="💕 Me interesa",
-                callback_data=f"vip_promo_interest_{promo.id}"
+                callback_data=VipPromoInterestCallback(promo_id=promo.id)
             )])
 
         buttons.append([InlineKeyboardButton(
@@ -231,14 +228,10 @@ async def view_vip_promotion_detail(callback: CallbackQuery):
         promotion_service.close()
 
 
-@router.callback_query(F.data.startswith("vip_promo_interest_"))
-async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot):
+@router.callback_query(VipPromoInterestCallback.filter())
+async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot, callback_data: VipPromoInterestCallback):
     """Procesa interés en promoción VIP exclusiva"""
-    try:
-        promo_id = int(callback.data.replace("vip_promo_interest_", ""))
-    except ValueError:
-        await callback.answer("Algo inesperado ha ocurrido...", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     promotion_service = PromotionService()
     user = callback.from_user

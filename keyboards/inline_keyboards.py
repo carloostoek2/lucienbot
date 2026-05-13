@@ -8,7 +8,8 @@ from keyboards.callback_data import (
     SelectTariffCallback, CopyTokenCallback,
     ChannelDetailCallback, ConfigWaitCallback, ConfigInviteCallback,
     PendingReqCallback, ApproveAllCallback, DeleteChannelCallback,
-    ConfirmDeleteChannelCallback, WaitTimeCallback
+    ConfirmDeleteChannelCallback, WaitTimeCallback,
+    AnonViewCallback
 )
 from typing import List, Optional
 from models.models import Channel, Tariff
@@ -444,7 +445,7 @@ def admin_anonymous_notification_keyboard(message_id: int) -> InlineKeyboardMark
     buttons = [
         [InlineKeyboardButton(
             text="📨 Ver mensaje",
-            callback_data=f"anon_view_{message_id}"
+            callback_data=AnonViewCallback(message_id=message_id).pack()
         )],
         [InlineKeyboardButton(
             text="🔙 Cerrar",

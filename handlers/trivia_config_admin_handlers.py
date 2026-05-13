@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from config.settings import bot_config
 from services import get_service, TriviaConfigService
 from keyboards.inline_keyboards import trivia_admin_keyboard, back_keyboard, cancel_keyboard
-
+from keyboards.callback_data import TriviaConfigFieldCallback
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -48,19 +48,19 @@ def _config_keyboard(config: dict) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
             text=f"Dados Free: {config['dice_limit_free']} | VIP: {config['dice_limit_vip']}",
-            callback_data="trivia_cfg_field_dice"
+            callback_data=TriviaConfigFieldCallback(field_key="dice").pack()
         )],
         [InlineKeyboardButton(
             text=f"Trivia Free: {config['trivia_limit_free']} | VIP: {config['trivia_limit_vip']}",
-            callback_data="trivia_cfg_field_trivia"
+            callback_data=TriviaConfigFieldCallback(field_key="trivia").pack()
         )],
         [InlineKeyboardButton(
             text=f"Trivia VIP: {config['trivia_vip_limit']} (solo VIP)",
-            callback_data="trivia_cfg_field_trivia_vip"
+            callback_data=TriviaConfigFieldCallback(field_key="trivia_vip").pack()
         )],
         [InlineKeyboardButton(
             text=f"Trivia Simple Free: {config['trivia_simple_limit_free']} | VIP: {config['trivia_simple_limit_vip']}",
-            callback_data="trivia_cfg_field_trivia_simple"
+            callback_data=TriviaConfigFieldCallback(field_key="trivia_simple").pack()
         )],
         [InlineKeyboardButton(
             text="🔙 Volver a Trivias",
@@ -95,10 +95,10 @@ async def admin_trivia_config(callback: CallbackQuery):
     logger.info(f"trivia_config_admin - admin_trivia_config - {callback.from_user.id}")
 
 
-@router.callback_query(F.data.startswith("trivia_cfg_field_"), lambda cb: is_admin(cb.from_user.id))
-async def trivia_config_select_field(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(TriviaConfigFieldCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def trivia_config_select_field(callback: CallbackQuery, callback_data: TriviaConfigFieldCallback, state: FSMContext):
     """Solicita el nuevo valor para el campo seleccionado."""
-    field_key = callback.data.replace("trivia_cfg_field_", "")
+    field_key = callback_data.field_key
     label, free_key, vip_key, vip_only = FIELD_LABELS[field_key]
 
     await state.update_data(field_key=field_key)
