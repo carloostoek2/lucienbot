@@ -8,6 +8,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
+from aiogram.types import InlineKeyboardMarkup
 from models.models import (
     BroadcastMessage, BroadcastReaction, ReactionEmoji,
     Channel, ChannelType, MissionType
@@ -356,6 +357,31 @@ class BroadcastService:
         if hasattr(self, 'db') and self.db:
             self.db.close()
             self.db = None
+
+    async def update_reaction_message(
+        self,
+        bot,
+        channel_id: int,
+        message_id: int,
+        new_markup: InlineKeyboardMarkup
+    ):
+        """Actualiza el markup de un mensaje de broadcast con los nuevos conteos.
+
+        Args:
+            bot: Instancia de bot de Telegram
+            channel_id: ID del canal
+            message_id: ID del mensaje
+            new_markup: Nuevo teclado inline
+        """
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=channel_id,
+                message_id=message_id,
+                reply_markup=new_markup
+            )
+        except Exception as e:
+            logger.warning(f"No se pudo actualizar conteo en mensaje: {e}")
+            raise
 
     def __del__(self):
         """Cierra la sesión de base de datos"""

@@ -14,7 +14,7 @@ from services import get_service
 from services.package_service import PackageService
 from services.vip_service import VIPService
 from models.models import RewardType
-from keyboards.callback_data import SelectTariffCallback, RewardSelectPkgCallback, RewardAdminDetailCallback, RewardToggleCallback, RewardDeleteCallback
+from keyboards.callback_data import SelectTariffCallback, RewardSelectPkgCallback, RewardAdminDetailCallback, RewardToggleCallback, RewardDeleteCallback, RewardTypeCallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -104,9 +104,9 @@ async def process_reward_description(message: Message, state: FSMContext):
     await state.update_data(description=description)
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💋 Besitos", callback_data="reward_type_besitos")],
-        [InlineKeyboardButton(text="📦 Paquete de fotos", callback_data="reward_type_package")],
-        [InlineKeyboardButton(text="👑 Acceso VIP", callback_data="reward_type_vip")],
+        [InlineKeyboardButton(text="💋 Besitos", callback_data=RewardTypeCallback(reward_type="besitos").pack())],
+        [InlineKeyboardButton(text="📦 Paquete de fotos", callback_data=RewardTypeCallback(reward_type="package").pack())],
+        [InlineKeyboardButton(text="👑 Acceso VIP", callback_data=RewardTypeCallback(reward_type="vip_access").pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")]
     ])
     
@@ -121,19 +121,16 @@ Selecciona el tipo:""",
     await state.set_state(RewardWizardStates.selecting_type)
 
 
-@router.callback_query(RewardWizardStates.selecting_type, F.data.startswith("reward_type_"))
-async def select_reward_type(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(RewardWizardStates.selecting_type, RewardTypeCallback.filter())
+async def select_reward_type(callback: CallbackQuery, state: FSMContext, callback_data: RewardTypeCallback):
     """Selecciona tipo de recompensa"""
-    type_map = {
-        "reward_type_besitos": RewardType.BESITOS,
-        "reward_type_package": RewardType.PACKAGE,
-        "reward_type_vip": RewardType.VIP_ACCESS
-    }
-    
-    reward_type = type_map.get(callback.data)
-    if not reward_type:
-        await callback.answer("Tipo invalido", show_alert=True)
+    # Validar que el tipo sea válido
+    valid_types = {"besitos", "package", "vip_access"}
+    if callback_data.reward_type not in valid_types:
+        await callback.answer("Tipo inválido", show_alert=True)
         return
+
+    reward_type = RewardType(callback_data.reward_type)
     
     await state.update_data(reward_type=reward_type)
     

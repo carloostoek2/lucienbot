@@ -7,6 +7,11 @@ import logging
 
 from aiogram import Router
 from aiogram.types import CallbackQuery
+from keyboards.callback_data import (
+    TriviaAnswerCallback,
+    TriviaVipAnswerCallback,
+    TriviaSimpleAnswerCallback,
+)
 from keyboards.inline_keyboards import (
     game_menu_keyboard,
     dice_play_keyboard,
@@ -142,14 +147,14 @@ async def game_trivia(callback: CallbackQuery):
     logger.info(f"game_user_handlers - game_trivia - {user_id} - shown")
 
 
-@router.callback_query(lambda c: c.data.startswith("trivia_answer_"))
+@router.callback_query(TriviaAnswerCallback.filter())
 async def trivia_answer(callback: CallbackQuery):
     """Procesa respuesta de trivia"""
     user_id = callback.from_user.id
 
-    parts = callback.data.split("_")
-    answer_idx = int(parts[2])
-    question_idx = int(parts[3])
+    data = TriviaAnswerCallback.unpack(callback.data)
+    answer_idx = data.answer_idx
+    question_idx = data.question_idx
 
     with get_service(GameService) as service:
         result = service.play_trivia(user_id, question_idx, answer_idx)
@@ -214,14 +219,14 @@ async def game_trivia_vip(callback: CallbackQuery):
     logger.info(f"game_user_handlers - game_trivia_vip - {user_id} - shown")
 
 
-@router.callback_query(lambda c: c.data.startswith("trivia_vip_answer_"))
+@router.callback_query(TriviaVipAnswerCallback.filter())
 async def trivia_vip_answer(callback: CallbackQuery):
     """Procesa respuesta de trivia VIP"""
     user_id = callback.from_user.id
 
-    parts = callback.data.split("_")
-    answer_idx = int(parts[3])
-    question_idx = int(parts[4])
+    data = TriviaVipAnswerCallback.unpack(callback.data)
+    answer_idx = data.answer_idx
+    question_idx = data.question_idx
 
     with get_service(GameService) as service:
         result = service.play_trivia_vip(user_id, question_idx, answer_idx)
@@ -307,14 +312,14 @@ async def game_trivia_simple(callback: CallbackQuery):
     logger.info(f"game_user_handlers - game_trivia_simple - {user_id} - shown - category:{category_id}")
 
 
-@router.callback_query(lambda c: c.data.startswith("trivia_simple_answer_"))
+@router.callback_query(TriviaSimpleAnswerCallback.filter())
 async def trivia_simple_answer(callback: CallbackQuery):
     """Procesa respuesta de trivia especial."""
     user_id = callback.from_user.id
 
-    parts = callback.data.split("_")
-    answer_idx = int(parts[3])
-    question_idx = int(parts[4])
+    data = TriviaSimpleAnswerCallback.unpack(callback.data)
+    answer_idx = data.answer_idx
+    question_idx = data.question_idx
 
     if answer_idx < 0 or answer_idx > 3:
         await callback.answer("Opcion invalida.", show_alert=True)

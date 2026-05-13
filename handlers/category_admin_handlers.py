@@ -11,6 +11,14 @@ from config.settings import bot_config
 from services import get_service
 from services.package_service import PackageService
 from utils.lucien_voice import LucienVoice
+from keyboards.callback_data import (
+    CategoryAdminDetailCallback,
+    CategoryAdminToggleCallback,
+    CategoryAdminDeleteCallback,
+    CategoryAdminConfirmDeleteCallback,
+    CategoryAssignCallback,
+    PackageAssignCallback,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -241,7 +249,7 @@ async def list_categories(callback: CallbackQuery):
 
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {category.name[:30]}",
-                    callback_data=f"category_admin_detail_{category.id}"
+                    callback_data=CategoryAdminDetailCallback(category_id=category.id)
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="manage_categories")])
@@ -250,14 +258,10 @@ async def list_categories(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("category_admin_detail_"), lambda cb: is_admin(cb.from_user.id))
-async def category_admin_detail(callback: CallbackQuery):
+@router.callback_query(CategoryAdminDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def category_admin_detail(callback: CallbackQuery, callback_data: CategoryAdminDetailCallback):
     """Muestra detalles de una categoría"""
-    try:
-        category_id = int(callback.data.replace("category_admin_detail_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    category_id = callback_data.category_id
 
     with get_service(PackageService) as package_service:
             category = package_service.get_category(category_id)
@@ -272,11 +276,11 @@ async def category_admin_detail(callback: CallbackQuery):
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if category.is_active else 'Activar'}",
-                    callback_data=f"toggle_category_{category_id}"
+                    callback_data=CategoryAdminToggleCallback(category_id=category_id)
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
-                    callback_data=f"delete_category_{category_id}"
+                    callback_data=CategoryAdminDeleteCallback(category_id=category_id)
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="list_categories")]
             ])
@@ -296,16 +300,13 @@ async def category_admin_detail(callback: CallbackQuery):
                 reply_markup=keyboard
             )
             await callback.answer()
+            logger.info(f"category_admin_detail | view | user_id={callback.from_user.id} | category_id={category_id}")
 
 
-@router.callback_query(F.data.startswith("toggle_category_"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_category(callback: CallbackQuery):
+@router.callback_query(CategoryAdminToggleCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_category(callback: CallbackQuery, callback_data: CategoryAdminToggleCallback):
     """Activa/desactiva una categoría"""
-    try:
-        category_id = int(callback.data.replace("toggle_category_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    category_id = callback_data.category_id
 
     with get_service(PackageService) as package_service:
             category = package_service.get_category(category_id)
@@ -318,21 +319,18 @@ async def toggle_category(callback: CallbackQuery):
 
             status = "activada" if not category.is_active else "desactivada"
             await callback.answer(f"Categoría {status}")
-            await category_admin_detail(callback)
+            await category_admin_detail(callback, CategoryAdminDetailCallback(category_id=category_id))
+            logger.info(f"toggle_category | toggle | user_id={callback.from_user.id} | category_id={category_id}")
 
 
-@router.callback_query(F.data.startswith("delete_category_"), lambda cb: is_admin(cb.from_user.id))
-async def delete_category_confirm(callback: CallbackQuery):
+@router.callback_query(CategoryAdminDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def delete_category_confirm(callback: CallbackQuery, callback_data: CategoryAdminDeleteCallback):
     """Confirma eliminación de categoría"""
-    try:
-        category_id = int(callback.data.replace("delete_category_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    category_id = callback_data.category_id
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Sí, eliminar", callback_data=f"confirm_delete_category_{category_id}")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"category_admin_detail_{category_id}")]
+        [InlineKeyboardButton(text="✅ Sí, eliminar", callback_data=CategoryAdminConfirmDeleteCallback(category_id=category_id))],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=CategoryAdminDetailCallback(category_id=category_id))]
     ])
 
     await callback.message.edit_text(
@@ -343,16 +341,13 @@ async def delete_category_confirm(callback: CallbackQuery):
         reply_markup=keyboard
     )
     await callback.answer()
+    logger.info(f"delete_category_confirm | confirm | user_id={callback.from_user.id} | category_id={category_id}")
 
 
-@router.callback_query(F.data.startswith("confirm_delete_category_"), lambda cb: is_admin(cb.from_user.id))
-async def confirm_delete_category(callback: CallbackQuery):
+@router.callback_query(CategoryAdminConfirmDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def confirm_delete_category(callback: CallbackQuery, callback_data: CategoryAdminConfirmDeleteCallback):
     """Elimina la categoría"""
-    try:
-        category_id = int(callback.data.replace("confirm_delete_category_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    category_id = callback_data.category_id
 
     with get_service(PackageService) as package_service:
             success = package_service.delete_category(category_id)
@@ -365,6 +360,7 @@ async def confirm_delete_category(callback: CallbackQuery):
                         [InlineKeyboardButton(text="🔙 Volver", callback_data="list_categories")]
                     ])
                 )
+                logger.info(f"confirm_delete_category | delete | user_id={callback.from_user.id} | category_id={category_id}")
             else:
                 await callback.message.edit_text(
                     "Error al eliminar la categoría.",
@@ -400,7 +396,7 @@ async def assign_package_category_start(callback: CallbackQuery, state: FSMConte
             for category in categories:
                 buttons.append([InlineKeyboardButton(
                     text=f"📁 {category.name}",
-                    callback_data=f"select_cat_assign_{category.id}"
+                    callback_data=CategoryAssignCallback(category_id=category.id)
                 )])
 
             buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="manage_categories")])
@@ -414,14 +410,10 @@ async def assign_package_category_start(callback: CallbackQuery, state: FSMConte
             await callback.answer()
 
 
-@router.callback_query(AssignCategoryStates.selecting_category, F.data.startswith("select_cat_assign_"))
-async def select_category_for_assign(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(AssignCategoryStates.selecting_category, CategoryAssignCallback.filter())
+async def select_category_for_assign(callback: CallbackQuery, callback_data: CategoryAssignCallback, state: FSMContext):
     """Selecciona categoría y muestra paquetes"""
-    try:
-        category_id = int(callback.data.replace("select_cat_assign_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    category_id = callback_data.category_id
 
     with get_service(PackageService) as package_service:
             category = package_service.get_category(category_id)
@@ -454,7 +446,7 @@ async def select_category_for_assign(callback: CallbackQuery, state: FSMContext)
                 file_count = len(package.files) if package.files else 0
                 buttons.append([InlineKeyboardButton(
                     text=f"📦 {package.name} ({file_count} archivos)",
-                    callback_data=f"select_pkg_assign_{package.id}"
+                    callback_data=PackageAssignCallback(package_id=package.id)
                 )])
 
             buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="manage_categories")])
@@ -468,14 +460,10 @@ async def select_category_for_assign(callback: CallbackQuery, state: FSMContext)
             await callback.answer()
 
 
-@router.callback_query(AssignCategoryStates.selecting_package, F.data.startswith("select_pkg_assign_"))
-async def select_package_for_assign(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(AssignCategoryStates.selecting_package, PackageAssignCallback.filter())
+async def select_package_for_assign(callback: CallbackQuery, callback_data: PackageAssignCallback, state: FSMContext):
     """Confirma asignación de paquete a categoría"""
-    try:
-        package_id = int(callback.data.replace("select_pkg_assign_", ""))
-    except ValueError:
-        await callback.answer("ID inválido", show_alert=True)
-        return
+    package_id = callback_data.package_id
 
     data = await state.get_data()
     category_id = data.get('category_id')

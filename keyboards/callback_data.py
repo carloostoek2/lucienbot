@@ -307,7 +307,27 @@ class FinishDeleteFilesCallback(CallbackData, prefix="finish_delfile"):
     package_id: int
 
 
-# ==================== STORY ====================
+# ==================== STORY ADMIN ====================
+
+class StoryNodeTypeCallback(CallbackData, prefix="story_node_type"):
+    """Selección de tipo de nodo"""
+    node_type: str  # NodeType enum value
+
+
+class StoryArchetypeReqCallback(CallbackData, prefix="story_archetype_req"):
+    """Selección de requisito de arquetipo"""
+    archetype: str  # ArchetypeType enum value or "none"
+
+
+class StoryChoicePointsCallback(CallbackData, prefix="story_choice_pts"):
+    """Selección de puntos de arquetipo para opción"""
+    archetype: str  # ArchetypeType enum value or "none"
+
+
+class StoryNewArchetypeCallback(CallbackData, prefix="story_new_archetype"):
+    """Crear nuevo arquetipo"""
+    archetype: str  # ArchetypeType enum value
+
 
 class StoryChoiceCallback(CallbackData, prefix="story_choice"):
     """Seleccionar opción de historia"""
@@ -361,6 +381,11 @@ class ArchetypeDetailCallback(CallbackData, prefix="archetype_detail"):
 
 
 # ==================== REWARD ====================
+
+class RewardTypeCallback(CallbackData, prefix="reward_type"):
+    """Selección de tipo de recompensa"""
+    reward_type: str  # RewardType enum value: "besitos", "package", "vip_access"
+
 
 class RewardSelectPkgCallback(CallbackData, prefix="reward_sel_pkg"):
     """Seleccionar paquete para recompensa"""
@@ -464,7 +489,17 @@ class AnonDeleteCallback(CallbackData, prefix="anon_delete"):
     message_id: int
 
 
-# ==================== MISSION ====================
+# ==================== MISSION ADMIN ====================
+
+class MissionTypeSelectCallback(CallbackData, prefix="mission_type_sel"):
+    """Selección de tipo de misión"""
+    mission_type: str  # MissionType enum value
+
+
+class MissionFreqSelectCallback(CallbackData, prefix="mission_freq_sel"):
+    """Selección de frecuencia de misión"""
+    frequency: str  # MissionFrequency enum value
+
 
 class MissionDetailCallback(CallbackData, prefix="mission_detail"):
     """Detalle de misión (admin)"""
@@ -555,3 +590,51 @@ class TriviaStreakCategoryCallback(CallbackData, prefix="streak_promo_cat"):
 class TriviaStreakGoalTypeCallback(CallbackData, prefix="streak_promo_gt"):
     """Selección de tipo de juego para promoción por racha"""
     goal_type: str  # "general" | "simple" | "vip" | "done"
+
+
+# ==================== GAME ====================
+
+class TriviaAnswerCallback(CallbackData, prefix="trivia_answer"):
+    """Respuesta de trivia"""
+    answer_idx: int
+    question_idx: int
+
+
+class TriviaVipAnswerCallback(CallbackData, prefix="trivia_vip_answer"):
+    """Respuesta de trivia VIP"""
+    answer_idx: int
+    question_idx: int
+
+
+class TriviaSimpleAnswerCallback(CallbackData, prefix="trivia_simple_answer"):
+    """Respuesta de trivia especial"""
+    answer_idx: int
+    question_idx: int
+
+
+# ==================== BACKPACK ====================
+
+class BackpackRewardsPageCallback(CallbackData, prefix="backpack_rewards_page"):
+    """Paginación de recompensas"""
+    page: int
+
+
+class BackpackPurchasesPageCallback(CallbackData, prefix="backpack_purchases_page"):
+    """Paginación de compras"""
+    page: int
+
+
+class BackpackRewardDetailCallback(CallbackData, prefix="backpack_reward"):
+    """Detalle de recompensa"""
+    history_id: int
+
+
+class BackpackPurchaseDetailCallback(CallbackData, prefix="backpack_purchase"):
+    """Detalle de compra"""
+    order_id: int
+    product_id: int
+
+
+class BackpackDeliverCallback(CallbackData, prefix="backpack_deliver"):
+    """Entregar contenido de paquete"""
+    package_id: int

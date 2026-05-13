@@ -14,6 +14,13 @@ from aiogram import Bot
 from services.backpack_service import BackpackService
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
+from keyboards.callback_data import (
+    BackpackRewardsPageCallback,
+    BackpackPurchasesPageCallback,
+    BackpackRewardDetailCallback,
+    BackpackPurchaseDetailCallback,
+    BackpackDeliverCallback,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -69,16 +76,22 @@ def build_rewards_keyboard(rewards: list, page: int = 0) -> InlineKeyboardMarkup
         }.get(reward['reward_type'], '🎁')
 
         text = f"{reward_type_emoji} {reward['reward_name'][:25]}"
-        callback_data = f"backpack_reward_{reward['history_id']}"
+        callback_data = BackpackRewardDetailCallback(history_id=reward['history_id']).compile()
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
     # Navigation buttons
     nav_buttons = []
     total_pages = (len(rewards) + items_per_page - 1) // items_per_page
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"backpack_rewards_page_{page - 1}"))
+        nav_buttons.append(InlineKeyboardButton(
+            text="◀️",
+            callback_data=BackpackRewardsPageCallback(page=page - 1).compile()
+        ))
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"backpack_rewards_page_{page + 1}"))
+        nav_buttons.append(InlineKeyboardButton(
+            text="▶️",
+            callback_data=BackpackRewardsPageCallback(page=page + 1).compile()
+        ))
 
     if nav_buttons:
         keyboard_buttons.append(nav_buttons)
@@ -100,16 +113,25 @@ def build_purchases_keyboard(purchases: list, page: int = 0) -> InlineKeyboardMa
     for purchase in page_purchases:
         price = purchase.get('total_price', 0)
         text = f"📦 {purchase['product_name'][:20]} - {price} 💋"
-        callback_data = f"backpack_purchase_{purchase['order_id']}_{purchase['product_id']}"
+        callback_data = BackpackPurchaseDetailCallback(
+            order_id=purchase['order_id'],
+            product_id=purchase['product_id']
+        ).compile()
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
     # Navigation buttons
     nav_buttons = []
     total_pages = (len(purchases) + items_per_page - 1) // items_per_page
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"backpack_purchases_page_{page - 1}"))
+        nav_buttons.append(InlineKeyboardButton(
+            text="◀️",
+            callback_data=BackpackPurchasesPageCallback(page=page - 1).compile()
+        ))
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"backpack_purchases_page_{page + 1}"))
+        nav_buttons.append(InlineKeyboardButton(
+            text="▶️",
+            callback_data=BackpackPurchasesPageCallback(page=page + 1).compile()
+        ))
 
     if nav_buttons:
         keyboard_buttons.append(nav_buttons)
@@ -140,7 +162,10 @@ def build_reward_detail_keyboard(reward: dict) -> InlineKeyboardMarkup:
 
     if reward.get('reward_type') == 'PACKAGE' and reward.get('package_id'):
         keyboard_buttons.append([
-            InlineKeyboardButton(text="📂 Ver Contenido", callback_data=f"backpack_deliver_{reward['package_id']}")
+            InlineKeyboardButton(
+                text="📂 Ver Contenido",
+                callback_data=BackpackDeliverCallback(package_id=reward['package_id']).compile()
+            )
         ])
 
     keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_rewards")])
@@ -154,7 +179,10 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
 
     if purchase.get('package_id'):
         keyboard_buttons.append([
-            InlineKeyboardButton(text="📂 Ver Contenido", callback_data=f"backpack_deliver_{purchase['package_id']}")
+            InlineKeyboardButton(
+                text="📂 Ver Contenido",
+                callback_data=BackpackDeliverCallback(package_id=purchase['package_id']).compile()
+            )
         ])
 
     keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_purchases")])
@@ -253,11 +281,11 @@ async def callback_rewards(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar recompensas", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("backpack_rewards_page_"))
-async def callback_rewards_page(callback: CallbackQuery, bot: Bot):
+@router.callback_query(BackpackRewardsPageCallback.filter())
+async def callback_rewards_page(callback: CallbackQuery, callback_data: BackpackRewardsPageCallback):
     """Muestra página de recompensas"""
     user_id = callback.from_user.id
-    page = int(callback.data.split("_")[-1])
+    page = callback_data.page
 
     try:
         backpack_service = BackpackService()
@@ -298,11 +326,11 @@ async def callback_purchases(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar compras", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("backpack_purchases_page_"))
-async def callback_purchases_page(callback: CallbackQuery, bot: Bot):
+@router.callback_query(BackpackPurchasesPageCallback.filter())
+async def callback_purchases_page(callback: CallbackQuery, callback_data: BackpackPurchasesPageCallback):
     """Muestra página de compras"""
     user_id = callback.from_user.id
-    page = int(callback.data.split("_")[-1])
+    page = callback_data.page
 
     try:
         backpack_service = BackpackService()
@@ -358,11 +386,11 @@ async def callback_vip(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar VIP", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("backpack_reward_"))
-async def callback_reward_detail(callback: CallbackQuery, bot: Bot):
+@router.callback_query(BackpackRewardDetailCallback.filter())
+async def callback_reward_detail(callback: CallbackQuery, callback_data: BackpackRewardDetailCallback):
     """Muestra detalle de una recompensa"""
     user_id = callback.from_user.id
-    history_id = int(callback.data.split("_")[-1])
+    history_id = callback_data.history_id
 
     try:
         backpack_service = BackpackService()
@@ -392,13 +420,12 @@ async def callback_reward_detail(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar detalle", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("backpack_purchase_"))
-async def callback_purchase_detail(callback: CallbackQuery, bot: Bot):
+@router.callback_query(BackpackPurchaseDetailCallback.filter())
+async def callback_purchase_detail(callback: CallbackQuery, callback_data: BackpackPurchaseDetailCallback):
     """Muestra detalle de una compra"""
     user_id = callback.from_user.id
-    parts = callback.data.split("_")
-    order_id = int(parts[2])
-    product_id = int(parts[3])
+    order_id = callback_data.order_id
+    product_id = callback_data.product_id
 
     try:
         backpack_service = BackpackService()
@@ -439,11 +466,11 @@ async def callback_purchase_detail(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar detalle", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("backpack_deliver_"))
-async def callback_deliver_package(callback: CallbackQuery, bot: Bot):
+@router.callback_query(BackpackDeliverCallback.filter())
+async def callback_deliver_package(callback: CallbackQuery, callback_data: BackpackDeliverCallback):
     """Entrega contenido de un paquete como álbum"""
     user_id = callback.from_user.id
-    package_id = int(callback.data.split("_")[-1])
+    package_id = callback_data.package_id
 
     try:
         backpack_service = BackpackService()

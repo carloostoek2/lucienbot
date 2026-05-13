@@ -149,14 +149,11 @@ async def handle_member_join(event: ChatMemberUpdated):
         if not channel:
             return
 
-        # Actualizar solicitud si existe
+        # Obtener y aprobar solicitud usando el servicio
         pending = channel_service.get_pending_request(user.id, channel.id)
         if pending and pending.status == "pending":
-            pending.status = "approved"
-            pending.approved_at = datetime.utcnow()
-            channel_service.db.commit()
-
-            logger.info(f"Solicitud marcada como aprobada: id={pending.id}")
+            channel_service.approve_request(pending.id)
+            logger.info(f"Solicitud aprobada: id={pending.id}")
 
             # Enviar mensaje de bienvenida ritual con enlace
             try:

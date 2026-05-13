@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from services.besito_service import BesitoService
 from services.daily_gift_service import DailyGiftService
 from services.broadcast_service import BroadcastService
-from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard
+from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard, reactions_keyboard_with_counts
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -189,23 +189,16 @@ async def claim_daily_gift(callback: CallbackQuery):
 
 # ==================== REACCIONES A BROADCAST ====================
 
-@router.callback_query(F.data.startswith("react_"))
-async def handle_reaction(callback: CallbackQuery):
+from keyboards.callback_data import ReactionCallback
+
+@router.callback_query(ReactionCallback.filter())
+async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallback):
     """Maneja las reacciones a mensajes de broadcast y actualiza conteos"""
     user = callback.from_user
 
-    # Parsear datos: react_{broadcast_id}_{emoji_id}
-    parts = callback.data.split("_")
-    if len(parts) != 3:
-        await callback.answer("Error en la reacción", show_alert=True)
-        return
-
-    try:
-        broadcast_id = int(parts[1])
-        emoji_id = int(parts[2])
-    except ValueError:
-        await callback.answer("Error en la reacción", show_alert=True)
-        return
+    # Datos extraídos type-safe del CallbackData
+    broadcast_id = callback_data.broadcast_id
+    emoji_id = callback_data.emoji_id
 
     # Deduplication key para prevenir procesamiento duplicado
     dedup_key = f"{user.id}:{broadcast_id}:{emoji_id}"
@@ -252,29 +245,28 @@ async def handle_reaction(callback: CallbackQuery):
                         emoji_id_val = r.reaction_emoji.id
                         emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
 
-                # Reconstruir el teclado con TODOS los emojis originales (con o sin conteo)
-                buttons = []
+                # Construir lista de emojis para el keyboard
+                emojis = []
                 for emoji_id in selected_emoji_ids:
                     emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
                     if emoji_obj:
-                        count = emoji_counts.get(emoji_id, 0)
-                        # Mostrar el emoji con el conteo (o solo el emoji si no hay conteo)
-                        text = f"{emoji_obj.emoji} {count}" if count > 0 else emoji_obj.emoji
-                        buttons.append(InlineKeyboardButton(
-                            text=text,
-                            callback_data=f"react_{broadcast_id}_{emoji_id}"
-                        ))
+                        emojis.append((emoji_id, emoji_obj.emoji))
 
-                if buttons:
-                    new_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
-                    try:
-                        await callback.bot.edit_message_reply_markup(
-                            chat_id=broadcast.channel_id,
-                            message_id=broadcast.message_id,
-                            reply_markup=new_markup
-                        )
-                    except Exception as e:
-                        logger.warning(f"No se pudo actualizar conteo en mensaje: {e}")
+                # Usar función extractada para reconstruir el teclado
+                if emojis:
+                    new_markup = reactions_keyboard_with_counts(
+                        broadcast_id, emojis, emoji_counts
+                    )
+                    # Usar método extractado para actualizar mensaje
+                    await broadcast_service.update_reaction_message(
+                        bot=callback.bot,
+                        channel_id=broadcast.channel_id,
+                        message_id=broadcast.message_id,
+                        new_markup=new_markup
+                    )
+
+            # Logging de la reacción recibida
+            logger.info(f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}")
 
             # Solo notificar via callback (sin mensaje privado)
             await callback.answer(f"¡+{besitos} besitos! 💋")

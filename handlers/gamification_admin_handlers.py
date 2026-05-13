@@ -384,14 +384,13 @@ async def process_gift_amount(message: Message, state: FSMContext):
 async def toggle_daily_gift(callback: CallbackQuery):
     """Activa/desactiva el regalo diario"""
     gift_service = DailyGiftService()
-    config = gift_service.get_config()
-    
-    # Toggle
-    config.is_active = not config.is_active
-    gift_service.db.commit()
-    
-    status = "activado" if config.is_active else "desactivado"
+    is_active = gift_service.toggle_daily_gift()
+
+    status = "activado" if is_active else "desactivado"
     await callback.answer(f"Regalo diario {status}")
+
+    # Recargar config para mostrar estado actualizado
+    config = gift_service.get_config()
     await config_daily_gift(callback)
 
 

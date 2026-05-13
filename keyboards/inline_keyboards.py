@@ -9,7 +9,8 @@ from keyboards.callback_data import (
     ChannelDetailCallback, ConfigWaitCallback, ConfigInviteCallback,
     PendingReqCallback, ApproveAllCallback, DeleteChannelCallback,
     ConfirmDeleteChannelCallback, WaitTimeCallback,
-    AnonViewCallback
+    AnonViewCallback,
+    TriviaAnswerCallback, TriviaVipAnswerCallback, TriviaSimpleAnswerCallback,
 )
 from typing import List, Optional
 from models.models import Channel, Tariff
@@ -485,7 +486,7 @@ def trivia_keyboard(question: dict, question_idx: int, back_callback: str = "gam
     for idx, opt_text in enumerate(question['opts']):
         buttons.append([InlineKeyboardButton(
             text=opt_text,
-            callback_data=f"trivia_answer_{idx}_{question_idx}"
+            callback_data=TriviaAnswerCallback(answer_idx=idx, question_idx=question_idx).pack()
         )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver al menú de juegos",
@@ -500,7 +501,7 @@ def trivia_vip_keyboard(question: dict, question_idx: int, back_callback: str = 
     for idx, opt_text in enumerate(question['opts']):
         buttons.append([InlineKeyboardButton(
             text=opt_text,
-            callback_data=f"trivia_vip_answer_{idx}_{question_idx}"
+            callback_data=TriviaVipAnswerCallback(answer_idx=idx, question_idx=question_idx).pack()
         )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver a El Diván",
@@ -524,7 +525,7 @@ def trivia_simple_keyboard(question: dict, question_idx: int) -> InlineKeyboardM
     for idx, opt_text in enumerate(question['opts']):
         buttons.append([InlineKeyboardButton(
             text=opt_text,
-            callback_data=f"trivia_simple_answer_{idx}_{question_idx}"
+            callback_data=TriviaSimpleAnswerCallback(answer_idx=idx, question_idx=question_idx).pack()
         )])
     buttons.append([InlineKeyboardButton(
         text="🔙 Volver al menu de juegos",

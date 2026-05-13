@@ -17,7 +17,8 @@ from services.package_service import PackageService
 from models.models import MissionType, MissionFrequency, RewardType
 from keyboards.callback_data import (
     MissionDetailCallback, MissionToggleCallback, MissionDeleteCallback,
-    MissionStatsCallback, SelectRewardMissionCallback, ConfirmCreateMissionCallback
+    MissionStatsCallback, SelectRewardMissionCallback, ConfirmCreateMissionCallback,
+    MissionTypeSelectCallback, MissionFreqSelectCallback
 )
 import logging
 
@@ -133,11 +134,11 @@ async def process_mission_description(message: Message, state: FSMContext):
     await state.update_data(description=description)
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💋 Reaccionar N veces", callback_data="type_reaction_count")],
-        [InlineKeyboardButton(text="🎁 Reclamar regalo N dias (consecutivos)", callback_data="type_daily_streak")],
-        [InlineKeyboardButton(text="🎁 Reclamar regalo N dias (total)", callback_data="type_daily_total")],
-        [InlineKeyboardButton(text="🛒 Comprar en tienda", callback_data="type_store_purchase")],
-        [InlineKeyboardButton(text="👑 Tener VIP activo", callback_data="type_vip_active")],
+        [InlineKeyboardButton(text="💋 Reaccionar N veces", callback_data=MissionTypeSelectCallback(mission_type=MissionType.REACTION_COUNT.value).pack())],
+        [InlineKeyboardButton(text="🎁 Reclamar regalo N dias (consecutivos)", callback_data=MissionTypeSelectCallback(mission_type=MissionType.DAILY_GIFT_STREAK.value).pack())],
+        [InlineKeyboardButton(text="🎁 Reclamar regalo N dias (total)", callback_data=MissionTypeSelectCallback(mission_type=MissionType.DAILY_GIFT_TOTAL.value).pack())],
+        [InlineKeyboardButton(text="🛒 Comprar en tienda", callback_data=MissionTypeSelectCallback(mission_type=MissionType.STORE_PURCHASE.value).pack())],
+        [InlineKeyboardButton(text="👑 Tener VIP activo", callback_data=MissionTypeSelectCallback(mission_type=MissionType.VIP_ACTIVE.value).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")]
     ])
     
@@ -152,22 +153,15 @@ Selecciona el tipo de desafio:""",
     await state.set_state(MissionWizardStates.selecting_type)
 
 
-@router.callback_query(MissionWizardStates.selecting_type, F.data.startswith("type_"))
-async def select_mission_type(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(MissionWizardStates.selecting_type, MissionTypeSelectCallback.filter())
+async def select_mission_type(callback: CallbackQuery, state: FSMContext, callback_data: MissionTypeSelectCallback):
     """Selecciona tipo de mision"""
-    type_map = {
-        "type_reaction_count": MissionType.REACTION_COUNT,
-        "type_daily_streak": MissionType.DAILY_GIFT_STREAK,
-        "type_daily_total": MissionType.DAILY_GIFT_TOTAL,
-        "type_store_purchase": MissionType.STORE_PURCHASE,
-        "type_vip_active": MissionType.VIP_ACTIVE
-    }
-    
-    mission_type = type_map.get(callback.data)
-    if not mission_type:
+    try:
+        mission_type = MissionType(callback_data.mission_type)
+    except ValueError:
         await callback.answer("Tipo invalido", show_alert=True)
         return
-    
+
     await state.update_data(mission_type=mission_type)
     
     examples = {
@@ -207,8 +201,8 @@ async def process_mission_target(message: Message, state: FSMContext):
     await state.update_data(target_value=target)
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Una vez", callback_data="freq_one_time")],
-        [InlineKeyboardButton(text="Recurrente", callback_data="freq_recurring")],
+        [InlineKeyboardButton(text="Una vez", callback_data=MissionFreqSelectCallback(frequency=MissionFrequency.ONE_TIME.value).pack())],
+        [InlineKeyboardButton(text="Recurrente", callback_data=MissionFreqSelectCallback(frequency=MissionFrequency.RECURRING.value).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")]
     ])
     
@@ -226,19 +220,15 @@ Recurrente: Se reinicia al completarse""",
     await state.set_state(MissionWizardStates.selecting_frequency)
 
 
-@router.callback_query(MissionWizardStates.selecting_frequency, F.data.startswith("freq_"))
-async def select_frequency(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(MissionWizardStates.selecting_frequency, MissionFreqSelectCallback.filter())
+async def select_frequency(callback: CallbackQuery, state: FSMContext, callback_data: MissionFreqSelectCallback):
     """Selecciona frecuencia"""
-    freq_map = {
-        "freq_one_time": MissionFrequency.ONE_TIME,
-        "freq_recurring": MissionFrequency.RECURRING
-    }
-    
-    frequency = freq_map.get(callback.data)
-    if not frequency:
+    try:
+        frequency = MissionFrequency(callback_data.frequency)
+    except ValueError:
         await callback.answer("Frecuencia invalida", show_alert=True)
         return
-    
+
     await state.update_data(frequency=frequency)
     
     # Mostrar recompensas disponibles

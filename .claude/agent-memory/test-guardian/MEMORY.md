@@ -1,0 +1,1 @@
+- [Gamification Admin CallbackData tests](test_callbackdata_gamification_admin.md) — EditEmojiCallback and ToggleEmojiCallback tests (16 tests pass)

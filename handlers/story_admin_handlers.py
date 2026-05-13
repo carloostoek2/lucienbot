@@ -21,6 +21,10 @@ from keyboards.callback_data import (
     StoryAddChoicesCallback,
     StoryChoiceNextCallback,
     ArchetypeDetailCallback,
+    StoryNodeTypeCallback,
+    StoryArchetypeReqCallback,
+    StoryChoicePointsCallback,
+    StoryNewArchetypeCallback,
 )
 from utils.helpers import is_admin
 import logging
@@ -151,10 +155,10 @@ async def process_node_content(message: Message, state: FSMContext):
     await state.update_data(content=content)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Narrativo", callback_data="node_type_narrative")],
-        [InlineKeyboardButton(text="🎭 Decision", callback_data="node_type_decision")],
-        [InlineKeyboardButton(text="🏁 Final", callback_data="node_type_ending")],
-        [InlineKeyboardButton(text="❓ Cuestionario", callback_data="node_type_quiz")],
+        [InlineKeyboardButton(text="📖 Narrativo", callback_data=StoryNodeTypeCallback(node_type=NodeType.NARRATIVE.value).pack())],
+        [InlineKeyboardButton(text="🎭 Decision", callback_data=StoryNodeTypeCallback(node_type=NodeType.DECISION.value).pack())],
+        [InlineKeyboardButton(text="🏁 Final", callback_data=StoryNodeTypeCallback(node_type=NodeType.ENDING.value).pack())],
+        [InlineKeyboardButton(text="❓ Cuestionario", callback_data=StoryNodeTypeCallback(node_type=NodeType.QUIZ.value).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_narrative")]
     ])
 
@@ -166,18 +170,12 @@ async def process_node_content(message: Message, state: FSMContext):
     await state.set_state(NodeWizardStates.selecting_type)
 
 
-@router.callback_query(NodeWizardStates.selecting_type, F.data.startswith("node_type_"))
-async def select_node_type(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(NodeWizardStates.selecting_type, StoryNodeTypeCallback.filter())
+async def select_node_type(callback: CallbackQuery, state: FSMContext, callback_data: StoryNodeTypeCallback):
     """Selecciona tipo de nodo - Voz de Lucien"""
-    type_map = {
-        "node_type_narrative": NodeType.NARRATIVE,
-        "node_type_decision": NodeType.DECISION,
-        "node_type_ending": NodeType.ENDING,
-        "node_type_quiz": NodeType.QUIZ
-    }
-
-    node_type = type_map.get(callback.data)
-    if not node_type:
+    try:
+        node_type = NodeType(callback_data.node_type)
+    except ValueError:
         await callback.answer("Tipo no valido", show_alert=True)
         return
 
@@ -211,13 +209,13 @@ async def process_node_chapter(message: Message, state: FSMContext):
     await state.update_data(chapter=chapter)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌸 Cualquiera", callback_data="req_archetype_none")],
-        [InlineKeyboardButton(text="🎭 El Seductor", callback_data="req_archetype_seductor")],
-        [InlineKeyboardButton(text="👁️ El Observador", callback_data="req_archetype_observer")],
-        [InlineKeyboardButton(text="💎 El Devoto", callback_data="req_archetype_devoto")],
-        [InlineKeyboardButton(text="🗺️ El Explorador", callback_data="req_archetype_explorador")],
-        [InlineKeyboardButton(text="🌑 El Misterioso", callback_data="req_archetype_misterioso")],
-        [InlineKeyboardButton(text="🔥 El Intrepido", callback_data="req_archetype_intrepido")],
+        [InlineKeyboardButton(text="🌸 Cualquiera", callback_data=StoryArchetypeReqCallback(archetype="none").pack())],
+        [InlineKeyboardButton(text="🎭 El Seductor", callback_data=StoryArchetypeReqCallback(archetype=ArchetypeType.SEDUCTOR.value).pack())],
+        [InlineKeyboardButton(text="👁️ El Observador", callback_data=StoryArchetypeReqCallback(archetype=ArchetypeType.OBSERVER.value).pack())],
+        [InlineKeyboardButton(text="💎 El Devoto", callback_data=StoryArchetypeReqCallback(archetype=ArchetypeType.DEVOTO.value).pack())],
+        [InlineKeyboardButton(text="🗺️ El Explorador", callback_data=StoryArchetypeReqCallback(archetype=ArchetypeType.EXPLORADOR.value).pack())],
+        [InlineKeyboardButton(text="🌑 El Misterioso", callback_data=StoryArchetypeReqCallback(archetype=ArchetypeType.MISTERIOSO.value).pack())],
+        [InlineKeyboardButton(text="🔥 El Intrepido", callback_data=StoryArchetypeReqCallback(archetype=ArchetypeType.INTREPIDO.value).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_narrative")]
     ])
 
@@ -230,20 +228,18 @@ async def process_node_chapter(message: Message, state: FSMContext):
     await state.set_state(NodeWizardStates.waiting_requirements)
 
 
-@router.callback_query(NodeWizardStates.waiting_requirements, F.data.startswith("req_archetype_"))
-async def select_archetype_requirement(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(NodeWizardStates.waiting_requirements, StoryArchetypeReqCallback.filter())
+async def select_archetype_requirement(callback: CallbackQuery, state: FSMContext, callback_data: StoryArchetypeReqCallback):
     """Selecciona requisito de arquetipo - Voz de Lucien"""
-    archetype_map = {
-        "req_archetype_none": None,
-        "req_archetype_seductor": ArchetypeType.SEDUCTOR,
-        "req_archetype_observer": ArchetypeType.OBSERVER,
-        "req_archetype_devoto": ArchetypeType.DEVOTO,
-        "req_archetype_explorador": ArchetypeType.EXPLORADOR,
-        "req_archetype_misterioso": ArchetypeType.MISTERIOSO,
-        "req_archetype_intrepido": ArchetypeType.INTREPIDO
-    }
+    if callback_data.archetype == "none":
+        required_archetype = None
+    else:
+        try:
+            required_archetype = ArchetypeType(callback_data.archetype)
+        except ValueError:
+            await callback.answer("Arquetipo no valido", show_alert=True)
+            return
 
-    required_archetype = archetype_map.get(callback.data)
     await state.update_data(required_archetype=required_archetype)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -734,13 +730,13 @@ async def select_choice_next_node(callback: CallbackQuery, state: FSMContext, ca
     await state.update_data(choice_next_node_id=next_node_id)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌸 Ninguno", callback_data="choice_points_none")],
-        [InlineKeyboardButton(text="🎭 Seductor", callback_data="choice_points_seductor")],
-        [InlineKeyboardButton(text="👁️ Observador", callback_data="choice_points_observer")],
-        [InlineKeyboardButton(text="💎 Devoto", callback_data="choice_points_devoto")],
-        [InlineKeyboardButton(text="🗺️ Explorador", callback_data="choice_points_explorador")],
-        [InlineKeyboardButton(text="🌑 Misterioso", callback_data="choice_points_misterioso")],
-        [InlineKeyboardButton(text="🔥 Intrepido", callback_data="choice_points_intrepido")],
+        [InlineKeyboardButton(text="🌸 Ninguno", callback_data=StoryChoicePointsCallback(archetype="none").pack())],
+        [InlineKeyboardButton(text="🎭 Seductor", callback_data=StoryChoicePointsCallback(archetype=ArchetypeType.SEDUCTOR.value).pack())],
+        [InlineKeyboardButton(text="👁️ Observador", callback_data=StoryChoicePointsCallback(archetype=ArchetypeType.OBSERVER.value).pack())],
+        [InlineKeyboardButton(text="💎 Devoto", callback_data=StoryChoicePointsCallback(archetype=ArchetypeType.DEVOTO.value).pack())],
+        [InlineKeyboardButton(text="🗺️ Explorador", callback_data=StoryChoicePointsCallback(archetype=ArchetypeType.EXPLORADOR.value).pack())],
+        [InlineKeyboardButton(text="🌑 Misterioso", callback_data=StoryChoicePointsCallback(archetype=ArchetypeType.MISTERIOSO.value).pack())],
+        [InlineKeyboardButton(text="🔥 Intrepido", callback_data=StoryChoicePointsCallback(archetype=ArchetypeType.INTREPIDO.value).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_narrative")]
     ])
 
@@ -753,20 +749,18 @@ async def select_choice_next_node(callback: CallbackQuery, state: FSMContext, ca
     await callback.answer()
 
 
-@router.callback_query(ChoiceWizardStates.waiting_archetype_points, F.data.startswith("choice_points_"))
-async def select_choice_archetype_points(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ChoiceWizardStates.waiting_archetype_points, StoryChoicePointsCallback.filter())
+async def select_choice_archetype_points(callback: CallbackQuery, state: FSMContext, callback_data: StoryChoicePointsCallback):
     """Selecciona puntos de arquetipo - Voz de Lucien"""
-    archetype_map = {
-        "choice_points_none": None,
-        "choice_points_seductor": ArchetypeType.SEDUCTOR,
-        "choice_points_observer": ArchetypeType.OBSERVER,
-        "choice_points_devoto": ArchetypeType.DEVOTO,
-        "choice_points_explorador": ArchetypeType.EXPLORADOR,
-        "choice_points_misterioso": ArchetypeType.MISTERIOSO,
-        "choice_points_intrepido": ArchetypeType.INTREPIDO
-    }
+    if callback_data.archetype == "none":
+        selected_archetype = None
+    else:
+        try:
+            selected_archetype = ArchetypeType(callback_data.archetype)
+        except ValueError:
+            await callback.answer("Arquetipo no valido", show_alert=True)
+            return
 
-    selected_archetype = archetype_map.get(callback.data)
     await state.update_data(choice_archetype=selected_archetype)
 
     data = await state.get_data()
@@ -838,12 +832,12 @@ async def confirm_create_choice(callback: CallbackQuery, state: FSMContext):
 async def create_archetype_start(callback: CallbackQuery, state: FSMContext):
     """Inicia wizard para crear arquetipo - Voz de Lucien"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎭 El Seductor", callback_data="new_archetype_seductor")],
-        [InlineKeyboardButton(text="👁️ El Observador", callback_data="new_archetype_observer")],
-        [InlineKeyboardButton(text="💎 El Devoto", callback_data="new_archetype_devoto")],
-        [InlineKeyboardButton(text="🗺️ El Explorador", callback_data="new_archetype_explorador")],
-        [InlineKeyboardButton(text="🌑 El Misterioso", callback_data="new_archetype_misterioso")],
-        [InlineKeyboardButton(text="🔥 El Intrepido", callback_data="new_archetype_intrepido")],
+        [InlineKeyboardButton(text="🎭 El Seductor", callback_data=StoryNewArchetypeCallback(archetype=ArchetypeType.SEDUCTOR.value).pack())],
+        [InlineKeyboardButton(text="👁️ El Observador", callback_data=StoryNewArchetypeCallback(archetype=ArchetypeType.OBSERVER.value).pack())],
+        [InlineKeyboardButton(text="💎 El Devoto", callback_data=StoryNewArchetypeCallback(archetype=ArchetypeType.DEVOTO.value).pack())],
+        [InlineKeyboardButton(text="🗺️ El Explorador", callback_data=StoryNewArchetypeCallback(archetype=ArchetypeType.EXPLORADOR.value).pack())],
+        [InlineKeyboardButton(text="🌑 El Misterioso", callback_data=StoryNewArchetypeCallback(archetype=ArchetypeType.MISTERIOSO.value).pack())],
+        [InlineKeyboardButton(text="🔥 El Intrepido", callback_data=StoryNewArchetypeCallback(archetype=ArchetypeType.INTREPIDO.value).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="manage_archetypes")]
     ])
 
@@ -856,20 +850,12 @@ async def create_archetype_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(ArchetypeWizardStates.selecting_type, F.data.startswith("new_archetype_"))
-async def select_new_archetype_type(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(ArchetypeWizardStates.selecting_type, StoryNewArchetypeCallback.filter())
+async def select_new_archetype_type(callback: CallbackQuery, state: FSMContext, callback_data: StoryNewArchetypeCallback):
     """Selecciona tipo de arquetipo - Voz de Lucien"""
-    archetype_map = {
-        "new_archetype_seductor": ArchetypeType.SEDUCTOR,
-        "new_archetype_observer": ArchetypeType.OBSERVER,
-        "new_archetype_devoto": ArchetypeType.DEVOTO,
-        "new_archetype_explorador": ArchetypeType.EXPLORADOR,
-        "new_archetype_misterioso": ArchetypeType.MISTERIOSO,
-        "new_archetype_intrepido": ArchetypeType.INTREPIDO
-    }
-
-    archetype_type = archetype_map.get(callback.data)
-    if not archetype_type:
+    try:
+        archetype_type = ArchetypeType(callback_data.archetype)
+    except ValueError:
         await callback.answer("Tipo no valido", show_alert=True)
         return
 

@@ -9,8 +9,8 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from config.settings import bot_config
+from services import get_service
 from services.analytics_service import AnalyticsService
-from models.database import SessionLocal
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -33,10 +33,9 @@ async def show_stats(message: Message):
         )
         return
 
-    db = SessionLocal()
-    svc = AnalyticsService(db)
     try:
-        stats = svc.get_dashboard_stats()
+        with get_service(AnalyticsService) as svc:
+            stats = svc.get_dashboard_stats()
         await message.answer(
             LucienVoice.analytics_dashboard(stats),
             parse_mode=ParseMode.HTML
@@ -44,8 +43,6 @@ async def show_stats(message: Message):
     except Exception as e:
         logger.error(f"Error showing stats: {e}")
         await message.answer(LucienVoice.error_message())
-    finally:
-        svc.close()
 
 
 @router.message(Command("export"))
@@ -64,15 +61,14 @@ async def export_data(message: Message):
     if len(args) > 1 and args[1].lower() in ("users", "activity"):
         export_type = args[1].lower()
 
-    db = SessionLocal()
-    svc = AnalyticsService(db)
     try:
-        if export_type == "users":
-            csv_path = svc.export_users_csv()
-            filename = "visitantes_export.csv"
-        else:
-            csv_path = svc.export_activity_csv()
-            filename = "actividad_export.csv"
+        with get_service(AnalyticsService) as svc:
+            if export_type == "users":
+                csv_path = svc.export_users_csv()
+                filename = "visitantes_export.csv"
+            else:
+                csv_path = svc.export_activity_csv()
+                filename = "actividad_export.csv"
 
         if csv_path is None:
             await message.answer(
@@ -95,5 +91,3 @@ async def export_data(message: Message):
     except Exception as e:
         logger.error(f"Error exporting data: {e}")
         await message.answer(LucienVoice.error_message())
-    finally:
-        svc.close()

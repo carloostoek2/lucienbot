@@ -20,7 +20,7 @@ from models.models import (
     StoreProduct, Package, Promotion, PromotionStatus, ReactionEmoji,
     BroadcastMessage, StoryNode, StoryChoice, NodeType, Archetype,
     ArchetypeType, DailyGiftConfig, DailyGiftClaim, CartItem, Order,
-    OrderStatus, Reward, RewardType
+    OrderStatus, Reward, RewardType, Category
 )
 
 
@@ -457,6 +457,21 @@ def sample_reward_besitos(db_session: Session):
     db_session.commit()
     db_session.refresh(reward)
     return reward
+
+
+@pytest.fixture
+def sample_category(db_session: Session):
+    """Crea una categoría de prueba."""
+    category = Category(
+        name="Test Category",
+        description="A test category",
+        order_index=1,
+        is_active=True
+    )
+    db_session.add(category)
+    db_session.commit()
+    db_session.refresh(category)
+    return category
 
 
 
