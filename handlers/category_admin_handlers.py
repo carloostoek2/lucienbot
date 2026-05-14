@@ -319,7 +319,7 @@ async def toggle_category(callback: CallbackQuery, callback_data: CategoryAdminT
 
             status = "activada" if not category.is_active else "desactivada"
             await callback.answer(f"Categoría {status}")
-            await category_admin_detail(callback, CategoryAdminDetailCallback(category_id=category_id).pack())
+            await category_admin_detail(callback, CategoryAdminDetailCallback(category_id=category_id))
             logger.info(f"toggle_category | toggle | user_id={callback.from_user.id} | category_id={category_id}")
 
 

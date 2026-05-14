@@ -216,11 +216,10 @@ async def process_manual_files(message: Message, state: FSMContext):
 async def select_package_for_promotion(callback: CallbackQuery, state: FSMContext):
     """Selecciona paquete para la promocion - Voz de Lucien"""
     try:
-        callback_data = SelectPkgPromoCallback.parse(callback.data)
-        package_id = callback_data["pkg_id"]
+        callback_data = SelectPkgPromoCallback.unpack(callback.data)
+        package_id = callback_data.pkg_id
     except Exception:
         await callback.answer("ID invalido", show_alert=True)
-        return
         return
 
     await state.update_data(package_id=package_id, manual_file_count=None)

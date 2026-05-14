@@ -249,10 +249,12 @@ async def edit_emoji(callback: CallbackQuery, callback_data: EditEmojiCallback):
         return
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"Valor: {emoji.besito_value} besitos",
-            callback_data=EditEmojiCallback(emoji_id=emoji_id).pack()
-        )],
+        [
+            InlineKeyboardButton(
+                text="✏️ Cambiar valor",
+                callback_data=ChangeEmojiValueCallback(emoji_id=emoji_id).pack()
+            )
+        ],
         [InlineKeyboardButton(
             text=f"{'Desactivar' if emoji.is_active else 'Activar'}",
             callback_data=ToggleEmojiCallback(emoji_id=emoji_id).pack()
@@ -293,7 +295,7 @@ async def toggle_emoji(callback: CallbackQuery, callback_data: ToggleEmojiCallba
         await callback.answer("Estado actualizado")
         # Reconstruir callback para volver a editar el emoji
         callback.data = EditEmojiCallback(emoji_id=emoji_id).pack()
-        await edit_emoji(callback)
+        await edit_emoji(callback, EditEmojiCallback(emoji_id=emoji_id))
     else:
         await callback.answer("Error al actualizar", show_alert=True)
 

@@ -887,7 +887,7 @@ async def view_package_files(callback: CallbackQuery, bot: Bot, callback_data: V
         Total: {len(files)} archivo(s)
 
         Enviando previews...""",
-                reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).serialize())
+                reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).pack())
             )
             await callback.answer()
     
@@ -1284,7 +1284,7 @@ async def delete_package_files_start(callback: CallbackQuery, state: FSMContext,
         <i>Este paquete no tiene archivos...</i>
 
         👉 <i>No hay nada que eliminar.</i>""",
-                    reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).serialize()),
+                    reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).pack()),
                     parse_mode="HTML"
                 )
                 await callback.answer()
@@ -1370,7 +1370,7 @@ async def show_files_for_deletion(callback: CallbackQuery, state: FSMContext, bo
         <i>El paquete ya no tiene archivos...</i>
 
         ✅ <b>Todos los archivos han sido eliminados.</b>""",
-                    reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).serialize()),
+                    reply_markup=back_keyboard(PackageDetailCallback(package_id=package_id).pack()),
                     parse_mode="HTML"
                 )
                 await state.clear()
