@@ -99,11 +99,11 @@ async def manage_packages_menu(callback: CallbackQuery):
                 )],
                 [InlineKeyboardButton(
                     text="📋 Ver paquetes activos",
-                    callback_data=PackageListCallback(list_type="active")
+                    callback_data=PackageListCallback(list_type="active").pack()
                 )],
                 [InlineKeyboardButton(
                     text="📋 Ver todos los paquetes",
-                    callback_data=PackageListCallback(list_type="all")
+                    callback_data=PackageListCallback(list_type="all").pack()
                 )],
                 [InlineKeyboardButton(
                     text="🔙 Volver",
@@ -173,7 +173,7 @@ async def list_packages(callback: CallbackQuery, callback_data: PackageListCallb
         
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {pkg.name[:30]}",
-                    callback_data=PackageDetailCallback(package_id=pkg.id)
+                    callback_data=PackageDetailCallback(package_id=pkg.id).pack()
                 )])
     
             buttons.append([InlineKeyboardButton(
@@ -208,23 +208,23 @@ async def package_detail(callback: CallbackQuery, callback_data: PackageDetailCa
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text="👁️ Ver archivos",
-                    callback_data=ViewPackageFilesCallback(package_id=package_id)
+                    callback_data=ViewPackageFilesCallback(package_id=package_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar archivos",
-                    callback_data=DeletePackageFilesCallback(package_id=package_id)
+                    callback_data=DeletePackageFilesCallback(package_id=package_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if package.is_active else 'Activar'}",
-                    callback_data=TogglePackageCallback(package_id=package_id)
+                    callback_data=TogglePackageCallback(package_id=package_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar paquete",
-                    callback_data=DeletePackageCallback(package_id=package_id, confirmed=False)
+                    callback_data=DeletePackageCallback(package_id=package_id, confirmed=False).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🔙 Volver",
-                    callback_data=PackageListCallback(list_type="all")
+                    callback_data=PackageListCallback(list_type="all").pack()
                 )]
             ])
     
@@ -281,11 +281,11 @@ async def delete_package_confirm(callback: CallbackQuery, callback_data: DeleteP
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="✅ Sí, eliminar",
-            callback_data=DeletePackageCallback(package_id=package_id, confirmed=True)
+            callback_data=DeletePackageCallback(package_id=package_id, confirmed=True).pack()
         )],
         [InlineKeyboardButton(
             text="❌ Cancelar",
-            callback_data=PackageDetailCallback(package_id=package_id)
+            callback_data=PackageDetailCallback(package_id=package_id).pack()
         )]
     ])
 
@@ -775,7 +775,7 @@ async def send_package_to_user_start(callback: CallbackQuery, state: FSMContext)
             for pkg in packages:
                 buttons.append([InlineKeyboardButton(
                     text=f"{pkg.name} ({pkg.file_count} archivos)",
-                    callback_data=SendPackageSelectCallback(package_id=pkg.id)
+                    callback_data=SendPackageSelectCallback(package_id=pkg.id).pack()
                 )])
     
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="manage_packages")])
@@ -954,7 +954,7 @@ async def update_package_start(callback: CallbackQuery, state: FSMContext):
                 status = "✅" if pkg.is_active else "❌"
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {pkg.name[:35]} ({pkg.file_count} archivos)",
-                    callback_data=UpdatePackageSelectCallback(package_id=pkg.id)
+                    callback_data=UpdatePackageSelectCallback(package_id=pkg.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(
@@ -1228,7 +1228,7 @@ async def pkgfiles_delete_menu(callback: CallbackQuery, state: FSMContext):
                 if file_count > 0:  # Solo mostrar paquetes con archivos
                     buttons.append([InlineKeyboardButton(
                         text=f"{pkg.name[:30]} ({file_count} archivos)",
-                        callback_data=DeleteFilePkgCallback(package_id=pkg.id)
+                        callback_data=DeleteFilePkgCallback(package_id=pkg.id).pack()
                     )])
 
             if not buttons:
@@ -1397,11 +1397,11 @@ async def show_files_for_deletion(callback: CallbackQuery, state: FSMContext, bo
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(
                             text="🗑️ Eliminar este archivo",
-                            callback_data=ConfirmDeleteFileCallback(file_id=file_entry.id)
+                            callback_data=ConfirmDeleteFileCallback(file_id=file_entry.id).pack()
                         )],
                         [InlineKeyboardButton(
                             text="✅ Terminar",
-                            callback_data=FinishDeleteFilesCallback(package_id=package_id)
+                            callback_data=FinishDeleteFilesCallback(package_id=package_id).pack()
                         )]
                     ])
 
@@ -1454,11 +1454,11 @@ async def confirm_delete_file(callback: CallbackQuery, state: FSMContext, callba
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="✅ Sí, eliminar",
-            callback_data=ExecuteDeleteFileCallback(file_id=file_id)
+            callback_data=ExecuteDeleteFileCallback(file_id=file_id).pack()
         )],
         [InlineKeyboardButton(
             text="❌ Cancelar",
-            callback_data=ContinueDeleteFilesCallback(package_id=package_id)
+            callback_data=ContinueDeleteFilesCallback(package_id=package_id).pack()
         )]
     ])
 
@@ -1490,11 +1490,11 @@ async def execute_delete_file(callback: CallbackQuery, state: FSMContext, callba
                         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                             [InlineKeyboardButton(
                                 text="🗑️ Eliminar más archivos",
-                                callback_data=ContinueDeleteFilesCallback(package_id=package_id)
+                                callback_data=ContinueDeleteFilesCallback(package_id=package_id).pack()
                             )],
                             [InlineKeyboardButton(
                                 text="✅ Terminar",
-                                callback_data=FinishDeleteFilesCallback(package_id=package_id)
+                                callback_data=FinishDeleteFilesCallback(package_id=package_id).pack()
                             )]
                         ]),
                         parse_mode="HTML"
@@ -1529,7 +1529,7 @@ async def finish_delete_files(callback: CallbackQuery, state: FSMContext, callba
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="📦 Ver paquete",
-                callback_data=PackageDetailCallback(package_id=package_id)
+                callback_data=PackageDetailCallback(package_id=package_id).pack()
             )],
             [InlineKeyboardButton(
                 text="🔙 Menú de paquetes",

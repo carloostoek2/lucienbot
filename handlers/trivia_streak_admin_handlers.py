@@ -360,12 +360,12 @@ async def streak_promo_get_category(message, state: FSMContext):
 
     buttons = [[InlineKeyboardButton(
         text="\U0001f3b0 Mazo general",
-        callback_data=TriviaStreakCategoryCallback(category="none")
+        callback_data=TriviaStreakCategoryCallback(category="none").pack()
     )]]
     for cat in categories:
         buttons.append([InlineKeyboardButton(
             text=f"{cat['display_name']} ({cat['question_count']} preguntas)",
-            callback_data=TriviaStreakCategoryCallback(category=str(cat['category_id']))
+            callback_data=TriviaStreakCategoryCallback(category=str(cat['category_id'])).pack()
         )])
 
     await message.answer(
@@ -415,12 +415,12 @@ async def streak_promo_duration_hours_got(message, state: FSMContext):
 
     buttons = [[InlineKeyboardButton(
         text="\U0001f3b0 Mazo general",
-        callback_data=TriviaStreakCategoryCallback(category="none")
+        callback_data=TriviaStreakCategoryCallback(category="none").pack()
     )]]
     for cat in categories:
         buttons.append([InlineKeyboardButton(
             text=f"{cat['display_name']} ({cat['question_count']} preguntas)",
-            callback_data=TriviaStreakCategoryCallback(category=str(cat['category_id']))
+            callback_data=TriviaStreakCategoryCallback(category=str(cat['category_id'])).pack()
         )])
 
     await message.answer(
@@ -442,19 +442,19 @@ async def streak_promo_choose_game_types(callback: CallbackQuery, callback_data:
     buttons = [
         [InlineKeyboardButton(
             text="✅ General (trivia clasica)",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="general")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="general").pack()
         )],
         [InlineKeyboardButton(
             text="✅ Simple (trivia especial)",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="simple")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="simple").pack()
         )],
         [InlineKeyboardButton(
             text="❌ VIP (trivia exclusiva)",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="vip")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="vip").pack()
         )],
         [InlineKeyboardButton(
             text="\U0001f6d1 Continuar",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="done")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="done").pack()
         )],
     ]
     await callback.message.edit_text(
@@ -481,19 +481,19 @@ def _build_game_type_selection_keyboard(gt_flag: dict) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(
             text=f"{'✅' if gt_flag['general'] else '❌'} General (trivia clasica)",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="general")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="general").pack()
         )],
         [InlineKeyboardButton(
             text=f"{'✅' if gt_flag['simple'] else '❌'} Simple (trivia especial)",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="simple")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="simple").pack()
         )],
         [InlineKeyboardButton(
             text=f"{'✅' if gt_flag['vip'] else '❌'} VIP (trivia exclusiva)",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="vip")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="vip").pack()
         )],
         [InlineKeyboardButton(
             text="\U0001f6d1 Continuar",
-            callback_data=TriviaStreakGoalTypeCallback(goal_type="done")
+            callback_data=TriviaStreakGoalTypeCallback(goal_type="done").pack()
         )],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -724,7 +724,7 @@ async def streak_promo_toggle(callback: CallbackQuery, callback_data: TriviaStre
             service.activate(promo_id)
             await callback.answer("✅ Promocion activada.", show_alert=True)
 
-    await streak_promo_view(callback, TriviaStreakDetailCallback(promo_id=promo_id))
+    await streak_promo_view(callback, TriviaStreakDetailCallback(promo_id=promo_id).pack())
     logger.info(
         f"trivia_streak_admin_handlers - streak_promo_toggle - "
         f"{callback.from_user.id} - promo_id:{promo_id}"

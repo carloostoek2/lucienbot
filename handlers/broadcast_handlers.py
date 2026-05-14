@@ -66,7 +66,7 @@ async def send_broadcast_start(callback: CallbackQuery, state: FSMContext):
         emoji = "🚪" if ch.channel_type.value == "free" else "👑"
         buttons.append([InlineKeyboardButton(
             text=f"{emoji} {ch.channel_name or 'Sin nombre'}",
-            callback_data=BroadcastChannelCallback(channel_id=ch.channel_id)
+            callback_data=BroadcastChannelCallback(channel_id=ch.channel_id).pack()
         )])
     
     buttons.append([InlineKeyboardButton(
@@ -378,7 +378,7 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
         check = "✅ " if is_selected else "⬜ "
         buttons.append([InlineKeyboardButton(
             text=f"{check}{emoji.emoji} = {emoji.besito_value} besitos",
-            callback_data=ToggleReactionCallback(emoji_id=emoji.id)
+            callback_data=ToggleReactionCallback(emoji_id=emoji.id).pack()
         )])
     
     buttons.append([InlineKeyboardButton(
@@ -489,8 +489,8 @@ async def skip_reactions(callback: CallbackQuery, state: FSMContext):
 async def ask_for_protection(target, state: FSMContext):
     """Pregunta por protección del mensaje"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes"))],
-        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no"))],
+        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes").pack())],
+        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no").pack())],
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
     ])
@@ -624,8 +624,8 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
 async def back_from_preview(callback: CallbackQuery, state: FSMContext):
     """Regresar desde preview a protección"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes"))],
-        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no"))],
+        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes").pack())],
+        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no").pack())],
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
     ])

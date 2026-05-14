@@ -215,7 +215,7 @@ async def show_node(callback: CallbackQuery, node_id: int):
                         btn_text += f" ({choice.additional_cost} 💋)"
                     buttons.append([InlineKeyboardButton(
                         text=btn_text,
-                        callback_data=StoryChoiceCallback(choice_id=choice.id)
+                        callback_data=StoryChoiceCallback(choice_id=choice.id).pack()
                     )])
             else:
                 # Nodo narrativo sin opciones - boton para continuar
@@ -226,7 +226,7 @@ async def show_node(callback: CallbackQuery, node_id: int):
                     next_node = next_nodes[current_idx + 1]
                     buttons.append([InlineKeyboardButton(
                         text="Continuar...",
-                        callback_data=ContinueStoryCallback(node_id=next_node.id)
+                        callback_data=ContinueStoryCallback(node_id=next_node.id).pack()
                     )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Menu de Fragmentos", callback_data="narrative")])
@@ -329,7 +329,7 @@ async def show_quiz_question(callback: CallbackQuery, state: FSMContext):
             for i, option in enumerate(question['options']):
                 buttons.append([InlineKeyboardButton(
                     text=option['text'],
-                    callback_data=QuizAnswerCallback(answer_idx=i)
+                    callback_data=QuizAnswerCallback(answer_idx=i).pack()
                 )])
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)

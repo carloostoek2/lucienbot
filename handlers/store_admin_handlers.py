@@ -117,7 +117,7 @@ async def stock_alerts(callback: CallbackQuery):
                     text += f"   ❌ {product.name}\n"
                     buttons.append([InlineKeyboardButton(
                         text=f"📝 Reabastecer: {product.name[:25]}",
-                        callback_data=RestockProductCallback(product_id=product.id)
+                        callback_data=RestockProductCallback(product_id=product.id).pack()
                     )])
                 text += "\n"
 
@@ -128,7 +128,7 @@ async def stock_alerts(callback: CallbackQuery):
                     text += f"   ⚠️ {product.name} ({stock_status})\n"
                     buttons.append([InlineKeyboardButton(
                         text=f"📝 Reabastecer: {product.name[:25]}",
-                        callback_data=RestockProductCallback(product_id=product.id)
+                        callback_data=RestockProductCallback(product_id=product.id).pack()
                     )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
@@ -298,7 +298,7 @@ async def process_product_description(message: Message, state: FSMContext):
         stock_text = "∞" if pkg.store_stock == -1 else str(pkg.store_stock)
         buttons.append([InlineKeyboardButton(
             text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
-            callback_data=SelectPkgProductCallback(product_id=pkg.id)
+            callback_data=SelectPkgProductCallback(product_id=pkg.id).pack()
         )])
 
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
@@ -512,7 +512,7 @@ async def list_products(callback: CallbackQuery):
 
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {product.name[:30]}",
-                    callback_data=ProductAdminDetailCallback(product_id=product.id)
+                    callback_data=ProductAdminDetailCallback(product_id=product.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
@@ -539,19 +539,19 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if product.is_active else 'Activar'}",
-                    callback_data=ToggleProductCallback(product_id=product_id)
+                    callback_data=ToggleProductCallback(product_id=product_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="📝 Reabastecer",
-                    callback_data=RestockProductCallback(product_id=product_id)
+                    callback_data=RestockProductCallback(product_id=product_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="⚙️ Configurar alerta",
-                    callback_data=ConfigStockAlertCallback(product_id=product_id)
+                    callback_data=ConfigStockAlertCallback(product_id=product_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
-                    callback_data=DeleteProductCallback(product_id=product_id)
+                    callback_data=DeleteProductCallback(product_id=product_id).pack()
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")]
             ])
@@ -662,8 +662,8 @@ async def handle_delete_product(callback: CallbackQuery, callback_data: DeletePr
     if not callback_data.confirmed:
         # Show confirmation
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=DeleteProductCallback(product_id=product_id, confirmed=True))],
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data=ProductAdminDetailCallback(product_id=product_id))]
+            [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=DeleteProductCallback(product_id=product_id, confirmed=True).pack())],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data=ProductAdminDetailCallback(product_id=product_id).pack())]
         ])
 
         await callback.message.edit_text(

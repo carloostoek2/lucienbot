@@ -155,7 +155,7 @@ async def show_map_of_desire(callback: CallbackQuery):
             for promo in vip_promos:
                 buttons.append([InlineKeyboardButton(
                     text=f"✨ {promo.name}",
-                    callback_data=VipPromoDetailCallback(promo_id=promo.id)
+                    callback_data=VipPromoDetailCallback(promo_id=promo.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(
@@ -209,7 +209,7 @@ async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipP
             text += "<i>Si esta experiencia despierta su curiosidad...</i>\n"
             buttons.append([InlineKeyboardButton(
                 text="💕 Me interesa",
-                callback_data=VipPromoInterestCallback(promo_id=promo.id)
+                callback_data=VipPromoInterestCallback(promo_id=promo.id).pack()
             )])
 
         buttons.append([InlineKeyboardButton(

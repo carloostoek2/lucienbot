@@ -616,7 +616,7 @@ async def toggle_node(callback: CallbackQuery, callback_data: StoryNodeToggleCal
             status = "activado" if not node.is_active else "desactivado"
             await callback.answer(f"Fragmento {status}")
             # Refresh the detail view
-            callback_data = StoryNodeDetailCallback(node_id=node_id)
+            callback_data = StoryNodeDetailCallback(node_id=node_id).pack()
             await node_detail(callback, callback_data)
 
 

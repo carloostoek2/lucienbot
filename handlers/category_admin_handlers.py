@@ -249,7 +249,7 @@ async def list_categories(callback: CallbackQuery):
 
                 buttons.append([InlineKeyboardButton(
                     text=f"{status} {category.name[:30]}",
-                    callback_data=CategoryAdminDetailCallback(category_id=category.id)
+                    callback_data=CategoryAdminDetailCallback(category_id=category.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="manage_categories")])
@@ -276,11 +276,11 @@ async def category_admin_detail(callback: CallbackQuery, callback_data: Category
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text=f"{'Desactivar' if category.is_active else 'Activar'}",
-                    callback_data=CategoryAdminToggleCallback(category_id=category_id)
+                    callback_data=CategoryAdminToggleCallback(category_id=category_id).pack()
                 )],
                 [InlineKeyboardButton(
                     text="🗑️ Eliminar",
-                    callback_data=CategoryAdminDeleteCallback(category_id=category_id)
+                    callback_data=CategoryAdminDeleteCallback(category_id=category_id).pack()
                 )],
                 [InlineKeyboardButton(text="🔙 Volver", callback_data="list_categories")]
             ])
@@ -319,7 +319,7 @@ async def toggle_category(callback: CallbackQuery, callback_data: CategoryAdminT
 
             status = "activada" if not category.is_active else "desactivada"
             await callback.answer(f"Categoría {status}")
-            await category_admin_detail(callback, CategoryAdminDetailCallback(category_id=category_id))
+            await category_admin_detail(callback, CategoryAdminDetailCallback(category_id=category_id).pack())
             logger.info(f"toggle_category | toggle | user_id={callback.from_user.id} | category_id={category_id}")
 
 
@@ -329,8 +329,8 @@ async def delete_category_confirm(callback: CallbackQuery, callback_data: Catego
     category_id = callback_data.category_id
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Sí, eliminar", callback_data=CategoryAdminConfirmDeleteCallback(category_id=category_id))],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data=CategoryAdminDetailCallback(category_id=category_id))]
+        [InlineKeyboardButton(text="✅ Sí, eliminar", callback_data=CategoryAdminConfirmDeleteCallback(category_id=category_id).pack())],
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=CategoryAdminDetailCallback(category_id=category_id).pack())]
     ])
 
     await callback.message.edit_text(
@@ -396,7 +396,7 @@ async def assign_package_category_start(callback: CallbackQuery, state: FSMConte
             for category in categories:
                 buttons.append([InlineKeyboardButton(
                     text=f"📁 {category.name}",
-                    callback_data=CategoryAssignCallback(category_id=category.id)
+                    callback_data=CategoryAssignCallback(category_id=category.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="manage_categories")])
@@ -446,7 +446,7 @@ async def select_category_for_assign(callback: CallbackQuery, callback_data: Cat
                 file_count = len(package.files) if package.files else 0
                 buttons.append([InlineKeyboardButton(
                     text=f"📦 {package.name} ({file_count} archivos)",
-                    callback_data=PackageAssignCallback(package_id=package.id)
+                    callback_data=PackageAssignCallback(package_id=package.id).pack()
                 )])
 
             buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="manage_categories")])

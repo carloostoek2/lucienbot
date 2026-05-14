@@ -112,7 +112,7 @@ async def store_catalog(callback: CallbackQuery):
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=ProductDetailCallback(product_id=product.id)
+            callback_data=ProductDetailCallback(product_id=product.id).pack()
         ))
 
         # 2 botones por fila
@@ -166,7 +166,7 @@ async def store_categories(callback: CallbackQuery):
         package_count = len([p for p in category.packages if p.is_active]) if category.packages else 0
         buttons.append([InlineKeyboardButton(
             text=f"📁 {category.name} ({package_count})",
-            callback_data=StoreCategoryCallback(category_id=category.id)
+            callback_data=StoreCategoryCallback(category_id=category.id).pack()
         )])
 
     buttons.append([InlineKeyboardButton(
@@ -227,7 +227,7 @@ async def store_category_products(callback: CallbackQuery):
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=ProductDetailCallback(product_id=product.id)
+            callback_data=ProductDetailCallback(product_id=product.id).pack()
         ))
 
         # 2 botones por fila
@@ -305,14 +305,14 @@ async def product_detail(callback: CallbackQuery):
     # First row: Preview button and Buy button (if available)
     row.append(InlineKeyboardButton(
         text="👁️ Preview",
-        callback_data=ProductPreviewCallback(product_id=product.id)
+        callback_data=ProductPreviewCallback(product_id=product.id).pack()
     ))
 
     if is_available:
         if balance >= product.price:
             row.append(InlineKeyboardButton(
                 text="💋 Comprar ahora",
-                callback_data=DirectBuyCallback(product_id=product.id)
+                callback_data=DirectBuyCallback(product_id=product.id).pack()
             ))
         else:
             row.append(InlineKeyboardButton(
@@ -422,7 +422,7 @@ async def product_preview(callback: CallbackQuery):
         if balance >= product.price:
             row.append(InlineKeyboardButton(
                 text="💋 Comprar ahora",
-                callback_data=DirectBuyCallback(product_id=product.id)
+                callback_data=DirectBuyCallback(product_id=product.id).pack()
             ))
         else:
             row.append(InlineKeyboardButton(
@@ -489,11 +489,11 @@ async def direct_buy(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="✅ Confirmar",
-            callback_data=ConfirmDirectBuyCallback(product_id=product_id)
+            callback_data=ConfirmDirectBuyCallback(product_id=product_id).pack()
         )],
         [InlineKeyboardButton(
             text="❌ Cancelar",
-            callback_data=ProductDetailCallback(product_id=product_id)
+            callback_data=ProductDetailCallback(product_id=product_id).pack()
         )]
     ])
 
@@ -643,7 +643,7 @@ async def process_search_query(message: Message, state: FSMContext):
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=ProductDetailCallback(product_id=product.id)
+            callback_data=ProductDetailCallback(product_id=product.id).pack()
         ))
 
         if len(row) == 2:
@@ -764,7 +764,7 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
         btn_text = f"{emoji} {product.name[:20]}"
         row.append(InlineKeyboardButton(
             text=btn_text,
-            callback_data=ProductDetailCallback(product_id=product.id)
+            callback_data=ProductDetailCallback(product_id=product.id).pack()
         ))
 
         if len(row) == 2:

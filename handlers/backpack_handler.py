@@ -76,7 +76,7 @@ def build_rewards_keyboard(rewards: list, page: int = 0) -> InlineKeyboardMarkup
         }.get(reward['reward_type'], '🎁')
 
         text = f"{reward_type_emoji} {reward['reward_name'][:25]}"
-        callback_data = BackpackRewardDetailCallback(history_id=reward['history_id']).compile()
+        callback_data = BackpackRewardDetailCallback(history_id=reward['history_id']).pack()
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
     # Navigation buttons
@@ -85,12 +85,12 @@ def build_rewards_keyboard(rewards: list, page: int = 0) -> InlineKeyboardMarkup
     if page > 0:
         nav_buttons.append(InlineKeyboardButton(
             text="◀️",
-            callback_data=BackpackRewardsPageCallback(page=page - 1).compile()
+            callback_data=BackpackRewardsPageCallback(page=page - 1).pack()
         ))
     if page < total_pages - 1:
         nav_buttons.append(InlineKeyboardButton(
             text="▶️",
-            callback_data=BackpackRewardsPageCallback(page=page + 1).compile()
+            callback_data=BackpackRewardsPageCallback(page=page + 1).pack()
         ))
 
     if nav_buttons:
@@ -116,7 +116,7 @@ def build_purchases_keyboard(purchases: list, page: int = 0) -> InlineKeyboardMa
         callback_data = BackpackPurchaseDetailCallback(
             order_id=purchase['order_id'],
             product_id=purchase['product_id']
-        ).compile()
+        ).pack()
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
     # Navigation buttons
@@ -125,12 +125,12 @@ def build_purchases_keyboard(purchases: list, page: int = 0) -> InlineKeyboardMa
     if page > 0:
         nav_buttons.append(InlineKeyboardButton(
             text="◀️",
-            callback_data=BackpackPurchasesPageCallback(page=page - 1).compile()
+            callback_data=BackpackPurchasesPageCallback(page=page - 1).pack()
         ))
     if page < total_pages - 1:
         nav_buttons.append(InlineKeyboardButton(
             text="▶️",
-            callback_data=BackpackPurchasesPageCallback(page=page + 1).compile()
+            callback_data=BackpackPurchasesPageCallback(page=page + 1).pack()
         ))
 
     if nav_buttons:
@@ -164,7 +164,7 @@ def build_reward_detail_keyboard(reward: dict) -> InlineKeyboardMarkup:
         keyboard_buttons.append([
             InlineKeyboardButton(
                 text="📂 Ver Contenido",
-                callback_data=BackpackDeliverCallback(package_id=reward['package_id']).compile()
+                callback_data=BackpackDeliverCallback(package_id=reward['package_id']).pack()
             )
         ])
 
@@ -181,7 +181,7 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
         keyboard_buttons.append([
             InlineKeyboardButton(
                 text="📂 Ver Contenido",
-                callback_data=BackpackDeliverCallback(package_id=purchase['package_id']).compile()
+                callback_data=BackpackDeliverCallback(package_id=purchase['package_id']).pack()
             )
         ])
 
