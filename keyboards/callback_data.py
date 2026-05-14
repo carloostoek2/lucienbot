@@ -25,6 +25,11 @@ class ToggleEmojiCallback(CallbackData, prefix="toggle_emoji"):
     emoji_id: int
 
 
+class ChangeEmojiValueCallback(CallbackData, prefix="change_emoji_value"):
+    """Cambiar valor de emoji"""
+    emoji_id: int
+
+
 class BalanceCallback(CallbackData, prefix="bal"):
     """Consulta de saldo de besitos"""
     action: str = "view"

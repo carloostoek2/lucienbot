@@ -15,6 +15,7 @@ from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, can
 from keyboards.callback_data import (
     EditEmojiCallback,
     ToggleEmojiCallback,
+    ChangeEmojiValueCallback,
 )
 from utils.lucien_voice import LucienVoice
 import logging
@@ -28,6 +29,7 @@ class EmojiConfigStates(StatesGroup):
     waiting_emoji = State()
     waiting_name = State()
     waiting_value = State()
+    edit_waiting_value = State()
 
 
 class DailyGiftConfigStates(StatesGroup):
@@ -298,6 +300,63 @@ async def toggle_emoji(callback: CallbackQuery, callback_data: ToggleEmojiCallba
         await edit_emoji(callback, EditEmojiCallback(emoji_id=emoji_id))
     else:
         await callback.answer("Error al actualizar", show_alert=True)
+
+
+@router.callback_query(ChangeEmojiValueCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def change_emoji_value_start(callback: CallbackQuery, callback_data: ChangeEmojiValueCallback, state: FSMContext):
+    """Inicia cambio de valor de emoji"""
+    await state.update_data(emoji_id=callback_data.emoji_id)
+
+    broadcast_service = BroadcastService()
+    emoji = broadcast_service.get_reaction_emoji(callback_data.emoji_id)
+    broadcast_service.close()
+
+    await callback.message.edit_text(
+        f"🎩 Lucien:\n\n"
+        f"Indique el nuevo valor en besitos para {emoji.emoji}:\n\n"
+        f"Valor actual: {emoji.besito_value} besitos\n\n"
+        "Ejemplo: 10",
+        reply_markup=cancel_keyboard()
+    )
+    await state.set_state(EmojiConfigStates.edit_waiting_value)
+    await callback.answer()
+
+
+@router.message(EmojiConfigStates.edit_waiting_value)
+async def process_emoji_value_edit(message: Message, state: FSMContext):
+    """Procesa el nuevo valor del emoji"""
+    try:
+        value = int(message.text.strip())
+        if value <= 0:
+            raise ValueError("Valor debe ser positivo")
+    except ValueError:
+        await message.answer(
+            "🎩 Lucien:\n\n"
+            "Por favor, indique un numero valido mayor a cero...",
+            reply_markup=cancel_keyboard()
+        )
+        return
+
+    data = await state.get_data()
+    emoji_id = data['emoji_id']
+
+    broadcast_service = BroadcastService()
+    success = broadcast_service.update_emoji_value(emoji_id, value)
+    broadcast_service.close()
+
+    if success:
+        await message.answer(
+            f"🎩 Lucien:\n\n"
+            f"El valor ha sido actualizado a {value} besitos.",
+            reply_markup=back_keyboard("config_besitos")
+        )
+    else:
+        await message.answer(
+            LucienVoice.error_message("actualizar el valor del emoji"),
+            reply_markup=back_keyboard("config_besitos")
+        )
+
+    await state.clear()
 
 
 # ==================== CONFIGURAR REGALO DIARIO ====================
