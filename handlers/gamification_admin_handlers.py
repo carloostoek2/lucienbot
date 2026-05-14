@@ -242,10 +242,13 @@ async def process_emoji_value(message: Message, state: FSMContext):
 async def edit_emoji(callback: CallbackQuery, callback_data: EditEmojiCallback):
     """Editar un emoji existente"""
     emoji_id = callback_data.emoji_id
-    
+
     broadcast_service = BroadcastService()
-    emoji = broadcast_service.get_reaction_emoji(emoji_id)
-    
+    try:
+        emoji = broadcast_service.get_reaction_emoji(emoji_id)
+    finally:
+        broadcast_service.close()
+
     if not emoji:
         await callback.answer("Emoji no encontrado", show_alert=True)
         return
@@ -289,10 +292,13 @@ async def edit_emoji(callback: CallbackQuery, callback_data: EditEmojiCallback):
 async def toggle_emoji(callback: CallbackQuery, callback_data: ToggleEmojiCallback):
     """Activa/desactiva un emoji"""
     emoji_id = callback_data.emoji_id
-    
+
     broadcast_service = BroadcastService()
-    success = broadcast_service.toggle_emoji(emoji_id)
-    
+    try:
+        success = broadcast_service.toggle_emoji(emoji_id)
+    finally:
+        broadcast_service.close()
+
     if success:
         await callback.answer("Estado actualizado")
         # Reconstruir callback para volver a editar el emoji
@@ -308,8 +314,10 @@ async def change_emoji_value_start(callback: CallbackQuery, callback_data: Chang
     await state.update_data(emoji_id=callback_data.emoji_id)
 
     broadcast_service = BroadcastService()
-    emoji = broadcast_service.get_reaction_emoji(callback_data.emoji_id)
-    broadcast_service.close()
+    try:
+        emoji = broadcast_service.get_reaction_emoji(callback_data.emoji_id)
+    finally:
+        broadcast_service.close()
 
     await callback.message.edit_text(
         f"🎩 Lucien:\n\n"
@@ -341,8 +349,10 @@ async def process_emoji_value_edit(message: Message, state: FSMContext):
     emoji_id = data['emoji_id']
 
     broadcast_service = BroadcastService()
-    success = broadcast_service.update_emoji_value(emoji_id, value)
-    broadcast_service.close()
+    try:
+        success = broadcast_service.update_emoji_value(emoji_id, value)
+    finally:
+        broadcast_service.close()
 
     if success:
         await message.answer(
@@ -462,15 +472,18 @@ async def gamification_stats(callback: CallbackQuery):
     """Estadisticas de gamificacion"""
     from services.besito_service import BesitoService
     from services.daily_gift_service import DailyGiftService
-    
+
     besito_service = BesitoService()
     gift_service = DailyGiftService()
-    
-    total_besitos = besito_service.get_total_besitos_in_circulation()
-    top_users = besito_service.get_top_users(limit=5)
-    claims_today = gift_service.get_total_claims_today()
-    besitos_given_today = gift_service.get_total_besitos_given_today()
-    
+    try:
+        total_besitos = besito_service.get_total_besitos_in_circulation()
+        top_users = besito_service.get_top_users(limit=5)
+        claims_today = gift_service.get_total_claims_today()
+        besitos_given_today = gift_service.get_total_besitos_given_today()
+    finally:
+        besito_service.close()
+        gift_service.close()
+
     text = "🎩 Lucien:\n\n" \
            "Los patrones de la devocion acumulada...\n\n" \
            "📊 Estadisticas de Gamificacion:\n\n" \

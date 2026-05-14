@@ -724,7 +724,7 @@ async def streak_promo_toggle(callback: CallbackQuery, callback_data: TriviaStre
             service.activate(promo_id)
             await callback.answer("✅ Promocion activada.", show_alert=True)
 
-    await streak_promo_view(callback, TriviaStreakDetailCallback(promo_id=promo_id).pack())
+    await streak_promo_view(callback, TriviaStreakDetailCallback(promo_id=promo_id))
     logger.info(
         f"trivia_streak_admin_handlers - streak_promo_toggle - "
         f"{callback.from_user.id} - promo_id:{promo_id}"
