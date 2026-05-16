@@ -766,7 +766,7 @@ async def toggle_reward(callback: CallbackQuery, callback_data: RewardToggleCall
             # Show updated detail
             new_reward = reward_service.get_reward(reward_id)
             if new_reward:
-                await show_reward_detail(callback, new_reward)
+                await reward_admin_detail(callback, RewardAdminDetailCallback(reward_id=reward_id))
             await callback.answer()
 
 
