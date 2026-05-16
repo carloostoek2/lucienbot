@@ -185,10 +185,9 @@ async def store_categories(callback: CallbackQuery):
 
 
 @router.callback_query(StoreCategoryCallback.filter())
-async def store_category_products(callback: CallbackQuery):
+async def store_category_products(callback: CallbackQuery, callback_data: StoreCategoryCallback):
     """Muestra productos de una categoria con botones minimalistas"""
-    cb = StoreCategoryCallback.parse(callback.data)
-    category_id = cb.category_id
+    category_id = callback_data.category_id
 
     package_service = PackageService()
     store_service = StoreService()
@@ -254,10 +253,9 @@ async def store_category_products(callback: CallbackQuery):
 
 
 @router.callback_query(ProductDetailCallback.filter())
-async def product_detail(callback: CallbackQuery):
+async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCallback):
     """Muestra detalle de un producto sin preview automatico"""
-    cb = ProductDetailCallback.parse(callback.data)
-    product_id = cb.product_id
+    product_id = callback_data.product_id
 
     store_service = StoreService()
     package_service = PackageService()
@@ -348,10 +346,9 @@ async def product_detail(callback: CallbackQuery):
 
 
 @router.callback_query(ProductPreviewCallback.filter())
-async def product_preview(callback: CallbackQuery):
+async def product_preview(callback: CallbackQuery, callback_data: ProductPreviewCallback):
     """Envía el preview del producto bajo demanda y vuelve a mostrar la tarjeta"""
-    cb = ProductPreviewCallback.parse(callback.data)
-    product_id = cb.product_id
+    product_id = callback_data.product_id
 
     store_service = StoreService()
     package_service = PackageService()
@@ -459,10 +456,9 @@ async def product_preview(callback: CallbackQuery):
 # ==================== COMPRA DIRECTA ====================
 
 @router.callback_query(DirectBuyCallback.filter())
-async def direct_buy(callback: CallbackQuery):
+async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
     """Muestra confirmacion de compra directa"""
-    cb = DirectBuyCallback.parse(callback.data)
-    product_id = cb.product_id
+    product_id = callback_data.product_id
 
     store_service = StoreService()
     besito_service = BesitoService()
@@ -502,10 +498,9 @@ async def direct_buy(callback: CallbackQuery):
 
 
 @router.callback_query(ConfirmDirectBuyCallback.filter())
-async def confirm_direct_buy(callback: CallbackQuery, bot: Bot):
+async def confirm_direct_buy(callback: CallbackQuery, callback_data: ConfirmDirectBuyCallback, bot: Bot):
     """Procesa la compra directa"""
-    cb = ConfirmDirectBuyCallback.parse(callback.data)
-    product_id = cb.product_id
+    product_id = callback_data.product_id
 
     store_service = StoreService()
     user_id = callback.from_user.id

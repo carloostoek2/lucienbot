@@ -110,15 +110,10 @@ async def offers_catalog(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data.startswith("view_offer:"))
-async def view_offer_detail(callback: CallbackQuery):
+@router.callback_query(ViewOfferCallback.filter())
+async def view_offer_detail(callback: CallbackQuery, callback_data: ViewOfferCallback):
     """Muestra detalle de una promocion - Voz de Lucien"""
-    try:
-        callback_data = ViewOfferCallback.parse(callback.data)
-        promo_id = callback_data["promo_id"]
-    except Exception:
-        await callback.answer("Hmm... algo inesperado ha ocurrido.", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     with get_service(PromotionService) as promotion_service:
         promo = promotion_service.get_promotion(promo_id)
@@ -165,15 +160,10 @@ async def view_offer_detail(callback: CallbackQuery):
 
         # ==================== SISTEMA "ME INTERESA" ====================
 
-@router.callback_query(F.data.startswith("offer_interest:"))
-async def express_interest(callback: CallbackQuery, bot: Bot):
+@router.callback_query(OfferInterestCallback.filter())
+async def express_interest(callback: CallbackQuery, callback_data: OfferInterestCallback, bot: Bot):
     """Procesa el interes del usuario en una promocion - Voz de Lucien"""
-    try:
-        callback_data = OfferInterestCallback.parse(callback.data)
-        promo_id = callback_data["promo_id"]
-    except Exception:
-        await callback.answer("Hmm... algo inesperado ha ocurrido.", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     with get_service(PromotionService) as promotion_service:
             user = callback.from_user

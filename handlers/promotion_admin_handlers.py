@@ -212,15 +212,10 @@ async def process_manual_files(message: Message, state: FSMContext):
     await state.set_state(PromotionWizardStates.waiting_price)
 
 
-@router.callback_query(PromotionWizardStates.selecting_package, F.data.startswith("select_pkg_promo_"))
-async def select_package_for_promotion(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(PromotionWizardStates.selecting_package, SelectPkgPromoCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def select_package_for_promotion(callback: CallbackQuery, state: FSMContext, callback_data: SelectPkgPromoCallback):
     """Selecciona paquete para la promocion - Voz de Lucien"""
-    try:
-        callback_data = SelectPkgPromoCallback.unpack(callback.data)
-        package_id = callback_data.pkg_id
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    package_id = callback_data.pkg_id
 
     await state.update_data(package_id=package_id, manual_file_count=None)
 
@@ -437,15 +432,10 @@ async def list_promotions(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data.startswith("promo_detail:"), lambda cb: is_admin(cb.from_user.id))
-async def promotion_admin_detail(callback: CallbackQuery):
+@router.callback_query(PromoDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def promotion_admin_detail(callback: CallbackQuery, callback_data: PromoDetailCallback):
     """Muestra detalles de una promocion - Voz de Lucien"""
-    try:
-        callback_data = PromoDetailCallback.parse(callback.data)
-        promo_id = callback_data["promo_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     with get_service(PromotionService) as promotion_service:
         promo = promotion_service.get_promotion(promo_id)
@@ -479,15 +469,10 @@ async def promotion_admin_detail(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data.startswith("toggle_promo:"), lambda cb: is_admin(cb.from_user.id))
-async def toggle_promotion(callback: CallbackQuery):
+@router.callback_query(TogglePromoCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def toggle_promotion(callback: CallbackQuery, callback_data: TogglePromoCallback):
     """Activa/desactiva una promocion - Voz de Lucien"""
-    try:
-        callback_data = TogglePromoCallback.parse(callback.data)
-        promo_id = callback_data["promo_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     with get_service(PromotionService) as promotion_service:
         promo = promotion_service.get_promotion(promo_id)
@@ -503,16 +488,11 @@ async def toggle_promotion(callback: CallbackQuery):
         await promotion_admin_detail(callback)
 
 
-@router.callback_query(F.data.startswith("promo_del:"), lambda cb: is_admin(cb.from_user.id))
-async def delete_promotion_confirm(callback: CallbackQuery):
+@router.callback_query(PromoDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def delete_promotion_confirm(callback: CallbackQuery, callback_data: PromoDeleteCallback):
     """Confirma eliminacion de promocion - Voz de Lucien"""
-    try:
-        callback_data = PromoDeleteCallback.parse(callback.data)
-        promo_id = callback_data["promo_id"]
-        confirmed = callback_data.get("confirmed", False)
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
+    confirmed = callback_data.confirmed
 
     if confirmed:
         # Ejecutar eliminación
@@ -585,15 +565,10 @@ async def show_pending_interests(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data.startswith("promo_interests:"), lambda cb: is_admin(cb.from_user.id))
-async def show_promotion_interests(callback: CallbackQuery):
+@router.callback_query(PromoInterestsCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def show_promotion_interests(callback: CallbackQuery, callback_data: PromoInterestsCallback):
     """Muestra intereses de una promocion especifica - Voz de Lucien"""
-    try:
-        callback_data = PromoInterestsCallback.parse(callback.data)
-        promo_id = callback_data["promo_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    promo_id = callback_data.promo_id
 
     with get_service(PromotionService) as promotion_service:
         promo = promotion_service.get_promotion(promo_id)
@@ -634,15 +609,10 @@ async def show_promotion_interests(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data.startswith("interest_detail:"), lambda cb: is_admin(cb.from_user.id))
-async def show_interest_detail(callback: CallbackQuery):
+@router.callback_query(InterestDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def show_interest_detail(callback: CallbackQuery, callback_data: InterestDetailCallback):
     """Muestra detalle de un interes con botones de accion - Voz de Lucien"""
-    try:
-        callback_data = InterestDetailCallback.parse(callback.data)
-        interest_id = callback_data["interest_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    interest_id = callback_data.interest_id
 
     with get_service(PromotionService) as promotion_service:
         interest = promotion_service.get_interest(interest_id)
@@ -686,15 +656,10 @@ async def show_interest_detail(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data.startswith("adm_attended:"), lambda cb: is_admin(cb.from_user.id))
-async def mark_interest_attended(callback: CallbackQuery):
+@router.callback_query(MarkAttendedCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def mark_interest_attended(callback: CallbackQuery, callback_data: MarkAttendedCallback):
     """Marca un interes como atendido - Voz de Lucien"""
-    try:
-        callback_data = MarkAttendedCallback.parse(callback.data)
-        interest_id = callback_data["interest_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    interest_id = callback_data.interest_id
 
     with get_service(PromotionService) as promotion_service:
         success = promotion_service.mark_interest_attended(interest_id, callback.from_user.id)
@@ -706,16 +671,11 @@ async def mark_interest_attended(callback: CallbackQuery):
             await callback.answer("Error al marcar como atendido", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("block_int:"), lambda cb: is_admin(cb.from_user.id))
-async def block_interest_user(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(BlockInterestCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def block_interest_user(callback: CallbackQuery, callback_data: BlockInterestCallback, state: FSMContext):
     """Inicia proceso de bloqueo de usuario - Voz de Lucien"""
-    try:
-        callback_data = BlockInterestCallback.parse(callback.data)
-        user_id = callback_data["user_id"]
-        confirmed = callback_data.get("confirmed", False)
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    user_id = callback_data.user_id
+    confirmed = callback_data.confirmed
 
     # Obtener interest_id del estado
     data = await state.get_data()
@@ -896,15 +856,10 @@ async def show_blocked_users(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("blocked_user_detail:"), lambda cb: is_admin(cb.from_user.id))
-async def show_blocked_user_detail(callback: CallbackQuery):
+@router.callback_query(BlockedUserDetailCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def show_blocked_user_detail(callback: CallbackQuery, callback_data: BlockedUserDetailCallback):
     """Muestra detalle de un usuario bloqueado - Voz de Lucien"""
-    try:
-        callback_data = BlockedUserDetailCallback.parse(callback.data)
-        user_id = callback_data["user_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    user_id = callback_data.user_id
 
     with get_service(PromotionService) as promotion_service:
             blocked = promotion_service.get_blocked_user_info(user_id)
@@ -937,15 +892,10 @@ async def show_blocked_user_detail(callback: CallbackQuery):
             await callback.answer()
 
 
-@router.callback_query(F.data.startswith("unblock_user:"), lambda cb: is_admin(cb.from_user.id))
-async def unblock_user(callback: CallbackQuery):
+@router.callback_query(UnblockUserCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def unblock_user(callback: CallbackQuery, callback_data: UnblockUserCallback):
     """Desbloquea un usuario - Voz de Lucien"""
-    try:
-        callback_data = UnblockUserCallback.parse(callback.data)
-        user_id = callback_data["user_id"]
-    except Exception:
-        await callback.answer("ID invalido", show_alert=True)
-        return
+    user_id = callback_data.user_id
 
     with get_service(PromotionService) as promotion_service:
         success = promotion_service.unblock_user(user_id)

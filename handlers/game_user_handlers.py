@@ -148,13 +148,11 @@ async def game_trivia(callback: CallbackQuery):
 
 
 @router.callback_query(TriviaAnswerCallback.filter())
-async def trivia_answer(callback: CallbackQuery):
+async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCallback):
     """Procesa respuesta de trivia"""
     user_id = callback.from_user.id
-
-    data = TriviaAnswerCallback.unpack(callback.data)
-    answer_idx = data.answer_idx
-    question_idx = data.question_idx
+    answer_idx = callback_data.answer_idx
+    question_idx = callback_data.question_idx
 
     with get_service(GameService) as service:
         result = service.play_trivia(user_id, question_idx, answer_idx)
@@ -220,13 +218,11 @@ async def game_trivia_vip(callback: CallbackQuery):
 
 
 @router.callback_query(TriviaVipAnswerCallback.filter())
-async def trivia_vip_answer(callback: CallbackQuery):
+async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAnswerCallback):
     """Procesa respuesta de trivia VIP"""
     user_id = callback.from_user.id
-
-    data = TriviaVipAnswerCallback.unpack(callback.data)
-    answer_idx = data.answer_idx
-    question_idx = data.question_idx
+    answer_idx = callback_data.answer_idx
+    question_idx = callback_data.question_idx
 
     with get_service(GameService) as service:
         result = service.play_trivia_vip(user_id, question_idx, answer_idx)
@@ -313,13 +309,11 @@ async def game_trivia_simple(callback: CallbackQuery):
 
 
 @router.callback_query(TriviaSimpleAnswerCallback.filter())
-async def trivia_simple_answer(callback: CallbackQuery):
+async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSimpleAnswerCallback):
     """Procesa respuesta de trivia especial."""
     user_id = callback.from_user.id
-
-    data = TriviaSimpleAnswerCallback.unpack(callback.data)
-    answer_idx = data.answer_idx
-    question_idx = data.question_idx
+    answer_idx = callback_data.answer_idx
+    question_idx = callback_data.question_idx
 
     if answer_idx < 0 or answer_idx > 3:
         await callback.answer("Opcion invalida.", show_alert=True)
