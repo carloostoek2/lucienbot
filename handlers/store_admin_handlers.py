@@ -651,7 +651,7 @@ async def toggle_product(callback: CallbackQuery, callback_data: ToggleProductCa
 
             status = "activado" if not product.is_active else "desactivado"
             await callback.answer(f"Producto {status}")
-            await product_admin_detail(callback)
+            await product_admin_detail(callback, ProductAdminDetailCallback(product_id=product_id))
 
 
 @router.callback_query(DeleteProductCallback.filter(), lambda cb: is_admin(cb.from_user.id))

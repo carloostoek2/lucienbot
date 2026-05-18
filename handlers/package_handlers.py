@@ -267,7 +267,7 @@ async def toggle_package(callback: CallbackQuery, callback_data: TogglePackageCa
     
             status = "activado" if not package.is_active else "desactivado"
             await callback.answer(f"Paquete {status}")
-            await package_detail(callback)
+            await package_detail(callback, PackageDetailCallback(package_id=package_id))
 
 
 @router.callback_query(DeletePackageCallback.filter(F.confirmed == False))

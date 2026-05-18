@@ -8,6 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from config.settings import bot_config
+from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
 from services.channel_service import ChannelService
@@ -460,8 +461,6 @@ async def toggle_daily_gift(callback: CallbackQuery):
     status = "activado" if is_active else "desactivado"
     await callback.answer(f"Regalo diario {status}")
 
-    # Recargar config para mostrar estado actualizado
-    config = gift_service.get_config()
     await config_daily_gift(callback)
 
 
@@ -470,9 +469,6 @@ async def toggle_daily_gift(callback: CallbackQuery):
 @router.callback_query(F.data == "gamification_stats", lambda cb: is_admin(cb.from_user.id))
 async def gamification_stats(callback: CallbackQuery):
     """Estadisticas de gamificacion"""
-    from services.besito_service import BesitoService
-    from services.daily_gift_service import DailyGiftService
-
     besito_service = BesitoService()
     gift_service = DailyGiftService()
     try:

@@ -485,7 +485,7 @@ async def toggle_promotion(callback: CallbackQuery, callback_data: TogglePromoCa
 
         status = "activada" if not promo.is_active else "desactivada"
         await callback.answer(f"Experiencia {status}")
-        await promotion_admin_detail(callback)
+        await promotion_admin_detail(callback, PromoDetailCallback(promo_id=promo_id))
 
 
 @router.callback_query(PromoDeleteCallback.filter(), lambda cb: is_admin(cb.from_user.id))

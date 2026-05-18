@@ -82,8 +82,6 @@ async def offers_catalog(callback: CallbackQuery):
         text = "🎩 <b>Lucien:</b>\n\n"
         text += "<i>Las ofertas que Diana ha preparado para usted:</i>\n\n"
 
-        from keyboards.inline_keyboards import user_offers_keyboard
-
         buttons = []
         for promo in promos:
             file_count = promo.file_count
