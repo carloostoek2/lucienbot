@@ -72,11 +72,11 @@ class TestVIPCompleteCycle:
         db_session.refresh(user)
 
         # Canjear token
-        subscription = vip_service.redeem_token(token.token_code, user.id)
+        subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
 
         # === ASSERT ===
         assert subscription is not None, "Token debería ser canjeado exitosamente"
-        assert subscription.user_id == user.id
+        assert subscription.user_id == user.telegram_id
         assert subscription.channel_id == vip_channel.id
         assert subscription.is_active is True
         assert subscription.end_date > datetime.utcnow()
@@ -84,10 +84,10 @@ class TestVIPCompleteCycle:
         # Verificar token marcado como usado
         updated_token = vip_service.get_token(token.id)
         assert updated_token.status == TokenStatus.USED
-        assert updated_token.redeemed_by_id == user.id
+        assert updated_token.redeemed_by_id == user.telegram_id
 
         # Verificar que el usuario es VIP
-        assert vip_service.is_user_vip(user.id) is True
+        assert vip_service.is_user_vip(user.telegram_id) is True
 
         print(f"✓ Fase 1 completada: Token → Suscripción activa")
         print(f"  Token: {token.token_code[:10]}...")
@@ -134,7 +134,7 @@ class TestVIPCompleteCycle:
         db_session.commit()
         db_session.refresh(user)
 
-        subscription = vip_service.redeem_token(token.token_code, user.id)
+        subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
 
         # La suscripción debería vencer en ~24 horas (1 día)
         hours_until_expiry = (subscription.end_date - datetime.utcnow()).total_seconds() / 3600
@@ -208,7 +208,7 @@ class TestVIPCompleteCycle:
         db_session.commit()
         db_session.refresh(user)
 
-        subscription = vip_service.redeem_token(token.token_code, user.id)
+        subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
 
         # Modificar la fecha de expiración al pasado (simular suscripción expirada)
         subscription.end_date = datetime.utcnow() - timedelta(hours=1)
@@ -229,11 +229,11 @@ class TestVIPCompleteCycle:
         assert updated.is_active is False
 
         # Verificar que el usuario ya no es VIP
-        assert vip_service.is_user_vip(user.id) is False
+        assert vip_service.is_user_vip(user.telegram_id) is False
 
         print(f"✓ Fase 3 completada: Expiración y desactivación")
         print(f"  Suscripción inactiva: {updated.is_active}")
-        print(f"  Usuario VIP: {vip_service.is_user_vip(user.id)}")
+        print(f"  Usuario VIP: {vip_service.is_user_vip(user.telegram_id)}")
 
     def test_vip_complete_lifecycle_integration(self, db_session, sample_admin):
         """
@@ -276,9 +276,9 @@ class TestVIPCompleteCycle:
         db_session.refresh(user)
 
         # Canjear token
-        subscription = vip_service.redeem_token(token.token_code, user.id)
+        subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
         assert subscription.is_active is True
-        assert vip_service.is_user_vip(user.id) is True
+        assert vip_service.is_user_vip(user.telegram_id) is True
 
         print("=== FASE 1: Entry ===")
         print(f"✓ Usuario {user.telegram_id} ahora es VIP")
@@ -302,7 +302,7 @@ class TestVIPCompleteCycle:
 
         # Verificar estado final
         final_sub = vip_service.get_subscription(subscription.id)
-        is_vip = vip_service.is_user_vip(user.id)
+        is_vip = vip_service.is_user_vip(user.telegram_id)
 
         print(f"\n=== FASE 3: Expulsión ===")
         print(f"✓ Suscripción inactiva: {not final_sub.is_active}")

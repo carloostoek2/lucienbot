@@ -14,6 +14,18 @@ from models.database import SessionLocal
 logger = logging.getLogger(__name__)
 
 
+def _ensure_aware(dt):
+    """Normaliza un datetime a timezone-aware UTC.
+
+    SQLite no preserva tzinfo en columnas DateTime(timezone=True), por lo que
+    los datetimes recuperados de BD pueden ser naive aunque se hayan guardado
+    como aware. Esta función permite comparaciones seguras sin TypeError.
+    """
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @contextmanager
 def get_db_session():
     """Context manager para sesiones de base de datos."""
@@ -153,7 +165,7 @@ class VIPService:
         if token.status == TokenStatus.EXPIRED:
             return None, "expired"
 
-        if token.expires_at and token.expires_at < datetime.utcnow():
+        if token.expires_at and _ensure_aware(token.expires_at) < datetime.now(timezone.utc):
             token.status = TokenStatus.EXPIRED
             db.commit()
             return None, "expired"
@@ -185,7 +197,7 @@ class VIPService:
             db.rollback()
             return None
 
-        if token.expires_at and token.expires_at < datetime.utcnow():
+        if token.expires_at and _ensure_aware(token.expires_at) < datetime.now(timezone.utc):
             token.status = TokenStatus.EXPIRED
             db.commit()
             return None
@@ -200,12 +212,7 @@ class VIPService:
         now = datetime.utcnow()
 
         # Normalizar a timezone-aware: SQLite no preserva tzinfo en DateTime(timezone=True)
-        if existing_subscription:
-            sub_end_date = existing_subscription.end_date
-            if sub_end_date.tzinfo is None:
-                sub_end_date = sub_end_date.replace(tzinfo=timezone.utc)
-        else:
-            sub_end_date = None
+        sub_end_date = _ensure_aware(existing_subscription.end_date) if existing_subscription else None
 
         if existing_subscription and sub_end_date > now:
             # Usuario activo: extender la suscripción existente
