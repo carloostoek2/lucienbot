@@ -6,9 +6,12 @@ Gestiona la lógica de tokens, tarifas y suscripciones VIP.
 from datetime import datetime, timedelta
 from typing import Optional, List
 from contextlib import contextmanager
+import logging
 from sqlalchemy.orm import Session
 from models.models import Tariff, Token, TokenStatus, Subscription, Channel, ChannelType, User
 from models.database import SessionLocal
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -196,9 +199,17 @@ class VIPService:
         existing_subscription = self.get_user_subscription(user_id)
         now = datetime.utcnow()
 
-        if existing_subscription and existing_subscription.end_date > now:
+        # Normalizar a timezone-aware: SQLite no preserva tzinfo en DateTime(timezone=True)
+        if existing_subscription:
+            sub_end_date = existing_subscription.end_date
+            if sub_end_date.tzinfo is None:
+                sub_end_date = sub_end_date.replace(tzinfo=timezone.utc)
+        else:
+            sub_end_date = None
+
+        if existing_subscription and sub_end_date > now:
             # Usuario activo: extender la suscripción existente
-            existing_subscription.end_date = existing_subscription.end_date + timedelta(days=tariff.duration_days)
+            existing_subscription.end_date = sub_end_date + timedelta(days=tariff.duration_days)
             # Mantener la nueva referencia del token aunque sea extensión
             existing_subscription.token_id = token.id
 
