@@ -273,11 +273,13 @@ class VIPService:
         return db.query(Subscription).filter(Subscription.id == subscription_id).first()
 
     def get_user_subscription(self, user_id: int, channel_id: int = None) -> Optional[Subscription]:
-        """Obtiene la suscripción activa de un usuario"""
+        """Obtiene la suscripción activa de un usuario (no expirada)"""
         db = self._get_db()
+        now = datetime.now(timezone.utc)
         query = db.query(Subscription).filter(
             Subscription.user_id == user_id,
-            Subscription.is_active == True
+            Subscription.is_active == True,
+            Subscription.end_date > now
         )
         if channel_id:
             query = query.filter(Subscription.channel_id == channel_id)

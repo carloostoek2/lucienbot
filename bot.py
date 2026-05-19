@@ -127,8 +127,13 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                 # Desactivar la suscripción
                 vip_service.expire_subscription(subscription.id)
 
-                # Obtener información del usuario
+                # Limpiar estado VIP del usuario (consistente con _process_expired_subscriptions)
                 user = subscription.user
+                if user and user.vip_entry_status is not None:
+                    vip_service.clear_vip_entry_state(user.telegram_id)
+                    logger.info(f"VIP entry state cleared on startup: user_id={user.telegram_id}")
+
+                # Obtener información del usuario
                 channel = subscription.channel
 
                 if user and channel:

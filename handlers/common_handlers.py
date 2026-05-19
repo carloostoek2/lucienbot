@@ -110,12 +110,30 @@ async def cmd_start(message: Message):
                     parse_mode="HTML"
                 )
             elif stage == 3:
+                vip_channel = vip_service.get_vip_channel()
+
+                # Verify user has actually joined the channel before completing entry
+                if vip_channel:
+                    try:
+                        chat_member = await message.bot.get_chat_member(
+                            chat_id=vip_channel.channel_id,
+                            user_id=user.id
+                        )
+                        if chat_member.status in ["member", "administrator", "creator"]:
+                            vip_service.complete_vip_entry(user.id)
+                            await message.answer(
+                                LucienVoice.vip_entry_complete(),
+                                parse_mode="HTML"
+                            )
+                            return
+                    except Exception as e:
+                        logger.error(f"Error verificando membresía VIP para user {user.id}: {e}")
+
+                # User hasn't joined yet — resend the invite link
                 await message.answer(
                     LucienVoice.vip_entry_stage_3(),
                     parse_mode="HTML"
                 )
-                # Generate invite link for Stage 3
-                vip_channel = vip_service.get_vip_channel()
                 if vip_channel:
                     try:
                         invite_link = await message.bot.create_chat_invite_link(
@@ -146,7 +164,6 @@ async def cmd_start(message: Message):
                                 f"Por favor, contacte a Diana directamente para que le proporcione acceso al canal.",
                                 parse_mode="HTML"
                             )
-                vip_service.complete_vip_entry(user.id)
             return
 
         # Verificar si es token de acceso VIP

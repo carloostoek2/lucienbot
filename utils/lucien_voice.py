@@ -240,6 +240,19 @@ Tiene 24 horas para usar el enlace.
 Entre con intención.
 👇"""
 
+    @staticmethod
+    def vip_entry_complete() -> str:
+        """Mensaje cuando el usuario completa el ritual y ya está en el canal"""
+        return """🎩 <b>Lucien:</b>
+
+<i>El ritual está completo.</i>
+
+Ha cruzado el umbral. Pertenece ahora al círculo íntimo de Diana, donde la distancia entre observador y musa se desvanece.
+
+El Diván es suyo. Disfrute de lo que pocos alcanzan.
+
+Diana nota su presencia... y sonríe."""
+
     # ==================== CANAL VIP ====================
 
     @staticmethod
