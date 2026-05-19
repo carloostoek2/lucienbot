@@ -188,6 +188,21 @@ async def _process_expired_subscriptions():
                 if not channel or not channel.is_active:
                     continue
 
+                # Verificar si el usuario tiene otra suscripción activa en cualquier canal
+                other_active = db.query(Subscription).filter(
+                    Subscription.user_id == subscription.user_id,
+                    Subscription.is_active == True,
+                    Subscription.id != subscription.id
+                ).first()
+
+                if other_active:
+                    # El usuario tiene otra suscripción activa, solo marcar esta como inactiva
+                    subscription.is_active = False
+                    db.commit()
+                    logger.info(f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}, other_sub_id={other_active.id}")
+                    continue
+
+                # Es la única suscripción del usuario: ban/unban y notificar
                 await bot.ban_chat_member(
                     chat_id=channel.channel_id,
                     user_id=subscription.user_id
@@ -198,6 +213,15 @@ async def _process_expired_subscriptions():
                 )
 
                 subscription.is_active = False
+
+                # Limpiar estado VIP del usuario para evitar inconsistencias
+                from models.models import User
+                user = db.query(User).filter(User.telegram_id == subscription.user_id).first()
+                if user and user.vip_entry_status is not None:
+                    user.vip_entry_status = None
+                    user.vip_entry_stage = None
+                    logger.info(f"VIP entry state cleared: user_id={subscription.user_id}")
+
                 db.commit()
 
                 await bot.send_message(
@@ -206,7 +230,7 @@ async def _process_expired_subscriptions():
                     parse_mode="HTML"
                 )
 
-                logger.info(f"Suscripción expirada: subscription={subscription.id}")
+                logger.info(f"Suscripción expirada (única): subscription={subscription.id}")
 
             except Exception as e:
                 logger.error(f"Error expirando suscripción {subscription.id}: {e}")

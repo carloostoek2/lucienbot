@@ -192,9 +192,38 @@ class VIPService:
         token.redeemed_at = datetime.utcnow()
         token.redeemed_by_id = user_id
 
-        # Crear suscripción
-        tariff = token.tariff
-        end_date = datetime.utcnow() + timedelta(days=tariff.duration_days)
+        # Verificar si el usuario ya tiene una suscripción activa
+        existing_subscription = self.get_user_subscription(user_id)
+        now = datetime.utcnow()
+
+        if existing_subscription and existing_subscription.end_date > now:
+            # Usuario activo: extender la suscripción existente
+            existing_subscription.end_date = existing_subscription.end_date + timedelta(days=tariff.duration_days)
+            # Mantener la nueva referencia del token aunque sea extensión
+            existing_subscription.token_id = token.id
+
+            # Desactivar cualquier otra suscripción activa del usuario (duplicados por bug anterior)
+            db.query(Subscription).filter(
+                Subscription.user_id == user_id,
+                Subscription.is_active == True,
+                Subscription.id != existing_subscription.id
+            ).update({Subscription.is_active: False})
+
+            db.commit()
+            db.refresh(existing_subscription)
+
+            # Limpiar estado VIP previo y mantener como activo
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            if user:
+                user.vip_entry_status = None
+                user.vip_entry_stage = None
+                db.commit()
+
+            logger.info(f"VIP subscription extended: user_id={user_id}, new_end_date={existing_subscription.end_date}")
+            return existing_subscription
+
+        # Crear nueva suscripción
+        end_date = now + timedelta(days=tariff.duration_days)
 
         # Buscar canal VIP (asumimos el primero disponible o se especifica)
         vip_channel = db.query(Channel).filter(
