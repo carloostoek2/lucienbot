@@ -252,6 +252,12 @@ class VIPService:
         # Crear nueva suscripción
         end_date = now + timedelta(days=tariff.duration_days)
 
+        # Desactivar suscripciones previas (expiradas o duplicadas)
+        db.query(Subscription).filter(
+            Subscription.user_id == user_id,
+            Subscription.is_active == True
+        ).update({Subscription.is_active: False})
+
         # Buscar canal VIP (asumimos el primero disponible o se especifica)
         vip_channel = db.query(Channel).filter(
             Channel.channel_type == ChannelType.VIP,
@@ -334,12 +340,26 @@ class VIPService:
         ).all()
 
     def get_expired_subscriptions(self) -> List[Subscription]:
-        """Obtiene suscripciones que ya vencieron"""
+        """Obtiene suscripciones activas que ya vencieron"""
         db = self._get_db()
         now = datetime.now(timezone.utc)
         return db.query(Subscription).filter(
+            Subscription.is_active == True,
             Subscription.end_date < now
         ).all()
+
+    def has_other_active_subscription(self, user_id: int,
+                                      exclude_subscription_id: int) -> bool:
+        """Verifica si un usuario tiene otra suscripcion activa a futuro ademas de la dada."""
+        db = self._get_db()
+        now = datetime.now(timezone.utc)
+        other = db.query(Subscription).filter(
+            Subscription.user_id == user_id,
+            Subscription.is_active == True,
+            Subscription.end_date > now,
+            Subscription.id != exclude_subscription_id
+        ).first()
+        return other is not None
 
     def mark_reminder_sent(self, subscription_id: int) -> bool:
         """Marca que se envió el recordatorio de renovación"""
@@ -374,7 +394,7 @@ class VIPService:
             Channel.is_active == True
         ).first()
 
-    # ==================== VIP ENTRY STATE MANAGEMENT (PHASE 10) ====================
+    # ==================== VIP ENTRY STATE (legacy cleanup) ====================
 
     def get_vip_entry_state(self, user_id: int) -> tuple:
         """Returns (status, stage) for the user's VIP entry, or (None, None)."""
@@ -383,32 +403,6 @@ class VIPService:
         if user:
             return user.vip_entry_status, user.vip_entry_stage
         return None, None
-
-    def get_vip_entry_state_for_update(self, user_id: int) -> tuple:
-        """
-        Returns (status, stage) with SELECT FOR UPDATE to prevent race conditions.
-        Use this before operations that modify state (e.g., advance_vip_entry_stage).
-        """
-        db = self._get_db()
-        user = db.query(User).filter(
-            User.telegram_id == user_id
-        ).with_for_update().first()
-        if user:
-            return user.vip_entry_status, user.vip_entry_stage
-        return None, None
-
-    def advance_vip_entry_stage(self, user_id: int) -> int:
-        """Advances vip_entry_stage by 1 (max 3). Returns new stage or None."""
-        db = self._get_db()
-        user = db.query(User).filter(
-            User.telegram_id == user_id
-        ).with_for_update().first()
-        if not user or user.vip_entry_status != "pending_entry" or user.vip_entry_stage is None:
-            return None
-        new_stage = min(user.vip_entry_stage + 1, 3)
-        user.vip_entry_stage = new_stage
-        db.commit()
-        return new_stage
 
     def clear_vip_entry_state(self, user_id: int) -> bool:
         """Clears vip_entry_status and vip_entry_stage."""
@@ -420,76 +414,3 @@ class VIPService:
             db.commit()
             return True
         return False
-
-    def get_active_subscription_for_entry(self, user_id: int) -> Optional[Subscription]:
-        """Returns the active subscription for a pending_entry user, or None if expired/inactive."""
-        db = self._get_db()
-        now = datetime.now(timezone.utc)
-        sub = db.query(Subscription).filter(
-            Subscription.user_id == user_id,
-            Subscription.is_active == True,
-            Subscription.end_date > now
-        ).first()
-        return sub
-
-    def complete_vip_entry(self, user_id: int) -> bool:
-        """Marks VIP entry as active and clears stage. Returns True if state was pending_entry and subscription is active."""
-        db = self._get_db()
-        user = db.query(User).filter(User.telegram_id == user_id).first()
-        if not user or user.vip_entry_status != "pending_entry":
-            return False
-        if not self.get_active_subscription_for_entry(user_id):
-            return False
-        user.vip_entry_status = "active"
-        user.vip_entry_stage = None
-        db.commit()
-        return True
-
-    def get_pending_entry_users_with_expired_subscription(self, days_threshold: int = 7) -> List[User]:
-        """Returns users with pending_entry whose subscription expired days_threshold ago."""
-        db = self._get_db()
-        threshold_date = datetime.now(timezone.utc) - timedelta(days=days_threshold)
-        # Users with pending_entry and no active subscription expired before threshold
-        expired_subs_user_ids = db.query(Subscription.user_id).filter(
-            Subscription.is_active == True,
-            Subscription.end_date < threshold_date
-        ).distinct().all()
-        expired_ids = [uid for (uid,) in expired_subs_user_ids]
-
-        return db.query(User).filter(
-            User.vip_entry_status == "pending_entry",
-            User.telegram_id.in_(expired_ids)
-        ).all()
-
-    def cleanup_stale_vip_entries(self, days_threshold: int = 7) -> int:
-        """Clears vip_entry_state for abandoned rituals. Returns count of cleaned entries."""
-        stale_users = self.get_pending_entry_users_with_expired_subscription(days_threshold)
-        count = 0
-        db = self._get_db()
-        for user in stale_users:
-            user.vip_entry_status = None
-            user.vip_entry_stage = None
-            count += 1
-        db.commit()
-        logger.info(f"VIPService.cleanup_stale_vip_entries - {count} stale entries cleared")
-        return count
-
-    def check_vip_entry_eligibility(self, user_id: int) -> dict:
-        """
-        Checks if user is eligible to complete VIP entry.
-        Returns dict with 'eligible' bool and 'reason' string.
-        """
-        status, stage = self.get_vip_entry_state(user_id)
-        if status != "pending_entry" or stage != 3:
-            return {"eligible": False, "reason": "not_pending"}
-
-        subscription = self.get_active_subscription_for_entry(user_id)
-        if not subscription:
-            self.clear_vip_entry_state(user_id)
-            return {"eligible": False, "reason": "no_subscription"}
-
-        vip_channel = self.get_vip_channel()
-        if not vip_channel:
-            return {"eligible": False, "reason": "not_pending"}
-
-        return {"eligible": True, "vip_channel": vip_channel}

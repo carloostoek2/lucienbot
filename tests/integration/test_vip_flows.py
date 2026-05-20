@@ -557,120 +557,11 @@ class TestFlow5ReturnAfterExpulsion:
         assert user.vip_entry_stage is None
 
 
-# ==================== RITUAL DE ENTRADA DE 3 ETAPAS ====================
+# ==================== VIP ENTRY STATE (LEGACY UTILS) ====================
 
 @pytest.mark.integration
-class TestVIPEntryRitual:
-    """
-    Flujo de 3 etapas del ritual de entrada VIP (Phase 10).
-    Verifica progresión, complete_vip_entry, y BUG 5 fix.
-    """
-
-    def test_complete_vip_entry_sets_active_and_clears_stage(
-        self, db_session
-    ):
-        """complete_vip_entry cambia pending_entry → active y limpia stage."""
-        user = _create_user(db_session, 9001,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-        channel = _create_vip_channel(db_session)
-        tariff = _create_tariff(db_session)
-        token = _create_token(db_session, tariff)
-        _create_subscription(db_session, user, channel, token, end_date=_future(30))
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is True
-
-        db_session.refresh(user)
-        assert user.vip_entry_status == "active"
-        assert user.vip_entry_stage is None
-
-    def test_complete_vip_entry_fails_without_active_subscription(
-        self, db_session
-    ):
-        """complete_vip_entry retorna False si no hay suscripción activa."""
-        user = _create_user(db_session, 9002,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-        # Sin suscripción
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is False
-
-        db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"  # Sin cambios
-
-    def test_complete_vip_entry_fails_with_expired_subscription(
-        self, db_session
-    ):
-        """complete_vip_entry retorna False si la sub está expirada."""
-        user = _create_user(db_session, 9003,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-        channel = _create_vip_channel(db_session)
-        tariff = _create_tariff(db_session)
-        token = _create_token(db_session, tariff)
-        _create_subscription(db_session, user, channel, token, end_date=_past(1))
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is False
-
-    def test_complete_vip_entry_fails_if_not_pending_entry(
-        self, db_session
-    ):
-        """complete_vip_entry falla si el usuario no está en pending_entry."""
-        user = _create_user(db_session, 9004,
-                           vip_entry_status=None, vip_entry_stage=None)
-        channel = _create_vip_channel(db_session)
-        tariff = _create_tariff(db_session)
-        token = _create_token(db_session, tariff)
-        _create_subscription(db_session, user, channel, token, end_date=_future(30))
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is False
-
-    def test_advance_vip_entry_stage_progresses_through_stages(
-        self, db_session
-    ):
-        """advance_vip_entry_stage avanza stage 1→2→3 correctamente."""
-        user = _create_user(db_session, 9005,
-                           vip_entry_status="pending_entry", vip_entry_stage=1)
-
-        vip = VIPService(db_session)
-
-        # Stage 1 → 2
-        new_stage = vip.advance_vip_entry_stage(user.telegram_id)
-        assert new_stage == 2
-        db_session.refresh(user)
-        assert user.vip_entry_stage == 2
-
-        # Stage 2 → 3
-        new_stage = vip.advance_vip_entry_stage(user.telegram_id)
-        assert new_stage == 3
-        db_session.refresh(user)
-        assert user.vip_entry_stage == 3
-
-    def test_advance_vip_entry_stage_caps_at_3(
-        self, db_session
-    ):
-        """Stage no puede exceder 3."""
-        user = _create_user(db_session, 9006,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-
-        vip = VIPService(db_session)
-        new_stage = vip.advance_vip_entry_stage(user.telegram_id)
-        assert new_stage == 3  # No pasa de 3
-
-    def test_advance_vip_entry_stage_fails_if_not_pending_entry(
-        self, db_session
-    ):
-        """advance_vip_entry_stage retorna None si no está en pending_entry."""
-        user = _create_user(db_session, 9007)
-
-        vip = VIPService(db_session)
-        result = vip.advance_vip_entry_stage(user.telegram_id)
-        assert result is None
+class TestVIPEntryState:
+    """Tests para los metodos legacy de estado VIP (get/clear)."""
 
     def test_get_vip_entry_state_returns_correct_values(
         self, db_session
@@ -710,26 +601,10 @@ class TestVIPEntryRitual:
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
 
-    def test_get_active_subscription_for_entry_requires_end_date_future(
+    def test_full_entry_flow_token_to_active(
         self, db_session
     ):
-        """get_active_subscription_for_entry verifica end_date > now."""
-        user = _create_user(db_session, 9011)
-        channel = _create_vip_channel(db_session)
-        tariff = _create_tariff(db_session)
-
-        # Suscripción expirada
-        expired_token = _create_token(db_session, tariff, code="EXPENTRY1")
-        _create_subscription(db_session, user, channel, expired_token, end_date=_past(1))
-
-        vip = VIPService(db_session)
-        sub = vip.get_active_subscription_for_entry(user.telegram_id)
-        assert sub is None
-
-    def test_full_entry_ritual_flow_token_to_active(
-        self, db_session
-    ):
-        """Flujo simplificado: redeem_token →VIP acceso directo."""
+        """Flujo simplificado: redeem_token → acceso directo VIP."""
         user = _create_user(db_session, 9012)
         channel = _create_vip_channel(db_session)
         tariff = _create_tariff(db_session)
@@ -737,88 +612,13 @@ class TestVIPEntryRitual:
 
         vip = VIPService(db_session)
 
-        # Canjear token da acceso directo (sin ritual de entrada)
         sub = vip.redeem_token(token.token_code, user.telegram_id)
         assert sub is not None
         db_session.refresh(user)
 
-        # Acceso directo, no hay etapas
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
-
-        # VIP access is immediate
         assert vip.is_user_vip(user.telegram_id) is True
-
-
-# ==================== BUG 5 FIX: STAGE 3 VERIFICA MEMBRESÍA ====================
-
-@pytest.mark.integration
-class TestBug5Stage3ChannelVerification:
-    """
-    BUG 5 FIX: complete_vip_entry() ya NO se llama ciegamente en stage 3.
-    El handler ahora verifica membresía real al canal antes de completar.
-    Estos tests verifican que complete_vip_entry() requiere suscripción activa.
-    """
-
-    def test_complete_vip_entry_blocks_if_no_active_subscription(
-        self, db_session
-    ):
-        """
-        BUG 5: complete_vip_entry requiere get_active_subscription_for_entry.
-        Si no hay sub activa, retorna False.
-        """
-        user = _create_user(db_session, 9101,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-        # Sin suscripción
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is False
-
-        # Estado no cambió
-        db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 3
-
-    def test_complete_vip_entry_blocks_if_subscription_expired(
-        self, db_session
-    ):
-        """
-        BUG 5: complete_vip_entry verifica end_date > now via
-        get_active_subscription_for_entry. Sub expirada → False.
-        """
-        user = _create_user(db_session, 9102,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-        channel = _create_vip_channel(db_session)
-        tariff = _create_tariff(db_session)
-        token = _create_token(db_session, tariff)
-        _create_subscription(db_session, user, channel, token, end_date=_past(1))
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is False
-
-    def test_complete_vip_entry_succeeds_with_valid_subscription(
-        self, db_session
-    ):
-        """
-        BUG 5 FIX: Con suscripción activa válida, complete_vip_entry funciona.
-        El handler verifica membresía con get_chat_member() antes de llamar esto.
-        """
-        user = _create_user(db_session, 9103,
-                           vip_entry_status="pending_entry", vip_entry_stage=3)
-        channel = _create_vip_channel(db_session)
-        tariff = _create_tariff(db_session)
-        token = _create_token(db_session, tariff)
-        _create_subscription(db_session, user, channel, token, end_date=_future(30))
-
-        vip = VIPService(db_session)
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is True
-
-        db_session.refresh(user)
-        assert user.vip_entry_status == "active"
-        assert user.vip_entry_stage is None
 
 
 # ==================== FLUJO COMPLETO END-TO-END ====================

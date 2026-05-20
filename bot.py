@@ -124,6 +124,17 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
 
         for subscription in expired_subscriptions:
             try:
+                # Verificar si el usuario tiene otra suscripción activa antes de expulsar
+                if vip_service.has_other_active_subscription(
+                    subscription.user_id, subscription.id
+                ):
+                    vip_service.expire_subscription(subscription.id)
+                    logger.info(
+                        f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: "
+                        f"user_id={subscription.user_id}"
+                    )
+                    continue
+
                 # Desactivar la suscripción
                 vip_service.expire_subscription(subscription.id)
 

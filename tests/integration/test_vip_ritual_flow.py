@@ -1,9 +1,8 @@
 """
-Tests de integración para el ritual de entrada VIP de 3 fases.
+Tests de integración para acceso directo VIP.
 
-Verifica transiciones de estado (stage 1 -> 2 -> 3 -> active),
-reanudación, bloqueos por suscripción expirada/inexistente,
-y envío simulado del invite link mediante bot mockado.
+Verifica que redeem_token da acceso inmediato sin ritual,
+y que el invite link se genera correctamente via el handler.
 """
 import pytest
 from datetime import datetime, timedelta
@@ -43,31 +42,14 @@ class TestVIPRitualFlow:
         assert vip_service.is_user_vip(sample_user.telegram_id) is True
         assert sample_user.vip_entry_status is None
 
-    def test_vip_ritual_blocked_on_expired_subscription(self, db_session, sample_user, sample_vip_channel, sample_token):
-        """Suscripción expirada durante el ritual impide completar la entrada."""
-        vip_service = VIPService(db_session)
-
-        vip_service.redeem_token(sample_token.token_code, sample_user.telegram_id)
-        vip_service.advance_vip_entry_stage(sample_user.telegram_id)
-        vip_service.advance_vip_entry_stage(sample_user.telegram_id)
-
-        # Expirar la suscripción activa
-        sub = vip_service.get_active_subscription_for_entry(sample_user.telegram_id)
-        assert sub is not None
-        sub.end_date = datetime.utcnow() - timedelta(days=1)
-        db_session.commit()
-
-        result = vip_service.complete_vip_entry(sample_user.telegram_id)
-        assert result is False
-
     def test_vip_ritual_blocked_if_no_subscription(self, db_session, sample_user):
-        """Sin suscripción activa no se puede completar el ritual."""
+        """Sin suscripción no es VIP."""
         vip_service = VIPService(db_session)
 
-        result = vip_service.complete_vip_entry(sample_user.telegram_id)
-        assert result is False
+        is_vip = vip_service.is_user_vip(sample_user.telegram_id)
+        assert is_vip is False
 
-    def test_complete_vip_entry_sends_invite_link(self, db_session, sample_user, sample_token, sample_vip_channel, mock_bot):
+    def test_redeem_token_sends_invite_link(self, db_session, sample_user, sample_token, sample_vip_channel, mock_bot):
         """Verify the VIP subscription is created (invite link sent by handler)."""
         vip_service = VIPService(db_session)
 
