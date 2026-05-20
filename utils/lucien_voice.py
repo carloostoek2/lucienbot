@@ -235,10 +235,37 @@ No se comparte.
 No se replica.
 Y se cierra cuando el vínculo termina.
 
-Tiene 24 horas para usar el enlace.
+Tiene 7 días para usar el enlace.
 
 Entre con intención.
 👇"""
+
+    @staticmethod
+    def vip_entry_invite_link(invite_link: str) -> str:
+        """Enlace de acceso exclusivo para VIP"""
+        return f"""🔗 <b>Su enlace de acceso exclusivo:</b>
+
+{invite_link}
+
+<i>Diana le espera en el círculo íntimo...</i>"""
+
+    @staticmethod
+    def vip_entry_not_member() -> str:
+        """Mensaje cuando usuario aún no se une al canal VIP"""
+        return """🎩 <b>Lucien:</b>
+
+<i>Aún no le veo en el círculo íntimo...</i>
+
+Es posible que el enlace no haya sido utilizado aún, o que el acceso esté pendiente de aprobación.
+
+Por favor, verifique que:
+1. Haya hecho clic en el enlace de invitación
+2. Haya solicitado acceso al canal
+3. El administrador haya aprobado su solicitud
+
+Si ya lo hizo, espere un momento y vuelva a intentar.
+
+<i>Diana le aguarda paciente pero vigilante...</i>"""
 
     @staticmethod
     def vip_entry_complete() -> str:

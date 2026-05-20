@@ -433,6 +433,14 @@ def vip_entry_ready_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def vip_entry_joined_keyboard() -> InlineKeyboardMarkup:
+    """Botón Ya me uni para Fase 3 del ritual VIP"""
+    buttons = [
+        [InlineKeyboardButton(text="Ya me uni", callback_data="vip_entry_joined")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def returning_user_keyboard() -> InlineKeyboardMarkup:
     """Teclado para usuarios que ya estaban en el canal antes del bot"""
     buttons = [

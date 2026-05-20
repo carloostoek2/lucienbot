@@ -13,7 +13,7 @@ from services.channel_service import ChannelService
 from keyboards.inline_keyboards import (
     vip_management_keyboard, tariffs_keyboard,
     confirmation_keyboard, back_keyboard, token_actions_keyboard,
-    vip_entry_continue_keyboard, vip_entry_ready_keyboard
+    vip_entry_continue_keyboard, vip_entry_ready_keyboard, vip_entry_joined_keyboard
 )
 from utils.lucien_voice import LucienVoice
 from keyboards.callback_data import SelectTariffCallback, CopyTokenCallback
@@ -480,12 +480,12 @@ async def vip_entry_ready(callback: CallbackQuery):
                     chat_id=vip_channel.channel_id,
                     name=f"VIP {user.id}",
                     creates_join_request=False,
-                    member_limit=1
+                    member_limit=1,
+                    expire_timestamp=604800  # 7 days
                 )
                 await callback.message.answer(
-                    f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
-                    f"{invite_link.invite_link}\n\n"
-                    f"<i>Diana le espera en el círculo íntimo...</i>",
+                    LucienVoice.vip_entry_invite_link(invite_link.invite_link),
+                    reply_markup=vip_entry_joined_keyboard(),
                     parse_mode="HTML"
                 )
             except Exception as e:
@@ -505,8 +505,7 @@ async def vip_entry_ready(callback: CallbackQuery):
                         parse_mode="HTML"
                     )
 
-        # Complete the entry
-        vip_service.complete_vip_entry(user.id)
+        # NOTE: do NOT call complete_vip_entry here — user must click "Ya me uni" after joining
     finally:
         vip_service.close()
     await callback.answer()

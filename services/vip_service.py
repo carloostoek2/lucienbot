@@ -3,7 +3,7 @@ Servicio VIP - Lucien Bot
 
 Gestiona la lógica de tokens, tarifas y suscripciones VIP.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from contextlib import contextmanager
 import logging
@@ -206,6 +206,12 @@ class VIPService:
         token.status = TokenStatus.USED
         token.redeemed_at = datetime.utcnow()
         token.redeemed_by_id = user_id
+
+        # Obtener la tarifa asociada al token
+        tariff = self.get_tariff(token.tariff_id)
+        if not tariff:
+            db.rollback()
+            return None
 
         # Verificar si el usuario ya tiene una suscripción activa
         existing_subscription = self.get_user_subscription(user_id)
@@ -436,3 +442,32 @@ class VIPService:
         user.vip_entry_stage = None
         db.commit()
         return True
+
+    def get_pending_entry_users_with_expired_subscription(self, days_threshold: int = 7) -> List[User]:
+        """Returns users with pending_entry whose subscription expired days_threshold ago."""
+        db = self._get_db()
+        threshold_date = datetime.utcnow() - timedelta(days=days_threshold)
+        # Users with pending_entry and no active subscription expired before threshold
+        expired_subs_user_ids = db.query(Subscription.user_id).filter(
+            Subscription.is_active == True,
+            Subscription.end_date < threshold_date
+        ).distinct().all()
+        expired_ids = [uid for (uid,) in expired_subs_user_ids]
+
+        return db.query(User).filter(
+            User.vip_entry_status == "pending_entry",
+            User.telegram_id.in_(expired_ids)
+        ).all()
+
+    def cleanup_stale_vip_entries(self, days_threshold: int = 7) -> int:
+        """Clears vip_entry_state for abandoned rituals. Returns count of cleaned entries."""
+        stale_users = self.get_pending_entry_users_with_expired_subscription(days_threshold)
+        count = 0
+        db = self._get_db()
+        for user in stale_users:
+            user.vip_entry_status = None
+            user.vip_entry_stage = None
+            count += 1
+        db.commit()
+        logger.info(f"VIPService.cleanup_stale_vip_entries - {count} stale entries cleared")
+        return count

@@ -270,6 +270,19 @@ async def _deactivate_streak_promotion(promo_id: int):
         db.close()
 
 
+async def _cleanup_stale_vip_entries():
+    """Limpia rituales VIP abandonados (pending_entry con suscripcion vencida)."""
+    db = SessionLocal()
+    try:
+        vip_service = VIPService(db)
+        count = vip_service.cleanup_stale_vip_entries(days_threshold=7)
+        logger.info(f"[Scheduler] _cleanup_stale_vip_entries - {count} entradas limpiadas")
+    except Exception as e:
+        logger.error(f"[Scheduler] Error en _cleanup_stale_vip_entries: {e}")
+    finally:
+        db.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SchedulerService — solo maneja el ciclo de vida de APScheduler
 # ─────────────────────────────────────────────────────────────────────────────
@@ -342,6 +355,14 @@ class SchedulerService:
             hour=3, minute=0,
             id="daily_backup",
             name="Daily database backup",
+            replace_existing=True,
+        )
+        self._scheduler.add_job(
+            _cleanup_stale_vip_entries,
+            trigger="cron",
+            hour=1, minute=0,
+            id="cleanup_stale_vip_entries",
+            name="Cleanup stale VIP entries",
             replace_existing=True,
         )
 
