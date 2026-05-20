@@ -11,6 +11,7 @@ from keyboards.callback_data import (
     ConfirmDeleteChannelCallback, WaitTimeCallback,
     AnonViewCallback,
     TriviaAnswerCallback, TriviaVipAnswerCallback, TriviaSimpleAnswerCallback,
+    VipEntryJoinedCallback,
 )
 from typing import List, Optional
 from models.models import Channel, Tariff
@@ -436,7 +437,7 @@ def vip_entry_ready_keyboard() -> InlineKeyboardMarkup:
 def vip_entry_joined_keyboard() -> InlineKeyboardMarkup:
     """Botón Ya me uni para Fase 3 del ritual VIP"""
     buttons = [
-        [InlineKeyboardButton(text="Ya me uni", callback_data="vip_entry_joined")]
+        [InlineKeyboardButton(text="Ya me uni", callback_data=VipEntryJoinedCallback().as_widget())]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
