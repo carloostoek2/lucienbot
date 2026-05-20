@@ -417,10 +417,10 @@ def social_links_keyboard() -> InlineKeyboardMarkup:
 
 
 
-def vip_access_keyboard(invite_link: str = None) -> InlineKeyboardMarkup:
-    """Botón Ir a El Diván para acceso VIP directo"""
+def vip_access_keyboard() -> InlineKeyboardMarkup:
+    """Botón Volver al menú para acceso VIP directo"""
     buttons = [
-        [InlineKeyboardButton(text="Ir a El Diván", url=invite_link)] if invite_link else []
+        [InlineKeyboardButton(text="🔙 Volver al menú", callback_data="back_to_main")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

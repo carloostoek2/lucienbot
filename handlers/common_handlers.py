@@ -112,7 +112,7 @@ async def cmd_start(message: Message):
 
                 await message.answer(
                     LucienVoice.vip_direct_access(invite_link),
-                    reply_markup=vip_access_keyboard(invite_link),
+                    reply_markup=vip_access_keyboard(),
                     parse_mode="HTML"
                 )
                 return
