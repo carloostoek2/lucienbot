@@ -11,6 +11,7 @@ from config.settings import bot_config
 from services.user_service import UserService
 from services.vip_service import VIPService
 from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, vip_entry_continue_keyboard, vip_entry_ready_keyboard, returning_user_keyboard, vip_entry_joined_keyboard
+from keyboards.callback_data import VipEntryJoinedCallback
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -288,32 +289,24 @@ async def cancel_action(callback: CallbackQuery):
     await callback.answer("Acción cancelada")
 
 
-@router.callback_query(F.data == "vip_entry_joined")
+@router.callback_query(VipEntryJoinedCallback.filter())
 async def vip_entry_joined(callback: CallbackQuery):
     """Fase 3: Usuario confirma que se unió al canal VIP"""
     user = callback.from_user
     vip_service = VIPService()
     try:
-        status, stage = vip_service.get_vip_entry_state(user.id)
-        if status != "pending_entry" or stage != 3:
-            await callback.answer("El ritual no está activo.", show_alert=True)
+        eligibility = vip_service.check_vip_entry_eligibility(user.id)
+        if not eligibility["eligible"]:
+            if eligibility["reason"] == "no_subscription":
+                await callback.message.edit_text(
+                    LucienVoice.vip_entry_expired(),
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.answer("El ritual no está activo.", show_alert=True)
             return
 
-        subscription = vip_service.get_active_subscription_for_entry(user.id)
-        if not subscription:
-            vip_service.clear_vip_entry_state(user.id)
-            await callback.message.edit_text(
-                LucienVoice.vip_entry_expired(),
-                parse_mode="HTML"
-            )
-            await callback.answer()
-            return
-
-        vip_channel = vip_service.get_vip_channel()
-        if not vip_channel:
-            await callback.answer("Canal VIP no disponible.", show_alert=True)
-            return
-
+        vip_channel = eligibility["vip_channel"]
         try:
             chat_member = await callback.bot.get_chat_member(
                 chat_id=vip_channel.channel_id,
@@ -325,6 +318,7 @@ async def vip_entry_joined(callback: CallbackQuery):
                     LucienVoice.vip_entry_complete(),
                     parse_mode="HTML"
                 )
+                logger.info(f"VIP entry completed: user_id={user.id}")
             else:
                 await callback.message.edit_text(
                     LucienVoice.vip_entry_not_member(),
@@ -332,7 +326,7 @@ async def vip_entry_joined(callback: CallbackQuery):
                     parse_mode="HTML"
                 )
         except Exception as e:
-            logger.error(f"Error verificando membresía VIP para user {user.id}: {e}")
+            logger.error(f"Error verifying VIP membership for user {user.id}: {e}")
             await callback.message.edit_text(
                 LucienVoice.vip_entry_not_member(),
                 reply_markup=vip_entry_joined_keyboard(),

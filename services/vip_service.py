@@ -471,3 +471,23 @@ class VIPService:
         db.commit()
         logger.info(f"VIPService.cleanup_stale_vip_entries - {count} stale entries cleared")
         return count
+
+    def check_vip_entry_eligibility(self, user_id: int) -> dict:
+        """
+        Checks if user is eligible to complete VIP entry.
+        Returns dict with 'eligible' bool and 'reason' string.
+        """
+        status, stage = self.get_vip_entry_state(user_id)
+        if status != "pending_entry" or stage != 3:
+            return {"eligible": False, "reason": "not_pending"}
+
+        subscription = self.get_active_subscription_for_entry(user_id)
+        if not subscription:
+            self.clear_vip_entry_state(user_id)
+            return {"eligible": False, "reason": "no_subscription"}
+
+        vip_channel = self.get_vip_channel()
+        if not vip_channel:
+            return {"eligible": False, "reason": "not_pending"}
+
+        return {"eligible": True, "vip_channel": vip_channel}
