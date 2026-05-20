@@ -114,7 +114,7 @@ async def _process_pending_requests():
                 )
 
                 request.status = "approved"
-                request.approved_at = datetime.utcnow()
+                request.approved_at = datetime.now(timezone.utc)
                 db.commit()
 
                 # Enviar mensaje de bienvenida directamente.

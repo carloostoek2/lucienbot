@@ -118,7 +118,7 @@ class VIPService:
         )
 
         if expires_in_days:
-            token.expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+            token.expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
 
         db.add(token)
         db.commit()
@@ -204,7 +204,7 @@ class VIPService:
 
         # Marcar token como usado
         token.status = TokenStatus.USED
-        token.redeemed_at = datetime.utcnow()
+        token.redeemed_at = datetime.now(timezone.utc)
         token.redeemed_by_id = user_id
 
         # Obtener la tarifa asociada al token
@@ -215,7 +215,7 @@ class VIPService:
 
         # Verificar si el usuario ya tiene una suscripción activa
         existing_subscription = self.get_user_subscription(user_id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Normalizar a timezone-aware: SQLite no preserva tzinfo en DateTime(timezone=True)
         sub_end_date = _ensure_aware(existing_subscription.end_date) if existing_subscription else None
@@ -320,7 +320,7 @@ class VIPService:
     def get_expiring_subscriptions(self, hours: int = 24) -> List[Subscription]:
         """Obtiene suscripciones que vencen en las próximas X horas"""
         db = self._get_db()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         threshold = now + timedelta(hours=hours)
 
         return db.query(Subscription).filter(
@@ -333,7 +333,7 @@ class VIPService:
     def get_expired_subscriptions(self) -> List[Subscription]:
         """Obtiene suscripciones que ya vencieron"""
         db = self._get_db()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return db.query(Subscription).filter(
             Subscription.is_active == True,
             Subscription.end_date < now
@@ -422,7 +422,7 @@ class VIPService:
     def get_active_subscription_for_entry(self, user_id: int) -> Optional[Subscription]:
         """Returns the active subscription for a pending_entry user, or None if expired/inactive."""
         db = self._get_db()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         sub = db.query(Subscription).filter(
             Subscription.user_id == user_id,
             Subscription.is_active == True,
@@ -446,7 +446,7 @@ class VIPService:
     def get_pending_entry_users_with_expired_subscription(self, days_threshold: int = 7) -> List[User]:
         """Returns users with pending_entry whose subscription expired days_threshold ago."""
         db = self._get_db()
-        threshold_date = datetime.utcnow() - timedelta(days=days_threshold)
+        threshold_date = datetime.now(timezone.utc) - timedelta(days=days_threshold)
         # Users with pending_entry and no active subscription expired before threshold
         expired_subs_user_ids = db.query(Subscription.user_id).filter(
             Subscription.is_active == True,

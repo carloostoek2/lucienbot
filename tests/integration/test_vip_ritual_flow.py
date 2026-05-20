@@ -87,8 +87,7 @@ class TestVIPRitualFlow:
         result = vip_service.complete_vip_entry(sample_user.telegram_id)
         assert result is False
 
-    @pytest.mark.asyncio
-    async def test_complete_vip_entry_sends_invite_link(self, db_session, sample_user, sample_token, sample_vip_channel, mock_bot):
+    def test_complete_vip_entry_sends_invite_link(self, db_session, sample_user, sample_token, sample_vip_channel, mock_bot):
         """Al completar el ritual se genera y envía el link de invitación VIP."""
         vip_service = VIPService(db_session)
 
@@ -104,16 +103,16 @@ class TestVIPRitualFlow:
         # Simular envío de link tal como lo hace el handler
         vip_channel = vip_service.get_vip_channel()
         if vip_channel:
-            mock_bot.create_chat_invite_link = AsyncMock(
+            mock_bot.create_chat_invite_link = MagicMock(
                 return_value=MagicMock(invite_link="https://t.me/+DynamicLink")
             )
-            invite_link = await mock_bot.create_chat_invite_link(
+            invite_link = mock_bot.create_chat_invite_link(
                 chat_id=vip_channel.channel_id,
                 name=f"VIP {sample_user.telegram_id}",
                 creates_join_request=False,
                 member_limit=1
             )
-            await mock_bot.send_message(
+            mock_bot.send_message(
                 chat_id=sample_user.telegram_id,
                 text=f"Su enlace: {invite_link.invite_link}",
                 parse_mode="HTML"

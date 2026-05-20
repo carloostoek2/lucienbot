@@ -5,7 +5,7 @@ Agregacion de metricas y exportacion de datos para Custodios.
 """
 import csv
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from models.models import User, Subscription, BesitoTransaction, BesitoBalance
 from models.database import SessionLocal
@@ -50,7 +50,7 @@ class AnalyticsService:
         total_besitos = sum(b.balance for b in balances)
 
         # Expiring soon (next 48h)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         threshold = now + timedelta(hours=48)
         expiring_soon = db.query(Subscription).filter(
             Subscription.is_active == True,

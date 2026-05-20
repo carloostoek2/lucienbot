@@ -3,7 +3,7 @@ Servicio de Regalo Diario - Lucien Bot
 
 Gestiona el sistema de regalo diario de besitos.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -65,7 +65,7 @@ class DailyGiftService:
         config = self.get_config()
         config.besito_amount = besito_amount
         config.updated_by = admin_id
-        config.updated_at = datetime.utcnow()
+        config.updated_at = datetime.now(timezone.utc)
         self._get_db().commit()
         logger.info(f"Configuración de regalo diario actualizada: {besito_amount} besitos")
         return config
@@ -194,14 +194,14 @@ class DailyGiftService:
 
     def get_total_claims_today(self) -> int:
         """Obtiene el total de reclamos del día actual"""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         return self._get_db().query(DailyGiftClaim).filter(
             DailyGiftClaim.claimed_at >= today
         ).count()
 
     def get_total_besitos_given_today(self) -> int:
         """Obtiene el total de besitos entregados hoy"""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         claims = self._get_db().query(DailyGiftClaim).filter(
             DailyGiftClaim.claimed_at >= today
         ).all()

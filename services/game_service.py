@@ -6,7 +6,7 @@ Gestiona los minijuegos de dados y trivia con límites diarios.
 import json
 import logging
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
@@ -309,7 +309,7 @@ class GameService:
 
     def _get_today_trivia_records(self, user_id: int) -> list:
         """Obtiene registros de trivia de hoy ordenados por tiempo DESC"""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         records = self.db.query(GameRecord).filter(
             GameRecord.user_id == user_id,
             GameRecord.game_type == 'trivia',
@@ -424,7 +424,7 @@ class GameService:
 
     def get_today_play_count(self, user_id: int, game_type: str) -> int:
         """Obtiene jugadas de hoy para un tipo de juego"""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         return self.db.query(GameRecord).filter(
             GameRecord.user_id == user_id,
             GameRecord.game_type == game_type,
@@ -876,7 +876,7 @@ class GameService:
 
     def _get_today_vip_trivia_records(self, user_id: int) -> list:
         """Obtiene registros de trivia VIP de hoy ordenados por tiempo DESC"""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         records = self.db.query(GameRecord).filter(
             GameRecord.user_id == user_id,
             GameRecord.game_type == 'trivia_vip',
@@ -1172,7 +1172,7 @@ class GameService:
 
     def _get_today_simple_trivia_records(self, user_id: int) -> list:
         """Obtiene registros de trivia temática de hoy ordenados por tiempo DESC."""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         records = self.db.query(GameRecord).filter(
             GameRecord.user_id == user_id,
             GameRecord.game_type == 'trivia_simple',
@@ -1182,7 +1182,7 @@ class GameService:
 
     def _get_answered_today_indices(self, user_id: int, game_type: str) -> set:
         """Retorna set de indices de preguntas ya respondidas hoy para un game_type."""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         records = self.db.query(GameRecord).filter(
             GameRecord.user_id == user_id,
             GameRecord.game_type == game_type,

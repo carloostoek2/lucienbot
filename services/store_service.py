@@ -3,7 +3,7 @@ Servicio de Tienda - Lucien Bot
 
 Gestiona el catalogo de productos, carrito y compras.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -465,7 +465,7 @@ class StoreService:
 
         # Actualizar orden
         order.status = OrderStatus.COMPLETED
-        order.completed_at = datetime.utcnow()
+        order.completed_at = datetime.now(timezone.utc)
         db.commit()
 
         # Notificar alertas de stock a admins

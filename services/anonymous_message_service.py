@@ -3,7 +3,7 @@ Servicio de Mensajes Anónimos - Lucien Bot
 
 Gestiona el envío y recepción de mensajes anónimos de suscriptores VIP a Diana.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from models.models import AnonymousMessage, AnonymousMessageStatus, User
@@ -65,7 +65,7 @@ class AnonymousMessageService:
         message = self.get_message(message_id)
         if message:
             message.status = AnonymousMessageStatus.READ
-            message.read_at = datetime.utcnow()
+            message.read_at = datetime.now(timezone.utc)
             message.read_by = admin_id
             db.commit()
             return True
@@ -78,9 +78,9 @@ class AnonymousMessageService:
         if message:
             message.status = AnonymousMessageStatus.REPLIED
             message.admin_reply = reply
-            message.replied_at = datetime.utcnow()
+            message.replied_at = datetime.now(timezone.utc)
             if not message.read_at:
-                message.read_at = datetime.utcnow()
+                message.read_at = datetime.now(timezone.utc)
                 message.read_by = admin_id
             db.commit()
             return True

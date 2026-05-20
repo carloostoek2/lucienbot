@@ -5,7 +5,7 @@ Handlers FSM para gestion de promociones por racha de trivia.
 Phase 17 - Promos de Trivias.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -316,7 +316,7 @@ async def streak_promo_get_end_date(message, state: FSMContext):
     """Guarda la fecha de inicio y pide la fecha de fin."""
     text = message.text.strip()
     if text.lower() == "ahora":
-        start_date = datetime.utcnow()
+        start_date = datetime.now(timezone.utc)
     else:
         try:
             start_date = datetime.strptime(text, "%d/%m/%Y %H:%M")

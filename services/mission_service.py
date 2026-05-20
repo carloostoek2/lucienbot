@@ -3,7 +3,7 @@ Servicio de Misiones - Lucien Bot
 
 Gestiona la creacion, progreso y completacion de misiones.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -82,7 +82,7 @@ class MissionService:
     def get_available_missions(self) -> List[Mission]:
         """Obtiene misiones disponibles actualmente"""
         db = self._get_db()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return db.query(Mission).filter(
             Mission.is_active == True,
             (Mission.start_date == None) | (Mission.start_date <= now),
@@ -240,7 +240,7 @@ class MissionService:
             # Verificar completitud
             if progress.current_value >= mission.target_value:
                 progress.is_completed = True
-                progress.completed_at = datetime.utcnow()
+                progress.completed_at = datetime.now(timezone.utc)
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
 
@@ -296,7 +296,7 @@ class MissionService:
             # Verificar completitud
             if progress.current_value >= mission.target_value:
                 progress.is_completed = True
-                progress.completed_at = datetime.utcnow()
+                progress.completed_at = datetime.now(timezone.utc)
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
 
@@ -305,7 +305,7 @@ class MissionService:
                     # Verificar cooldown para misiones RECURRING
                     if mission.frequency == MissionFrequency.RECURRING and mission.cooldown_hours:
                         if progress.last_updated:
-                            hours_since = (datetime.utcnow() - progress.last_updated).total_seconds() / 3600
+                            hours_since = (datetime.now(timezone.utc) - progress.last_updated).total_seconds() / 3600
                             if hours_since < mission.cooldown_hours:
                                 logger.info(f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa")
                                 continue
@@ -333,7 +333,7 @@ class MissionService:
 
         if progress.current_value >= mission.target_value:
             progress.is_completed = True
-            progress.completed_at = datetime.utcnow()
+            progress.completed_at = datetime.now(timezone.utc)
         else:
             progress.is_completed = False
             progress.completed_at = None

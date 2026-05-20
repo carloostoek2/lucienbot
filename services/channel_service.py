@@ -4,7 +4,7 @@ Servicio de Canales - Lucien Bot
 Gestiona la lógica de canales Free y VIP.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from models.models import Channel, ChannelType, PendingRequest, User
@@ -125,7 +125,7 @@ class ChannelService:
         if not channel:
             raise ValueError("Canal no encontrado")
 
-        scheduled_time = datetime.utcnow() + timedelta(minutes=channel.wait_time_minutes)
+        scheduled_time = datetime.now(timezone.utc) + timedelta(minutes=channel.wait_time_minutes)
 
         request = PendingRequest(
             user_id=user_id,
@@ -166,7 +166,7 @@ class ChannelService:
     def get_ready_to_approve(self) -> List[PendingRequest]:
         """Obtiene solicitudes listas para aprobar (tiempo vencido)"""
         db = self._get_db()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return db.query(PendingRequest).filter(
             PendingRequest.status == "pending",
             PendingRequest.scheduled_approval_at <= now
@@ -180,7 +180,7 @@ class ChannelService:
         ).first()
         if request:
             request.status = "approved"
-            request.approved_at = datetime.utcnow()
+            request.approved_at = datetime.now(timezone.utc)
             db.commit()
             return True
         return False
@@ -206,7 +206,7 @@ class ChannelService:
         count = 0
         for req in requests:
             req.status = "approved"
-            req.approved_at = datetime.utcnow()
+            req.approved_at = datetime.now(timezone.utc)
             count += 1
 
         db.commit()

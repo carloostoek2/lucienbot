@@ -6,7 +6,7 @@ descubrimiento de archivos JSON y consulta de estado.
 """
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
@@ -90,14 +90,14 @@ class TriviaCategoryService:
             if cat:
                 cat.is_active = True
                 cat.display_name = display_name or cat.display_name
-                cat.activated_at = datetime.utcnow()
+                cat.activated_at = datetime.now(timezone.utc)
                 cat.scheduled_end = scheduled_end
             else:
                 cat = TriviaCategory(
                     category_id=category_id,
                     display_name=display_name or category_id,
                     is_active=True,
-                    activated_at=datetime.utcnow(),
+                    activated_at=datetime.now(timezone.utc),
                     scheduled_end=scheduled_end
                 )
                 db.add(cat)

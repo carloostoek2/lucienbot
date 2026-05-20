@@ -6,7 +6,7 @@ de codigos de descuento cuando un usuario alcanza una racha objetivo.
 """
 import logging
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session, joinedload
@@ -205,7 +205,7 @@ class StreakPromotionService:
                     continue
                 code.status = StreakPromotionCodeStatus.DELIVERED
                 code.user_id = user_id
-                code.delivered_at = datetime.utcnow()
+                code.delivered_at = datetime.now(timezone.utc)
                 redemption = StreakPromotionRedemption(
                     user_id=user_id, level_id=level.id, code_id=code.id,
                     streak_achieved=streak,
