@@ -3,6 +3,7 @@ Handlers VIP - Lucien Bot
 
 Gestión de tarifas, tokens y suscripciones VIP.
 """
+from datetime import timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -481,7 +482,7 @@ async def vip_entry_ready(callback: CallbackQuery):
                     name=f"VIP {user.id}",
                     creates_join_request=False,
                     member_limit=1,
-                    expire_timestamp=604800  # 7 days
+                    expire_date=timedelta(days=7)  # 7 days
                 )
                 await callback.message.answer(
                     LucienVoice.vip_entry_invite_link(invite_link.invite_link),

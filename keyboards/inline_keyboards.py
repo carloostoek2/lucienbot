@@ -437,7 +437,7 @@ def vip_entry_ready_keyboard() -> InlineKeyboardMarkup:
 def vip_entry_joined_keyboard() -> InlineKeyboardMarkup:
     """Botón Ya me uni para Fase 3 del ritual VIP"""
     buttons = [
-        [InlineKeyboardButton(text="Ya me uni", callback_data=VipEntryJoinedCallback().as_widget())]
+        [InlineKeyboardButton(text="Ya me uni", callback_data=VipEntryJoinedCallback().pack())]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

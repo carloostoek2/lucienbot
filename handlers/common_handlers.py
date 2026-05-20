@@ -3,6 +3,7 @@ Handlers Comunes - Lucien Bot
 
 Handlers para comandos básicos y flujos generales.
 """
+from datetime import timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
@@ -142,7 +143,7 @@ async def cmd_start(message: Message):
                             name=f"VIP {user.id}",
                             creates_join_request=False,
                             member_limit=1,
-                            expire_timestamp=604800  # 7 days
+                            expire_date=timedelta(days=7)  # 7 days
                         )
                         await message.answer(
                             f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"

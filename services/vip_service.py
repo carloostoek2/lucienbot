@@ -335,7 +335,6 @@ class VIPService:
         db = self._get_db()
         now = datetime.now(timezone.utc)
         return db.query(Subscription).filter(
-            Subscription.is_active == True,
             Subscription.end_date < now
         ).all()
 
