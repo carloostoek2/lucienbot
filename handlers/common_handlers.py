@@ -11,8 +11,7 @@ from aiogram.enums import ChatType
 from config.settings import bot_config
 from services.user_service import UserService
 from services.vip_service import VIPService
-from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, vip_entry_continue_keyboard, vip_entry_ready_keyboard, returning_user_keyboard, vip_entry_joined_keyboard
-from keyboards.callback_data import VipEntryJoinedCallback
+from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, returning_user_keyboard, vip_access_keyboard
 from utils.lucien_voice import LucienVoice
 import logging
 
@@ -88,96 +87,32 @@ async def cmd_start(message: Message):
             last_name=user.last_name
         )
 
-        # Check for pending VIP entry ritual BEFORE token processing
-        status, stage = vip_service.get_vip_entry_state(user.id)
-        if status == "pending_entry":
-            subscription = vip_service.get_active_subscription_for_entry(user.id)
-            if not subscription:
-                vip_service.clear_vip_entry_state(user.id)
-                await message.answer(
-                    LucienVoice.vip_entry_expired(),
-                    parse_mode="HTML"
-                )
-                return
-            if stage == 1:
-                await message.answer(
-                    LucienVoice.vip_entry_stage_1(),
-                    reply_markup=vip_entry_continue_keyboard(),
-                    parse_mode="HTML"
-                )
-            elif stage == 2:
-                await message.answer(
-                    LucienVoice.vip_entry_stage_2(),
-                    reply_markup=vip_entry_ready_keyboard(),
-                    parse_mode="HTML"
-                )
-            elif stage == 3:
-                vip_channel = vip_service.get_vip_channel()
-
-                # Verify user has actually joined the channel before completing entry
-                if vip_channel:
-                    try:
-                        chat_member = await message.bot.get_chat_member(
-                            chat_id=vip_channel.channel_id,
-                            user_id=user.id
-                        )
-                        if chat_member.status in ["member", "administrator", "creator"]:
-                            vip_service.complete_vip_entry(user.id)
-                            await message.answer(
-                                LucienVoice.vip_entry_complete(),
-                                parse_mode="HTML"
-                            )
-                            return
-                    except Exception as e:
-                        logger.error(f"Error verificando membresía VIP para user {user.id}: {e}")
-
-                # User hasn't joined yet — resend the invite link
-                await message.answer(
-                    LucienVoice.vip_entry_stage_3(),
-                    parse_mode="HTML"
-                )
-                if vip_channel:
-                    try:
-                        invite_link = await message.bot.create_chat_invite_link(
-                            chat_id=vip_channel.channel_id,
-                            name=f"VIP {user.id}",
-                            creates_join_request=False,
-                            member_limit=1,
-                            expire_date=timedelta(days=7)  # 7 days
-                        )
-                        await message.answer(
-                            f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
-                            f"{invite_link.invite_link}\n\n"
-                            f"<i>Diana le espera en el círculo íntimo...</i>",
-                            parse_mode="HTML"
-                        )
-                    except Exception as e:
-                        logger.error(f"Error creando invite link para canal {vip_channel.channel_id}: {e}")
-                        if vip_channel.invite_link:
-                            await message.answer(
-                                f"🔗 <b>Su enlace de acceso exclusivo:</b>\n\n"
-                                f"{vip_channel.invite_link}\n\n"
-                                f"<i>Diana le espera en el círculo íntimo...</i>",
-                                parse_mode="HTML"
-                            )
-                        else:
-                            await message.answer(
-                                f"🎩 <b>Lucien:</b>\n\n"
-                                f"<i>Disculpe, ha ocurrido un inconveniente técnico al generar su acceso...</i>\n\n"
-                                f"Por favor, contacte a Diana directamente para que le proporcione acceso al canal.",
-                                parse_mode="HTML"
-                            )
-            return
-
         # Verificar si es token de acceso VIP
         if args:
             subscription = vip_service.redeem_token(args, user.id)
 
             if subscription:
-                # Token válido - start VIP entry ritual (Stage 1)
+                # Token válido - enviar enlace directo al canal VIP
+                vip_channel = vip_service.get_vip_channel()
+                invite_link = None
+
+                if vip_channel:
+                    try:
+                        invite_link_obj = await message.bot.create_chat_invite_link(
+                            chat_id=vip_channel.channel_id,
+                            name=f"VIP {user.id}",
+                            creates_join_request=False,
+                            member_limit=1,
+                            expire_date=timedelta(days=VIPService.INVITE_LINK_EXPIRATION_DAYS)
+                        )
+                        invite_link = invite_link_obj.invite_link
+                    except Exception as e:
+                        logger.error(f"Error creando invite link para canal {vip_channel.channel_id}: {e}")
+                        invite_link = vip_channel.invite_link
+
                 await message.answer(
-                    LucienVoice.vip_entry_stage_1(),
-                    reply_markup=vip_entry_continue_keyboard(),
+                    LucienVoice.vip_direct_access(invite_link),
+                    reply_markup=vip_access_keyboard(invite_link),
                     parse_mode="HTML"
                 )
                 return
@@ -288,54 +223,6 @@ async def cancel_action(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer("Acción cancelada")
-
-
-@router.callback_query(VipEntryJoinedCallback.filter())
-async def vip_entry_joined(callback: CallbackQuery):
-    """Fase 3: Usuario confirma que se unió al canal VIP"""
-    user = callback.from_user
-    vip_service = VIPService()
-    try:
-        eligibility = vip_service.check_vip_entry_eligibility(user.id)
-        if not eligibility["eligible"]:
-            if eligibility["reason"] == "no_subscription":
-                await callback.message.edit_text(
-                    LucienVoice.vip_entry_expired(),
-                    parse_mode="HTML"
-                )
-            else:
-                await callback.answer("El ritual no está activo.", show_alert=True)
-            return
-
-        vip_channel = eligibility["vip_channel"]
-        try:
-            chat_member = await callback.bot.get_chat_member(
-                chat_id=vip_channel.channel_id,
-                user_id=user.id
-            )
-            if chat_member.status in ["member", "administrator", "creator"]:
-                vip_service.complete_vip_entry(user.id)
-                await callback.message.edit_text(
-                    LucienVoice.vip_entry_complete(),
-                    parse_mode="HTML"
-                )
-                logger.info(f"VIP entry completed: user_id={user.id}")
-            else:
-                await callback.message.edit_text(
-                    LucienVoice.vip_entry_not_member(),
-                    reply_markup=vip_entry_joined_keyboard(),
-                    parse_mode="HTML"
-                )
-        except Exception as e:
-            logger.error(f"Error verifying VIP membership for user {user.id}: {e}")
-            await callback.message.edit_text(
-                LucienVoice.vip_entry_not_member(),
-                reply_markup=vip_entry_joined_keyboard(),
-                parse_mode="HTML"
-            )
-    finally:
-        vip_service.close()
-    await callback.answer()
 
 
 @router.callback_query(F.data.in_({"profile", "narrative"}))

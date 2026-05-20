@@ -122,163 +122,34 @@ el vestíbulo tiene para ofrecer.</i>
 
 Si cambia de parecer, las puertas siempre están... casi abiertas."""
 
-    # ==================== RITUALES DE ENTRADA (PHASE 10) ====================
+    # ==================== VIP ACCESS (SIMPLIFIED) ====================
 
     @staticmethod
-    def free_entry_ritual(channel_name: str) -> str:
-        """Mensaje 1: Ritual de entrada al canal Free (tras 30s de espera)"""
+    def vip_no_subscription() -> str:
+        """Mensaje para usuarios sin VIP - contact Diana"""
+        return """🎩 <b>Lucien:</b>
+
+<i>El círculo íntimo no está disponible para usted... aún.</i>
+
+Diana abre las puertas solo a quienes ella considera dignos.
+Si desea explorar este camino, contacte a Diana directamente.
+
+<i>@DianaKinky</i>
+
+<i>Diana observa con interés su curiosidad...</i>"""
+
+    @staticmethod
+    def vip_direct_access(invite_link: str = None) -> str:
+        """Mensaje con enlace directo al canal VIP"""
+        link_text = f"\n🔗 <b>Su acceso:</b> {invite_link}" if invite_link else ""
         return f"""🎩 <b>Lucien:</b>
 
-<i>Ah… alguien ha llamado a la puerta.</i>
+<i>Bienvenido al círculo íntimo de Diana.</i>
 
-Su solicitud para entrar a <b>{channel_name}</b> ha sido registrada en los archivos de Diana.
+Su membresía VIP está activa. El Diván lo espera.
+{link_text}
 
-<i>Diana siempre nota cuando alguien decide cruzar hacia su mundo…</i>
-
-⏳ <b>Su acceso está siendo preparado.</b>
-
-<i>Mientras tanto, hay algo que puede hacer:</i>
-
-💡 <b>Observe sus redes.</b>
-No son simples perfiles.
-<i>Obsérvela. Escuche el tono.
-Empiece a entender el juego.</i>
-
-<i>No necesita quedarse aquí esperando.
-Cuando todo esté listo, yo mismo vendré a buscarle.</i>
-
-👇 <i>Entre tanto… puede seguir su rastro.</i>"""
-
-    @staticmethod
-    def free_entry_impatient(channel_name: str) -> str:
-        """Mensaje 2: Cuando el usuario solicita acceso nuevamente estando pending"""
-        return f"""🎩 <b>Lucien:</b>
-
-<i>Veo que el deseo de entrar no ha disminuido…</i>
-
-Su acceso a <b>{channel_name}</b> ya está en movimiento.
-
-<i>Puede cerrar este chat con tranquilidad.
-Cuando llegue el momento, no tendrá que buscar la puerta.</i>
-
-🚪 <b>La puerta se abrirá.</b>"""
-
-    @staticmethod
-    def free_entry_welcome(channel_name: str) -> str:
-        """Mensaje 3: Bienvenida al ser aprobado en el canal Free"""
-        return f"""🎩 <b>Lucien:</b>
-
-✨ <b>Las puertas se han abierto.</b>
-
-<i>Diana ha permitido su entrada a <b>{channel_name}</b>.</i>
-
-<i>Este no es el lugar donde ella se entrega.
-Es el lugar donde comienza a insinuarse…
-y donde algunos descubren que ya no quieren quedarse solo aquí.</i>
-
-⏰ <b> Tiene 24 horas para cruzar.</b>
-<i>Entre con intención.</i>
-
-👇 <b>Su enlace de acceso:</b>"""
-
-    @staticmethod
-    def vip_entry_expired() -> str:
-        """Mensaje cuando expira la suscripción durante el ritual VIP"""
-        return """🎩 <b>Lucien:</b>
-
-<i>Su acceso ha expirado antes de completar el ritual.</i>
-
-Diana cierra las puertas cuando el tiempo se agota. Si desea regresar, deberá obtener un nuevo enlace."""
-
-    @staticmethod
-    def vip_entry_stage_1() -> str:
-        """Fase 1 del ritual de entrada VIP: Confirmación"""
-        return """🎩 <b>Lucien:</b>
-
-Veo que ha dado el paso que muchos contemplan… y pocos toman.
-
-Su acceso al Diván de Diana está siendo preparado.
-
-Este no es un espacio público.
-No es un canal más.
-Y definitivamente no es para quien solo siente curiosidad.
-
-Antes de entregarle la entrada, hay algo que debe saber…"""
-
-    @staticmethod
-    def vip_entry_stage_2() -> str:
-        """Fase 2 del ritual de entrada VIP: Alineación de expectativas"""
-        return """🎩 <b>Lucien:</b>
-
-El Diván no es un lugar donde se mira y se olvida.
-Es un espacio íntimo, sin filtros, sin máscaras.
-
-Aquí Diana se muestra sin la distancia de las redes,
-y eso exige discreción, respeto y presencia real.
-
-Si ha llegado hasta aquí solo para observar de paso…
-este es el momento de detenerse.
-
-Si entiende lo que significa entrar… entonces sí."""
-
-    @staticmethod
-    def vip_entry_stage_3() -> str:
-        """Fase 3 del ritual de entrada VIP: Entrega del acceso"""
-        return """🎩 <b>Lucien:</b>
-
-Entonces no le haré esperar más.
-
-Diana le abre la puerta al Diván.
-
-Este acceso es personal.
-No se comparte.
-No se replica.
-Y se cierra cuando el vínculo termina.
-
-Tiene 7 días para usar el enlace.
-
-Entre con intención.
-👇"""
-
-    @staticmethod
-    def vip_entry_invite_link(invite_link: str) -> str:
-        """Enlace de acceso exclusivo para VIP"""
-        return f"""🔗 <b>Su enlace de acceso exclusivo:</b>
-
-{invite_link}
-
-<i>Diana le espera en el círculo íntimo...</i>"""
-
-    @staticmethod
-    def vip_entry_not_member() -> str:
-        """Mensaje cuando usuario aún no se une al canal VIP"""
-        return """🎩 <b>Lucien:</b>
-
-<i>Aún no le veo en el círculo íntimo...</i>
-
-Es posible que el enlace no haya sido utilizado aún, o que el acceso esté pendiente de aprobación.
-
-Por favor, verifique que:
-1. Haya hecho clic en el enlace de invitación
-2. Haya solicitado acceso al canal
-3. El administrador haya aprobado su solicitud
-
-Si ya lo hizo, espere un momento y vuelva a intentar.
-
-<i>Diana le aguarda paciente pero vigilante...</i>"""
-
-    @staticmethod
-    def vip_entry_complete() -> str:
-        """Mensaje cuando el usuario completa el ritual y ya está en el canal"""
-        return """🎩 <b>Lucien:</b>
-
-<i>El ritual está completo.</i>
-
-Ha cruzado el umbral. Pertenece ahora al círculo íntimo de Diana, donde la distancia entre observador y musa se desvanece.
-
-El Diván es suyo. Disfrute de lo que pocos alcanzan.
-
-Diana nota su presencia... y sonríe."""
+<i>Entre con intención.</i>"""
 
     # ==================== CANAL VIP ====================
 

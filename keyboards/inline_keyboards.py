@@ -11,7 +11,6 @@ from keyboards.callback_data import (
     ConfirmDeleteChannelCallback, WaitTimeCallback,
     AnonViewCallback,
     TriviaAnswerCallback, TriviaVipAnswerCallback, TriviaSimpleAnswerCallback,
-    VipEntryJoinedCallback,
 )
 from typing import List, Optional
 from models.models import Channel, Tariff
@@ -418,26 +417,10 @@ def social_links_keyboard() -> InlineKeyboardMarkup:
 
 
 
-def vip_entry_continue_keyboard() -> InlineKeyboardMarkup:
-    """Botón Continuar para Fase 1 del ritual VIP"""
+def vip_access_keyboard(invite_link: str = None) -> InlineKeyboardMarkup:
+    """Botón Ir a El Diván para acceso VIP directo"""
     buttons = [
-        [InlineKeyboardButton(text="Continuar", callback_data="vip_entry_continue")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def vip_entry_ready_keyboard() -> InlineKeyboardMarkup:
-    """Botón Estoy listo para Fase 2 del ritual VIP"""
-    buttons = [
-        [InlineKeyboardButton(text="Estoy listo", callback_data="vip_entry_ready")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def vip_entry_joined_keyboard() -> InlineKeyboardMarkup:
-    """Botón Ya me uni para Fase 3 del ritual VIP"""
-    buttons = [
-        [InlineKeyboardButton(text="Ya me uni", callback_data=VipEntryJoinedCallback().pack())]
+        [InlineKeyboardButton(text="Ir a El Diván", url=invite_link)] if invite_link else []
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

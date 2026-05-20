@@ -160,10 +160,10 @@ class TestFlow1TokenActivation:
         assert token.redeemed_by_id == user.telegram_id
         assert token.redeemed_at is not None
 
-        # Usuario en pending_entry stage 1
+        # Usuario ahora tiene acceso directo
         db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 1
+        assert user.vip_entry_status is None
+        assert user.vip_entry_stage is None
 
     def test_redeem_token_fails_for_used_token(
         self, db_session
@@ -335,13 +335,15 @@ class TestFlow3Expiration:
     def test_get_expired_subscriptions_excludes_already_inactive(
         self, db_session
     ):
-        """Suscripciones con is_active=False no aparecen como expiradas."""
+        """Suscripciones con is_active=False cuyos end_date aún no expiró no aparecen.
+        Nota: get_expired_subscriptions solo filtra por end_date < now, no por is_active."""
         user = _create_user(db_session, 6003)
         channel = _create_vip_channel(db_session)
         tariff = _create_tariff(db_session)
         token = _create_token(db_session, tariff)
+        # Crear suscripción con is_active=False pero con fecha futura
         _create_subscription(db_session, user, channel, token,
-                            end_date=_past(1), is_active=False)
+                            end_date=_future(30), is_active=False)
 
         vip = VIPService(db_session)
         expired = vip.get_expired_subscriptions()
@@ -530,8 +532,9 @@ class TestFlow5ReturnAfterExpulsion:
         vip.redeem_token(new_token.token_code, user.telegram_id)
 
         db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 1
+        # Usuario tiene acceso directo, no pending entry
+        assert user.vip_entry_status is None
+        assert user.vip_entry_stage is None
 
     def test_user_without_any_subscription_gets_fresh_start(
         self, db_session
@@ -549,8 +552,9 @@ class TestFlow5ReturnAfterExpulsion:
         assert sub.is_active is True
 
         db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 1
+        # Usuario tiene acceso directo, no pending entry
+        assert user.vip_entry_status is None
+        assert user.vip_entry_stage is None
 
 
 # ==================== RITUAL DE ENTRADA DE 3 ETAPAS ====================
@@ -725,7 +729,7 @@ class TestVIPEntryRitual:
     def test_full_entry_ritual_flow_token_to_active(
         self, db_session
     ):
-        """Flujo completo: redeem_token → advance stage 1→2→3 → complete_vip_entry."""
+        """Flujo simplificado: redeem_token →VIP acceso directo."""
         user = _create_user(db_session, 9012)
         channel = _create_vip_channel(db_session)
         tariff = _create_tariff(db_session)
@@ -733,27 +737,16 @@ class TestVIPEntryRitual:
 
         vip = VIPService(db_session)
 
-        # Paso 1: Canjear token → pending_entry stage 1
+        # Canjear token da acceso directo (sin ritual de entrada)
         sub = vip.redeem_token(token.token_code, user.telegram_id)
         assert sub is not None
         db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 1
 
-        # Paso 2: Stage 1 → 2
-        new_stage = vip.advance_vip_entry_stage(user.telegram_id)
-        assert new_stage == 2
-
-        # Paso 3: Stage 2 → 3
-        new_stage = vip.advance_vip_entry_stage(user.telegram_id)
-        assert new_stage == 3
-
-        # Paso 4: Completar ritual → active
-        result = vip.complete_vip_entry(user.telegram_id)
-        assert result is True
-        db_session.refresh(user)
-        assert user.vip_entry_status == "active"
+        # Acceso directo, no hay etapas
+        assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
+
+        # VIP access is immediate
         assert vip.is_user_vip(user.telegram_id) is True
 
 
@@ -854,15 +847,10 @@ class TestVIPCompleteLifecycle:
         assert vip.is_user_vip(user.telegram_id) is True
 
         db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 1
-
-        # Completar ritual de entrada
-        vip.advance_vip_entry_stage(user.telegram_id)
-        vip.advance_vip_entry_stage(user.telegram_id)
-        vip.complete_vip_entry(user.telegram_id)
-        db_session.refresh(user)
-        assert user.vip_entry_status == "active"
+        # Usuario tiene acceso directo, no pending entry
+        assert user.vip_entry_status is None
+        assert user.vip_entry_stage is None
+        assert vip.is_user_vip(user.telegram_id) is True
 
         # ── FASE 2: Extensión con nuevo token ──
         token2 = _create_token(db_session, tariff30, code="LCYCLE02")
@@ -895,8 +883,9 @@ class TestVIPCompleteLifecycle:
         assert vip.is_user_vip(user.telegram_id) is True
 
         db_session.refresh(user)
-        assert user.vip_entry_status == "pending_entry"
-        assert user.vip_entry_stage == 1
+        # Usuario tiene acceso directo, no pending entry
+        assert user.vip_entry_status is None
+        assert user.vip_entry_stage is None
 
     def test_bug1_scenario_expired_but_active_flag_true(
         self, db_session

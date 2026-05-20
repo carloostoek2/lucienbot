@@ -643,10 +643,3 @@ class BackpackPurchaseDetailCallback(CallbackData, prefix="backpack_purchase"):
 class BackpackDeliverCallback(CallbackData, prefix="backpack_deliver"):
     """Entregar contenido de paquete"""
     package_id: int
-
-
-# ==================== VIP ENTRY ====================
-
-class VipEntryJoinedCallback(CallbackData, prefix="vip_entry_joined"):
-    """Usuario confirma haberse unido al canal VIP"""
-    pass

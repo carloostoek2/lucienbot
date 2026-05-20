@@ -39,6 +39,9 @@ def get_db_session():
 class VIPService:
     """Servicio para gestión VIP"""
 
+    # Constant for VIP invite link expiration (7 days)
+    INVITE_LINK_EXPIRATION_DAYS = 7
+
     def __init__(self, db: Session = None):
         self.db = db
         self._owns_session = db is None
@@ -270,11 +273,11 @@ class VIPService:
         db.commit()
         db.refresh(subscription)
 
-        # Set VIP entry state for the 3-phase ritual
+        # Clear any previous VIP entry state (no ritual anymore)
         user = db.query(User).filter(User.telegram_id == user_id).first()
         if user:
-            user.vip_entry_status = "pending_entry"
-            user.vip_entry_stage = 1
+            user.vip_entry_status = None
+            user.vip_entry_stage = None
             db.commit()
 
         return subscription
