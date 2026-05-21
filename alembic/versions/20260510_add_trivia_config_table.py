@@ -39,7 +39,6 @@ def upgrade() -> None:
         table_exists = result.scalar()
 
     if table_exists:
-        op.drop_index('ix_trivia_config_id', table_name='trivia_config')
         op.drop_table('trivia_config')
 
     op.create_table('trivia_config',
