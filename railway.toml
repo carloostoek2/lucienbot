@@ -12,7 +12,7 @@ NIXPACKS_PYTHON_PKGS = "python3 python3-pip"
 
 [deploy]
 # Comando de inicio
-startCommand = "alembic upgrade head && python bot.py"
+startCommand = "alembic upgrade head 2>/dev/null && python bot.py"
 
 # Healthcheck (opcional)
 # healthcheckPath = "/health"
