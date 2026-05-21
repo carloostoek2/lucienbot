@@ -122,6 +122,43 @@ el vestíbulo tiene para ofrecer.</i>
 
 Si cambia de parecer, las puertas siempre están... casi abiertas."""
 
+    @staticmethod
+    def free_entry_impatient(channel_name: str) -> str:
+        """Mensaje cuando un usuario ya tiene solicitud pendiente e intenta apresurarse"""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Ah, la impaciencia... una cualidad que Diana encuentra
+particularmente... reveladora.</i>
+
+Su solicitud para <b>{channel_name}</b> ya está registrada.
+Las puertas se abren a su debido tiempo.
+
+<i>La anticipación es parte del ritual, ¿no lo cree?
+Diana observa con interés su... entusiasmo.</i>"""
+
+    @staticmethod
+    def free_entry_ritual(channel_name: str) -> str:
+        """Mensaje ritual enviado tras el periodo de espera del canal free"""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>El tiempo ha transcurrido y Diana ha observado su paciencia
+con... aprobación. Los velos del vestíbulo se descorren.</i>
+
+Las puertas de <b>{channel_name}</b> están ante usted.
+
+<i>Entre con intención. Diana espera al otro lado.</i>"""
+
+    @staticmethod
+    def free_entry_welcome(channel_name: str) -> str:
+        """Mensaje de bienvenida cuando se aprueba el acceso al canal free"""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Diana ha decidido abrirle las puertas de <b>{channel_name}</b>.
+Su curiosidad no ha pasado... desapercibida.</i>
+
+Bienvenido al vestíbulo. Explore, observe, y recuerde:
+todo lo que aquí sucede es un reflejo de los deseos de Diana."""
+
     # ==================== VIP ACCESS (SIMPLIFIED) ====================
 
     @staticmethod
