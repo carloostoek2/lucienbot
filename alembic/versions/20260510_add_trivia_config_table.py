@@ -19,7 +19,29 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Create trivia_config table for configurable game limits."""
+    """Create trivia_config table for configurable game limits.
+
+    Drops old trivia_config if it exists (from legacy trivia chain) before
+    creating the new schema with dice and trivia limit columns.
+    """
+    conn = op.get_bind()
+    dialect = conn.dialect.name
+
+    if dialect == 'sqlite':
+        result = conn.execute(sa.text(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='trivia_config'"
+        ))
+        table_exists = result.fetchone() is not None
+    else:
+        result = conn.execute(sa.text(
+            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'trivia_config')"
+        ))
+        table_exists = result.scalar()
+
+    if table_exists:
+        op.drop_index('ix_trivia_config_id', table_name='trivia_config')
+        op.drop_table('trivia_config')
+
     op.create_table('trivia_config',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('dice_limit_free', sa.Integer(), nullable=False, server_default=sa.text('10')),
