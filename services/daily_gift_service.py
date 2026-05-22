@@ -75,6 +75,11 @@ class DailyGiftService:
         config = self.get_config()
         return config.is_active
     
+    def get_gift_amount(self) -> int:
+        """Obtiene la cantidad de besitos del regalo diario"""
+        config = self.get_config()
+        return config.besito_amount if config.is_active else 0
+
     def toggle_daily_gift(self) -> bool:
         """
         Activa/desactiva el regalo diario.
@@ -87,9 +92,6 @@ class DailyGiftService:
         self._get_db().commit()
         logger.info(f"Daily gift toggled: is_active={config.is_active}")
         return config.is_active
-        """Obtiene la cantidad de besitos del regalo diario"""
-        config = self.get_config()
-        return config.besito_amount if config.is_active else 0
     
     # ==================== RECLAMOS ====================
     

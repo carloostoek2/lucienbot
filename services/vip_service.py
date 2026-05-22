@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from contextlib import contextmanager
 import logging
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from models.models import Tariff, Token, TokenStatus, Subscription, Channel, ChannelType, User
 from models.database import SessionLocal
 
@@ -321,7 +321,9 @@ class VIPService:
     def get_active_subscriptions(self, channel_id: int = None) -> List[Subscription]:
         """Obtiene todas las suscripciones activas"""
         db = self._get_db()
-        query = db.query(Subscription).filter(Subscription.is_active == True)
+        query = db.query(Subscription).options(
+            joinedload(Subscription.token).joinedload(Token.tariff)
+        ).filter(Subscription.is_active == True)
         if channel_id:
             query = query.filter(Subscription.channel_id == channel_id)
         return query.all()
