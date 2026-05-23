@@ -7,7 +7,7 @@ y el sistema de "Me Interesa" para notificar a administradores.
 from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import asc, desc, and_
 from models.models import (
     Promotion, PromotionStatus, PromotionInterest, InterestStatus,
     BlockedPromotionUser, Package
