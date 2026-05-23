@@ -846,7 +846,7 @@ class GameService:
                 }
             else:
                 # Set timeout
-                session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+                session.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=2)
                 self.db.flush()
                 return {
                     "action": "timeout",

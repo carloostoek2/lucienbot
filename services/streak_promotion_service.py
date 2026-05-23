@@ -244,7 +244,7 @@ class StreakPromotionService:
         la expiracion en la logica posterior.
         """
         db = self._get_db()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         session = (
             db.query(StreakSession)
             .filter(
@@ -356,7 +356,7 @@ class StreakPromotionService:
             return
         if not retire:
             self.cancel_session_codes(session.id)
-        session.expires_at = datetime.now(timezone.utc)
+        session.expires_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.flush()
         logger.info(
             f"streak_promotion_service - close_session - "
