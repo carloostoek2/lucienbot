@@ -209,6 +209,12 @@ class StreakPromotionService:
                 code.status = StreakPromotionCodeStatus.DELIVERED
                 code.user_id = user_id
                 code.delivered_at = datetime.now(timezone.utc)
+                # Phase 18: Link code to active session
+                session = self._get_or_create_session(user_id, promo.id)
+                code.session_id = session.id
+                codes_list = json.loads(session.codes_delivered or "[]")
+                codes_list.append(code.id)
+                session.codes_delivered = json.dumps(codes_list)
                 redemption = StreakPromotionRedemption(
                     user_id=user_id, level_id=level.id, code_id=code.id,
                     streak_achieved=streak,
