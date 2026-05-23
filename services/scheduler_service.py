@@ -270,6 +270,44 @@ async def _deactivate_streak_promotion(promo_id: int):
         db.close()
 
 
+def _cleanup_expired_streak_sessions():
+    """Cancela sesiones de racha expiradas que no fueron cerradas por interaccion."""
+    from datetime import datetime, timezone
+    from models.models import StreakSession, StreakPromotionCode, StreakPromotionCodeStatus
+    import json
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        expired = (
+            db.query(StreakSession)
+            .filter(
+                StreakSession.expires_at.isnot(None),
+                StreakSession.expires_at < now,
+            )
+            .all()
+        )
+        cancelled = 0
+        for session in expired:
+            code_ids = json.loads(session.codes_delivered or "[]")
+            for code_id in code_ids:
+                code = db.query(StreakPromotionCode).filter(
+                    StreakPromotionCode.id == code_id
+                ).first()
+                if code and code.status == StreakPromotionCodeStatus.DELIVERED:
+                    code.status = StreakPromotionCodeStatus.CANCELLED
+                    cancelled += 1
+            session.expires_at = now
+        if cancelled > 0:
+            db.commit()
+            logger.info(f"scheduler_service - cleanup_streak_sessions - cancelled:{cancelled}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"scheduler_service - cleanup_streak_sessions - error:{e}")
+    finally:
+        db.close()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SchedulerService — solo maneja el ciclo de vida de APScheduler
 # ─────────────────────────────────────────────────────────────────────────────
@@ -343,6 +381,13 @@ class SchedulerService:
             id="daily_backup",
             name="Daily database backup",
             replace_existing=True,
+        )
+        self._scheduler.add_job(
+            _cleanup_expired_streak_sessions,
+            IntervalTrigger(minutes=60),
+            id="cleanup_streak_sessions",
+            replace_existing=True,
+            name="Limpieza de sesiones de racha expiradas",
         )
         self._scheduler.start()
         self.running = True
