@@ -620,13 +620,13 @@ class TriviaSimpleAnswerCallback(CallbackData, prefix="trivia_simple_answer"):
 class StreakProtectAcceptCallback(CallbackData, prefix="streak_protect_accept"):
     """Aceptar proteccion de racha pagando besitos."""
     streak: int
-    question_idx: int
+    game_type: str
 
 
 class StreakProtectDeclineCallback(CallbackData, prefix="streak_protect_decline"):
     """Rechazar proteccion de racha (pierde streak y codigos)."""
     streak: int
-    question_idx: int
+    game_type: str
 
 
 class StreakRetireCallback(CallbackData, prefix="streak_retire"):
