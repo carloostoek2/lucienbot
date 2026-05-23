@@ -546,7 +546,7 @@ class TriviaConfigFieldCallback(CallbackData, prefix="trivia_cfg_field"):
 
 class TriviaCategoryActivateCallback(CallbackData, prefix="trivia_cat_activate"):
     """Activar categoría de trivia"""
-    category_id: int
+    category_id: str
 
 
 # ==================== MISSION USER ====================
