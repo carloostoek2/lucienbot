@@ -6,7 +6,7 @@ Gestiona los minijuegos de dados y trivia con límites diarios.
 import json
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
@@ -793,6 +793,13 @@ class GameService:
         # 11. Construir mensaje final
         message = self._build_trivia_message(message_parts)
 
+        # Phase 18: Build session_state for handler decisions
+        session_state = None
+        if not is_correct:
+            session_state = self._build_streak_failure_state(user_id, previous_streak)
+        elif promo_code_info:
+            session_state = self._build_streak_claim_state(user_id, promo_code_info)
+
         logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}, bonus:{streak_bonus}")
 
         # Commit del registro de jugadapara asegurar persistencia
@@ -810,8 +817,62 @@ class GameService:
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
-            'limit_reached': False
+            'limit_reached': False,
+            'session_state': session_state,
         }
+
+    def _build_streak_failure_state(self, user_id: int, streak: int) -> Optional[dict]:
+        """Construye session_state cuando el usuario falla una pregunta con sesion activa."""
+        from services.streak_promotion_service import StreakPromotionService
+        promo_service = StreakPromotionService(self.db)
+        try:
+            session = promo_service.get_active_session(user_id)
+            if not session:
+                return None
+            if session.protection_used:
+                # Already used protection -> cancel all codes, close session
+                promo_service.cancel_session_codes(session.id)
+                promo_service.close_session(user_id, retire=False)
+                return {"action": "cancelled", "streak_reset_to": 0}
+            # Protection available -> check if user can afford
+            cost = promo_service.calculate_protection_cost(streak)
+            besito_service = BesitoService(self.db)
+            can_afford = besito_service.has_sufficient_balance(user_id, cost)
+            if can_afford:
+                return {
+                    "action": "offer_protection",
+                    "protection_cost": cost,
+                    "streak": streak,
+                }
+            else:
+                # Set timeout
+                session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+                self.db.flush()
+                return {
+                    "action": "timeout",
+                    "expires_at": session.expires_at.isoformat(),
+                    "streak": streak,
+                }
+        finally:
+            promo_service.close()
+
+    def _build_streak_claim_state(self, user_id: int, promo_code_info: dict) -> Optional[dict]:
+        """Construye session_state cuando el usuario alcanza un tier y reclama codigo."""
+        from services.streak_promotion_service import StreakPromotionService
+        promo_service = StreakPromotionService(self.db)
+        try:
+            session = promo_service.get_active_session(user_id)
+            if not session:
+                return None
+            if session.is_in_risk_mode:
+                return {"action": "claimed_in_risk", "code": promo_code_info}
+            return {
+                "action": "offer_retire",
+                "code": promo_code_info,
+                "session_id": session.id,
+            }
+        finally:
+            promo_service.close()
 
     def _build_trivia_message_parts(self, is_correct: bool, question: dict,
                                      besitos: int, streak_message: Optional[str],
@@ -1086,6 +1147,13 @@ class GameService:
         # 11. Construir mensaje final
         message = self._build_trivia_vip_message(message_parts)
 
+        # Phase 18: Build session_state for handler decisions
+        session_state = None
+        if not is_correct:
+            session_state = self._build_streak_failure_state(user_id, previous_streak)
+        elif promo_code_info:
+            session_state = self._build_streak_claim_state(user_id, promo_code_info)
+
         logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
 
         # Commit del registro de jugadapara asegurar persistencia
@@ -1103,7 +1171,8 @@ class GameService:
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
-            'limit_reached': False
+            'limit_reached': False,
+            'session_state': session_state,
         }
 
     def _build_trivia_vip_message_parts(self, is_correct: bool, question: dict,
@@ -1389,6 +1458,13 @@ class GameService:
         )
         message = self._build_trivia_simple_message(message_parts)
 
+        # Phase 18: Build session_state for handler decisions
+        session_state = None
+        if not is_correct:
+            session_state = self._build_streak_failure_state(user_id, previous_streak)
+        elif promo_code_info:
+            session_state = self._build_streak_claim_state(user_id, promo_code_info)
+
         logger.info(f"game_service - play_trivia_simple - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
 
         # Commit del registro dejugada
@@ -1406,7 +1482,8 @@ class GameService:
             'message': message,
             'message_parts': message_parts,
             'remaining_after': remaining_after,
-            'limit_reached': False
+            'limit_reached': False,
+            'session_state': session_state,
         }
 
     def _build_trivia_simple_message_parts(self, is_correct: bool, question: dict,
