@@ -174,6 +174,7 @@ class TransactionSource(str, enum.Enum):
     ANONYMOUS_MESSAGE = "anonymous_message"  # Mensaje anónimo VIP
     GAME = "GAME"               # Victoria en dados
     TRIVIA = "TRIVIA"           # Respuesta correcta en trivia
+    STREAK_PROTECTION = "streak_protection"
 
 
 class BesitoBalance(Base):
@@ -1140,6 +1141,7 @@ class StreakPromotionCodeStatus(str, enum.Enum):
     AVAILABLE = "available"
     DELIVERED = "delivered"
     USED = "used"
+    CANCELLED = "cancelled"
 
 
 class StreakPromotion(Base):
