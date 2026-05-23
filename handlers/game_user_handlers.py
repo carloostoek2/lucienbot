@@ -3,6 +3,7 @@ Handlers de Minijuegos - Lucien Bot
 
 Maneja los flujos de usuario para dados y trivia.
 """
+import json
 import logging
 
 from aiogram import Router
@@ -29,7 +30,7 @@ from keyboards.inline_keyboards import (
     protection_keyboard,
     risk_mode_keyboard,
 )
-from services import get_service, GameService
+from services import get_service, GameService, StreakPromotionService
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -477,3 +478,91 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
         f"correct:{result['correct']}, besitos:{result['besitos']}, "
         f"bonus:{result.get('streak_bonus', 0)}"
     )
+
+
+# ==================== PHASE 18: PROTECCION DE RACHA ====================
+
+
+@router.callback_query(StreakProtectAcceptCallback.filter())
+async def handle_protection_accept(callback: CallbackQuery,
+                                    callback_data: StreakProtectAcceptCallback):
+    """Acepta proteccion de racha y debita besitos.
+    Delega en StreakPromotionService.protect_streak() que encapsula
+    BesitoService debit + session update en una operacion atomica.
+    """
+    user_id = callback.from_user.id
+    streak = callback_data.streak
+
+    with get_service(StreakPromotionService) as promo_svc:
+        if not promo_svc.protect_streak(user_id, streak):
+            await callback.answer("Besitos insuficientes para la proteccion.", show_alert=True)
+            return
+        cost = promo_svc.calculate_protection_cost(streak)
+
+    await callback.message.edit_text(
+        LucienVoice.streak_protection_accepted(cost, streak),
+        reply_markup=game_menu_keyboard()
+    )
+    await callback.answer()
+    logger.info(f"game_user_handlers - handle_protection_accept - {user_id} - cost:{cost} - streak:{streak}")
+
+
+@router.callback_query(StreakProtectDeclineCallback.filter())
+async def handle_protection_decline(callback: CallbackQuery,
+                                     callback_data: StreakProtectDeclineCallback):
+    """Rechaza proteccion de racha: cancela codigos y cierra sesion."""
+    user_id = callback.from_user.id
+    streak = callback_data.streak
+
+    with get_service(StreakPromotionService) as promo_svc:
+        session = promo_svc.get_active_session(user_id)
+        if session:
+            promo_svc.cancel_session_codes(session.id)
+            promo_svc.close_session(user_id, retire=False)
+
+    await callback.message.edit_text(
+        LucienVoice.streak_protection_declined(streak),
+        reply_markup=game_menu_keyboard()
+    )
+    await callback.answer()
+    logger.info(f"game_user_handlers - handle_protection_decline - {user_id}")
+
+
+@router.callback_query(StreakRetireCallback.filter())
+async def handle_streak_retire(callback: CallbackQuery):
+    """Retirarse del modo arriesgo conservando codigos."""
+    user_id = callback.from_user.id
+
+    with get_service(StreakPromotionService) as promo_svc:
+        session = promo_svc.get_active_session(user_id)
+        code_count = 0
+        if session:
+            codes = json.loads(session.codes_delivered or "[]")
+            code_count = len(codes)
+            promo_svc.close_session(user_id, retire=True)
+
+    await callback.message.edit_text(
+        LucienVoice.streak_retire_confirmed(code_count),
+        reply_markup=game_menu_keyboard()
+    )
+    await callback.answer()
+    logger.info(f"game_user_handlers - handle_streak_retire - {user_id} - codes:{code_count}")
+
+
+@router.callback_query(StreakContinueCallback.filter())
+async def handle_streak_continue(callback: CallbackQuery):
+    """Continuar en modo arriesgo."""
+    user_id = callback.from_user.id
+
+    with get_service(StreakPromotionService) as promo_svc:
+        session = promo_svc.get_active_session(user_id)
+        if session:
+            session.is_in_risk_mode = True
+            promo_svc.db.commit()
+
+    await callback.message.edit_text(
+        LucienVoice.streak_continue_confirmed(),
+        reply_markup=game_menu_keyboard()
+    )
+    await callback.answer()
+    logger.info(f"game_user_handlers - handle_streak_continue - {user_id} - risk_mode")
