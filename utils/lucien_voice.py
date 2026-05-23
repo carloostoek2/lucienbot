@@ -961,6 +961,75 @@ pero las puertas siempre están abiertas para quienes buscan.</i>
         }
         return messages.get(reward_type, messages['rewards'])
 
+    @staticmethod
+    def streak_protection_offer(cost: int, streak: int) -> str:
+        """Ofrece proteccion de racha al fallar una pregunta."""
+        return (
+            f"<b>La respuesta no es correcta, pero Lucien puede proteger su racha.</b>\n\n"
+            f"Su racha de {streak} se mantiene si acepta la proteccion.\n"
+            f"Costo: {cost} besitos."
+        )
+
+    @staticmethod
+    def streak_protection_accepted(cost: int, streak: int) -> str:
+        """Proteccion de racha aceptada y pagada."""
+        return (
+            f"Lucien ha protegido su racha. Se han debitado {cost} besitos.\n"
+            f"Su racha de {streak} continua. Prosiga con cautela."
+        )
+
+    @staticmethod
+    def streak_protection_declined(streak: int) -> str:
+        """Usuario rechaza proteccion, pierde racha y codigos."""
+        return (
+            f"Ha decidido no proteger su racha.\n"
+            f"Su racha de {streak} se ha roto y los codigos acumulados se han perdido."
+        )
+
+    @staticmethod
+    def streak_risk_mode_offer(code_value: str, discount_pct: int, promotion_name: str) -> str:
+        """Ofrece elegir entre retirarse con el codigo actual o continuar."""
+        return (
+            f"Ha alcanzado un nuevo nivel en <b>{promotion_name}</b>.\n\n"
+            f"Codigo obtenido: <code>{code_value}</code> ({discount_pct}% descuento)\n\n"
+            f"Puede retirarse y conservar este codigo, o continuar por un descuento mayor... "
+            f"pero si falla, perdera todos los codigos acumulados en esta sesion."
+        )
+
+    @staticmethod
+    def streak_retire_confirmed(code_count: int) -> str:
+        """Usuario se retira conservando codigos."""
+        return (
+            f"Sabia decision. Lucien ha cerrado su sesion.\n"
+            f"Conserva {code_count} codigo(s) de descuento. Visite el panel de Diana para mas informacion."
+        )
+
+    @staticmethod
+    def streak_continue_confirmed() -> str:
+        """Usuario elige continuar en modo arriesgo."""
+        return (
+            f"Ha elegido continuar. Lucien observa con interes.\n"
+            f"Recuerde: si falla ahora, perdera todos los codigos acumulados.\n\n"
+            f"Continuemos con la siguiente pregunta."
+        )
+
+    @staticmethod
+    def streak_timeout_granted(minutes: int, streak: int) -> str:
+        """Timeout de 2 minutos para ganar besitos en trivia libre."""
+        return (
+            f"No tiene besitos suficientes para proteger su racha de {streak}.\n\n"
+            f"Lucien le concede {minutes} minutos para ganar besitos en trivia libre.\n"
+            f"Use /trivia para jugar. Si no regresa, perdera su racha y codigos."
+        )
+
+    @staticmethod
+    def streak_codes_cancelled(code_count: int) -> str:
+        """Notifica que los codigos han sido cancelados."""
+        return (
+            f"Los {code_count} codigo(s) acumulados en esta sesion han sido cancelados.\n"
+            f"Su racha ha vuelto a 0. Puede intentarlo de nuevo cuando guste."
+        )
+
 
 # Import para evitar dependencia circular
 from models.models import ChannelType
