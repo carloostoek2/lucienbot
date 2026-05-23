@@ -11,6 +11,8 @@ from keyboards.callback_data import (
     ConfirmDeleteChannelCallback, WaitTimeCallback,
     AnonViewCallback,
     TriviaAnswerCallback, TriviaVipAnswerCallback, TriviaSimpleAnswerCallback,
+    StreakProtectAcceptCallback, StreakProtectDeclineCallback,
+    StreakRetireCallback, StreakContinueCallback,
 )
 from typing import List, Optional
 from models.models import Channel, Tariff
@@ -531,6 +533,39 @@ def trivia_simple_result_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="🔄 Otra pregunta especial", callback_data="game_trivia_simple")],
         [InlineKeyboardButton(text="🔙 Menu de juegos", callback_data="game_menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# ==================== PHASE 18: PROTECCION DE RACHA ====================
+
+
+def protection_keyboard(protection_cost: int, streak: int, question_idx: int) -> InlineKeyboardMarkup:
+    """Teclado para decision de proteccion de racha."""
+    buttons = [
+        [InlineKeyboardButton(
+            text=f"Proteger (-{protection_cost} besitos)",
+            callback_data=StreakProtectAcceptCallback(streak=streak, question_idx=question_idx).pack()
+        )],
+        [InlineKeyboardButton(
+            text="No proteger",
+            callback_data=StreakProtectDeclineCallback(streak=streak, question_idx=question_idx).pack()
+        )]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def risk_mode_keyboard() -> InlineKeyboardMarkup:
+    """Teclado para modo arriesgo: continuar o retirarse."""
+    buttons = [
+        [InlineKeyboardButton(
+            text="Continuar",
+            callback_data=StreakContinueCallback().pack()
+        )],
+        [InlineKeyboardButton(
+            text="Retirarse y conservar codigos",
+            callback_data=StreakRetireCallback().pack()
+        )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
