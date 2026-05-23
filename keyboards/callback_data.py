@@ -617,6 +617,28 @@ class TriviaSimpleAnswerCallback(CallbackData, prefix="trivia_simple_answer"):
     question_idx: int
 
 
+class StreakProtectAcceptCallback(CallbackData, prefix="streak_protect_accept"):
+    """Aceptar proteccion de racha pagando besitos."""
+    streak: int
+    question_idx: int
+
+
+class StreakProtectDeclineCallback(CallbackData, prefix="streak_protect_decline"):
+    """Rechazar proteccion de racha (pierde streak y codigos)."""
+    streak: int
+    question_idx: int
+
+
+class StreakRetireCallback(CallbackData, prefix="streak_retire"):
+    """Retirarse del modo arriesgo conservando codigos actuales."""
+    pass
+
+
+class StreakContinueCallback(CallbackData, prefix="streak_continue"):
+    """Continuar en modo arriesgo por el siguiente nivel."""
+    pass
+
+
 # ==================== BACKPACK ====================
 
 class BackpackRewardsPageCallback(CallbackData, prefix="backpack_rewards_page"):
