@@ -562,3 +562,58 @@ def mock_dispatcher():
     """Crea un mock del dispatcher."""
     dp = MagicMock()
     return dp
+
+
+@pytest.fixture
+def sample_streak_promotion(db_session):
+    """Create a test streak promotion with one level and codes."""
+    from models.models import (
+        StreakPromotion, StreakPromotionLevel, StreakPromotionCode,
+        StreakPromotionCodeStatus, StreakPromotionStatus,
+    )
+    promo = StreakPromotion(
+        name="Test Promotion",
+        description="Test",
+        status=StreakPromotionStatus.ACTIVE,
+        is_active=True,
+        include_general=True,
+        include_simple=True,
+    )
+    db_session.add(promo)
+    db_session.flush()
+
+    level = StreakPromotionLevel(
+        promotion_id=promo.id,
+        consecutive_required=5,
+        discount_pct=50,
+        codes_available=3,
+    )
+    db_session.add(level)
+    db_session.flush()
+
+    for i in range(3):
+        code = StreakPromotionCode(
+            level_id=level.id,
+            code_value=f"TEST-CODE-{i}",
+            status=StreakPromotionCodeStatus.AVAILABLE,
+        )
+        db_session.add(code)
+
+    db_session.commit()
+    return promo
+
+
+@pytest.fixture
+def sample_streak_session(db_session, sample_streak_promotion):
+    """Create a test StreakSession."""
+    from models.models import StreakSession
+    session = StreakSession(
+        user_id=12345,
+        promotion_id=sample_streak_promotion.id,
+        is_in_risk_mode=False,
+        protection_used=False,
+        codes_delivered="[]",
+    )
+    db_session.add(session)
+    db_session.commit()
+    return session
