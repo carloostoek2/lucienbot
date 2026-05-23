@@ -2,12 +2,14 @@
 Modelos de datos - Lucien Bot
 """
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, BigInteger, Text, Enum, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from models.database import Base
 import enum
 import secrets
 import string
+from uuid import uuid4
 
 
 class ChannelType(str, enum.Enum):
@@ -1205,8 +1207,10 @@ class StreakPromotionCode(Base):
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
     used_by_admin = Column(BigInteger, nullable=True)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("streak_sessions.id"), nullable=True)
 
     level = relationship("StreakPromotionLevel", back_populates="codes")
+    session = relationship("StreakSession", back_populates="codes")
 
 
 class StreakPromotionRedemption(Base):
@@ -1223,3 +1227,19 @@ class StreakPromotionRedemption(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "level_id", name="uq_streak_redemption_user_level"),
     )
+
+
+class StreakSession(Base):
+    """Sesion activa de trivia con promociones: rastrea proteccion, riesgo y timeout."""
+    __tablename__ = "streak_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    promotion_id = Column(Integer, ForeignKey("streak_promotions.id"), nullable=False)
+    is_in_risk_mode = Column(Boolean, default=False)
+    protection_used = Column(Boolean, default=False)
+    codes_delivered = Column(Text, nullable=True)  # JSON list of code IDs
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    codes = relationship("StreakPromotionCode", back_populates="session")
