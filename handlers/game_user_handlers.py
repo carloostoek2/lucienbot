@@ -7,10 +7,16 @@ import logging
 
 from aiogram import Router
 from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from keyboards.callback_data import (
     TriviaAnswerCallback,
     TriviaVipAnswerCallback,
     TriviaSimpleAnswerCallback,
+    StreakProtectAcceptCallback,
+    StreakProtectDeclineCallback,
+    StreakRetireCallback,
+    StreakContinueCallback,
 )
 from keyboards.inline_keyboards import (
     game_menu_keyboard,
@@ -19,13 +25,21 @@ from keyboards.inline_keyboards import (
     trivia_vip_keyboard,
     trivia_vip_result_keyboard,
     trivia_simple_keyboard,
-    trivia_simple_result_keyboard
+    trivia_simple_result_keyboard,
+    protection_keyboard,
+    risk_mode_keyboard,
 )
 from services import get_service, GameService
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
 router = Router()
+
+
+class TriviaStreakStates(StatesGroup):
+    waiting_protection_choice = State()
+    waiting_retire_choice = State()
 
 
 @router.callback_query(lambda c: c.data == "game_menu")
@@ -157,6 +171,46 @@ async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCall
     with get_service(GameService) as service:
         result = service.play_trivia(user_id, question_idx, answer_idx)
 
+    session_state = result.get('session_state')
+    if session_state:
+        if session_state['action'] == 'offer_protection':
+            await callback.message.edit_text(
+                LucienVoice.streak_protection_offer(
+                    session_state['protection_cost'], session_state['streak']
+                ),
+                reply_markup=protection_keyboard(
+                    session_state['protection_cost'],
+                    session_state['streak'],
+                    question_idx
+                )
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'offer_retire':
+            code = session_state['code']
+            await callback.message.edit_text(
+                LucienVoice.streak_risk_mode_offer(
+                    code['code'], code['discount_pct'], code['promotion_name']
+                ),
+                reply_markup=risk_mode_keyboard()
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'timeout':
+            await callback.message.edit_text(
+                LucienVoice.streak_timeout_granted(2, session_state['streak']),
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'cancelled':
+            await callback.message.edit_text(
+                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(0),
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return
+
     await callback.message.edit_text(
         result['message'],
         reply_markup=game_menu_keyboard()
@@ -226,6 +280,46 @@ async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAns
 
     with get_service(GameService) as service:
         result = service.play_trivia_vip(user_id, question_idx, answer_idx)
+
+    session_state = result.get('session_state')
+    if session_state:
+        if session_state['action'] == 'offer_protection':
+            await callback.message.edit_text(
+                LucienVoice.streak_protection_offer(
+                    session_state['protection_cost'], session_state['streak']
+                ),
+                reply_markup=protection_keyboard(
+                    session_state['protection_cost'],
+                    session_state['streak'],
+                    question_idx
+                )
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'offer_retire':
+            code = session_state['code']
+            await callback.message.edit_text(
+                LucienVoice.streak_risk_mode_offer(
+                    code['code'], code['discount_pct'], code['promotion_name']
+                ),
+                reply_markup=risk_mode_keyboard()
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'timeout':
+            await callback.message.edit_text(
+                LucienVoice.streak_timeout_granted(2, session_state['streak']),
+                reply_markup=trivia_vip_result_keyboard()
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'cancelled':
+            await callback.message.edit_text(
+                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(0),
+                reply_markup=trivia_vip_result_keyboard()
+            )
+            await callback.answer()
+            return
 
     await callback.message.edit_text(
         result['message'],
@@ -332,6 +426,46 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
         result = service.play_trivia_simple(
             user_id, question_idx, answer_idx, special_info['category_id']
         )
+
+    session_state = result.get('session_state')
+    if session_state:
+        if session_state['action'] == 'offer_protection':
+            await callback.message.edit_text(
+                LucienVoice.streak_protection_offer(
+                    session_state['protection_cost'], session_state['streak']
+                ),
+                reply_markup=protection_keyboard(
+                    session_state['protection_cost'],
+                    session_state['streak'],
+                    question_idx
+                )
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'offer_retire':
+            code = session_state['code']
+            await callback.message.edit_text(
+                LucienVoice.streak_risk_mode_offer(
+                    code['code'], code['discount_pct'], code['promotion_name']
+                ),
+                reply_markup=risk_mode_keyboard()
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'timeout':
+            await callback.message.edit_text(
+                LucienVoice.streak_timeout_granted(2, session_state['streak']),
+                reply_markup=trivia_simple_result_keyboard()
+            )
+            await callback.answer()
+            return
+        elif session_state['action'] == 'cancelled':
+            await callback.message.edit_text(
+                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(0),
+                reply_markup=trivia_simple_result_keyboard()
+            )
+            await callback.answer()
+            return
 
     await callback.message.edit_text(
         result['message'],
