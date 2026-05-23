@@ -238,15 +238,19 @@ class StreakPromotionService:
         return 5 + (streak // 3) * 5
 
     def get_active_session(self, user_id: int) -> Optional[StreakSession]:
-        """Retorna la sesion activa de promociones del usuario, o None."""
+        """Retorna la sesion activa de promociones del usuario, o None.
+        NO filtra por expires_at=None para que las sesiones con timeout
+        (expires_at futuro) sigan siendo visibles y se pueda verificar
+        la expiracion en la logica posterior.
+        """
         db = self._get_db()
         now = datetime.now(timezone.utc)
         session = (
             db.query(StreakSession)
             .filter(
                 StreakSession.user_id == user_id,
-                StreakSession.expires_at == None,
             )
+            .order_by(StreakSession.started_at.desc())
             .first()
         )
         if not session:
@@ -317,24 +321,29 @@ class StreakPromotionService:
         )
         return True
 
-    def cancel_session_codes(self, session_id: uuid.UUID):
-        """Marca todos los codigos DELIVERED de la sesion como CANCELLED."""
+    def cancel_session_codes(self, session_id: uuid.UUID) -> int:
+        """Marca todos los codigos DELIVERED de la sesion como CANCELLED.
+        Retorna la cantidad de codigos cancelados.
+        """
         db = self._get_db()
         session = db.query(StreakSession).filter(StreakSession.id == session_id).first()
         if not session:
-            return
+            return 0
         code_ids = json.loads(session.codes_delivered or "[]")
+        cancelled = 0
         for code_id in code_ids:
             code = db.query(StreakPromotionCode).filter(
                 StreakPromotionCode.id == code_id
             ).first()
             if code and code.status == StreakPromotionCodeStatus.DELIVERED:
                 code.status = StreakPromotionCodeStatus.CANCELLED
+                cancelled += 1
                 logger.info(
                     f"streak_promotion_service - cancel_session_codes - "
                     f"session:{session_id} - code:{code.id} - cancelled"
                 )
         db.flush()
+        return cancelled
 
     def close_session(self, user_id: int, retire: bool = True):
         """Cierra la sesion activa del usuario.
@@ -353,6 +362,23 @@ class StreakPromotionService:
             f"streak_promotion_service - close_session - "
             f"user:{user_id} - session:{session.id} - retire:{retire}"
         )
+
+    def set_risk_mode(self, user_id: int) -> bool:
+        """Activa el modo arriesgo en la sesion activa del usuario.
+        Los handlers delegan en este metodo en vez de llamar db.commit().
+        Retorna True si se activo, False si no hay sesion activa.
+        """
+        db = self._get_db()
+        session = self.get_active_session(user_id)
+        if not session:
+            return False
+        session.is_in_risk_mode = True
+        db.commit()
+        logger.info(
+            f"streak_promotion_service - set_risk_mode - "
+            f"user:{user_id} - session:{session.id}"
+        )
+        return True
 
     def activate(self, promo_id: int) -> bool:
         """Activa una promocion y su categoria asociada si existe."""

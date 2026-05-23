@@ -205,8 +205,9 @@ async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCall
             await callback.answer()
             return
         elif session_state['action'] == 'cancelled':
+            code_count = session_state.get('codes_cancelled', 0)
             await callback.message.edit_text(
-                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(0),
+                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
                 reply_markup=game_menu_keyboard()
             )
             await callback.answer()
@@ -555,10 +556,7 @@ async def handle_streak_continue(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     with get_service(StreakPromotionService) as promo_svc:
-        session = promo_svc.get_active_session(user_id)
-        if session:
-            session.is_in_risk_mode = True
-            promo_svc.db.commit()
+        promo_svc.set_risk_mode(user_id)
 
     await callback.message.edit_text(
         LucienVoice.streak_continue_confirmed(),

@@ -831,9 +831,9 @@ class GameService:
                 return None
             if session.protection_used:
                 # Already used protection -> cancel all codes, close session
-                promo_service.cancel_session_codes(session.id)
+                cancelled = promo_service.cancel_session_codes(session.id)
                 promo_service.close_session(user_id, retire=False)
-                return {"action": "cancelled", "streak_reset_to": 0}
+                return {"action": "cancelled", "streak_reset_to": 0, "codes_cancelled": cancelled}
             # Protection available -> check if user can afford
             cost = promo_service.calculate_protection_cost(streak)
             besito_service = BesitoService(self.db)
