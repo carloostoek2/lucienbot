@@ -6,6 +6,8 @@ de codigos de descuento cuando un usuario alcanza una racha objetivo.
 """
 import logging
 import secrets
+import json
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -18,6 +20,7 @@ from models.models import (
     StreakPromotionCodeStatus,
     StreakPromotionStatus,
     StreakPromotionRedemption,
+    StreakSession,
 )
 from models.database import SessionLocal
 
@@ -220,6 +223,130 @@ class StreakPromotionService:
                 }
         logger.info(f"streak_promotion_service - claim_for_streak - user:{user_id} - game_type:{game_type} - streak:{streak} - result:none")
         return None
+
+    def calculate_protection_cost(self, streak: int) -> int:
+        """Calcula el costo en besitos para proteger una racha.
+        Formula: 5 + (streak // 3) * 5
+        Ej: streak 0-2 -> 5, streak 3-5 -> 10, streak 6-8 -> 15
+        """
+        return 5 + (streak // 3) * 5
+
+    def get_active_session(self, user_id: int) -> Optional[StreakSession]:
+        """Retorna la sesion activa de promociones del usuario, o None."""
+        db = self._get_db()
+        now = datetime.now(timezone.utc)
+        session = (
+            db.query(StreakSession)
+            .filter(
+                StreakSession.user_id == user_id,
+                StreakSession.expires_at == None,
+            )
+            .first()
+        )
+        if not session:
+            return None
+        if session.expires_at and now > session.expires_at:
+            self.cancel_session_codes(session.id)
+            self.close_session(user_id, retire=False)
+            return None
+        return session
+
+    def _get_or_create_session(self, user_id: int, promotion_id: int) -> StreakSession:
+        """Obtiene la sesion activa o crea una nueva."""
+        db = self._get_db()
+        session = self.get_active_session(user_id)
+        if session:
+            return session
+        session = StreakSession(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            promotion_id=promotion_id,
+            is_in_risk_mode=False,
+            protection_used=False,
+            codes_delivered="[]",
+        )
+        db.add(session)
+        db.flush()
+        logger.info(
+            f"streak_promotion_service - _get_or_create_session - "
+            f"user:{user_id} - promotion:{promotion_id} - created"
+        )
+        return session
+
+    def protect_streak(self, user_id: int, streak: int) -> bool:
+        """Protege una racha debitando besitos y marcando protection_used.
+        Encapsula BesitoService debit + session update en un solo metodo atomico
+        para que los handlers llamen exactamente 1 service.
+        Retorna True si la proteccion fue aplicada, False si saldo insuficiente.
+        """
+        db = self._get_db()
+        session = self.get_active_session(user_id)
+        if not session:
+            logger.warning(
+                f"streak_promotion_service - protect_streak - "
+                f"user:{user_id} - no_active_session"
+            )
+            return False
+        cost = self.calculate_protection_cost(streak)
+        from models.models import TransactionSource
+        from services.besito_service import BesitoService
+        besito_service = BesitoService(db)
+        if not besito_service.debit_besitos(
+            user_id=user_id,
+            amount=cost,
+            source=TransactionSource.STREAK_PROTECTION,
+            description=f"Proteccion de racha streak={streak}",
+            commit=False,
+        ):
+            logger.info(
+                f"streak_promotion_service - protect_streak - "
+                f"user:{user_id} - insufficient_balance - cost:{cost}"
+            )
+            return False
+        session.protection_used = True
+        db.commit()
+        logger.info(
+            f"streak_promotion_service - protect_streak - "
+            f"user:{user_id} - cost:{cost} - streak:{streak}"
+        )
+        return True
+
+    def cancel_session_codes(self, session_id: uuid.UUID):
+        """Marca todos los codigos DELIVERED de la sesion como CANCELLED."""
+        db = self._get_db()
+        session = db.query(StreakSession).filter(StreakSession.id == session_id).first()
+        if not session:
+            return
+        code_ids = json.loads(session.codes_delivered or "[]")
+        for code_id in code_ids:
+            code = db.query(StreakPromotionCode).filter(
+                StreakPromotionCode.id == code_id
+            ).first()
+            if code and code.status == StreakPromotionCodeStatus.DELIVERED:
+                code.status = StreakPromotionCodeStatus.CANCELLED
+                logger.info(
+                    f"streak_promotion_service - cancel_session_codes - "
+                    f"session:{session_id} - code:{code.id} - cancelled"
+                )
+        db.flush()
+
+    def close_session(self, user_id: int, retire: bool = True):
+        """Cierra la sesion activa del usuario.
+        retire=True: conserva codigos DELIVERED, limpia expires_at.
+        retire=False: cancela todos los codigos de la sesion.
+        """
+        db = self._get_db()
+        session = self.get_active_session(user_id)
+        if not session:
+            return
+        if not retire:
+            self.cancel_session_codes(session.id)
+        session.expires_at = datetime.now(timezone.utc)
+        db.flush()
+        logger.info(
+            f"streak_promotion_service - close_session - "
+            f"user:{user_id} - session:{session.id} - retire:{retire}"
+        )
 
     def activate(self, promo_id: int) -> bool:
         """Activa una promocion y su categoria asociada si existe."""
