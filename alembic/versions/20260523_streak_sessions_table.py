@@ -28,6 +28,12 @@ def upgrade() -> None:
         sa.Column('started_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
     )
+    with op.batch_alter_table('streak_sessions', schema=None) as batch_op:
+        batch_op.create_foreign_key(
+            'fk_streak_sessions_promotion',
+            'streak_promotions',
+            ['promotion_id'], ['id']
+        )
     with op.batch_alter_table('streak_promotion_codes', schema=None) as batch_op:
         batch_op.add_column(sa.Column('session_id', sa.Uuid(), nullable=True))
         batch_op.create_foreign_key(
@@ -38,6 +44,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    with op.batch_alter_table('streak_sessions', schema=None) as batch_op:
+        batch_op.drop_constraint('fk_streak_sessions_promotion', type_='foreignkey')
     with op.batch_alter_table('streak_promotion_codes', schema=None) as batch_op:
         batch_op.drop_constraint('fk_streak_promotion_codes_session', type_='foreignkey')
         batch_op.drop_column('session_id')
