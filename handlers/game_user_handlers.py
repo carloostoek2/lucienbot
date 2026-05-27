@@ -380,8 +380,6 @@ async def game_trivia_simple(callback: CallbackQuery):
             )
             await callback.answer()
             return
-            await callback.answer()
-            return
 
     counter_text = data['counter_template'].format(
         remaining=data['remaining'],
