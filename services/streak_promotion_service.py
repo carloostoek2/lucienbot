@@ -71,7 +71,7 @@ class StreakPromotionService:
                 db.flush()
                 generated = generated + 1
             except IntegrityError:
-                db.rollback()
+                db.expunge(code)
                 logger.warning(
                     f"streak_promotion_service - _pre_generate_codes - "
                     f"level_id:{level.id} - code collision, retrying"
