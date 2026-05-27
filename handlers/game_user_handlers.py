@@ -8,8 +8,6 @@ import logging
 
 from aiogram import Router
 from aiogram.types import CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from keyboards.callback_data import (
     TriviaAnswerCallback,
     TriviaVipAnswerCallback,
@@ -36,11 +34,6 @@ from utils.lucien_voice import LucienVoice
 logger = logging.getLogger(__name__)
 
 router = Router()
-
-
-class TriviaStreakStates(StatesGroup):
-    waiting_protection_choice = State()
-    waiting_retire_choice = State()
 
 
 @router.callback_query(lambda c: c.data == "game_menu")
