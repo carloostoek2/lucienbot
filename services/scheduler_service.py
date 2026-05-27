@@ -278,7 +278,7 @@ def _cleanup_expired_streak_sessions():
 
     db = SessionLocal()
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         expired = (
             db.query(StreakSession)
             .filter(
