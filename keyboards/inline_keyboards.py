@@ -5,7 +5,7 @@ Teclados personalizados con la estética elegante de Diana.
 """
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from keyboards.callback_data import (
-    SelectTariffCallback, CopyTokenCallback,
+    SelectTariffCallback, CopyTokenCallback, ToggleGiftCallback,
     ChannelDetailCallback, ConfigWaitCallback, ConfigInviteCallback,
     PendingReqCallback, ApproveAllCallback, DeleteChannelCallback,
     ConfirmDeleteChannelCallback, WaitTimeCallback,
@@ -381,12 +381,17 @@ def vip_management_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def token_actions_keyboard(token_id: int) -> InlineKeyboardMarkup:
+def token_actions_keyboard(token_id: int, is_gift: bool = False) -> InlineKeyboardMarkup:
     """Acciones para un token específico"""
+    gift_label = "🎁 Quitar marca de regalo" if is_gift else "🎁 Convertir en regalo"
     buttons = [
         [InlineKeyboardButton(
             text="📋 Copiar enlace",
             callback_data=CopyTokenCallback(token_id=token_id).pack()
+        )],
+        [InlineKeyboardButton(
+            text=gift_label,
+            callback_data=ToggleGiftCallback(token_id=token_id, is_gift=not is_gift).pack()
         )],
         [InlineKeyboardButton(
             text="🗑️ Revocar token",

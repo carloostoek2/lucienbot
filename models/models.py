@@ -128,6 +128,7 @@ class Token(Base):
     token_code = Column(String(64), unique=True, index=True, nullable=False)
     tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=False)
     status = Column(Enum(TokenStatus), default=TokenStatus.ACTIVE)
+    is_gift = Column(Boolean, default=False)  # True = token otorgado como regalo
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
     redeemed_at = Column(DateTime(timezone=True), nullable=True)

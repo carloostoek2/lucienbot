@@ -11,7 +11,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from keyboards.callback_data import CopyTokenCallback, SelectTariffCallback
+from keyboards.callback_data import (
+    CopyTokenCallback,
+    SelectTariffCallback,
+    ToggleGiftCallback,
+)
 from keyboards.inline_keyboards import (
     back_keyboard,
     confirmation_keyboard,
@@ -228,8 +232,8 @@ async def generate_token(
             )
 
             await callback.message.edit_text(
-                LucienVoice.token_generated(token_url, tariff.name),
-                reply_markup=token_actions_keyboard(token.id),
+                LucienVoice.token_generated(token_url, tariff.name, token.is_gift),
+                reply_markup=token_actions_keyboard(token.id, token.is_gift),
                 parse_mode="HTML",
             )
 
@@ -309,16 +313,18 @@ async def list_tokens(callback: CallbackQuery):
             status_emoji = {"active": "🟢", "used": "🔴", "expired": "⚫"}.get(
                 token.status.value, "⚪"
             )
+            gift_tag = " 🎁" if token.is_gift else ""
 
             text += (
-                f"{status_emoji} <code>{token.token_code[:16]}...</code> - {token.tariff.name}\n"
+                f"{status_emoji}{gift_tag} <code>{token.token_code[:16]}...</code> - {token.tariff.name}\n"
             )
 
             if token.status.value == "active":
+                gift_label = "🎁 " if token.is_gift else ""
                 buttons.append(
                     [
                         InlineKeyboardButton(
-                            text=f"{status_emoji} {token.tariff.name} - Copiar",
+                            text=f"{gift_label}{status_emoji} {token.tariff.name} - Copiar",
                             callback_data=CopyTokenCallback(token_id=token.id).pack(),
                         )
                     ]
@@ -357,6 +363,38 @@ async def copy_token(callback: CallbackQuery, callback_data: CopyTokenCallback):
     finally:
         vip_service.close()
     await callback.answer("Enlace copiado")
+
+
+@router.callback_query(ToggleGiftCallback.filter())
+async def toggle_gift(callback: CallbackQuery, callback_data: ToggleGiftCallback):
+    """Marca/desmarca un token como regalo"""
+    token_id = callback_data.token_id
+    new_gift_status = callback_data.is_gift
+    logger.info(
+        f"{__name__} | toggle_gift | user_id={callback.from_user.id} | "
+        f"token_id={token_id} | is_gift={new_gift_status}"
+    )
+
+    vip_service = VIPService()
+    try:
+        ok = vip_service.set_gift_status(token_id, new_gift_status)
+        if not ok:
+            await callback.answer("Token no encontrado", show_alert=True)
+            return
+
+        token = vip_service.get_token(token_id)
+        bot_info = await callback.bot.get_me()
+        token_url = f"https://t.me/{bot_info.username}?start={token.token_code}"
+
+        await callback.message.edit_text(
+            LucienVoice.token_generated(token_url, token.tariff.name, token.is_gift),
+            reply_markup=token_actions_keyboard(token.id, token.is_gift),
+            parse_mode="HTML",
+        )
+        label = "marcado como regalo" if new_gift_status else "marcado como regular"
+        await callback.answer(f"✅ Token {label}")
+    finally:
+        vip_service.close()
 
 
 # ==================== LISTAR SUSCRIPTORES ====================

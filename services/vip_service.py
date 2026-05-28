@@ -282,6 +282,19 @@ class VIPService:
 
         return subscription
 
+    def set_gift_status(self, token_id: int, is_gift: bool) -> bool:
+        """Marca/desmarca un token como regalo"""
+        db = self._get_db()
+        token = self.get_token(token_id)
+        if token:
+            token.is_gift = is_gift
+            db.commit()
+            logger.info(
+                f"VIP token gift status: token_id={token_id}, is_gift={is_gift}"
+            )
+            return True
+        return False
+
     def revoke_token(self, token_id: int) -> bool:
         """Revoca un token activo"""
         db = self._get_db()

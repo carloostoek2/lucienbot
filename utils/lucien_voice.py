@@ -287,15 +287,15 @@ Este enlace ha trascendido su vigencia.</i>
 de discreción. Solicite uno nuevo al custodio.</i>"""
 
     @staticmethod
-    def token_generated(token_url: str, tariff_name: str) -> str:
+    def token_generated(token_url: str, tariff_name: str, is_gift: bool = False) -> str:
         """Token generado exitosamente"""
+        gift_line = "\n🎁 <b>Regalo:</b> Sí — este token fue marcado como obsequio\n" if is_gift else ""
         return f"""🎩 <b>Lucien:</b>
 
 <i>Un nuevo acceso ha sido forjado para El Diván.</i>
 
 👑 <b>Tarifa:</b> {tariff_name}
-🔗 <b>Enlace:</b> <code>{token_url}</code>
-
+🔗 <b>Enlace:</b> <code>{token_url}</code>{gift_line}
 <i>Este enlace es único, como los secretos que revela.
 Compártalo con quien Diana considere digno.</i>"""
 

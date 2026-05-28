@@ -64,6 +64,12 @@ class CopyTokenCallback(CallbackData, prefix="copy_token"):
     token_id: int
 
 
+class ToggleGiftCallback(CallbackData, prefix="toggle_gift"):
+    """Marcar/desmarcar token como regalo"""
+    token_id: int
+    is_gift: bool = False
+
+
 class VipPromoDetailCallback(CallbackData, prefix="vip_promo_detail"):
     """Detalle de promoción VIP exclusiva"""
     promo_id: int
