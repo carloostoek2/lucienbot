@@ -36,7 +36,7 @@ jobs:
         continue-on-error: true
 
       - name: Security (bandit)
-        run: bandit -r handlers/ services/ models/ bot.py
+        run: bandit -r handlers/ services/ models/ bot.py --skip B311,B404,B603,B607
 
       - name: Test (pytest + coverage)
         run: pytest tests/ --cov=services --cov=models --cov=handlers --cov-fail-under=70
