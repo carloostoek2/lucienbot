@@ -17,6 +17,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    # Check if constraint already exists (avoids crash on re-run)
+    cons = inspector.get_foreign_keys('streak_sessions')
+    if any(c['name'] == 'fk_streak_sessions_promotion' for c in cons):
+        return
+
     with op.batch_alter_table('streak_sessions', schema=None) as batch_op:
         batch_op.create_foreign_key(
             'fk_streak_sessions_promotion',
