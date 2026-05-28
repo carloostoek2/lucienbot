@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check handlers/ services/ models/ bot.py
+
+      - name: Format check (ruff)
+        run: ruff format --check handlers/ services/ models/ bot.py
+
+      - name: Type check (mypy)
+        run: mypy handlers/ services/ models/ bot.py
+
+      - name: Security (bandit)
+        run: bandit -r handlers/ services/ models/ bot.py
+
+      - name: Test (pytest + coverage)
+        run: pytest tests/ --cov=services --cov=models --cov=handlers --cov-fail-under=70
+        env:
+          CI: true
