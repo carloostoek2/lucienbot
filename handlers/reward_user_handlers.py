@@ -3,14 +3,17 @@ Handlers de Recompensas para Usuarios - Lucien Bot
 
 Muestra recompensas disponibles y sus misiones asociadas.
 """
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+import logging
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
+from keyboards.callback_data import MissionDetailCallback, RewardUserDetailCallback
+from keyboards.inline_keyboards import back_keyboard
+from middlewares.idempotency import idempotency_cache
 from services.mission_service import MissionService
 from services.reward_service import RewardService
-from keyboards.inline_keyboards import back_keyboard
-from keyboards.callback_data import MissionDetailCallback, RewardUserDetailCallback
-from middlewares.idempotency import idempotency_cache
-import logging
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -33,9 +36,13 @@ Elige una recompensa para ver como obtenerla...
 
 
 def _build_reward_detail_text(
-    reward_emoji: str, reward_name: str, reward_desc: str | None,
-    reward_gives: str, mission_name: str, mission_desc: str | None,
-    status_text: str
+    reward_emoji: str,
+    reward_name: str,
+    reward_desc: str | None,
+    reward_gives: str,
+    mission_name: str,
+    mission_desc: str | None,
+    status_text: str,
 ) -> str:
     return f"""🎩 Lucien:
 
@@ -78,8 +85,7 @@ async def show_available_rewards(callback: CallbackQuery):
 
         if not rewards_data:
             await callback.message.edit_text(
-                _EMPTY_REWARDS_TEXT,
-                reply_markup=back_keyboard("back_to_main")
+                _EMPTY_REWARDS_TEXT, reply_markup=back_keyboard("back_to_main")
             )
             _safe_answer(callback, user_id)
             return
@@ -131,13 +137,23 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
         )
 
         text = _build_reward_detail_text(
-            reward_emoji, reward.name, reward.description,
-            reward_gives, mission.name, mission.description, status_text
+            reward_emoji,
+            reward.name,
+            reward.description,
+            reward_gives,
+            mission.name,
+            mission.description,
+            status_text,
         )
 
         buttons = [
-            [InlineKeyboardButton(text="🎯 Ver mision", callback_data=MissionDetailCallback(mission_id=mission.id).pack())],
-            [InlineKeyboardButton(text="🔙 Volver a recompensas", callback_data="rewards_list")]
+            [
+                InlineKeyboardButton(
+                    text="🎯 Ver mision",
+                    callback_data=MissionDetailCallback(mission_id=mission.id).pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Volver a recompensas", callback_data="rewards_list")],
         ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -152,14 +168,18 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
 def _build_rewards_buttons(rewards_data: list) -> list:
     buttons = []
     for item in rewards_data:
-        mission = item['mission']
-        reward = item['reward']
+        mission = item["mission"]
+        reward = item["reward"]
         reward_emoji, _ = RewardService().get_reward_emoji(reward)
-        status_emoji = "🔒" if item['progress'] and item['progress'].is_completed else "✨"
-        buttons.append([InlineKeyboardButton(
-            text=f"{status_emoji} {reward_emoji} {reward.name[:30]}",
-            callback_data=RewardUserDetailCallback(mission_id=mission.id).pack()
-        )])
+        status_emoji = "🔒" if item["progress"] and item["progress"].is_completed else "✨"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{status_emoji} {reward_emoji} {reward.name[:30]}",
+                    callback_data=RewardUserDetailCallback(mission_id=mission.id).pack(),
+                )
+            ]
+        )
     return buttons
 
 
@@ -175,4 +195,6 @@ def _safe_answer_alert(callback: CallbackQuery, mission_id: int, user_id: int, t
     try:
         callback.answer(text, show_alert=True)
     except Exception as e:
-        logger.warning(f"callback.answer() falló en reward_detail {mission_id} para user {user_id}: {e}")
+        logger.warning(
+            f"callback.answer() falló en reward_detail {mission_id} para user {user_id}: {e}"
+        )

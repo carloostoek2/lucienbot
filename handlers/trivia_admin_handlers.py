@@ -4,12 +4,16 @@ Handlers de Administracion de Trivias Especiales - Lucien Bot
 Handlers para gestion de categorias de trivia desde el panel admin.
 Fase 16 - Trivias Especiales.
 """
+
 import logging
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
 from config.settings import bot_config
-from services import get_service, TriviaCategoryService
 from keyboards.callback_data import TriviaCategoryActivateCallback
+from services import TriviaCategoryService, get_service
+
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -33,39 +37,49 @@ async def admin_trivia_categories_menu(callback: CallbackQuery):
 
     buttons = []
     for cat in categories:
-        is_active = active and active['category_id'] == cat['category_id']
-        btn_text = f"{'✅ ' if is_active else ''}{cat['display_name']} ({cat['question_count']} preguntas)"
-        cb_data = TriviaCategoryActivateCallback(category_id=cat['category_id']).pack()
+        is_active = active and active["category_id"] == cat["category_id"]
+        btn_text = (
+            f"{'✅ ' if is_active else ''}{cat['display_name']} ({cat['question_count']} preguntas)"
+        )
+        cb_data = TriviaCategoryActivateCallback(category_id=cat["category_id"]).pack()
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=cb_data)])
 
     if active:
-        buttons.append([InlineKeyboardButton(
-            text="⛔ Desactivar categoria activa",
-            callback_data="trivia_cat_deactivate"
-        )])
-    buttons.append([InlineKeyboardButton(
-        text="\U0001f519 Volver a Trivias",
-        callback_data="admin_trivia"
-    )])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="⛔ Desactivar categoria activa", callback_data="trivia_cat_deactivate"
+                )
+            ]
+        )
+    buttons.append(
+        [InlineKeyboardButton(text="\U0001f519 Volver a Trivias", callback_data="admin_trivia")]
+    )
 
     await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        parse_mode="HTML"
+        text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML"
     )
     await callback.answer()
-    logger.info(f"trivia_admin_handlers - admin_trivia_categories_menu - {callback.from_user.id} - shown")
+    logger.info(
+        f"trivia_admin_handlers - admin_trivia_categories_menu - {callback.from_user.id} - shown"
+    )
 
 
-@router.callback_query(TriviaCategoryActivateCallback.filter(), lambda cb: is_admin(cb.from_user.id))
-async def trivia_category_activate(callback: CallbackQuery, callback_data: TriviaCategoryActivateCallback):
+@router.callback_query(
+    TriviaCategoryActivateCallback.filter(), lambda cb: is_admin(cb.from_user.id)
+)
+async def trivia_category_activate(
+    callback: CallbackQuery, callback_data: TriviaCategoryActivateCallback
+):
     """Activa una categoria especial."""
     category_id = callback_data.category_id
     with get_service(TriviaCategoryService) as service:
         service.activate(category_id)
     await callback.answer(f"Categoria activada: {category_id}", show_alert=True)
     await admin_trivia_categories_menu(callback)
-    logger.info(f"trivia_admin_handlers - trivia_category_activate - {callback.from_user.id} - category:{category_id}")
+    logger.info(
+        f"trivia_admin_handlers - trivia_category_activate - {callback.from_user.id} - category:{category_id}"
+    )
 
 
 @router.callback_query(F.data == "trivia_cat_deactivate", lambda cb: is_admin(cb.from_user.id))
@@ -75,4 +89,6 @@ async def trivia_category_deactivate(callback: CallbackQuery):
         service.deactivate()
     await callback.answer("Categoria desactivada. Usando mazo general.", show_alert=True)
     await admin_trivia_categories_menu(callback)
-    logger.info(f"trivia_admin_handlers - trivia_category_deactivate - {callback.from_user.id} - deactivated")
+    logger.info(
+        f"trivia_admin_handlers - trivia_category_deactivate - {callback.from_user.id} - deactivated"
+    )

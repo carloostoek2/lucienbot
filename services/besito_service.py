@@ -3,16 +3,14 @@ Servicio de Besitos - Lucien Bot
 
 Gestiona la moneda virtual (besitos) del sistema de gamificación.
 """
-from datetime import datetime, timedelta
-from typing import Optional, List
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from models.models import (
-    BesitoBalance, BesitoTransaction,
-    TransactionType, TransactionSource
-)
-from models.database import SessionLocal
+
 import logging
+
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from models.database import SessionLocal
+from models.models import BesitoBalance, BesitoTransaction, TransactionSource, TransactionType
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +39,7 @@ class BesitoService:
     def get_or_create_balance(self, user_id: int, lock: bool = False) -> BesitoBalance:
         """Obtiene o crea el saldo de un usuario. Usa lock=True para operaciones de escritura."""
         db = self._get_db()
-        query = db.query(BesitoBalance).filter(
-            BesitoBalance.user_id == user_id
-        )
+        query = db.query(BesitoBalance).filter(BesitoBalance.user_id == user_id)
 
         if lock:
             query = query.with_for_update()
@@ -51,12 +47,7 @@ class BesitoService:
         balance = query.first()
 
         if not balance:
-            balance = BesitoBalance(
-                user_id=user_id,
-                balance=0,
-                total_earned=0,
-                total_spent=0
-            )
+            balance = BesitoBalance(user_id=user_id, balance=0, total_earned=0, total_spent=0)
             db.add(balance)
             db.commit()
             db.refresh(balance)
@@ -73,15 +64,21 @@ class BesitoService:
         """Obtiene el saldo con estadísticas"""
         balance = self.get_or_create_balance(user_id)
         return {
-            'balance': balance.balance,
-            'total_earned': balance.total_earned,
-            'total_spent': balance.total_spent
+            "balance": balance.balance,
+            "total_earned": balance.total_earned,
+            "total_spent": balance.total_spent,
         }
 
     # ==================== TRANSACCIONES ====================
 
-    def credit_besitos(self, user_id: int, amount: int, source: TransactionSource,
-                       description: str = None, reference_id: int = None) -> bool:
+    def credit_besitos(
+        self,
+        user_id: int,
+        amount: int,
+        source: TransactionSource,
+        description: str = None,
+        reference_id: int = None,
+    ) -> bool:
         """
         Acredita besitos a un usuario. Usa SELECT FOR UPDATE para prevenir race conditions.
 
@@ -115,7 +112,7 @@ class BesitoService:
                 type=TransactionType.CREDIT,
                 source=source,
                 description=description,
-                reference_id=reference_id
+                reference_id=reference_id,
             )
             db.add(transaction)
             db.commit()
@@ -128,9 +125,15 @@ class BesitoService:
             logger.error(f"Error acreditando besitos: {e}")
             return False
 
-    def debit_besitos(self, user_id: int, amount: int, source: TransactionSource,
-                      description: str = None, reference_id: int = None,
-                      commit: bool = True) -> bool:
+    def debit_besitos(
+        self,
+        user_id: int,
+        amount: int,
+        source: TransactionSource,
+        description: str = None,
+        reference_id: int = None,
+        commit: bool = True,
+    ) -> bool:
         """
         Debita besitos de un usuario. Usa SELECT FOR UPDATE para prevenir race conditions.
 
@@ -157,7 +160,9 @@ class BesitoService:
 
             # Verificar saldo suficiente
             if balance.balance < amount:
-                logger.warning(f"Saldo insuficiente para usuario {user_id}: {balance.balance} < {amount}")
+                logger.warning(
+                    f"Saldo insuficiente para usuario {user_id}: {balance.balance} < {amount}"
+                )
                 db.rollback()  # Liberar el lock
                 return False
 
@@ -172,7 +177,7 @@ class BesitoService:
                 type=TransactionType.DEBIT,
                 source=source,
                 description=description,
-                reference_id=reference_id
+                reference_id=reference_id,
             )
             db.add(transaction)
             if commit:
@@ -193,30 +198,36 @@ class BesitoService:
 
     # ==================== HISTORIAL ====================
 
-    def get_transaction_history(self, user_id: int, limit: int = 20) -> List[BesitoTransaction]:
+    def get_transaction_history(self, user_id: int, limit: int = 20) -> list[BesitoTransaction]:
         """Obtiene el historial de transacciones de un usuario"""
         db = self._get_db()
-        return db.query(BesitoTransaction).filter(
-            BesitoTransaction.user_id == user_id
-        ).order_by(desc(BesitoTransaction.created_at)).limit(limit).all()
+        return (
+            db.query(BesitoTransaction)
+            .filter(BesitoTransaction.user_id == user_id)
+            .order_by(desc(BesitoTransaction.created_at))
+            .limit(limit)
+            .all()
+        )
 
-    def get_transactions_by_source(self, user_id: int, source: TransactionSource,
-                                   limit: int = 20) -> List[BesitoTransaction]:
+    def get_transactions_by_source(
+        self, user_id: int, source: TransactionSource, limit: int = 20
+    ) -> list[BesitoTransaction]:
         """Obtiene transacciones filtradas por fuente"""
         db = self._get_db()
-        return db.query(BesitoTransaction).filter(
-            BesitoTransaction.user_id == user_id,
-            BesitoTransaction.source == source
-        ).order_by(desc(BesitoTransaction.created_at)).limit(limit).all()
+        return (
+            db.query(BesitoTransaction)
+            .filter(BesitoTransaction.user_id == user_id, BesitoTransaction.source == source)
+            .order_by(desc(BesitoTransaction.created_at))
+            .limit(limit)
+            .all()
+        )
 
     # ==================== ESTADÍSTICAS ====================
 
-    def get_top_users(self, limit: int = 10) -> List[BesitoBalance]:
+    def get_top_users(self, limit: int = 10) -> list[BesitoBalance]:
         """Obtiene los usuarios con más besitos"""
         db = self._get_db()
-        return db.query(BesitoBalance).order_by(
-            desc(BesitoBalance.balance)
-        ).limit(limit).all()
+        return db.query(BesitoBalance).order_by(desc(BesitoBalance.balance)).limit(limit).all()
 
     def get_total_besitos_in_circulation(self) -> int:
         """Obtiene el total de besitos en circulación"""

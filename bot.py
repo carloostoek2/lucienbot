@@ -3,75 +3,77 @@
 
 Bot de Telegram para gestión de canales Free y VIP.
 """
+
 import asyncio
 import logging
 import os
 import sys
 from datetime import timedelta
+
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
+from aiogram.fsm.storage.redis import DefaultKeyBuilder, RedisStorage
 from redis.asyncio import Redis
 
 from config.settings import bot_config
-from models.database import init_db
-from middlewares.error_handler import ErrorHandlerMiddleware
-from services.scheduler_service import get_scheduler
 from handlers import (
-    common_router,
     admin_router,
-    channel_router,
-    vip_router,
-    free_channel_router,
-    # Fase 1 - Gamificacion
-    gamification_user_router,
-    gamification_admin_router,
-    broadcast_router,
-    # Fase 2 - Paquetes
-    package_router,
-    # Fase 3 - Misiones y Recompensas
-    mission_user_router,
-    mission_admin_router,
-    reward_admin_router,
-    reward_user_router,
-    # Fase 4 - Tienda
-    store_user_router,
-    store_admin_router,
-    # Fase 5 - Promociones
-    promotion_user_router,
-    promotion_admin_router,
-    # Fase 6 - Narrativa
-    story_user_router,
-    story_admin_router,
     # Phase 9 - Analytics
     analytics_router,
-    # Phase 12 - Mensajes Anónimos VIP
-    vip_user_router,
     anonymous_message_admin_router,
-    # Phase 12 - Categorías de Tienda
-    category_admin_handlers,
-    # Phase 14 - Minijuegos
-    game_user_router,
     # Phase 15 - Mochila
     backpack_router,
+    broadcast_router,
+    # Phase 12 - Categorías de Tienda
+    category_admin_handlers,
+    channel_router,
+    common_router,
+    free_channel_router,
+    # Phase 14 - Minijuegos
+    game_user_router,
+    gamification_admin_router,
+    # Fase 1 - Gamificacion
+    gamification_user_router,
+    mission_admin_router,
+    # Fase 3 - Misiones y Recompensas
+    mission_user_router,
+    # Fase 2 - Paquetes
+    package_router,
+    promotion_admin_router,
+    # Fase 5 - Promociones
+    promotion_user_router,
+    reward_admin_router,
+    reward_user_router,
+    store_admin_router,
+    # Fase 4 - Tienda
+    store_user_router,
+    story_admin_router,
+    # Fase 6 - Narrativa
+    story_user_router,
     # Phase 16 - Trivias Especiales
     trivia_admin_router,
-    # Phase 17 - Promociones por Racha
-    trivia_streak_admin_router,
     # Configuracion de Trivias
     trivia_config_admin_router,
+    # Phase 17 - Promociones por Racha
+    trivia_streak_admin_router,
+    vip_router,
+    # Phase 12 - Mensajes Anónimos VIP
+    vip_user_router,
 )
+from middlewares.error_handler import ErrorHandlerMiddleware
+from models.database import init_db
+from services.scheduler_service import get_scheduler
 
 # Configurar logging
 logging.basicConfig(
-    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('lucien_bot.log', encoding='utf-8')
-    ]
+        logging.FileHandler("lucien_bot.log", encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -98,7 +100,9 @@ def create_storage():
         except Exception as e:
             logger.warning(f"Redis connection failed ({e}) -- falling back to MemoryStorage")
     else:
-        logger.warning("REDIS_URL not set -- FSM state will not persist across restarts (using MemoryStorage)")
+        logger.warning(
+            "REDIS_URL not set -- FSM state will not persist across restarts (using MemoryStorage)"
+        )
     return MemoryStorage()
 
 
@@ -125,9 +129,7 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
         for subscription in expired_subscriptions:
             try:
                 # Verificar si el usuario tiene otra suscripción activa antes de expulsar
-                if vip_service.has_other_active_subscription(
-                    subscription.user_id, subscription.id
-                ):
+                if vip_service.has_other_active_subscription(subscription.user_id, subscription.id):
                     vip_service.expire_subscription(subscription.id)
                     logger.info(
                         f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: "
@@ -151,15 +153,15 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                     # Intentar remover al usuario del canal VIP
                     try:
                         await bot.ban_chat_member(
-                            chat_id=channel.channel_id,
-                            user_id=user.telegram_id
+                            chat_id=channel.channel_id, user_id=user.telegram_id
                         )
                         # Desbanear inmediatamente para permitir que vuelva con un nuevo token
                         await bot.unban_chat_member(
-                            chat_id=channel.channel_id,
-                            user_id=user.telegram_id
+                            chat_id=channel.channel_id, user_id=user.telegram_id
                         )
-                        logger.info(f"Usuario {user.telegram_id} removido del canal VIP {channel.channel_id}")
+                        logger.info(
+                            f"Usuario {user.telegram_id} removido del canal VIP {channel.channel_id}"
+                        )
                     except Exception as e:
                         logger.error(f"Error removiendo usuario {user.telegram_id} del canal: {e}")
 
@@ -189,45 +191,45 @@ async def on_startup(bot: Bot):
     scheduler = get_scheduler(bot)
     await scheduler.start()
     logger.info("Scheduler iniciado")
-    
+
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:
         try:
             await bot.send_message(
                 chat_id=admin_id,
                 text="🎩 <b>Lucien:</b>\n\n"
-                     "<i>El guardián de los secretos ha despertado...</i>\n\n"
-                     "✅ <b>Bot iniciado correctamente.</b>",
-                parse_mode=ParseMode.HTML
+                "<i>El guardián de los secretos ha despertado...</i>\n\n"
+                "✅ <b>Bot iniciado correctamente.</b>",
+                parse_mode=ParseMode.HTML,
             )
         except Exception as e:
             logger.error(f"No se pudo notificar al admin {admin_id}: {e}")
-    
+
     logger.info("Lucien Bot iniciado correctamente")
 
 
 async def on_shutdown(bot: Bot):
     """Acciones al detener el bot"""
     logger.info("Deteniendo Lucien Bot...")
-    
+
     # Detener scheduler
     scheduler = get_scheduler()
     if scheduler:
         await scheduler.stop()
-    
+
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:
         try:
             await bot.send_message(
                 chat_id=admin_id,
                 text="🎩 <b>Lucien:</b>\n\n"
-                     "<i>El guardián descansa...</i>\n\n"
-                     "⏹ <b>Bot detenido.</b>",
-                parse_mode=ParseMode.HTML
+                "<i>El guardián descansa...</i>\n\n"
+                "⏹ <b>Bot detenido.</b>",
+                parse_mode=ParseMode.HTML,
             )
         except Exception as e:
             logger.error(f"No se pudo notificar al admin {admin_id}: {e}")
-    
+
     logger.info("Lucien Bot detenido")
 
 
@@ -237,10 +239,10 @@ async def main():
     if not bot_config.TOKEN:
         logger.error("BOT_TOKEN no configurado. Cree un archivo .env con BOT_TOKEN=your_token")
         sys.exit(1)
-    
+
     if not bot_config.ADMIN_IDS:
         logger.warning("ADMIN_IDS no configurado. El panel de administración no estará disponible.")
-    
+
     # Crear bot y dispatcher
     bot = Bot(token=bot_config.TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     storage = create_storage()
@@ -297,7 +299,7 @@ async def main():
     # Configurar eventos de startup/shutdown
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
-    
+
     # Iniciar polling
     try:
         await dp.start_polling(bot)

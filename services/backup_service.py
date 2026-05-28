@@ -4,12 +4,14 @@ Backup Service - Lucien Bot
 Realiza backups automaticos de la base de datos.
 Soporta SQLite (desarrollo) y PostgreSQL (produccion en Railway).
 """
-import subprocess
+
 import logging
 import os
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+
 from config.settings import bot_config
 
 logger = logging.getLogger(__name__)
@@ -67,11 +69,16 @@ class BackupService:
             result = subprocess.run(
                 [
                     "pg_dump",
-                    "-h", host,
-                    "-p", str(port),
-                    "-U", user,
-                    "-d", db_name,
-                    "-f", str(backup_file),
+                    "-h",
+                    host,
+                    "-p",
+                    str(port),
+                    "-U",
+                    user,
+                    "-d",
+                    db_name,
+                    "-f",
+                    str(backup_file),
                 ],
                 capture_output=True,
                 text=True,

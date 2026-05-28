@@ -3,25 +3,24 @@ Backpack Handler - Sistema de Mochila (Inventario de Usuario)
 
 Maneja el comando /mochila y callbacks relacionados.
 """
-from typing import Dict
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram import Bot
 
+import logging
+
+from aiogram import Bot, F, Router
+from aiogram.filters import Command
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
+from keyboards.callback_data import (
+    BackpackDeliverCallback,
+    BackpackPurchaseDetailCallback,
+    BackpackPurchasesPageCallback,
+    BackpackRewardDetailCallback,
+    BackpackRewardsPageCallback,
+)
 from services.backpack_service import BackpackService
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
-from keyboards.callback_data import (
-    BackpackRewardsPageCallback,
-    BackpackPurchasesPageCallback,
-    BackpackRewardDetailCallback,
-    BackpackPurchaseDetailCallback,
-    BackpackDeliverCallback,
-)
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,7 @@ router = Router()
 
 class BackpackStates(StatesGroup):
     """Estados para el flujo de mochila"""
+
     main_menu = State()
     rewards_list = State()
     purchases_list = State()
@@ -39,24 +39,28 @@ class BackpackStates(StatesGroup):
 
 def build_backpack_summary_keyboard(summary: dict) -> InlineKeyboardMarkup:
     """Construye el keyboard del menú principal de mochila"""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"🎁 Mis Recompensas ({summary['rewards_count']})",
-            callback_data="backpack_rewards"
-        )],
-        [InlineKeyboardButton(
-            text=f"🛒 Mis Compras ({summary['purchases_count']})",
-            callback_data="backpack_purchases"
-        )],
-        [InlineKeyboardButton(
-            text=f"👑 Membresías VIP ({summary['vip_count']})",
-            callback_data="backpack_vip"
-        )],
-        [InlineKeyboardButton(
-            text="🔙 Volver al menú",
-            callback_data="back_to_main"
-        )]
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"🎁 Mis Recompensas ({summary['rewards_count']})",
+                    callback_data="backpack_rewards",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"🛒 Mis Compras ({summary['purchases_count']})",
+                    callback_data="backpack_purchases",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"👑 Membresías VIP ({summary['vip_count']})", callback_data="backpack_vip"
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Volver al menú", callback_data="back_to_main")],
+        ]
+    )
 
 
 def build_rewards_keyboard(rewards: list, page: int = 0) -> InlineKeyboardMarkup:
@@ -69,29 +73,29 @@ def build_rewards_keyboard(rewards: list, page: int = 0) -> InlineKeyboardMarkup
     keyboard_buttons = []
 
     for reward in page_rewards:
-        reward_type_emoji = {
-            'BESITOS': '💋',
-            'PACKAGE': '📦',
-            'VIP_ACCESS': '👑'
-        }.get(reward['reward_type'], '🎁')
+        reward_type_emoji = {"BESITOS": "💋", "PACKAGE": "📦", "VIP_ACCESS": "👑"}.get(
+            reward["reward_type"], "🎁"
+        )
 
         text = f"{reward_type_emoji} {reward['reward_name'][:25]}"
-        callback_data = BackpackRewardDetailCallback(history_id=reward['history_id']).pack()
+        callback_data = BackpackRewardDetailCallback(history_id=reward["history_id"]).pack()
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
     # Navigation buttons
     nav_buttons = []
     total_pages = (len(rewards) + items_per_page - 1) // items_per_page
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(
-            text="◀️",
-            callback_data=BackpackRewardsPageCallback(page=page - 1).pack()
-        ))
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="◀️", callback_data=BackpackRewardsPageCallback(page=page - 1).pack()
+            )
+        )
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(
-            text="▶️",
-            callback_data=BackpackRewardsPageCallback(page=page + 1).pack()
-        ))
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="▶️", callback_data=BackpackRewardsPageCallback(page=page + 1).pack()
+            )
+        )
 
     if nav_buttons:
         keyboard_buttons.append(nav_buttons)
@@ -111,11 +115,10 @@ def build_purchases_keyboard(purchases: list, page: int = 0) -> InlineKeyboardMa
     keyboard_buttons = []
 
     for purchase in page_purchases:
-        price = purchase.get('total_price', 0)
+        price = purchase.get("total_price", 0)
         text = f"📦 {purchase['product_name'][:20]} - {price} 💋"
         callback_data = BackpackPurchaseDetailCallback(
-            order_id=purchase['order_id'],
-            product_id=purchase['product_id']
+            order_id=purchase["order_id"], product_id=purchase["product_id"]
         ).pack()
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
@@ -123,15 +126,17 @@ def build_purchases_keyboard(purchases: list, page: int = 0) -> InlineKeyboardMa
     nav_buttons = []
     total_pages = (len(purchases) + items_per_page - 1) // items_per_page
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(
-            text="◀️",
-            callback_data=BackpackPurchasesPageCallback(page=page - 1).pack()
-        ))
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="◀️", callback_data=BackpackPurchasesPageCallback(page=page - 1).pack()
+            )
+        )
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(
-            text="▶️",
-            callback_data=BackpackPurchasesPageCallback(page=page + 1).pack()
-        ))
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="▶️", callback_data=BackpackPurchasesPageCallback(page=page + 1).pack()
+            )
+        )
 
     if nav_buttons:
         keyboard_buttons.append(nav_buttons)
@@ -146,7 +151,7 @@ def build_vip_keyboard(subscriptions: list) -> InlineKeyboardMarkup:
     keyboard_buttons = []
 
     for sub in subscriptions:
-        end_str = sub['end_date'].strftime("%d/%m/%Y") if sub.get('end_date') else "??/??"
+        end_str = sub["end_date"].strftime("%d/%m/%Y") if sub.get("end_date") else "??/??"
         text = f"👑 {sub.get('tariff_name', 'VIP')} - Vence: {end_str}"
         callback_data = f"backpack_vip_{sub['subscription_id']}"
         keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
@@ -160,15 +165,19 @@ def build_reward_detail_keyboard(reward: dict) -> InlineKeyboardMarkup:
     """Construye el keyboard de detalle de recompensa"""
     keyboard_buttons = []
 
-    if reward.get('reward_type') == 'PACKAGE' and reward.get('package_id'):
-        keyboard_buttons.append([
-            InlineKeyboardButton(
-                text="📂 Ver Contenido",
-                callback_data=BackpackDeliverCallback(package_id=reward['package_id']).pack()
-            )
-        ])
+    if reward.get("reward_type") == "PACKAGE" and reward.get("package_id"):
+        keyboard_buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="📂 Ver Contenido",
+                    callback_data=BackpackDeliverCallback(package_id=reward["package_id"]).pack(),
+                )
+            ]
+        )
 
-    keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_rewards")])
+    keyboard_buttons.append(
+        [InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_rewards")]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
@@ -177,20 +186,25 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
     """Construye el keyboard de detalle de compra"""
     keyboard_buttons = []
 
-    if purchase.get('package_id'):
-        keyboard_buttons.append([
-            InlineKeyboardButton(
-                text="📂 Ver Contenido",
-                callback_data=BackpackDeliverCallback(package_id=purchase['package_id']).pack()
-            )
-        ])
+    if purchase.get("package_id"):
+        keyboard_buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="📂 Ver Contenido",
+                    callback_data=BackpackDeliverCallback(package_id=purchase["package_id"]).pack(),
+                )
+            ]
+        )
 
-    keyboard_buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_purchases")])
+    keyboard_buttons.append(
+        [InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_purchases")]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
 
 # ==================== COMMAND ====================
+
 
 @router.message(Command("mochila"))
 async def cmd_mochila(message: Message, bot: Bot):
@@ -214,6 +228,7 @@ async def cmd_mochila(message: Message, bot: Bot):
 
 
 # ==================== CALLBACKS ====================
+
 
 @router.callback_query(F.data == "backpack_menu")
 async def callback_backpack_menu(callback: CallbackQuery, bot: Bot):
@@ -274,7 +289,9 @@ async def callback_rewards(callback: CallbackQuery, bot: Bot):
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        logger.info(f"backpack_handler | callback_rewards | user_id={user_id} | result=shown: {len(rewards)}")
+        logger.info(
+            f"backpack_handler | callback_rewards | user_id={user_id} | result=shown: {len(rewards)}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_rewards | user_id={user_id} | error={e}")
@@ -282,7 +299,9 @@ async def callback_rewards(callback: CallbackQuery, bot: Bot):
 
 
 @router.callback_query(BackpackRewardsPageCallback.filter())
-async def callback_rewards_page(callback: CallbackQuery, callback_data: BackpackRewardsPageCallback):
+async def callback_rewards_page(
+    callback: CallbackQuery, callback_data: BackpackRewardsPageCallback
+):
     """Muestra página de recompensas"""
     user_id = callback.from_user.id
     page = callback_data.page
@@ -319,7 +338,9 @@ async def callback_purchases(callback: CallbackQuery, bot: Bot):
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        logger.info(f"backpack_handler | callback_purchases | user_id={user_id} | result=shown: {len(purchases)}")
+        logger.info(
+            f"backpack_handler | callback_purchases | user_id={user_id} | result=shown: {len(purchases)}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_purchases | user_id={user_id} | error={e}")
@@ -327,7 +348,9 @@ async def callback_purchases(callback: CallbackQuery, bot: Bot):
 
 
 @router.callback_query(BackpackPurchasesPageCallback.filter())
-async def callback_purchases_page(callback: CallbackQuery, callback_data: BackpackPurchasesPageCallback):
+async def callback_purchases_page(
+    callback: CallbackQuery, callback_data: BackpackPurchasesPageCallback
+):
     """Muestra página de compras"""
     user_id = callback.from_user.id
     page = callback_data.page
@@ -366,20 +389,24 @@ async def callback_vip(callback: CallbackQuery, bot: Bot):
         result = []
         for sub in user_subs:
             tariff_name = sub.token.tariff.name if sub.token and sub.token.tariff else "VIP"
-            result.append({
-                'subscription_id': sub.id,
-                'tariff_name': tariff_name,
-                'start_date': sub.start_date,
-                'end_date': sub.end_date,
-                'is_active': sub.is_active
-            })
+            result.append(
+                {
+                    "subscription_id": sub.id,
+                    "tariff_name": tariff_name,
+                    "start_date": sub.start_date,
+                    "end_date": sub.end_date,
+                    "is_active": sub.is_active,
+                }
+            )
 
         text = LucienVoice.backpack_vip_list(result)
         keyboard = build_vip_keyboard(result)
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        logger.info(f"backpack_handler | callback_vip | user_id={user_id} | result=shown: {len(result)}")
+        logger.info(
+            f"backpack_handler | callback_vip | user_id={user_id} | result=shown: {len(result)}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_vip | user_id={user_id} | error={e}")
@@ -387,7 +414,9 @@ async def callback_vip(callback: CallbackQuery, bot: Bot):
 
 
 @router.callback_query(BackpackRewardDetailCallback.filter())
-async def callback_reward_detail(callback: CallbackQuery, callback_data: BackpackRewardDetailCallback):
+async def callback_reward_detail(
+    callback: CallbackQuery, callback_data: BackpackRewardDetailCallback
+):
     """Muestra detalle de una recompensa"""
     user_id = callback.from_user.id
     history_id = callback_data.history_id
@@ -400,7 +429,7 @@ async def callback_reward_detail(callback: CallbackQuery, callback_data: Backpac
         # Find the specific reward
         reward = None
         for r in rewards:
-            if r['history_id'] == history_id:
+            if r["history_id"] == history_id:
                 reward = r
                 break
 
@@ -413,7 +442,9 @@ async def callback_reward_detail(callback: CallbackQuery, callback_data: Backpac
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        logger.info(f"backpack_handler | callback_reward_detail | user_id={user_id} | reward_id={history_id}")
+        logger.info(
+            f"backpack_handler | callback_reward_detail | user_id={user_id} | reward_id={history_id}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_reward_detail | user_id={user_id} | error={e}")
@@ -421,7 +452,9 @@ async def callback_reward_detail(callback: CallbackQuery, callback_data: Backpac
 
 
 @router.callback_query(BackpackPurchaseDetailCallback.filter())
-async def callback_purchase_detail(callback: CallbackQuery, callback_data: BackpackPurchaseDetailCallback):
+async def callback_purchase_detail(
+    callback: CallbackQuery, callback_data: BackpackPurchaseDetailCallback
+):
     """Muestra detalle de una compra"""
     user_id = callback.from_user.id
     order_id = callback_data.order_id
@@ -435,7 +468,7 @@ async def callback_purchase_detail(callback: CallbackQuery, callback_data: Backp
         # Find the specific purchase
         purchase = None
         for p in purchases:
-            if p['order_id'] == order_id and p['product_id'] == product_id:
+            if p["order_id"] == order_id and p["product_id"] == product_id:
                 purchase = p
                 break
 
@@ -459,7 +492,9 @@ async def callback_purchase_detail(callback: CallbackQuery, callback_data: Backp
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        logger.info(f"backpack_handler | callback_purchase_detail | user_id={user_id} | order_id={order_id}")
+        logger.info(
+            f"backpack_handler | callback_purchase_detail | user_id={user_id} | order_id={order_id}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_purchase_detail | user_id={user_id} | error={e}")
@@ -482,7 +517,9 @@ async def callback_deliver_package(callback: CallbackQuery, callback_data: Backp
         else:
             await callback.answer(message, show_alert=True)
 
-        logger.info(f"backpack_handler | callback_deliver_package | user_id={user_id} | package_id={package_id} | result={success}")
+        logger.info(
+            f"backpack_handler | callback_deliver_package | user_id={user_id} | package_id={package_id} | result={success}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_deliver_package | user_id={user_id} | error={e}")
@@ -510,13 +547,17 @@ async def callback_balance(callback: CallbackQuery, bot: Bot):
 <i>Use sus besitos para adquirir tesoros en la tienda
 o completar misiones para ganar más.</i>"""
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_main")]
-        ])
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="backpack_main")]
+            ]
+        )
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        logger.info(f"backpack_handler | callback_balance | user_id={user_id} | balance={summary['besitos_balance']}")
+        logger.info(
+            f"backpack_handler | callback_balance | user_id={user_id} | balance={summary['besitos_balance']}"
+        )
 
     except Exception as e:
         logger.error(f"backpack_handler | callback_balance | user_id={user_id} | error={e}")

@@ -3,11 +3,13 @@ Servicio de Mensajes Anónimos - Lucien Bot
 
 Gestiona el envío y recepción de mensajes anónimos de suscriptores VIP a Diana.
 """
-from datetime import datetime, timezone
-from typing import Optional, List
+
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
-from models.models import AnonymousMessage, AnonymousMessageStatus, User
+
 from models.database import SessionLocal
+from models.models import AnonymousMessage, AnonymousMessageStatus, User
 
 
 class AnonymousMessageService:
@@ -33,21 +35,21 @@ class AnonymousMessageService:
         """Envía un mensaje anónimo desde un suscriptor VIP."""
         db = self._get_db()
         message = AnonymousMessage(
-            sender_id=sender_id,
-            content=content,
-            status=AnonymousMessageStatus.UNREAD
+            sender_id=sender_id, content=content, status=AnonymousMessageStatus.UNREAD
         )
         db.add(message)
         db.commit()
         db.refresh(message)
         return message
 
-    def get_message(self, message_id: int) -> Optional[AnonymousMessage]:
+    def get_message(self, message_id: int) -> AnonymousMessage | None:
         """Obtiene un mensaje por ID."""
         db = self._get_db()
         return db.query(AnonymousMessage).filter(AnonymousMessage.id == message_id).first()
 
-    def get_all_messages(self, status: AnonymousMessageStatus = None, limit: int = 50) -> List[AnonymousMessage]:
+    def get_all_messages(
+        self, status: AnonymousMessageStatus = None, limit: int = 50
+    ) -> list[AnonymousMessage]:
         """Obtiene todos los mensajes, opcionalmente filtrados por estado."""
         db = self._get_db()
         query = db.query(AnonymousMessage)
@@ -55,7 +57,7 @@ class AnonymousMessageService:
             query = query.filter(AnonymousMessage.status == status)
         return query.order_by(AnonymousMessage.created_at.desc()).limit(limit).all()
 
-    def get_unread_messages(self) -> List[AnonymousMessage]:
+    def get_unread_messages(self) -> list[AnonymousMessage]:
         """Obtiene mensajes no leídos."""
         return self.get_all_messages(status=AnonymousMessageStatus.UNREAD)
 
@@ -65,7 +67,7 @@ class AnonymousMessageService:
         message = self.get_message(message_id)
         if message:
             message.status = AnonymousMessageStatus.READ
-            message.read_at = datetime.now(timezone.utc)
+            message.read_at = datetime.now(UTC)
             message.read_by = admin_id
             db.commit()
             return True
@@ -78,15 +80,15 @@ class AnonymousMessageService:
         if message:
             message.status = AnonymousMessageStatus.REPLIED
             message.admin_reply = reply
-            message.replied_at = datetime.now(timezone.utc)
+            message.replied_at = datetime.now(UTC)
             if not message.read_at:
-                message.read_at = datetime.now(timezone.utc)
+                message.read_at = datetime.now(UTC)
                 message.read_by = admin_id
             db.commit()
             return True
         return False
 
-    def get_sender_info(self, message_id: int) -> Optional[User]:
+    def get_sender_info(self, message_id: int) -> User | None:
         """
         Obtiene información del remitente (solo para casos delicados).
         Esto debe usarse con precaución y solo cuando sea necesario.
@@ -102,9 +104,7 @@ class AnonymousMessageService:
         db = self._get_db()
         counts = {}
         for status in AnonymousMessageStatus:
-            count = db.query(AnonymousMessage).filter(
-                AnonymousMessage.status == status
-            ).count()
+            count = db.query(AnonymousMessage).filter(AnonymousMessage.status == status).count()
             counts[status.value] = count
         return counts
 

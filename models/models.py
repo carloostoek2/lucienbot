@@ -1,25 +1,42 @@
 """
 Modelos de datos - Lucien Bot
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, BigInteger, Text, Enum, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from models.database import Base
+
 import enum
 import secrets
 import string
+from datetime import UTC
 from uuid import uuid4
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
+from models.database import Base
 
 
 class ChannelType(str, enum.Enum):
     """Tipos de canal"""
+
     FREE = "free"
     VIP = "vip"
 
 
 class TokenStatus(str, enum.Enum):
     """Estados de un token"""
+
     ACTIVE = "active"
     USED = "used"
     EXPIRED = "expired"
@@ -27,14 +44,16 @@ class TokenStatus(str, enum.Enum):
 
 class UserRole(str, enum.Enum):
     """Roles de usuario"""
+
     ADMIN = "admin"
     USER = "user"
 
 
 class User(Base):
     """Modelo de usuario"""
+
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     username = Column(String(100), nullable=True)
@@ -47,24 +66,27 @@ class User(Base):
 
     # VIP entry flow tracking (Phase 10)
     vip_entry_status = Column(String(20), nullable=True)  # values: "pending_entry", "active"
-    vip_entry_stage = Column(Integer, nullable=True)      # values: 1, 2, 3
+    vip_entry_stage = Column(Integer, nullable=True)  # values: 1, 2, 3
 
     # Relaciones
-    subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
+    subscriptions = relationship(
+        "Subscription", back_populates="user", cascade="all, delete-orphan"
+    )
     tokens_redeemed = relationship("Token", back_populates="redeemed_by")
 
 
 class Channel(Base):
     """Modelo de canal"""
+
     __tablename__ = "channels"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     channel_id = Column(BigInteger, unique=True, index=True, nullable=False)
     channel_name = Column(String(200), nullable=True)
     channel_type = Column(Enum(ChannelType), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Configuración específica para canal Free
     wait_time_minutes = Column(Integer, default=3)  # Tiempo de espera en minutos
     welcome_message = Column(Text, nullable=True)
@@ -75,13 +97,16 @@ class Channel(Base):
 
     # Relaciones
     subscriptions = relationship("Subscription", back_populates="channel")
-    pending_requests = relationship("PendingRequest", back_populates="channel", cascade="all, delete-orphan")
+    pending_requests = relationship(
+        "PendingRequest", back_populates="channel", cascade="all, delete-orphan"
+    )
 
 
 class Tariff(Base):
     """Modelo de tarifa VIP"""
+
     __tablename__ = "tariffs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     duration_days = Column(Integer, nullable=False)
@@ -89,15 +114,16 @@ class Tariff(Base):
     currency = Column(String(10), default="USD")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     tokens = relationship("Token", back_populates="tariff", cascade="all, delete-orphan")
 
 
 class Token(Base):
     """Modelo de token de acceso VIP"""
+
     __tablename__ = "tokens"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     token_code = Column(String(64), unique=True, index=True, nullable=False)
     tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=False)
@@ -106,22 +132,23 @@ class Token(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     redeemed_at = Column(DateTime(timezone=True), nullable=True)
     redeemed_by_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=True)
-    
+
     # Relaciones
     tariff = relationship("Tariff", back_populates="tokens")
     redeemed_by = relationship("User", back_populates="tokens_redeemed")
     subscriptions = relationship("Subscription", back_populates="token")
-    
+
     @staticmethod
     def generate_token():
         """Genera un token único de 32 caracteres"""
-        return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+        return "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
 
 
 class Subscription(Base):
     """Modelo de suscripción VIP"""
+
     __tablename__ = "subscriptions"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
@@ -131,7 +158,7 @@ class Subscription(Base):
     is_active = Column(Boolean, default=True)
     reminder_sent = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     user = relationship("User", back_populates="subscriptions")
     channel = relationship("Channel", back_populates="subscriptions")
@@ -140,8 +167,9 @@ class Subscription(Base):
 
 class PendingRequest(Base):
     """Modelo de solicitud pendiente de acceso al canal Free"""
+
     __tablename__ = "pending_requests"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
     channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
@@ -151,7 +179,7 @@ class PendingRequest(Base):
     requested_at = Column(DateTime(timezone=True), server_default=func.now())
     scheduled_approval_at = Column(DateTime(timezone=True), nullable=False)
     approved_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Relaciones
     channel = relationship("Channel", back_populates="pending_requests")
 
@@ -160,27 +188,31 @@ class PendingRequest(Base):
 # FASE 1: GAMIFICACIÓN - BESITOS, BROADCASTING, REGALO DIARIO
 # ============================================================
 
+
 class TransactionType(str, enum.Enum):
     """Tipos de transacción de besitos"""
-    CREDIT = "credit"      # Entrada de besitos
-    DEBIT = "debit"        # Salida de besitos
+
+    CREDIT = "credit"  # Entrada de besitos
+    DEBIT = "debit"  # Salida de besitos
 
 
 class TransactionSource(str, enum.Enum):
     """Fuentes de transacción de besitos"""
-    REACTION = "reaction"          # Reacción a mensaje
-    DAILY_GIFT = "daily_gift"      # Regalo diario
-    MISSION = "mission"            # Recompensa por misión
-    PURCHASE = "purchase"          # Compra en tienda
-    ADMIN = "admin"                # Ajuste manual por admin
+
+    REACTION = "reaction"  # Reacción a mensaje
+    DAILY_GIFT = "daily_gift"  # Regalo diario
+    MISSION = "mission"  # Recompensa por misión
+    PURCHASE = "purchase"  # Compra en tienda
+    ADMIN = "admin"  # Ajuste manual por admin
     ANONYMOUS_MESSAGE = "anonymous_message"  # Mensaje anónimo VIP
-    GAME = "GAME"               # Victoria en dados
-    TRIVIA = "TRIVIA"           # Respuesta correcta en trivia
+    GAME = "GAME"  # Victoria en dados
+    TRIVIA = "TRIVIA"  # Respuesta correcta en trivia
     STREAK_PROTECTION = "streak_protection"
 
 
 class BesitoBalance(Base):
     """Saldo de besitos por usuario"""
+
     __tablename__ = "besito_balances"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -192,11 +224,14 @@ class BesitoBalance(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relaciones
-    transactions = relationship("BesitoTransaction", back_populates="balance", cascade="all, delete-orphan")
+    transactions = relationship(
+        "BesitoTransaction", back_populates="balance", cascade="all, delete-orphan"
+    )
 
 
 class BesitoTransaction(Base):
     """Historial de transacciones de besitos"""
+
     __tablename__ = "besito_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -207,30 +242,32 @@ class BesitoTransaction(Base):
     description = Column(String(255), nullable=True)  # Descripción del movimiento
     reference_id = Column(Integer, nullable=True)  # ID de referencia (misión, compra, etc.)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     balance = relationship("BesitoBalance", back_populates="transactions")
 
 
 class ReactionEmoji(Base):
     """Configuración de emojis de reacción y sus valores"""
+
     __tablename__ = "reaction_emojis"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     emoji = Column(String(10), unique=True, nullable=False)  # El emoji mismo (💋, ❤️, etc.)
     name = Column(String(50), nullable=True)  # Nombre descriptivo
     besito_value = Column(Integer, default=1, nullable=False)  # Cuántos besitos otorga
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     broadcast_reactions = relationship("BroadcastReaction", back_populates="reaction_emoji")
 
 
 class BroadcastMessage(Base):
     """Mensajes de broadcasting con reacciones"""
+
     __tablename__ = "broadcast_messages"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     message_id = Column(BigInteger, nullable=False, index=True)  # ID del mensaje en Telegram
     channel_id = Column(BigInteger, ForeignKey("channels.channel_id"), nullable=False)
@@ -241,17 +278,22 @@ class BroadcastMessage(Base):
     attachment_file_id = Column(String(500), nullable=True)  # ID del archivo en Telegram
     has_reactions = Column(Boolean, default=False)  # Si tiene botones de reacción
     is_protected = Column(Boolean, default=False)  # Protección contra copia/reenvío
-    selected_emoji_ids = Column(String(200), nullable=True)  # IDs de emojis seleccionados separados por coma
+    selected_emoji_ids = Column(
+        String(200), nullable=True
+    )  # IDs de emojis seleccionados separados por coma
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
-    reactions = relationship("BroadcastReaction", back_populates="broadcast", cascade="all, delete-orphan")
+    reactions = relationship(
+        "BroadcastReaction", back_populates="broadcast", cascade="all, delete-orphan"
+    )
 
 
 class BroadcastReaction(Base):
     """Reacciones de usuarios a mensajes de broadcast"""
+
     __tablename__ = "broadcast_reactions"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     broadcast_id = Column(Integer, ForeignKey("broadcast_messages.id"), nullable=False, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
@@ -259,21 +301,22 @@ class BroadcastReaction(Base):
     reaction_emoji_id = Column(Integer, ForeignKey("reaction_emojis.id"), nullable=False)
     besitos_awarded = Column(BigInteger, nullable=False)  # Cuántos besitos se otorgaron
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     broadcast = relationship("BroadcastMessage", back_populates="reactions")
     reaction_emoji = relationship("ReactionEmoji", back_populates="broadcast_reactions")
-    
+
     # Constraint único: un usuario solo puede reaccionar una vez por mensaje
     __table_args__ = (
-        UniqueConstraint('broadcast_id', 'user_id', name='uq_broadcast_user_reaction'),
+        UniqueConstraint("broadcast_id", "user_id", name="uq_broadcast_user_reaction"),
     )
 
 
 class DailyGiftConfig(Base):
     """Configuración del regalo diario"""
+
     __tablename__ = "daily_gift_config"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     besito_amount = Column(Integer, default=10, nullable=False)  # Cantidad de besitos
     is_active = Column(Boolean, default=True)
@@ -283,13 +326,14 @@ class DailyGiftConfig(Base):
 
 class DailyGiftClaim(Base):
     """Registros de reclamos de regalo diario"""
+
     __tablename__ = "daily_gift_claims"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
     besitos_received = Column(Integer, nullable=False)
     claimed_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Para facilitar consultas de "último reclamo"
     __table_args__ = (
         # Índice compuesto para consultas eficientes
@@ -298,6 +342,7 @@ class DailyGiftClaim(Base):
 
 class TriviaConfig(Base):
     """Configuración de límites de trivia y minijuegos"""
+
     __tablename__ = "trivia_config"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -316,19 +361,21 @@ class TriviaConfig(Base):
 # FASE 2: PAQUETES (COMPONENTE COMPARTIDO)
 # ============================================================
 
+
 class Package(Base):
     """Paquetes de contenido (fotos/archivos) para tienda o recompensas"""
+
     __tablename__ = "packages"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    
+
     # Stock independiente para tienda y recompensas
     # -2 = no disponible, -1 = ilimitado, 0+ = stock limitado
     store_stock = Column(Integer, default=-1)
     reward_stock = Column(Integer, default=-1)
-    
+
     is_active = Column(Boolean, default=True)
     created_by = Column(BigInteger, nullable=True)  # Admin que creó el paquete
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -340,7 +387,7 @@ class Package(Base):
     # Relaciones
     files = relationship("PackageFile", back_populates="package", cascade="all, delete-orphan")
     category = relationship("Category", back_populates="packages")
-    
+
     @property
     def is_available_in_store(self) -> bool:
         """Verifica si está disponible en tienda"""
@@ -349,7 +396,7 @@ class Package(Base):
         if self.store_stock == -2:  # No disponible
             return False
         return self.store_stock == -1 or self.store_stock > 0
-    
+
     @property
     def is_available_for_reward(self) -> bool:
         """Verifica si está disponible para recompensas"""
@@ -358,7 +405,7 @@ class Package(Base):
         if self.reward_stock == -2:  # No disponible
             return False
         return self.reward_stock == -1 or self.reward_stock > 0
-    
+
     @property
     def store_stock_display(self) -> str:
         """Retorna texto legible del stock de tienda"""
@@ -368,7 +415,7 @@ class Package(Base):
             return "Ilimitado"
         else:
             return str(self.store_stock)
-    
+
     @property
     def reward_stock_display(self) -> str:
         """Retorna texto legible del stock de recompensas"""
@@ -378,12 +425,12 @@ class Package(Base):
             return "Ilimitado"
         else:
             return str(self.reward_stock)
-    
+
     @property
     def file_count(self) -> int:
         """Retorna la cantidad de archivos en el paquete"""
         return len(self.files) if self.files else 0
-    
+
     def decrement_store_stock(self) -> bool:
         """Decrementa el stock de tienda. Retorna True si tuvo éxito."""
         if self.store_stock == -2:  # No disponible
@@ -394,7 +441,7 @@ class Package(Base):
             self.store_stock -= 1
             return True
         return False
-    
+
     def decrement_reward_stock(self) -> bool:
         """Decrementa el stock de recompensas. Retorna True si tuvo éxito."""
         if self.reward_stock == -2:  # No disponible
@@ -409,28 +456,30 @@ class Package(Base):
 
 class PackageFile(Base):
     """Archivos individuales dentro de un paquete"""
+
     __tablename__ = "package_files"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     package_id = Column(Integer, ForeignKey("packages.id"), nullable=False, index=True)
-    
+
     # Información del archivo en Telegram
     file_id = Column(String(500), nullable=False)  # ID del archivo en Telegram
     file_type = Column(String(50), nullable=False)  # photo, video, document, animation
     file_name = Column(String(255), nullable=True)  # Nombre original del archivo
     file_size = Column(Integer, nullable=True)  # Tamaño en bytes
-    
+
     # Orden para mantener secuencia
     order_index = Column(Integer, default=0)
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     package = relationship("Package", back_populates="files")
 
 
 class Category(Base):
     """Categorías para organizar paquetes en la tienda"""
+
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -449,70 +498,78 @@ class Category(Base):
 # FASE 3: MISIONES Y RECOMPENSAS
 # ============================================================
 
+
 class MissionType(str, enum.Enum):
     """Tipos de misiones soportados"""
-    REACTION_COUNT = "reaction_count"           # Reaccionar N veces
-    DAILY_GIFT_STREAK = "daily_gift_streak"     # Reclamar regalo N dias (consecutivos)
-    DAILY_GIFT_TOTAL = "daily_gift_total"       # Reclamar regalo N dias (acumulados)
-    STORE_PURCHASE = "store_purchase"           # Comprar en tienda
-    VIP_ACTIVE = "vip_active"                   # Tener suscripcion VIP activa
+
+    REACTION_COUNT = "reaction_count"  # Reaccionar N veces
+    DAILY_GIFT_STREAK = "daily_gift_streak"  # Reclamar regalo N dias (consecutivos)
+    DAILY_GIFT_TOTAL = "daily_gift_total"  # Reclamar regalo N dias (acumulados)
+    STORE_PURCHASE = "store_purchase"  # Comprar en tienda
+    VIP_ACTIVE = "vip_active"  # Tener suscripcion VIP activa
 
 
 class MissionFrequency(str, enum.Enum):
     """Frecuencia de la mision"""
-    ONE_TIME = "one_time"       # Se completa una sola vez
-    RECURRING = "recurring"     # Se reinicia al completarse
+
+    ONE_TIME = "one_time"  # Se completa una sola vez
+    RECURRING = "recurring"  # Se reinicia al completarse
 
 
 class Mission(Base):
     """Misiones configuradas por el administrador"""
+
     __tablename__ = "missions"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    
+
     # Tipo y configuracion
     mission_type = Column(Enum(MissionType), nullable=False)
     target_value = Column(Integer, default=1, nullable=False)  # Meta numerica
-    
+
     # Frecuencia y vigencia
     frequency = Column(Enum(MissionFrequency), default=MissionFrequency.ONE_TIME)
     start_date = Column(DateTime(timezone=True), nullable=True)  # None = sin fecha inicio
-    end_date = Column(DateTime(timezone=True), nullable=True)    # None = sin fecha fin
+    end_date = Column(DateTime(timezone=True), nullable=True)  # None = sin fecha fin
     cooldown_hours = Column(Integer, nullable=True)  # Cooldown para RECURRING (None = sin cooldown)
 
     # Estado
     is_active = Column(Boolean, default=True)
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Recompensa asociada
     reward_id = Column(Integer, ForeignKey("rewards.id"), nullable=True)
-    
+
     # Relaciones
     reward = relationship("Reward", back_populates="missions")
-    user_progress = relationship("UserMissionProgress", back_populates="mission", cascade="all, delete-orphan")
-    
+    user_progress = relationship(
+        "UserMissionProgress", back_populates="mission", cascade="all, delete-orphan"
+    )
+
     @property
     def is_available(self) -> bool:
         """Verifica si la mision esta disponible actualmente"""
         if not self.is_active:
             return False
-        
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
+
+        from datetime import datetime
+
+        now = datetime.now(UTC)
 
         if self.start_date and now < self.start_date:
             return False
         if self.end_date and now > self.end_date:
             return False
-        
+
         return True
 
 
 class UserMissionProgress(Base):
     """Progreso de cada usuario en las misiones"""
+
     __tablename__ = "user_mission_progress"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -538,32 +595,34 @@ class UserMissionProgress(Base):
 
 class RewardType(str, enum.Enum):
     """Tipos de recompensas"""
-    BESITOS = "besitos"         # Cantidad de besitos
-    PACKAGE = "package"         # Paquete de contenido
-    VIP_ACCESS = "vip_access"   # Acceso VIP
+
+    BESITOS = "besitos"  # Cantidad de besitos
+    PACKAGE = "package"  # Paquete de contenido
+    VIP_ACCESS = "vip_access"  # Acceso VIP
 
 
 class Reward(Base):
     """Recompensas configuradas por el administrador"""
+
     __tablename__ = "rewards"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    
+
     # Tipo y contenido
     reward_type = Column(Enum(RewardType), nullable=False)
-    
+
     # Configuracion segun tipo
-    besito_amount = Column(Integer, nullable=True)      # Para tipo BESITOS
+    besito_amount = Column(Integer, nullable=True)  # Para tipo BESITOS
     package_id = Column(Integer, ForeignKey("packages.id"), nullable=True)  # Para tipo PACKAGE
-    tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=True)    # Para tipo VIP_ACCESS
-    
+    tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=True)  # Para tipo VIP_ACCESS
+
     # Estado
     is_active = Column(Boolean, default=True)
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     missions = relationship("Mission", back_populates="reward")
     package = relationship("Package")
@@ -572,13 +631,14 @@ class Reward(Base):
 
 class UserRewardHistory(Base):
     """Historial de recompensas entregadas a usuarios"""
+
     __tablename__ = "user_reward_history"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
     reward_id = Column(Integer, ForeignKey("rewards.id"), nullable=False)
     mission_id = Column(Integer, ForeignKey("missions.id"), nullable=True)  # None si fue de tienda
-    
+
     # Detalles de la entrega
     delivered_at = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(Text, nullable=True)  # JSON con detalles de la entrega
@@ -588,14 +648,16 @@ class UserRewardHistory(Base):
 # FASE 4: TIENDA
 # ============================================================
 
+
 class StoreProduct(Base):
     """Productos disponibles en la tienda"""
+
     __tablename__ = "store_products"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    
+
     # Relacion con paquete
     package_id = Column(Integer, ForeignKey("packages.id"), nullable=False)
 
@@ -620,7 +682,7 @@ class StoreProduct(Base):
     category = relationship("Category")
     cart_items = relationship("CartItem", back_populates="product", cascade="all, delete-orphan")
     order_items = relationship("OrderItem", back_populates="product")
-    
+
     @property
     def is_available(self) -> bool:
         """Verifica si el producto esta disponible"""
@@ -629,7 +691,7 @@ class StoreProduct(Base):
         if self.stock == 0:
             return False
         return True
-    
+
     @property
     def stock_display(self) -> str:
         """Retorna texto legible del stock"""
@@ -667,49 +729,53 @@ class StoreProduct(Base):
 
 class CartItem(Base):
     """Items en el carrito de compras de un usuario"""
+
     __tablename__ = "cart_items"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relaciones
     product = relationship("StoreProduct", back_populates="cart_items")
 
 
 class OrderStatus(str, enum.Enum):
     """Estados de una orden"""
-    PENDING = "pending"      # Pendiente de pago/confirmacion
+
+    PENDING = "pending"  # Pendiente de pago/confirmacion
     COMPLETED = "completed"  # Completada y entregada
     CANCELLED = "cancelled"  # Cancelada
 
 
 class Order(Base):
     """Ordenes de compra en la tienda"""
+
     __tablename__ = "orders"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
-    
+
     # Totales
     total_items = Column(Integer, default=0)
     total_price = Column(Integer, default=0)
-    
+
     # Estado
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
-    
+
     # Fechas
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Relaciones
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 
 class OrderItem(Base):
     """Items dentro de una orden"""
+
     __tablename__ = "order_items"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -731,15 +797,18 @@ class OrderItem(Base):
 # FASE 5: PROMOCIONES Y SISTEMA "ME INTERESA"
 # ============================================================
 
+
 class PromotionStatus(str, enum.Enum):
     """Estados de una promoción"""
-    ACTIVE = "active"       # Activa y visible
-    PAUSED = "paused"       # Pausada temporalmente
-    EXPIRED = "expired"     # Expirada
+
+    ACTIVE = "active"  # Activa y visible
+    PAUSED = "paused"  # Pausada temporalmente
+    EXPIRED = "expired"  # Expirada
 
 
 class Promotion(Base):
     """Promociones comerciales con precio en dinero real (MXN)"""
+
     __tablename__ = "promotions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -759,7 +828,7 @@ class Promotion(Base):
     # Estado y vigencia
     status = Column(Enum(PromotionStatus), default=PromotionStatus.ACTIVE)
     start_date = Column(DateTime(timezone=True), nullable=True)  # None = inmediato
-    end_date = Column(DateTime(timezone=True), nullable=True)    # None = sin expiración
+    end_date = Column(DateTime(timezone=True), nullable=True)  # None = sin expiración
 
     # Estado
     is_active = Column(Boolean, default=True)
@@ -770,7 +839,9 @@ class Promotion(Base):
 
     # Relaciones
     package = relationship("Package")
-    interests = relationship("PromotionInterest", back_populates="promotion", cascade="all, delete-orphan")
+    interests = relationship(
+        "PromotionInterest", back_populates="promotion", cascade="all, delete-orphan"
+    )
 
     @property
     def price_display(self) -> str:
@@ -787,8 +858,9 @@ class Promotion(Base):
         if self.status != PromotionStatus.ACTIVE:
             return False
 
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
+        from datetime import datetime
+
+        now = datetime.now(UTC)
 
         if self.start_date and now < self.start_date:
             return False
@@ -807,13 +879,15 @@ class Promotion(Base):
 
 class InterestStatus(str, enum.Enum):
     """Estados de un interés en promoción"""
-    PENDING = "pending"       # Pendiente de atención
-    ATTENDED = "attended"     # Atendido por admin
-    BLOCKED = "blocked"       # Usuario bloqueado
+
+    PENDING = "pending"  # Pendiente de atención
+    ATTENDED = "attended"  # Atendido por admin
+    BLOCKED = "blocked"  # Usuario bloqueado
 
 
 class PromotionInterest(Base):
     """Registro de intereses de usuarios en promociones"""
+
     __tablename__ = "promotion_interests"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -837,12 +911,13 @@ class PromotionInterest(Base):
 
     # Constraint único: un usuario solo puede expresar interés una vez por promoción
     __table_args__ = (
-        UniqueConstraint('user_id', 'promotion_id', name='uq_user_promotion_interest'),
+        UniqueConstraint("user_id", "promotion_id", name="uq_user_promotion_interest"),
     )
 
 
 class BlockedPromotionUser(Base):
     """Usuarios bloqueados del sistema de promociones"""
+
     __tablename__ = "blocked_promotion_users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -867,26 +942,30 @@ class BlockedPromotionUser(Base):
 # FASE 6: SISTEMA DE NARRATIVA CON ARQUETIPOS
 # ============================================================
 
+
 class NodeType(str, enum.Enum):
     """Tipos de nodos de historia"""
-    NARRATIVE = "narrative"     # Nodo narrativo (solo texto)
-    DECISION = "decision"       # Nodo con decisiones
-    ENDING = "ending"           # Nodo final
-    QUIZ = "quiz"               # Nodo de cuestionario para arquetipo
+
+    NARRATIVE = "narrative"  # Nodo narrativo (solo texto)
+    DECISION = "decision"  # Nodo con decisiones
+    ENDING = "ending"  # Nodo final
+    QUIZ = "quiz"  # Nodo de cuestionario para arquetipo
 
 
 class ArchetypeType(str, enum.Enum):
     """Arquetipos disponibles para los usuarios"""
-    SEDUCTOR = "seductor"           # El Seductor - busca el placer y la conquista
-    OBSERVER = "observer"           # El Observador - analiza y contempla
-    DEVOTO = "devoto"               # El Devoto - leal y dedicado
-    EXPLORADOR = "explorador"       # El Explorador - curioso y aventurero
-    MISTERIOSO = "misterioso"       # El Misterioso - enigmático y reservado
-    INTREPIDO = "intrepido"         # El Intrépido - audaz y sin miedo
+
+    SEDUCTOR = "seductor"  # El Seductor - busca el placer y la conquista
+    OBSERVER = "observer"  # El Observador - analiza y contempla
+    DEVOTO = "devoto"  # El Devoto - leal y dedicado
+    EXPLORADOR = "explorador"  # El Explorador - curioso y aventurero
+    MISTERIOSO = "misterioso"  # El Misterioso - enigmático y reservado
+    INTREPIDO = "intrepido"  # El Intrépido - audaz y sin miedo
 
 
 class StoryNode(Base):
     """Nodos de la historia narrativa"""
+
     __tablename__ = "story_nodes"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -912,8 +991,12 @@ class StoryNode(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relaciones
-    choices = relationship("StoryChoice", back_populates="node", cascade="all, delete-orphan",
-                          foreign_keys="StoryChoice.node_id")
+    choices = relationship(
+        "StoryChoice",
+        back_populates="node",
+        cascade="all, delete-orphan",
+        foreign_keys="StoryChoice.node_id",
+    )
 
     @property
     def has_choices(self) -> bool:
@@ -923,6 +1006,7 @@ class StoryNode(Base):
 
 class StoryChoice(Base):
     """Opciones de decision desde un nodo"""
+
     __tablename__ = "story_choices"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -935,7 +1019,9 @@ class StoryChoice(Base):
     next_node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=True)  # None = fin
 
     # Efecto en el arquetipo
-    choice_archetype = Column(Enum(ArchetypeType), nullable=True)  # Arquetipo al que suman los puntos
+    choice_archetype = Column(
+        Enum(ArchetypeType), nullable=True
+    )  # Arquetipo al que suman los puntos
     archetype_points = Column(Integer, default=0)  # Puntos que suma al arquetipo
 
     # Costo adicional
@@ -948,6 +1034,7 @@ class StoryChoice(Base):
 
 class UserStoryProgress(Base):
     """Progreso de cada usuario en la narrativa"""
+
     __tablename__ = "user_story_progress"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -986,7 +1073,7 @@ class UserStoryProgress(Base):
             ArchetypeType.DEVOTO: self.devoto_points,
             ArchetypeType.EXPLORADOR: self.explorador_points,
             ArchetypeType.MISTERIOSO: self.misterioso_points,
-            ArchetypeType.INTREPIDO: self.intrepido_points
+            ArchetypeType.INTREPIDO: self.intrepido_points,
         }
 
     def get_dominant_archetype(self) -> ArchetypeType:
@@ -997,6 +1084,7 @@ class UserStoryProgress(Base):
 
 class Archetype(Base):
     """Información sobre cada arquetipo"""
+
     __tablename__ = "archetypes"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1022,6 +1110,7 @@ class Archetype(Base):
 
 class StoryAchievement(Base):
     """Logros de narrativa desbloqueables"""
+
     __tablename__ = "story_achievements"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1030,7 +1119,9 @@ class StoryAchievement(Base):
     description = Column(Text, nullable=False)
 
     # Requisitos
-    required_node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=True)  # Completar este nodo
+    required_node_id = Column(
+        Integer, ForeignKey("story_nodes.id"), nullable=True
+    )  # Completar este nodo
     required_archetype = Column(Enum(ArchetypeType), nullable=True)  # Tener este arquetipo
     required_chapter = Column(Integer, nullable=True)  # Llegar a este capítulo
 
@@ -1046,6 +1137,7 @@ class StoryAchievement(Base):
 
 class UserStoryAchievement(Base):
     """Logros desbloqueados por cada usuario"""
+
     __tablename__ = "user_story_achievements"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1064,15 +1156,18 @@ class UserStoryAchievement(Base):
 # FASE 12: MENSAJES ANÓNIMOS VIP
 # ============================================================
 
+
 class AnonymousMessageStatus(str, enum.Enum):
     """Estados de un mensaje anónimo"""
-    UNREAD = "unread"       # No leído por Diana
-    READ = "read"           # Leído por Diana
-    REPLIED = "replied"     # Diana respondió
+
+    UNREAD = "unread"  # No leído por Diana
+    READ = "read"  # Leído por Diana
+    REPLIED = "replied"  # Diana respondió
 
 
 class AnonymousMessage(Base):
     """Mensajes anónimos enviados por suscriptores VIP a Diana"""
+
     __tablename__ = "anonymous_messages"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1105,8 +1200,10 @@ class AnonymousMessage(Base):
 # FASE 14: MINIJUEGOS (DADOS Y TRIVIA)
 # ============================================================
 
+
 class GameRecord(Base):
     """Registros de jugadas en minijuegos"""
+
     __tablename__ = "game_records"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1119,6 +1216,7 @@ class GameRecord(Base):
 
 class TriviaCategory(Base):
     """Estado de categorias especiales de trivia."""
+
     __tablename__ = "trivia_categories"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1132,6 +1230,7 @@ class TriviaCategory(Base):
 
 class StreakPromotionStatus(str, enum.Enum):
     """States for a streak promotion lifecycle."""
+
     PENDING = "pending"
     ACTIVE = "active"
     EXPIRED = "expired"
@@ -1140,6 +1239,7 @@ class StreakPromotionStatus(str, enum.Enum):
 
 class StreakPromotionCodeStatus(str, enum.Enum):
     """States for a streak promotion discount code."""
+
     AVAILABLE = "available"
     DELIVERED = "delivered"
     USED = "used"
@@ -1148,6 +1248,7 @@ class StreakPromotionCodeStatus(str, enum.Enum):
 
 class StreakPromotion(Base):
     """Promocion por racha: recompensa a usuarios que mantienen rachas en trivia."""
+
     __tablename__ = "streak_promotions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1173,12 +1274,13 @@ class StreakPromotion(Base):
         "StreakPromotionLevel",
         back_populates="promotion",
         cascade="all, delete-orphan",
-        order_by="StreakPromotionLevel.consecutive_required"
+        order_by="StreakPromotionLevel.consecutive_required",
     )
 
 
 class StreakPromotionLevel(Base):
     """Nivel dentro de una promocion por racha: umbral de racha y recompensa."""
+
     __tablename__ = "streak_promotion_levels"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1189,14 +1291,13 @@ class StreakPromotionLevel(Base):
 
     promotion = relationship("StreakPromotion", back_populates="levels")
     codes = relationship(
-        "StreakPromotionCode",
-        back_populates="level",
-        cascade="all, delete-orphan"
+        "StreakPromotionCode", back_populates="level", cascade="all, delete-orphan"
     )
 
 
 class StreakPromotionCode(Base):
     """Codigo de descuento individual generado para un nivel de promocion por racha."""
+
     __tablename__ = "streak_promotion_codes"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1215,6 +1316,7 @@ class StreakPromotionCode(Base):
 
 class StreakPromotionRedemption(Base):
     """Registro de canje de un codigo de descuento por un usuario en un nivel."""
+
     __tablename__ = "streak_promotion_redemptions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1231,6 +1333,7 @@ class StreakPromotionRedemption(Base):
 
 class StreakSession(Base):
     """Sesion activa de trivia con promociones: rastrea proteccion, riesgo y timeout."""
+
     __tablename__ = "streak_sessions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)

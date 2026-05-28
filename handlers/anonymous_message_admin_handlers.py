@@ -3,20 +3,25 @@ Handlers Admin para Mensajes Anónimos - Lucien Bot
 
 Gestión de mensajes anónimos por parte de Diana (admin).
 """
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+import logging
+
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
 from config.settings import bot_config
-from services.anonymous_message_service import AnonymousMessageService
-from services.user_service import UserService
-from keyboards.inline_keyboards import back_keyboard, admin_menu_keyboard
 from keyboards.callback_data import (
-    AnonUnreadCallback, AnonAllCallback, AnonViewCallback,
-    AnonReplyCallback, AnonRevealCallback, AnonDeleteCallback
+    AnonAllCallback,
+    AnonDeleteCallback,
+    AnonReplyCallback,
+    AnonRevealCallback,
+    AnonUnreadCallback,
+    AnonViewCallback,
 )
-from utils.lucien_voice import LucienVoice
-import logging
+from keyboards.inline_keyboards import admin_menu_keyboard, back_keyboard
+from services.anonymous_message_service import AnonymousMessageService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -35,79 +40,93 @@ def is_admin(user_id: int) -> bool:
 def anonymous_messages_menu_keyboard() -> InlineKeyboardMarkup:
     """Menú de gestión de mensajes anónimos"""
     buttons = [
-        [InlineKeyboardButton(
-            text="📨 Mensajes no leídos",
-            callback_data=AnonUnreadCallback().pack()
-        )],
-        [InlineKeyboardButton(
-            text="📋 Todos los mensajes",
-            callback_data=AnonAllCallback().pack()
-        )],
-        [InlineKeyboardButton(
-            text="🔙 Volver al sanctum",
-            callback_data="back_to_admin"
-        )]
+        [
+            InlineKeyboardButton(
+                text="📨 Mensajes no leídos", callback_data=AnonUnreadCallback().pack()
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📋 Todos los mensajes", callback_data=AnonAllCallback().pack()
+            )
+        ],
+        [InlineKeyboardButton(text="🔙 Volver al sanctum", callback_data="back_to_admin")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def anonymous_message_actions_keyboard(message_id: int, show_reveal: bool = True) -> InlineKeyboardMarkup:
+def anonymous_message_actions_keyboard(
+    message_id: int, show_reveal: bool = True
+) -> InlineKeyboardMarkup:
     """Acciones disponibles para un mensaje anónimo"""
     buttons = [
-        [InlineKeyboardButton(
-            text="💬 Responder",
-            callback_data=AnonReplyCallback(message_id=message_id).pack()
-        )]
+        [
+            InlineKeyboardButton(
+                text="💬 Responder", callback_data=AnonReplyCallback(message_id=message_id).pack()
+            )
+        ]
     ]
 
     if show_reveal:
-        buttons.append([InlineKeyboardButton(
-            text="👁️ Revelar remitente",
-            callback_data=AnonRevealCallback(message_id=message_id).pack()
-        )])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="👁️ Revelar remitente",
+                    callback_data=AnonRevealCallback(message_id=message_id).pack(),
+                )
+            ]
+        )
 
-    buttons.append([InlineKeyboardButton(
-        text="🗑️ Eliminar mensaje",
-        callback_data=AnonDeleteCallback(message_id=message_id).pack()
-    )])
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🗑️ Eliminar mensaje",
+                callback_data=AnonDeleteCallback(message_id=message_id).pack(),
+            )
+        ]
+    )
 
-    buttons.append([InlineKeyboardButton(
-        text="🔙 Volver a mensajes",
-        callback_data="admin_anonymous_messages"
-    )])
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🔙 Volver a mensajes", callback_data="admin_anonymous_messages"
+            )
+        ]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def anonymous_messages_list_keyboard(messages: list, show_sender: bool = False) -> InlineKeyboardMarkup:
+def anonymous_messages_list_keyboard(
+    messages: list, show_sender: bool = False
+) -> InlineKeyboardMarkup:
     """Lista de mensajes con botones para ver detalles"""
     buttons = []
 
     for msg in messages:
-        status_emoji = {
-            "unread": "🔴",
-            "read": "🟡",
-            "replied": "🟢"
-        }.get(msg.status.value, "⚪")
+        status_emoji = {"unread": "🔴", "read": "🟡", "replied": "🟢"}.get(msg.status.value, "⚪")
 
         # Preview del mensaje (primeros 30 chars)
         preview = msg.content[:30] + "..." if len(msg.content) > 30 else msg.content
         text = f"{status_emoji} {preview}"
 
-        buttons.append([InlineKeyboardButton(
-            text=text,
-            callback_data=AnonViewCallback(message_id=msg.id).pack()
-        )])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=text, callback_data=AnonViewCallback(message_id=msg.id).pack()
+                )
+            ]
+        )
 
-    buttons.append([InlineKeyboardButton(
-        text="🔙 Volver",
-        callback_data="admin_anonymous_messages"
-    )])
+    buttons.append(
+        [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_anonymous_messages")]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # ==================== MENÚ PRINCIPAL DE MENSAJES ANÓNIMOS ====================
+
 
 @router.callback_query(F.data == "admin_anonymous_messages", lambda cb: is_admin(cb.from_user.id))
 async def admin_anonymous_messages_menu(callback: CallbackQuery):
@@ -130,9 +149,7 @@ async def admin_anonymous_messages_menu(callback: CallbackQuery):
 <i>Seleccione una opción para gestionar los mensajes.</i>"""
 
         await callback.message.edit_text(
-            text,
-            reply_markup=anonymous_messages_menu_keyboard(),
-            parse_mode="HTML"
+            text, reply_markup=anonymous_messages_menu_keyboard(), parse_mode="HTML"
         )
     finally:
         anon_service.close()
@@ -148,11 +165,11 @@ async def show_unread_messages(callback: CallbackQuery, callback_data: AnonUnrea
 
         if not messages:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>No hay susurros pendientes...</i>\n\n"
-                f"📭 No hay mensajes anónimos sin leer.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>No hay susurros pendientes...</i>\n\n"
+                "📭 No hay mensajes anónimos sin leer.",
                 reply_markup=anonymous_messages_menu_keyboard(),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await callback.answer()
             return
@@ -166,9 +183,7 @@ async def show_unread_messages(callback: CallbackQuery, callback_data: AnonUnrea
 <i>Seleccione un mensaje para leerlo:</i>"""
 
         await callback.message.edit_text(
-            text,
-            reply_markup=anonymous_messages_list_keyboard(messages),
-            parse_mode="HTML"
+            text, reply_markup=anonymous_messages_list_keyboard(messages), parse_mode="HTML"
         )
     finally:
         anon_service.close()
@@ -184,11 +199,11 @@ async def show_all_messages(callback: CallbackQuery, callback_data: AnonAllCallb
 
         if not messages:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>El silencio reina en el círculo...</i>\n\n"
-                f"📭 No hay mensajes anónimos registrados.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>El silencio reina en el círculo...</i>\n\n"
+                "📭 No hay mensajes anónimos registrados.",
                 reply_markup=anonymous_messages_menu_keyboard(),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await callback.answer()
             return
@@ -202,9 +217,7 @@ async def show_all_messages(callback: CallbackQuery, callback_data: AnonAllCallb
 <i>Seleccione un mensaje para ver detalles:</i>"""
 
         await callback.message.edit_text(
-            text,
-            reply_markup=anonymous_messages_list_keyboard(messages),
-            parse_mode="HTML"
+            text, reply_markup=anonymous_messages_list_keyboard(messages), parse_mode="HTML"
         )
     finally:
         anon_service.close()
@@ -233,10 +246,12 @@ async def view_anonymous_message(callback: CallbackQuery, callback_data: AnonVie
         status_emoji = {
             "unread": "🔴 No leído",
             "read": "🟡 Leído",
-            "replied": "🟢 Respondido"
+            "replied": "🟢 Respondido",
         }.get(message.status.value, "⚪")
 
-        date_str = message.created_at.strftime("%d/%m/%Y %H:%M") if message.created_at else "Desconocida"
+        date_str = (
+            message.created_at.strftime("%d/%m/%Y %H:%M") if message.created_at else "Desconocida"
+        )
 
         text = f"""🎩 <b>Lucien:</b>
 
@@ -252,9 +267,7 @@ async def view_anonymous_message(callback: CallbackQuery, callback_data: AnonVie
             text += f"\n\n💬 <b>Su respuesta:</b>\n<blockquote>{message.admin_reply}</blockquote>"
 
         await callback.message.edit_text(
-            text,
-            reply_markup=anonymous_message_actions_keyboard(message_id),
-            parse_mode="HTML"
+            text, reply_markup=anonymous_message_actions_keyboard(message_id), parse_mode="HTML"
         )
     finally:
         anon_service.close()
@@ -294,37 +307,39 @@ async def reveal_anonymous_sender(callback: CallbackQuery, callback_data: AnonRe
 💬 <b>Mensaje:</b>
 <blockquote>{message.content[:100]}...</blockquote>"""
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="🔙 Volver al mensaje",
-                callback_data=AnonViewCallback(message_id=message_id).pack()
-            )]
-        ])
-
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔙 Volver al mensaje",
+                        callback_data=AnonViewCallback(message_id=message_id).pack(),
+                    )
+                ]
+            ]
         )
+
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     finally:
         anon_service.close()
     await callback.answer()
 
 
 @router.callback_query(AnonReplyCallback.filter(), lambda cb: is_admin(cb.from_user.id))
-async def start_anonymous_reply(callback: CallbackQuery, callback_data: AnonReplyCallback, state: FSMContext):
+async def start_anonymous_reply(
+    callback: CallbackQuery, callback_data: AnonReplyCallback, state: FSMContext
+):
     """Inicia el flujo de respuesta a un mensaje anónimo"""
     message_id = callback_data.message_id
 
     await state.update_data(reply_message_id=message_id)
 
     await callback.message.edit_text(
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Escriba su respuesta al mensaje anónimo...</i>\n\n"
-        f"💬 Esta respuesta será enviada al remitente.\n"
-        f"Escriba su mensaje a continuación:",
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Escriba su respuesta al mensaje anónimo...</i>\n\n"
+        "💬 Esta respuesta será enviada al remitente.\n"
+        "Escriba su mensaje a continuación:",
         reply_markup=back_keyboard(AnonViewCallback(message_id=message_id).pack()),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await state.set_state(AnonymousReplyStates.waiting_reply)
     await callback.answer()
@@ -338,11 +353,11 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 
     if not message_id:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Ha ocurrido un error...</i>\n\n"
-            f"No se encontró el mensaje al que responder.",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>Ha ocurrido un error...</i>\n\n"
+            "No se encontró el mensaje al que responder.",
             reply_markup=admin_menu_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await state.clear()
         return
@@ -351,11 +366,11 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 
     if len(reply_content) < 1:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>La respuesta está vacía...</i>\n\n"
-            f"Por favor, escriba una respuesta.",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>La respuesta está vacía...</i>\n\n"
+            "Por favor, escriba una respuesta.",
             reply_markup=back_keyboard(AnonViewCallback(message_id=message_id).pack()),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         return
 
@@ -366,10 +381,9 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 
         if not success:
             await message.answer(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>No se pudo guardar la respuesta...</i>",
+                "🎩 <b>Lucien:</b>\n\n" "<i>No se pudo guardar la respuesta...</i>",
                 reply_markup=admin_menu_keyboard(),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await state.clear()
             return
@@ -393,34 +407,36 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 <blockquote>{reply_content}</blockquote>
 
 <i>El Diván agradece su confianza.</i>""",
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
 
                 await message.answer(
-                    f"🎩 <b>Lucien:</b>\n\n"
-                    f"<i>Respuesta enviada exitosamente...</i>\n\n"
-                    f"✅ El remitente ha recibido su respuesta.",
+                    "🎩 <b>Lucien:</b>\n\n"
+                    "<i>Respuesta enviada exitosamente...</i>\n\n"
+                    "✅ El remitente ha recibido su respuesta.",
                     reply_markup=anonymous_messages_menu_keyboard(),
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
 
-                logger.info(f"Respuesta enviada a mensaje anónimo {message_id} por admin {message.from_user.id}")
+                logger.info(
+                    f"Respuesta enviada a mensaje anónimo {message_id} por admin {message.from_user.id}"
+                )
 
             except Exception as e:
                 logger.error(f"Error enviando respuesta a usuario {anon_message.sender_id}: {e}")
                 await message.answer(
-                    f"🎩 <b>Lucien:</b>\n\n"
-                    f"<i>La respuesta se guardó pero no se pudo enviar...</i>\n\n"
-                    f"⚠️ El usuario puede haber bloqueado al bot.",
+                    "🎩 <b>Lucien:</b>\n\n"
+                    "<i>La respuesta se guardó pero no se pudo enviar...</i>\n\n"
+                    "⚠️ El usuario puede haber bloqueado al bot.",
                     reply_markup=anonymous_messages_menu_keyboard(),
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
         else:
             await message.answer(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>Respuesta guardada pero no se pudo contactar al remitente.</i>",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>Respuesta guardada pero no se pudo contactar al remitente.</i>",
                 reply_markup=anonymous_messages_menu_keyboard(),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
     finally:
         anon_service.close()
@@ -439,11 +455,11 @@ async def delete_anonymous_message(callback: CallbackQuery, callback_data: AnonD
 
         if success:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>El susurro ha sido silenciado...</i>\n\n"
-                f"🗑️ Mensaje eliminado.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>El susurro ha sido silenciado...</i>\n\n"
+                "🗑️ Mensaje eliminado.",
                 reply_markup=anonymous_messages_menu_keyboard(),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             logger.info(f"Mensaje anónimo {message_id} eliminado por admin {callback.from_user.id}")
         else:

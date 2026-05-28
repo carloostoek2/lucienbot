@@ -3,16 +3,18 @@ Servicio de Minijuegos - Lucien Bot
 
 Gestiona los minijuegos de dados y trivia con límites diarios.
 """
+
 import json
 import logging
 import random
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Any
 
 from sqlalchemy.orm import Session
-from models.models import GameRecord, TransactionSource
+
 from models.database import SessionLocal
+from models.models import GameRecord, TransactionSource
 from services.besito_service import BesitoService
 from services.user_service import UserService
 from services.vip_service import VIPService
@@ -51,209 +53,248 @@ class GameService:
     # ==================== TEMPLATES DE COPY ====================
 
     MENU_TEMPLATES = {
-        'title': [
+        "title": [
             "🎮 Los Juegos del Destino",
             "🎮 El Salón de las Oportunidades",
-            "🎮 Donde la Fortuna Baila"
+            "🎮 Donde la Fortuna Baila",
         ],
-        'subtitle': [
+        "subtitle": [
             "Ah... pensé que podría verle esta noche.",
             "Diana ha preparado entretenimientos para quienes saben encontrar placer en los rituales.",
-            "Los dados y el conocimiento aguardan su decisión..."
+            "Los dados y el conocimiento aguardan su decisión...",
         ],
-        'dice_description': [
+        "dice_description": [
             "🎲 Dados — el azar revela el carácter",
             "🎲 Los dados del destino guardan secretos...",
-            "🎲 En cada tirada, la suerte se revela."
+            "🎲 En cada tirada, la suerte se revela.",
         ],
-        'trivia_description': [
+        "trivia_description": [
             "❓ Trivia — el conocimiento es poder",
             "❓ El examen de Diana aguarda...",
-            "❓ Las preguntas revelan quienes realmente observan."
+            "❓ Las preguntas revelan quienes realmente observan.",
         ],
-        'trivia_vip_description': [
+        "trivia_vip_description": [
             "🎩 Trivia VIP — solo para los más devotos",
             "🎩 El Examen Secreto de Diana",
-            "🎩 Demuestra tu conocimiento íntimo"
+            "🎩 Demuestra tu conocimiento íntimo",
         ],
-        'footer': [
+        "footer": [
             "Sus oportunidades de esta noche:",
             "¿Cuál será su elección, visitante?",
-            "Lucien observa con interés..."
-        ]
+            "Lucien observa con interés...",
+        ],
     }
 
     DICE_TEMPLATES = {
-        'entry_title': [
+        "entry_title": [
             "🎲 Los Dados del Destino",
             "🎲 El Ritual de los Números",
-            "🎲 Donde la Fortuna Gira"
+            "🎲 Donde la Fortuna Gira",
         ],
-        'entry_intro': [
+        "entry_intro": [
             "Los dados guardan secretos antiguos...",
             "En cada cara, un destino diferente.",
-            "La suerte es un lenguaje que pocos entienden."
+            "La suerte es un lenguaje que pocos entienden.",
         ],
-        'rules': [
+        "rules": [
             "• Pares (ambos pares): +1 besito 💋\n• Dobles (iguales): +1 besito 💋",
             "• Dobles: la perfección se recompensa 💋\n• Pares: la armonía tiene su precio 💋",
-            "• Dos iguales: la fortuna sonríe 💋\n• Dos pares: el equilibrio premia 💋"
+            "• Dos iguales: la fortuna sonríe 💋\n• Dos pares: el equilibrio premia 💋",
         ],
-        'win_doubles': [
+        "win_doubles": [
             "¡DOBLES! La perfección absoluta...",
             "¡Los dados se alinean en su honor!",
-            "¡Un espejo de números! La suerte le abraza."
+            "¡Un espejo de números! La suerte le abraza.",
         ],
-        'win_pairs': [
+        "win_pairs": [
             "¡PARES! La armonía de los pares...",
             "Los números pares bailan para usted...",
-            "¡La simetría de la fortuna le sonríe!"
+            "¡La simetría de la fortuna le sonríe!",
         ],
-        'near_miss_consecutive': [
+        "near_miss_consecutive": [
             "<i>inhala lentamente</i>... <b>{dice1}</b> y <b>{dice2}</b>. Tan cerca que duele, ¿no cree?",
             "Oh, la ironía... <b>{dice1}</b> y <b>{dice2}</b> son vecinos, pero el destino no permite visitas.",
-            "Casi, casi... <b>{dice1}</b> y <b>{dice2}</b> le susurran al oído: 'la próxima vez, quizás'."
+            "Casi, casi... <b>{dice1}</b> y <b>{dice2}</b> le susurran al oído: 'la próxima vez, quizás'.",
         ],
-        'near_miss_seven': [
+        "near_miss_seven": [
             "Siete, el número de la fortuna... pero no para usted, al parecer.",
             "La suma perfecta en una combinación imperfecta. La vida es así de graciosa.",
-            "Siete le susurra... 'hoy no es su día'."
+            "Siete le susurra... 'hoy no es su día'.",
         ],
-        'loss': [
+        "loss": [
             "Hmm... <b>{dice1}</b> y <b>{dice2}</b>. El destino ha decidido ser discreto con usted. No se preocupe — Diana ha visto a sus favoritos perder muchas veces antes de que todo cambie.",
             "<b>{dice1}</b> y <b>{dice2}</b>... Interesante. Lucien observa que la fortuna le está haciendo esperar. Quizás debería intentarlo de nuevo... o no.",
-            "<b>{dice1}</b> y <b>{dice2}</b>. Ah, la ironía del azar. Un momento desalentador, certamente, pero ¿quién sabe? Quizás mañana el destino sea más... generoso."
+            "<b>{dice1}</b> y <b>{dice2}</b>. Ah, la ironía del azar. Un momento desalentador, certamente, pero ¿quién sabe? Quizás mañana el destino sea más... generoso.",
         ],
-        'limit_reached': [
+        "limit_reached": [
             "Ha completado todos sus rituales del día. El destino, como Diana misma, aprecia la mesura sobre la obsesión.",
             "Los dados descansan... al igual que usted debería. Hasta mañana.",
-            "Su tiempo con la fortuna ha terminado por hoy. Regrese mañana... hay quienes dicen que la suerte cambia después del descanso."
-        ]
+            "Su tiempo con la fortuna ha terminado por hoy. Regrese mañana... hay quienes dicen que la suerte cambia después del descanso.",
+        ],
     }
 
     TRIVIA_TEMPLATES = {
-        'entry_title': [
+        "entry_title": [
             "❓ El Examen de Diana",
             "❓ Las Preguntas del Conocimiento",
-            "❓ El Desafío de la Sabiduría"
+            "❓ El Desafío de la Sabiduría",
         ],
-        'entry_intro': [
+        "entry_intro": [
             "Diana observa quién realmente presta atención...",
             "El conocimiento revela devoción verdadera.",
-            "Solo los atentos conocen las respuestas."
+            "Solo los atentos conocen las respuestas.",
         ],
-        'counter': [
+        "counter": [
             "Oportunidades restantes: {remaining} de {limit}",
             "Tiene {remaining} caminos de {limit} disponibles...",
-            "{remaining} de {limit} intentos aguardan su sabiduría."
+            "{remaining} de {limit} intentos aguardan su sabiduría.",
         ],
-        'correct': [
+        "correct": [
             "🎩 <b>Lucien:</b>\n<i>¡Correcto! Diana asiente con aprobación...</i>",
             "🎩 <b>Lucien:</b>\n<i>¡La respuesta exacta! Su atención no pasa desapercibida.</i>",
-            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría revelada! Ha demostrado su devoción.</i>"
+            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría revelada! Ha demostrado su devoción.</i>",
         ],
-        'incorrect': [
+        "incorrect": [
             "🎩 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana dice que equivocarse es inevitable. Lo revelador es cómo uno continúa después.</i>",
             "🎩 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Lucien observa que incluso los más devotos pueden distraerse. Quizás debería prestar más atención...</i>",
-            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un momento humillante, ¿verdad? Pero no se preocupe — Diana ha perdonado errores peores.</i>"
+            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un momento humillante, ¿verdad? Pero no se preocupe — Diana ha perdonado errores peores.</i>",
         ],
-        'streak_messages': {
+        "streak_messages": {
             2: ["🔥 Comienza a calentar...", "🔥 Diana nota su constancia..."],
-            3: ["⚡ ¡Racha de {streak}! Su mente despierta...", "⚡ {streak} correctas... impresionante."],
-            5: ["🌟 ¡Imparable! La sabiduría fluye en usted.", "🌟 {streak} victorias... es un prodigio."],
-            7: ["🎩 ¡Una leyenda nace! {streak} aciertos.", "🎩 Los dioses envidian su conocimiento."],
-            10: ["✨ ¡DIVINO! {streak} respuestas perfectas.", "✨ Es uno con la sabiduría de Diana."]
+            3: [
+                "⚡ ¡Racha de {streak}! Su mente despierta...",
+                "⚡ {streak} correctas... impresionante.",
+            ],
+            5: [
+                "🌟 ¡Imparable! La sabiduría fluye en usted.",
+                "🌟 {streak} victorias... es un prodigio.",
+            ],
+            7: [
+                "🎩 ¡Una leyenda nace! {streak} aciertos.",
+                "🎩 Los dioses envidian su conocimiento.",
+            ],
+            10: [
+                "✨ ¡DIVINO! {streak} respuestas perfectas.",
+                "✨ Es uno con la sabiduría de Diana.",
+            ],
         },
-        'limit_reached': [
+        "limit_reached": [
             "Ha agotado sus preguntas por hoy. El conocimiento, como el buen vino, requiere pausas.",
             "El examen ha terminado... por ahora. Diana aprecia la mesura sobre la obsesión.",
-            "Diana guarda las preguntas para mañana. El verdadero sabio sabe cuándo descansar."
-        ]
+            "Diana guarda las preguntas para mañana. El verdadero sabio sabe cuándo descansar.",
+        ],
     }
 
     TRIVIA_VIP_TEMPLATES = {
-        'entry_title': [
+        "entry_title": [
             "🎩 El Examen Secreto de Diana",
             "🎩 La Trivia que solo los iniciados conocen",
-            "🎩 Donde el conocimiento tiene recompensa mayor"
+            "🎩 Donde el conocimiento tiene recompensa mayor",
         ],
-        'entry_intro': [
+        "entry_intro": [
             "Solo los verdaderamente devotos conocen estas respuestas...",
             "Diana ha preparado preguntas especiales para sus favoritos.",
-            "El conocimiento íntimo se recompensa con generosidad."
+            "El conocimiento íntimo se recompensa con generosidad.",
         ],
-        'counter': [
+        "counter": [
             "Oportunidades VIP restantes: {remaining} de {limit}",
             "Tiene {remaining} preguntas secretas de {limit}...",
-            "{remaining} de {limit} caminos exclusivos aguardan."
+            "{remaining} de {limit} caminos exclusivos aguardan.",
         ],
-        'correct': [
+        "correct": [
             "🎩 <b>Lucien:</b>\n<i>¡Impresionante! Diana está complacida...</i>",
             "🎩 <b>Lucien:</b>\n<i>¡La respuesta perfecta! Su devoción es innegable.</i>",
-            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría de élite! Diana asiente con admiración.</i>"
+            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría de élite! Diana asiente con admiración.</i>",
         ],
-        'incorrect': [
+        "incorrect": [
             "🎩 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso los más cercanos pueden fallar. Continúe intentándolo...</i>",
             "🎩 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El camino del conocimiento íntimo requiere paciencia. Diana perdona el error.</i>",
-            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un tropiezo, certamente. Pero el verdadero devoto se levanta.</i>"
+            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un tropiezo, certamente. Pero el verdadero devoto se levanta.</i>",
         ],
-        'streak_messages': {
+        "streak_messages": {
             2: ["🔥 Comienza a destacar entre los demás...", "🔥 Diana nota su dedicación VIP..."],
-            3: ["⚡ ¡Racha de {streak}! Es verdaderamente especial.", "⚡ {streak} correctas... hay quienes pagarían por este conocimiento."],
-            5: ["🌟 ¡Imparable! La aristocracia del conocimiento.", "🌟 {streak} victorias... es usted crème de la crème."],
-            7: ["🎩 ¡LEYENDA! {streak} aciertos. Diana le observa con interés.", "🎩 Los dioses del conocimiento palidecen ante usted."],
-            10: ["✨ ¡DIVINO! {streak} respuestas perfectas. Es parte del círculo íntimo.", "✨ Ha alcanzado la iluminación de Diana."]
+            3: [
+                "⚡ ¡Racha de {streak}! Es verdaderamente especial.",
+                "⚡ {streak} correctas... hay quienes pagarían por este conocimiento.",
+            ],
+            5: [
+                "🌟 ¡Imparable! La aristocracia del conocimiento.",
+                "🌟 {streak} victorias... es usted crème de la crème.",
+            ],
+            7: [
+                "🎩 ¡LEYENDA! {streak} aciertos. Diana le observa con interés.",
+                "🎩 Los dioses del conocimiento palidecen ante usted.",
+            ],
+            10: [
+                "✨ ¡DIVINO! {streak} respuestas perfectas. Es parte del círculo íntimo.",
+                "✨ Ha alcanzado la iluminación de Diana.",
+            ],
         },
-        'limit_reached': [
+        "limit_reached": [
             "Ha agotado sus preguntas secretas por hoy. Diana aprecia su persistencia, pero también la mesura.",
             "El examen VIP ha terminado... por ahora. Regrese mañana para más desafíos.",
-            "Diana ha guardado sus preguntas VIP para mañana. El verdadero connaisseur sabe esperar."
-        ]
+            "Diana ha guardado sus preguntas VIP para mañana. El verdadero connaisseur sabe esperar.",
+        ],
     }
 
     TRIVIA_SIMPLE_TEMPLATES = {
-        'entry_title': [
+        "entry_title": [
             "\U0001f3ad La Trivia Especial de Diana",
             "\U0001f3ad El Desafío del Momento",
-            "\U0001f3ad Donde el Conocimiento se Viste de Ocasion"
+            "\U0001f3ad Donde el Conocimiento se Viste de Ocasion",
         ],
-        'entry_intro': [
+        "entry_intro": [
             "Diana ha preparado un desafio especial para esta ocasion...",
             "Una dinamica especial aguarda a quienes prestan atencion.",
-            "El conocimiento especial revela devotos verdaderos."
+            "El conocimiento especial revela devotos verdaderos.",
         ],
-        'counter': [
+        "counter": [
             "Oportunidades restantes: {remaining} de {limit}",
             "Tiene {remaining} oportunidades de {limit} disponibles...",
-            "{remaining} de {limit} intentos especiales aguardan."
+            "{remaining} de {limit} intentos especiales aguardan.",
         ],
-        'correct': [
+        "correct": [
             "\U0001f3a9 <b>Lucien:</b>\n<i>¡Respuesta correcta! El momento le favorece...</i>",
             "\U0001f3a9 <b>Lucien:</b>\n<i>¡Exacto! Diana aprecia su conocimiento.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Perfecto! Ha demostrado dominio.</i>"
+            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Perfecto! Ha demostrado dominio.</i>",
         ],
-        'incorrect': [
+        "incorrect": [
             "\U0001f3a9 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso en momentos especiales se puede errar.</i>",
             "\U0001f3a9 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El conocimiento especial requiere dedicacion.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un error, pero el momento siempre ensena algo.</i>"
+            "\U0001f3a9 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un error, pero el momento siempre ensena algo.</i>",
         ],
-        'streak_messages': {
-            2: ["\U0001f525 La racha comienza a revelarse...", "\U0001f525 Diana nota su interes..."],
-            3: ["⚡ ¡Racha de {streak}! El conocimiento fluye.", "⚡ {streak} aciertos... admirable."],
-            5: ["\U0001f31f ¡Experto! {streak} respuestas perfectas.", "\U0001f31f El momento se rinde ante su sabiduria."],
-            7: ["\U0001f3a9 ¡Maestro! {streak} aciertos.", "\U0001f3a9 Los espiritus del momento le observan con respeto."],
-            10: ["✨ ¡LEYENDA! {streak} respuestas perfectas.", "✨ Es uno con la esencia del momento."]
+        "streak_messages": {
+            2: [
+                "\U0001f525 La racha comienza a revelarse...",
+                "\U0001f525 Diana nota su interes...",
+            ],
+            3: [
+                "⚡ ¡Racha de {streak}! El conocimiento fluye.",
+                "⚡ {streak} aciertos... admirable.",
+            ],
+            5: [
+                "\U0001f31f ¡Experto! {streak} respuestas perfectas.",
+                "\U0001f31f El momento se rinde ante su sabiduria.",
+            ],
+            7: [
+                "\U0001f3a9 ¡Maestro! {streak} aciertos.",
+                "\U0001f3a9 Los espiritus del momento le observan con respeto.",
+            ],
+            10: [
+                "✨ ¡LEYENDA! {streak} respuestas perfectas.",
+                "✨ Es uno con la esencia del momento.",
+            ],
         },
-        'limit_reached': [
+        "limit_reached": [
             "Ha agotado sus oportunidades por hoy. La dinamica especial continuara manana.",
             "El desafio especial ha terminado... por ahora. Regrese manana.",
-            "Diana guarda el saber para manana. Sepa esperar."
+            "Diana guarda el saber para manana. Sepa esperar.",
         ],
-        'deck_exhausted': [
+        "deck_exhausted": [
             "Ha respondido todas las preguntas disponibles hoy. El conocimiento se renueva al amanecer.",
             "El mazo esta completo por hoy. Regrese manana para mas desafios.",
-            "Ha agotado el saber de esta jornada. El alba traera nuevas preguntas."
-        ]
+            "Ha agotado el saber de esta jornada. El alba traera nuevas preguntas.",
+        ],
     }
 
     def __init__(self, db: Session = None):
@@ -267,7 +308,7 @@ class GameService:
 
     def close(self):
         """Cierra la sesión de base de datos"""
-        if hasattr(self, 'db') and self.db:
+        if hasattr(self, "db") and self.db:
             self.db.close()
 
     # ==================== TEMPLATE HELPERS ====================
@@ -275,7 +316,9 @@ class GameService:
     def _select_template(self, template_list: list) -> str:
         """Selecciona una variación aleatoria de template"""
         selected = random.choice(template_list)
-        logger.debug(f"game_service - _select_template - selected from {len(template_list)} variations")
+        logger.debug(
+            f"game_service - _select_template - selected from {len(template_list)} variations"
+        )
         return selected
 
     def _is_near_miss(self, dice1: int, dice2: int) -> dict:
@@ -285,36 +328,41 @@ class GameService:
         """
         # No es near miss si es victoria
         if dice1 == dice2 or (dice1 % 2 == 0 and dice2 % 2 == 0):
-            return {'is_near_miss': False, 'type': None, 'description': None}
+            return {"is_near_miss": False, "type": None, "description": None}
 
         # Dados consecutivos (3-4, 5-6, etc.)
         if abs(dice1 - dice2) == 1:
-            template = self._select_template(self.DICE_TEMPLATES['near_miss_consecutive'])
+            template = self._select_template(self.DICE_TEMPLATES["near_miss_consecutive"])
             return {
-                'is_near_miss': True,
-                'type': 'consecutive',
-                'description': template.format(dice1=dice1, dice2=dice2)
+                "is_near_miss": True,
+                "type": "consecutive",
+                "description": template.format(dice1=dice1, dice2=dice2),
             }
 
         # Suma 7
         if dice1 + dice2 == 7:
-            template = self._select_template(self.DICE_TEMPLATES['near_miss_seven'])
+            template = self._select_template(self.DICE_TEMPLATES["near_miss_seven"])
             return {
-                'is_near_miss': True,
-                'type': 'seven',
-                'description': template.format(dice1=dice1, dice2=dice2)
+                "is_near_miss": True,
+                "type": "seven",
+                "description": template.format(dice1=dice1, dice2=dice2),
             }
 
-        return {'is_near_miss': False, 'type': None, 'description': None}
+        return {"is_near_miss": False, "type": None, "description": None}
 
     def _get_today_trivia_records(self, user_id: int) -> list:
         """Obtiene registros de trivia de hoy ordenados por tiempo DESC"""
-        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        records = self.db.query(GameRecord).filter(
-            GameRecord.user_id == user_id,
-            GameRecord.game_type == 'trivia',
-            GameRecord.played_at >= today
-        ).order_by(GameRecord.played_at.desc()).all()
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        records = (
+            self.db.query(GameRecord)
+            .filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == "trivia",
+                GameRecord.played_at >= today,
+            )
+            .order_by(GameRecord.played_at.desc())
+            .all()
+        )
         return records
 
     def _get_trivia_streak(self, user_id: int) -> int:
@@ -328,7 +376,7 @@ class GameService:
                 break
         return streak
 
-    def _get_streak_message(self, streak: int) -> Optional[str]:
+    def _get_streak_message(self, streak: int) -> str | None:
         """Obtiene mensaje de racha según nivel alcanzado"""
         if streak < 2:
             return None
@@ -345,30 +393,30 @@ class GameService:
         else:
             level = 2
 
-        templates = self.TRIVIA_TEMPLATES['streak_messages'].get(level, ["¡Racha de {streak}!"])
+        templates = self.TRIVIA_TEMPLATES["streak_messages"].get(level, ["¡Racha de {streak}!"])
         return self._select_template(templates).format(streak=streak)
 
     def _build_dice_message(self, parts: dict) -> str:
         """Construye mensaje final de dados desde partes"""
-        lines = [parts['header'], '', parts['dice_display'], '', parts['result_text']]
-        if parts.get('reward_text'):
-            lines.extend(['', parts['reward_text']])
-        if parts.get('encouragement'):
-            lines.extend(['', parts['encouragement']])
-        return '\n'.join(lines)
+        lines = [parts["header"], "", parts["dice_display"], "", parts["result_text"]]
+        if parts.get("reward_text"):
+            lines.extend(["", parts["reward_text"]])
+        if parts.get("encouragement"):
+            lines.extend(["", parts["encouragement"]])
+        return "\n".join(lines)
 
     def _build_trivia_message(self, parts: dict) -> str:
         """Construye mensaje final de trivia desde partes"""
-        lines = [parts['header']]
-        if parts.get('reward_text'):
-            lines.extend(['', parts['reward_text']])
-        if parts.get('streak_text'):
-            lines.extend(['', parts['streak_text']])
-        if parts.get('promo_code_line'):
-            lines.extend(['', parts['promo_code_line']])
-        if parts.get('encouragement'):
-            lines.extend(['', parts['encouragement']])
-        return '\n'.join(lines)
+        lines = [parts["header"]]
+        if parts.get("reward_text"):
+            lines.extend(["", parts["reward_text"]])
+        if parts.get("streak_text"):
+            lines.extend(["", parts["streak_text"]])
+        if parts.get("promo_code_line"):
+            lines.extend(["", parts["promo_code_line"]])
+        if parts.get("encouragement"):
+            lines.extend(["", parts["encouragement"]])
+        return "\n".join(lines)
 
     # ==================== VIP DETECTION ====================
 
@@ -381,68 +429,83 @@ class GameService:
         is_vip = self.is_user_vip(user_id)
         try:
             from services.trivia_config_service import TriviaConfigService
+
             config_svc = TriviaConfigService(self.db)
             config = config_svc.get_config()
         except Exception:
             config = {}
 
         return {
-            'dice_limit': config.get('dice_limit_vip' if is_vip else 'dice_limit_free',
-                                     self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE),
-            'trivia_limit': config.get('trivia_limit_vip' if is_vip else 'trivia_limit_free',
-                                       self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE),
-            'trivia_vip_limit': config.get('trivia_vip_limit', self.DAILY_TRIVIA_VIP_LIMIT),
-            'trivia_simple_limit': config.get('trivia_simple_limit_vip' if is_vip else 'trivia_simple_limit_free',
-                                              self.DAILY_TRIVIA_SIMPLE_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_SIMPLE_LIMIT_FREE)
+            "dice_limit": config.get(
+                "dice_limit_vip" if is_vip else "dice_limit_free",
+                self.DAILY_DICE_LIMIT_VIP if is_vip else self.DAILY_DICE_LIMIT_FREE,
+            ),
+            "trivia_limit": config.get(
+                "trivia_limit_vip" if is_vip else "trivia_limit_free",
+                self.DAILY_TRIVIA_LIMIT_VIP if is_vip else self.DAILY_TRIVIA_LIMIT_FREE,
+            ),
+            "trivia_vip_limit": config.get("trivia_vip_limit", self.DAILY_TRIVIA_VIP_LIMIT),
+            "trivia_simple_limit": config.get(
+                "trivia_simple_limit_vip" if is_vip else "trivia_simple_limit_free",
+                self.DAILY_TRIVIA_SIMPLE_LIMIT_VIP
+                if is_vip
+                else self.DAILY_TRIVIA_SIMPLE_LIMIT_FREE,
+            ),
         }
 
     def get_menu_data(self, user_id: int) -> dict:
         """Obtiene datos enriquecidos para el menú de juegos"""
         limits = self.get_daily_limits(user_id)
-        dice_played = self.get_today_play_count(user_id, 'dice')
-        trivia_played = self.get_today_play_count(user_id, 'trivia')
+        dice_played = self.get_today_play_count(user_id, "dice")
+        trivia_played = self.get_today_play_count(user_id, "trivia")
 
-        remaining_dice = max(0, limits['dice_limit'] - dice_played)
-        remaining_trivia = max(0, limits['trivia_limit'] - trivia_played)
+        remaining_dice = max(0, limits["dice_limit"] - dice_played)
+        remaining_trivia = max(0, limits["trivia_limit"] - trivia_played)
 
-        logger.info(f"game_service - get_menu_data - {user_id} - dice:{remaining_dice}/{limits['dice_limit']}, trivia:{remaining_trivia}/{limits['trivia_limit']}")
+        logger.info(
+            f"game_service - get_menu_data - {user_id} - dice:{remaining_dice}/{limits['dice_limit']}, trivia:{remaining_trivia}/{limits['trivia_limit']}"
+        )
 
         return {
-            'title': self._select_template(self.MENU_TEMPLATES['title']),
-            'subtitle': self._select_template(self.MENU_TEMPLATES['subtitle']),
-            'dice_description': self._select_template(self.MENU_TEMPLATES['dice_description']),
-            'trivia_description': self._select_template(self.MENU_TEMPLATES['trivia_description']),
-            'footer': self._select_template(self.MENU_TEMPLATES['footer']),
-            'remaining_dice': remaining_dice,
-            'remaining_trivia': remaining_trivia,
-            'limit_dice': limits['dice_limit'],
-            'limit_trivia': limits['trivia_limit'],
-            'is_vip': self.is_user_vip(user_id)
+            "title": self._select_template(self.MENU_TEMPLATES["title"]),
+            "subtitle": self._select_template(self.MENU_TEMPLATES["subtitle"]),
+            "dice_description": self._select_template(self.MENU_TEMPLATES["dice_description"]),
+            "trivia_description": self._select_template(self.MENU_TEMPLATES["trivia_description"]),
+            "footer": self._select_template(self.MENU_TEMPLATES["footer"]),
+            "remaining_dice": remaining_dice,
+            "remaining_trivia": remaining_trivia,
+            "limit_dice": limits["dice_limit"],
+            "limit_trivia": limits["trivia_limit"],
+            "is_vip": self.is_user_vip(user_id),
         }
 
     # ==================== CONTEO DIARIO ====================
 
     def get_today_play_count(self, user_id: int, game_type: str) -> int:
         """Obtiene jugadas de hoy para un tipo de juego"""
-        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        return self.db.query(GameRecord).filter(
-            GameRecord.user_id == user_id,
-            GameRecord.game_type == game_type,
-            GameRecord.played_at >= today
-        ).count()
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        return (
+            self.db.query(GameRecord)
+            .filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == game_type,
+                GameRecord.played_at >= today,
+            )
+            .count()
+        )
 
-    def can_play(self, user_id: int, game_type: str) -> Tuple[bool, int, int, str]:
+    def can_play(self, user_id: int, game_type: str) -> tuple[bool, int, int, str]:
         """
         Verifica si usuario puede jugar según límites diarios.
         Returns: (puede_jugar, jugadas_hoy, limite, mensaje)
         """
         limits = self.get_daily_limits(user_id)
-        if game_type == 'dice':
-            limit = limits['dice_limit']
-        elif game_type == 'trivia_simple':
-            limit = limits['trivia_simple_limit']
+        if game_type == "dice":
+            limit = limits["dice_limit"]
+        elif game_type == "trivia_simple":
+            limit = limits["trivia_simple_limit"]
         else:
-            limit = limits['trivia_limit']
+            limit = limits["trivia_limit"]
         played = self.get_today_play_count(user_id, game_type)
 
         if played >= limit:
@@ -450,9 +513,14 @@ class GameService:
             if is_vip:
                 return False, played, limit, "Ha alcanzado su límite diario. Regrese mañana."
             else:
-                return False, played, limit, (
-                    "Ha alcanzado su límite diario de juegos.\n"
-                    "¡Pero! Los miembros VIP tienen el doble de oportunidades..."
+                return (
+                    False,
+                    played,
+                    limit,
+                    (
+                        "Ha alcanzado su límite diario de juegos.\n"
+                        "¡Pero! Los miembros VIP tienen el doble de oportunidades..."
+                    ),
                 )
         return True, played, limit, None
 
@@ -461,21 +529,23 @@ class GameService:
     def get_dice_entry_data(self, user_id: int) -> dict:
         """Obtiene datos enriquecidos para la entrada del juego de dados"""
         limits = self.get_daily_limits(user_id)
-        played = self.get_today_play_count(user_id, 'dice')
-        remaining = max(0, limits['dice_limit'] - played)
+        played = self.get_today_play_count(user_id, "dice")
+        remaining = max(0, limits["dice_limit"] - played)
 
-        logger.info(f"game_service - get_dice_entry_data - {user_id} - remaining:{remaining}/{limits['dice_limit']}")
+        logger.info(
+            f"game_service - get_dice_entry_data - {user_id} - remaining:{remaining}/{limits['dice_limit']}"
+        )
 
         return {
-            'title': self._select_template(self.DICE_TEMPLATES['entry_title']),
-            'intro': self._select_template(self.DICE_TEMPLATES['entry_intro']),
-            'rules': self._select_template(self.DICE_TEMPLATES['rules']),
-            'remaining': remaining,
-            'limit': limits['dice_limit'],
-            'is_vip': self.is_user_vip(user_id)
+            "title": self._select_template(self.DICE_TEMPLATES["entry_title"]),
+            "intro": self._select_template(self.DICE_TEMPLATES["entry_intro"]),
+            "rules": self._select_template(self.DICE_TEMPLATES["rules"]),
+            "remaining": remaining,
+            "limit": limits["dice_limit"],
+            "is_vip": self.is_user_vip(user_id),
         }
 
-    def roll_dice(self) -> Tuple[int, int]:
+    def roll_dice(self) -> tuple[int, int]:
         """Lanza dos dados (1-6)"""
         return random.randint(1, 6), random.randint(1, 6)
 
@@ -485,27 +555,34 @@ class GameService:
         Returns: 'pairs', 'doubles', o 'none'
         """
         if dice1 == dice2:
-            return 'doubles'
+            return "doubles"
         if dice1 % 2 == 0 and dice2 % 2 == 0:
-            return 'pairs'
-        return 'none'
+            return "pairs"
+        return "none"
 
-    def play_dice_game(self, user_id: int) -> Dict[str, Any]:
+    def play_dice_game(self, user_id: int) -> dict[str, Any]:
         """
         Procesa una partida de dados con near-miss detection.
         Returns: {dice1, dice2, sum, won, win_type, is_near_miss, near_miss_type,
                  besitos, remaining_after, message_parts, limit_reached, message}
         """
         # 1. Verificar límites
-        can_play, played, limit, limit_msg = self.can_play(user_id, 'dice')
+        can_play, played, limit, limit_msg = self.can_play(user_id, "dice")
         if not can_play:
-            limit_template = self._select_template(self.DICE_TEMPLATES['limit_reached'])
+            limit_template = self._select_template(self.DICE_TEMPLATES["limit_reached"])
             return {
-                'dice1': None, 'dice2': None, 'sum': 0, 'won': False,
-                'win_type': None, 'is_near_miss': False, 'near_miss_type': None,
-                'besitos': 0, 'remaining_after': 0,
-                'message_parts': {}, 'limit_reached': True,
-                'message': limit_template + "\n\n" + limit_msg
+                "dice1": None,
+                "dice2": None,
+                "sum": 0,
+                "won": False,
+                "win_type": None,
+                "is_near_miss": False,
+                "near_miss_type": None,
+                "besitos": 0,
+                "remaining_after": 0,
+                "message_parts": {},
+                "limit_reached": True,
+                "message": limit_template + "\n\n" + limit_msg,
             }
 
         # 2. Lanzar dados
@@ -514,10 +591,10 @@ class GameService:
 
         # 3. Verificar victoria
         win_type = self.check_dice_win(dice1, dice2)
-        won = win_type != 'none'
+        won = win_type != "none"
 
         # 4. Verificar near-miss (solo si no ganó)
-        near_miss = {'is_near_miss': False, 'type': None, 'description': None}
+        near_miss = {"is_near_miss": False, "type": None, "description": None}
         if not won:
             near_miss = self._is_near_miss(dice1, dice2)
 
@@ -529,15 +606,12 @@ class GameService:
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.GAME,
-                description=f"Victoria en dados: {win_type}"
+                description=f"Victoria en dados: {win_type}",
             )
 
         # 6. Registrar jugada
         record = GameRecord(
-            user_id=user_id,
-            game_type='dice',
-            result=f"{dice1}+{dice2}",
-            payout=besitos
+            user_id=user_id, game_type="dice", result=f"{dice1}+{dice2}", payout=besitos
         )
         self.db.add(record)
         self.db.commit()
@@ -553,30 +627,39 @@ class GameService:
         # 9. Construir mensaje final
         message = self._build_dice_message(message_parts)
 
-        logger.info(f"game_service - play_dice_game - {user_id} - dice:{dice1}+{dice2}, won:{won}, near_miss:{near_miss['is_near_miss']}")
+        logger.info(
+            f"game_service - play_dice_game - {user_id} - dice:{dice1}+{dice2}, won:{won}, near_miss:{near_miss['is_near_miss']}"
+        )
 
         return {
-            'dice1': dice1,
-            'dice2': dice2,
-            'sum': dice_sum,
-            'won': won,
-            'win_type': win_type if won else None,
-            'is_near_miss': near_miss['is_near_miss'],
-            'near_miss_type': near_miss['type'],
-            'besitos': besitos,
-            'remaining_after': remaining_after,
-            'message_parts': message_parts,
-            'limit_reached': False,
-            'message': message
+            "dice1": dice1,
+            "dice2": dice2,
+            "sum": dice_sum,
+            "won": won,
+            "win_type": win_type if won else None,
+            "is_near_miss": near_miss["is_near_miss"],
+            "near_miss_type": near_miss["type"],
+            "besitos": besitos,
+            "remaining_after": remaining_after,
+            "message_parts": message_parts,
+            "limit_reached": False,
+            "message": message,
         }
 
-    def _build_dice_message_parts(self, dice1: int, dice2: int, won: bool,
-                                   win_type: str, near_miss: dict, besitos: int,
-                                   remaining: int) -> dict:
+    def _build_dice_message_parts(
+        self,
+        dice1: int,
+        dice2: int,
+        won: bool,
+        win_type: str,
+        near_miss: dict,
+        besitos: int,
+        remaining: int,
+    ) -> dict:
         """Construye las partes del mensaje de dados"""
         # Header con resultado visual y tipo de victoria si aplica
         if won:
-            if win_type == 'doubles':
+            if win_type == "doubles":
                 header = f"<b>¡DOBLES!</b>\n\n🎲 {dice1}  |  {dice2} 🎲"
             else:
                 header = f"<b>¡PARES!</b>\n\n🎲 {dice1}  |  {dice2} 🎲"
@@ -589,12 +672,16 @@ class GameService:
         # Texto de resultado según tipo (sin mostrar suma)
         if won:
             result_text = self._select_template(
-                self.DICE_TEMPLATES['win_doubles'] if win_type == 'doubles' else self.DICE_TEMPLATES['win_pairs']
+                self.DICE_TEMPLATES["win_doubles"]
+                if win_type == "doubles"
+                else self.DICE_TEMPLATES["win_pairs"]
             )
-        elif near_miss['is_near_miss']:
-            result_text = near_miss['description']
+        elif near_miss["is_near_miss"]:
+            result_text = near_miss["description"]
         else:
-            result_text = self._select_template(self.DICE_TEMPLATES['loss']).format(dice1=dice1, dice2=dice2)
+            result_text = self._select_template(self.DICE_TEMPLATES["loss"]).format(
+                dice1=dice1, dice2=dice2
+            )
 
         # Texto de recompensa
         reward_text = None
@@ -609,11 +696,11 @@ class GameService:
             encouragement = "Ha agotado sus oportunidades por hoy."
 
         return {
-            'header': header,
-            'dice_display': dice_display,
-            'result_text': result_text,
-            'reward_text': reward_text,
-            'encouragement': encouragement
+            "header": header,
+            "dice_display": dice_display,
+            "result_text": result_text,
+            "reward_text": reward_text,
+            "encouragement": encouragement,
         }
 
     # ==================== TRIVIA ====================
@@ -621,30 +708,32 @@ class GameService:
     def get_trivia_entry_data(self, user_id: int) -> dict:
         """Obtiene datos enriquecidos para la entrada de trivia"""
         limits = self.get_daily_limits(user_id)
-        played = self.get_today_play_count(user_id, 'trivia')
-        remaining = max(0, limits['trivia_limit'] - played)
+        played = self.get_today_play_count(user_id, "trivia")
+        remaining = max(0, limits["trivia_limit"] - played)
         streak = self._get_trivia_streak(user_id)
 
         can_play = remaining > 0
         limit_message = None
         if not can_play:
-            limit_message = self._select_template(self.TRIVIA_TEMPLATES['limit_reached'])
+            limit_message = self._select_template(self.TRIVIA_TEMPLATES["limit_reached"])
             is_vip = self.is_user_vip(user_id)
             if not is_vip:
                 limit_message += "\n\nLos caminos de VIP siempre tienen más oportunidades..."
 
-        logger.info(f"game_service - get_trivia_entry_data - {user_id} - remaining:{remaining}, streak:{streak}")
+        logger.info(
+            f"game_service - get_trivia_entry_data - {user_id} - remaining:{remaining}, streak:{streak}"
+        )
 
         return {
-            'title': self._select_template(self.TRIVIA_TEMPLATES['entry_title']),
-            'intro': self._select_template(self.TRIVIA_TEMPLATES['entry_intro']),
-            'counter_template': self._select_template(self.TRIVIA_TEMPLATES['counter']),
-            'remaining': remaining,
-            'limit': limits['trivia_limit'],
-            'current_streak': streak,
-            'is_vip': self.is_user_vip(user_id),
-            'can_play': can_play,
-            'limit_message': limit_message
+            "title": self._select_template(self.TRIVIA_TEMPLATES["entry_title"]),
+            "intro": self._select_template(self.TRIVIA_TEMPLATES["entry_intro"]),
+            "counter_template": self._select_template(self.TRIVIA_TEMPLATES["counter"]),
+            "remaining": remaining,
+            "limit": limits["trivia_limit"],
+            "current_streak": streak,
+            "is_vip": self.is_user_vip(user_id),
+            "can_play": can_play,
+            "limit_message": limit_message,
         }
 
     def load_trivia_questions(self) -> list:
@@ -658,16 +747,16 @@ class GameService:
             return []
 
         try:
-            with open(questions_path, 'r', encoding='utf-8') as f:
+            with open(questions_path, encoding="utf-8") as f:
                 data = json.load(f)
-                self._questions = data if isinstance(data, list) else data.get('questions', [])
+                self._questions = data if isinstance(data, list) else data.get("questions", [])
         except Exception as e:
             logger.error(f"Error loading trivia questions: {e}")
             self._questions = []
 
         return self._questions
 
-    def get_random_question(self) -> Tuple[Optional[dict], int]:
+    def get_random_question(self) -> tuple[dict | None, int]:
         """Retorna pregunta aleatoria con índice"""
         questions = self.load_trivia_questions()
         if not questions:
@@ -676,7 +765,7 @@ class GameService:
         idx = random.randint(0, len(questions) - 1)
         return questions[idx], idx
 
-    def get_question_by_index(self, index: int) -> Optional[dict]:
+    def get_question_by_index(self, index: int) -> dict | None:
         """Retorna pregunta por índice"""
         questions = self.load_trivia_questions()
         if 0 <= index < len(questions):
@@ -687,34 +776,44 @@ class GameService:
         """Verifica si respuesta es correcta"""
         if not question:
             return False
-        return question.get('answer') == answer_idx
+        return question.get("answer") == answer_idx
 
-    def play_trivia(self, user_id: int, question_idx: int, answer_idx: int) -> Dict[str, Any]:
+    def play_trivia(self, user_id: int, question_idx: int, answer_idx: int) -> dict[str, Any]:
         """
         Procesa respuesta de trivia con sistema de rachas.
         Returns: {correct, besitos, previous_streak, new_streak, streak_message,
                  message, message_parts, remaining_after, limit_reached}
         """
         # 1. Verificar límites
-        can_play, played, limit, limit_msg = self.can_play(user_id, 'trivia')
+        can_play, played, limit, limit_msg = self.can_play(user_id, "trivia")
         if not can_play:
-            limit_template = self._select_template(self.TRIVIA_TEMPLATES['limit_reached'])
+            limit_template = self._select_template(self.TRIVIA_TEMPLATES["limit_reached"])
             full_message = limit_template + "\n\n" + limit_msg
             return {
-                'correct': False, 'besitos': 0,
-                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': full_message, 'message_parts': {},
-                'remaining_after': 0, 'limit_reached': True
+                "correct": False,
+                "besitos": 0,
+                "previous_streak": 0,
+                "new_streak": 0,
+                "streak_message": None,
+                "message": full_message,
+                "message_parts": {},
+                "remaining_after": 0,
+                "limit_reached": True,
             }
 
         # 2. Obtener pregunta
         question = self.get_question_by_index(question_idx)
         if not question:
             return {
-                'correct': False, 'besitos': 0,
-                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': "Pregunta no encontrada.", 'message_parts': {},
-                'remaining_after': max(0, limit - played), 'limit_reached': False
+                "correct": False,
+                "besitos": 0,
+                "previous_streak": 0,
+                "new_streak": 0,
+                "streak_message": None,
+                "message": "Pregunta no encontrada.",
+                "message_parts": {},
+                "remaining_after": max(0, limit - played),
+                "limit_reached": False,
             }
 
         # 3. Obtener racha previa
@@ -742,7 +841,7 @@ class GameService:
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia (racha: {new_streak})"
+                description=f"Victoria en trivia (racha: {new_streak})",
             )
 
         # 7b. Verificar hito de racha (D-09, D-10)
@@ -754,15 +853,15 @@ class GameService:
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia"
+                description=f"Bonus por racha de {new_streak} en trivia",
             )
 
         # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
             user_id=user_id,
-            game_type='trivia',
+            game_type="trivia",
             result=f"question_{question_idx}",
-            payout=besitos + streak_bonus
+            payout=besitos + streak_bonus,
         )
         self.db.add(record)
 
@@ -770,11 +869,12 @@ class GameService:
         promo_code_info = None
         if is_correct:
             from services.streak_promotion_service import StreakPromotionService
+
             promo_service = StreakPromotionService(self.db)
             try:
                 promo_code_info = promo_service.claim_for_streak(
                     user_id=user_id,
-                    game_type='trivia',
+                    game_type="trivia",
                     streak=new_streak,
                     category_id=None,
                 )
@@ -786,8 +886,12 @@ class GameService:
 
         # 10. Construir partes del mensaje
         message_parts = self._build_trivia_message_parts(
-            is_correct, question, besitos, streak_message, remaining_after,
-            promo_code=promo_code_info
+            is_correct,
+            question,
+            besitos,
+            streak_message,
+            remaining_after,
+            promo_code=promo_code_info,
         )
 
         # 11. Construir mensaje final
@@ -800,30 +904,33 @@ class GameService:
         elif promo_code_info:
             session_state = self._build_streak_claim_state(user_id, promo_code_info)
 
-        logger.info(f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}, bonus:{streak_bonus}")
+        logger.info(
+            f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}, bonus:{streak_bonus}"
+        )
 
         # Commit del registro de jugadapara asegurar persistencia
         self.db.commit()
 
         return {
-            'correct': is_correct,
-            'besitos': besitos,
-            'besitos_total': besitos + streak_bonus,
-            'previous_streak': previous_streak,
-            'new_streak': new_streak,
-            'streak_message': streak_message,
-            'streak_bonus': streak_bonus,
-            'promo_code': promo_code_info,
-            'message': message,
-            'message_parts': message_parts,
-            'remaining_after': remaining_after,
-            'limit_reached': False,
-            'session_state': session_state,
+            "correct": is_correct,
+            "besitos": besitos,
+            "besitos_total": besitos + streak_bonus,
+            "previous_streak": previous_streak,
+            "new_streak": new_streak,
+            "streak_message": streak_message,
+            "streak_bonus": streak_bonus,
+            "promo_code": promo_code_info,
+            "message": message,
+            "message_parts": message_parts,
+            "remaining_after": remaining_after,
+            "limit_reached": False,
+            "session_state": session_state,
         }
 
-    def _build_streak_failure_state(self, user_id: int, streak: int) -> Optional[dict]:
+    def _build_streak_failure_state(self, user_id: int, streak: int) -> dict | None:
         """Construye session_state cuando el usuario falla una pregunta con sesion activa."""
         from services.streak_promotion_service import StreakPromotionService
+
         promo_service = StreakPromotionService(self.db)
         try:
             session = promo_service.get_active_session(user_id)
@@ -846,7 +953,7 @@ class GameService:
                 }
             else:
                 # Set timeout
-                session.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=2)
+                session.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=2)
                 self.db.flush()
                 return {
                     "action": "timeout",
@@ -856,9 +963,10 @@ class GameService:
         finally:
             promo_service.close()
 
-    def _build_streak_claim_state(self, user_id: int, promo_code_info: dict) -> Optional[dict]:
+    def _build_streak_claim_state(self, user_id: int, promo_code_info: dict) -> dict | None:
         """Construye session_state cuando el usuario alcanza un tier y reclama codigo."""
         from services.streak_promotion_service import StreakPromotionService
+
         promo_service = StreakPromotionService(self.db)
         try:
             session = promo_service.get_active_session(user_id)
@@ -874,22 +982,27 @@ class GameService:
         finally:
             promo_service.close()
 
-    def _build_trivia_message_parts(self, is_correct: bool, question: dict,
-                                     besitos: int, streak_message: Optional[str],
-                                     remaining: int,
-                                     promo_code: Optional[dict] = None) -> dict:
+    def _build_trivia_message_parts(
+        self,
+        is_correct: bool,
+        question: dict,
+        besitos: int,
+        streak_message: str | None,
+        remaining: int,
+        promo_code: dict | None = None,
+    ) -> dict:
         """Construye las partes del mensaje de trivia"""
         # Respuesta correcta (para formatear templates)
         letters = ["A", "B", "C", "D"]
-        answer_idx = min(question['answer'], len(letters) - 1)
+        answer_idx = min(question["answer"], len(letters) - 1)
         correct_letter = letters[answer_idx]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
 
         # Header según resultado
         if is_correct:
-            header = self._select_template(self.TRIVIA_TEMPLATES['correct'])
+            header = self._select_template(self.TRIVIA_TEMPLATES["correct"])
         else:
-            header_template = self._select_template(self.TRIVIA_TEMPLATES['incorrect'])
+            header_template = self._select_template(self.TRIVIA_TEMPLATES["incorrect"])
             header = header_template.format(correct_answer=correct_answer_text)
 
         # Resultado de la respuesta - simplificado
@@ -915,8 +1028,8 @@ class GameService:
 
         # Phase 17: Promo code line
         promo_code_line = None
-        if promo_code and promo_code.get('code'):
-            code = promo_code['code']
+        if promo_code and promo_code.get("code"):
+            code = promo_code["code"]
             promo_code_line = (
                 f"\U0001f39f️ <b>¡Código de descuento ganado!</b>\n"
                 f"<i>Su racha le ha otorgado: <code>{code}</code></i>\n"
@@ -924,25 +1037,30 @@ class GameService:
             )
 
         return {
-            'header': header,
-            'result_text': result_text,
-            'correct_answer': correct_answer,
-            'reward_text': reward_text,
-            'streak_text': streak_text,
-            'encouragement': encouragement,
-            'promo_code_line': promo_code_line,
+            "header": header,
+            "result_text": result_text,
+            "correct_answer": correct_answer,
+            "reward_text": reward_text,
+            "streak_text": streak_text,
+            "encouragement": encouragement,
+            "promo_code_line": promo_code_line,
         }
 
     # ==================== TRIVIA VIP ====================
 
     def _get_today_vip_trivia_records(self, user_id: int) -> list:
         """Obtiene registros de trivia VIP de hoy ordenados por tiempo DESC"""
-        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        records = self.db.query(GameRecord).filter(
-            GameRecord.user_id == user_id,
-            GameRecord.game_type == 'trivia_vip',
-            GameRecord.played_at >= today
-        ).order_by(GameRecord.played_at.desc()).all()
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        records = (
+            self.db.query(GameRecord)
+            .filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == "trivia_vip",
+                GameRecord.played_at >= today,
+            )
+            .order_by(GameRecord.played_at.desc())
+            .all()
+        )
         return records
 
     def _get_vip_trivia_streak(self, user_id: int) -> int:
@@ -956,19 +1074,29 @@ class GameService:
                 break
         return streak
 
-    def can_play_vip_trivia(self, user_id: int) -> Tuple[bool, int, int, str]:
+    def can_play_vip_trivia(self, user_id: int) -> tuple[bool, int, int, str]:
         """
         Verifica si usuario VIP puede jugar trivia VIP.
         Returns: (puede_jugar, jugadas_hoy, limite, mensaje)
         """
         if not self.is_user_vip(user_id):
-            return False, 0, self.DAILY_TRIVIA_VIP_LIMIT, "Esta trivia es exclusiva para miembros VIP."
+            return (
+                False,
+                0,
+                self.DAILY_TRIVIA_VIP_LIMIT,
+                "Esta trivia es exclusiva para miembros VIP.",
+            )
 
         played = len(self._get_today_vip_trivia_records(user_id))
         limit = self.DAILY_TRIVIA_VIP_LIMIT
 
         if played >= limit:
-            return False, played, limit, self._select_template(self.TRIVIA_VIP_TEMPLATES['limit_reached'])
+            return (
+                False,
+                played,
+                limit,
+                self._select_template(self.TRIVIA_VIP_TEMPLATES["limit_reached"]),
+            )
 
         return True, played, limit, None
 
@@ -983,16 +1111,16 @@ class GameService:
             return []
 
         try:
-            with open(questions_path, 'r', encoding='utf-8') as f:
+            with open(questions_path, encoding="utf-8") as f:
                 data = json.load(f)
-                self._vip_questions = data if isinstance(data, list) else data.get('questions', [])
+                self._vip_questions = data if isinstance(data, list) else data.get("questions", [])
         except Exception as e:
             logger.error(f"Error loading VIP trivia questions: {e}")
             self._vip_questions = []
 
         return self._vip_questions
 
-    def get_random_vip_question(self) -> Tuple[Optional[dict], int]:
+    def get_random_vip_question(self) -> tuple[dict | None, int]:
         """Retorna pregunta VIP aleatoria con índice"""
         questions = self.load_trivia_vip_questions()
         if not questions:
@@ -1001,7 +1129,7 @@ class GameService:
         idx = random.randint(0, len(questions) - 1)
         return questions[idx], idx
 
-    def get_vip_question_by_index(self, index: int) -> Optional[dict]:
+    def get_vip_question_by_index(self, index: int) -> dict | None:
         """Retorna pregunta VIP por índice"""
         questions = self.load_trivia_vip_questions()
         if 0 <= index < len(questions):
@@ -1012,13 +1140,13 @@ class GameService:
         """Verifica si respuesta VIP es correcta"""
         if not question:
             return False
-        return question.get('answer') == answer_idx
+        return question.get("answer") == answer_idx
 
     def get_trivia_vip_entry_data(self, user_id: int) -> dict:
         """Obtiene datos enriquecidos para la entrada de trivia VIP"""
         limits = self.get_daily_limits(user_id)
         played = len(self._get_today_vip_trivia_records(user_id))
-        remaining = max(0, limits['trivia_vip_limit'] - played)
+        remaining = max(0, limits["trivia_vip_limit"] - played)
         streak = self._get_vip_trivia_streak(user_id)
 
         can_play = remaining > 0
@@ -1029,23 +1157,25 @@ class GameService:
             limit_message = "Esta trivia es exclusiva para miembros VIP."
             can_play = False
         elif not can_play:
-            limit_message = self._select_template(self.TRIVIA_VIP_TEMPLATES['limit_reached'])
+            limit_message = self._select_template(self.TRIVIA_VIP_TEMPLATES["limit_reached"])
 
-        logger.info(f"game_service - get_trivia_vip_entry_data - {user_id} - remaining:{remaining}, streak:{streak}, is_vip:{is_vip}")
+        logger.info(
+            f"game_service - get_trivia_vip_entry_data - {user_id} - remaining:{remaining}, streak:{streak}, is_vip:{is_vip}"
+        )
 
         return {
-            'title': self._select_template(self.TRIVIA_VIP_TEMPLATES['entry_title']),
-            'intro': self._select_template(self.TRIVIA_VIP_TEMPLATES['entry_intro']),
-            'counter_template': self._select_template(self.TRIVIA_VIP_TEMPLATES['counter']),
-            'remaining': remaining,
-            'limit': limits['trivia_vip_limit'],
-            'current_streak': streak,
-            'is_vip': is_vip,
-            'can_play': can_play,
-            'limit_message': limit_message
+            "title": self._select_template(self.TRIVIA_VIP_TEMPLATES["entry_title"]),
+            "intro": self._select_template(self.TRIVIA_VIP_TEMPLATES["entry_intro"]),
+            "counter_template": self._select_template(self.TRIVIA_VIP_TEMPLATES["counter"]),
+            "remaining": remaining,
+            "limit": limits["trivia_vip_limit"],
+            "current_streak": streak,
+            "is_vip": is_vip,
+            "can_play": can_play,
+            "limit_message": limit_message,
         }
 
-    def play_trivia_vip(self, user_id: int, question_idx: int, answer_idx: int) -> Dict[str, Any]:
+    def play_trivia_vip(self, user_id: int, question_idx: int, answer_idx: int) -> dict[str, Any]:
         """
         Procesa respuesta de trivia VIP con sistema de rachas y 5 besitos.
         Returns: {correct, besitos, previous_streak, new_streak, streak_message,
@@ -1055,20 +1185,30 @@ class GameService:
         can_play, played, limit, limit_msg = self.can_play_vip_trivia(user_id)
         if not can_play:
             return {
-                'correct': False, 'besitos': 0,
-                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': limit_msg, 'message_parts': {},
-                'remaining_after': 0, 'limit_reached': True
+                "correct": False,
+                "besitos": 0,
+                "previous_streak": 0,
+                "new_streak": 0,
+                "streak_message": None,
+                "message": limit_msg,
+                "message_parts": {},
+                "remaining_after": 0,
+                "limit_reached": True,
             }
 
         # 2. Obtener pregunta
         question = self.get_vip_question_by_index(question_idx)
         if not question:
             return {
-                'correct': False, 'besitos': 0,
-                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': "Pregunta no encontrada.", 'message_parts': {},
-                'remaining_after': max(0, limit - played), 'limit_reached': False
+                "correct": False,
+                "besitos": 0,
+                "previous_streak": 0,
+                "new_streak": 0,
+                "streak_message": None,
+                "message": "Pregunta no encontrada.",
+                "message_parts": {},
+                "remaining_after": max(0, limit - played),
+                "limit_reached": False,
             }
 
         # 3. Obtener racha previa
@@ -1096,7 +1236,7 @@ class GameService:
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia VIP (racha: {new_streak})"
+                description=f"Victoria en trivia VIP (racha: {new_streak})",
             )
 
         # 7b. Verificar hito de racha (D-09, D-10)
@@ -1108,15 +1248,15 @@ class GameService:
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia VIP"
+                description=f"Bonus por racha de {new_streak} en trivia VIP",
             )
 
         # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
             user_id=user_id,
-            game_type='trivia_vip',
+            game_type="trivia_vip",
             result=f"vip_question_{question_idx}",
-            payout=besitos + streak_bonus
+            payout=besitos + streak_bonus,
         )
         self.db.add(record)
 
@@ -1124,11 +1264,12 @@ class GameService:
         promo_code_info = None
         if is_correct:
             from services.streak_promotion_service import StreakPromotionService
+
             promo_service = StreakPromotionService(self.db)
             try:
                 promo_code_info = promo_service.claim_for_streak(
                     user_id=user_id,
-                    game_type='trivia_vip',
+                    game_type="trivia_vip",
                     streak=new_streak,
                     category_id=None,
                 )
@@ -1140,8 +1281,12 @@ class GameService:
 
         # 10. Construir partes del mensaje
         message_parts = self._build_trivia_vip_message_parts(
-            is_correct, question, besitos, streak_message, remaining_after,
-            promo_code=promo_code_info
+            is_correct,
+            question,
+            besitos,
+            streak_message,
+            remaining_after,
+            promo_code=promo_code_info,
         )
 
         # 11. Construir mensaje final
@@ -1154,39 +1299,46 @@ class GameService:
         elif promo_code_info:
             session_state = self._build_streak_claim_state(user_id, promo_code_info)
 
-        logger.info(f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
+        logger.info(
+            f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}"
+        )
 
         # Commit del registro de jugadapara asegurar persistencia
         self.db.commit()
 
         return {
-            'correct': is_correct,
-            'besitos': besitos,
-            'besitos_total': besitos + streak_bonus,
-            'previous_streak': previous_streak,
-            'new_streak': new_streak,
-            'streak_message': streak_message,
-            'streak_bonus': streak_bonus,
-            'promo_code': promo_code_info,
-            'message': message,
-            'message_parts': message_parts,
-            'remaining_after': remaining_after,
-            'limit_reached': False,
-            'session_state': session_state,
+            "correct": is_correct,
+            "besitos": besitos,
+            "besitos_total": besitos + streak_bonus,
+            "previous_streak": previous_streak,
+            "new_streak": new_streak,
+            "streak_message": streak_message,
+            "streak_bonus": streak_bonus,
+            "promo_code": promo_code_info,
+            "message": message,
+            "message_parts": message_parts,
+            "remaining_after": remaining_after,
+            "limit_reached": False,
+            "session_state": session_state,
         }
 
-    def _build_trivia_vip_message_parts(self, is_correct: bool, question: dict,
-                                        besitos: int, streak_message: Optional[str],
-                                        remaining: int,
-                                        promo_code: Optional[dict] = None) -> dict:
+    def _build_trivia_vip_message_parts(
+        self,
+        is_correct: bool,
+        question: dict,
+        besitos: int,
+        streak_message: str | None,
+        remaining: int,
+        promo_code: dict | None = None,
+    ) -> dict:
         """Construye las partes del mensaje de trivia VIP"""
-        correct_letter = ["A", "B", "C", "D"][question['answer']]
+        correct_letter = ["A", "B", "C", "D"][question["answer"]]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
 
         if is_correct:
-            header = self._select_template(self.TRIVIA_VIP_TEMPLATES['correct'])
+            header = self._select_template(self.TRIVIA_VIP_TEMPLATES["correct"])
         else:
-            header_template = self._select_template(self.TRIVIA_VIP_TEMPLATES['incorrect'])
+            header_template = self._select_template(self.TRIVIA_VIP_TEMPLATES["incorrect"])
             header = header_template.format(correct_answer=correct_answer_text)
 
         result_text = None
@@ -1206,8 +1358,8 @@ class GameService:
 
         # Phase 17: Promo code line
         promo_code_line = None
-        if promo_code and promo_code.get('code'):
-            code = promo_code['code']
+        if promo_code and promo_code.get("code"):
+            code = promo_code["code"]
             promo_code_line = (
                 f"\U0001f39f️ <b>¡Código de descuento ganado!</b>\n"
                 f"<i>Su racha le ha otorgado: <code>{code}</code></i>\n"
@@ -1215,48 +1367,57 @@ class GameService:
             )
 
         return {
-            'header': header,
-            'result_text': result_text,
-            'correct_answer': correct_answer,
-            'reward_text': reward_text,
-            'streak_text': streak_text,
-            'encouragement': encouragement,
-            'promo_code_line': promo_code_line,
+            "header": header,
+            "result_text": result_text,
+            "correct_answer": correct_answer,
+            "reward_text": reward_text,
+            "streak_text": streak_text,
+            "encouragement": encouragement,
+            "promo_code_line": promo_code_line,
         }
 
     def _build_trivia_vip_message(self, parts: dict) -> str:
         """Construye mensaje final de trivia VIP"""
-        lines = [parts['header']]
-        if parts.get('reward_text'):
-            lines.extend(['', parts['reward_text']])
-        if parts.get('streak_text'):
-            lines.extend(['', parts['streak_text']])
-        if parts.get('promo_code_line'):
-            lines.extend(['', parts['promo_code_line']])
-        if parts.get('encouragement'):
-            lines.extend(['', parts['encouragement']])
-        return '\n'.join(lines)
+        lines = [parts["header"]]
+        if parts.get("reward_text"):
+            lines.extend(["", parts["reward_text"]])
+        if parts.get("streak_text"):
+            lines.extend(["", parts["streak_text"]])
+        if parts.get("promo_code_line"):
+            lines.extend(["", parts["promo_code_line"]])
+        if parts.get("encouragement"):
+            lines.extend(["", parts["encouragement"]])
+        return "\n".join(lines)
 
     # ==================== TRIVIA ESPECIAL (PHASE 16) ====================
 
     def _get_today_simple_trivia_records(self, user_id: int) -> list:
         """Obtiene registros de trivia temática de hoy ordenados por tiempo DESC."""
-        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        records = self.db.query(GameRecord).filter(
-            GameRecord.user_id == user_id,
-            GameRecord.game_type == 'trivia_simple',
-            GameRecord.played_at >= today
-        ).order_by(GameRecord.played_at.desc()).all()
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        records = (
+            self.db.query(GameRecord)
+            .filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == "trivia_simple",
+                GameRecord.played_at >= today,
+            )
+            .order_by(GameRecord.played_at.desc())
+            .all()
+        )
         return records
 
     def _get_answered_today_indices(self, user_id: int, game_type: str) -> set:
         """Retorna set de indices de preguntas ya respondidas hoy para un game_type."""
-        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        records = self.db.query(GameRecord).filter(
-            GameRecord.user_id == user_id,
-            GameRecord.game_type == game_type,
-            GameRecord.played_at >= today
-        ).all()
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        records = (
+            self.db.query(GameRecord)
+            .filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type == game_type,
+                GameRecord.played_at >= today,
+            )
+            .all()
+        )
         indices = set()
         for rec in records:
             result_str = rec.result or ""
@@ -1279,9 +1440,9 @@ class GameService:
             return []
 
         try:
-            with open(questions_path, 'r', encoding='utf-8') as f:
+            with open(questions_path, encoding="utf-8") as f:
                 data = json.load(f)
-                questions = data if isinstance(data, list) else data.get('questions', [])
+                questions = data if isinstance(data, list) else data.get("questions", [])
                 self._simple_questions[category_id] = questions
         except Exception as e:
             logger.error(f"Error loading trivia simple questions: {e}")
@@ -1296,7 +1457,7 @@ class GameService:
         if not questions:
             return None, -1
 
-        answered = self._get_answered_today_indices(user_id, 'trivia_simple')
+        answered = self._get_answered_today_indices(user_id, "trivia_simple")
         available = [i for i in range(len(questions)) if i not in answered]
         if not available:
             return None, -2
@@ -1315,14 +1476,14 @@ class GameService:
                 break
         return streak
 
-    def get_question_by_simple_index(self, index: int, category_id: str) -> Optional[dict]:
+    def get_question_by_simple_index(self, index: int, category_id: str) -> dict | None:
         """Retorna pregunta simple por indice y categoria."""
         questions = self.load_trivia_simple_questions(category_id)
         if 0 <= index < len(questions):
             return questions[index]
         return None
 
-    def _get_simple_streak_message(self, streak: int) -> Optional[str]:
+    def _get_simple_streak_message(self, streak: int) -> str | None:
         """Obtiene mensaje de racha actual segun nivel alcanzado."""
         if streak < 2:
             return None
@@ -1336,59 +1497,76 @@ class GameService:
             level = 3
         else:
             level = 2
-        templates = self.TRIVIA_SIMPLE_TEMPLATES['streak_messages'].get(level, ["!Racha de {streak}!"])
+        templates = self.TRIVIA_SIMPLE_TEMPLATES["streak_messages"].get(
+            level, ["!Racha de {streak}!"]
+        )
         return self._select_template(templates).format(streak=streak)
 
     def get_trivia_simple_entry_data(self, user_id: int) -> dict:
         """Obtiene datos enriquecidos para la entrada de trivia simple."""
         limits = self.get_daily_limits(user_id)
         played = len(self._get_today_simple_trivia_records(user_id))
-        remaining = max(0, limits['trivia_simple_limit'] - played)
+        remaining = max(0, limits["trivia_simple_limit"] - played)
         streak = self._get_simple_trivia_streak(user_id)
 
         can_play = remaining > 0
         limit_message = None
         if not can_play:
-            limit_message = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['limit_reached'])
+            limit_message = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["limit_reached"])
 
-        logger.info(f"game_service - get_trivia_simple_entry_data - {user_id} - remaining:{remaining}, streak:{streak}")
+        logger.info(
+            f"game_service - get_trivia_simple_entry_data - {user_id} - remaining:{remaining}, streak:{streak}"
+        )
 
         return {
-            'title': self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['entry_title']),
-            'intro': self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['entry_intro']),
-            'counter_template': self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['counter']),
-            'remaining': remaining,
-            'limit': limits['trivia_simple_limit'],
-            'current_streak': streak,
-            'is_vip': self.is_user_vip(user_id),
-            'can_play': can_play,
-            'limit_message': limit_message
+            "title": self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["entry_title"]),
+            "intro": self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["entry_intro"]),
+            "counter_template": self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["counter"]),
+            "remaining": remaining,
+            "limit": limits["trivia_simple_limit"],
+            "current_streak": streak,
+            "is_vip": self.is_user_vip(user_id),
+            "can_play": can_play,
+            "limit_message": limit_message,
         }
 
-    def play_trivia_simple(self, user_id: int, question_idx: int,
-                             answer_idx: int, category_id: str) -> Dict[str, Any]:
+    def play_trivia_simple(
+        self, user_id: int, question_idx: int, answer_idx: int, category_id: str
+    ) -> dict[str, Any]:
         """
         Procesa respuesta de trivia simple con rachas y bonus.
         Returns: {correct, besitos, streak_bonus, message, ...}
         """
-        can_play, played, limit, limit_msg = self.can_play(user_id, 'trivia_simple')
+        can_play, played, limit, limit_msg = self.can_play(user_id, "trivia_simple")
         if not can_play:
-            limit_template = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['limit_reached'])
+            limit_template = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["limit_reached"])
             full_message = limit_template + "\n\n" + limit_msg
             return {
-                'correct': False, 'besitos': 0, 'streak_bonus': 0,
-                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': full_message, 'message_parts': {},
-                'remaining_after': 0, 'limit_reached': True
+                "correct": False,
+                "besitos": 0,
+                "streak_bonus": 0,
+                "previous_streak": 0,
+                "new_streak": 0,
+                "streak_message": None,
+                "message": full_message,
+                "message_parts": {},
+                "remaining_after": 0,
+                "limit_reached": True,
             }
 
         question = self.get_question_by_simple_index(question_idx, category_id)
         if not question:
             return {
-                'correct': False, 'besitos': 0, 'streak_bonus': 0,
-                'previous_streak': 0, 'new_streak': 0, 'streak_message': None,
-                'message': "Pregunta simple no encontrada.", 'message_parts': {},
-                'remaining_after': max(0, limit - played), 'limit_reached': False
+                "correct": False,
+                "besitos": 0,
+                "streak_bonus": 0,
+                "previous_streak": 0,
+                "new_streak": 0,
+                "streak_message": None,
+                "message": "Pregunta simple no encontrada.",
+                "message_parts": {},
+                "remaining_after": max(0, limit - played),
+                "limit_reached": False,
             }
 
         previous_streak = self._get_simple_trivia_streak(user_id)
@@ -1412,7 +1590,7 @@ class GameService:
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia simple (racha: {new_streak})"
+                description=f"Victoria en trivia simple (racha: {new_streak})",
             )
 
         streak_bonus = 0
@@ -1423,15 +1601,15 @@ class GameService:
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia simple"
+                description=f"Bonus por racha de {new_streak} en trivia simple",
             )
 
         # Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
             user_id=user_id,
-            game_type='trivia_simple',
+            game_type="trivia_simple",
             result=f"simple_question_{question_idx}",
-            payout=besitos + streak_bonus
+            payout=besitos + streak_bonus,
         )
         self.db.add(record)
 
@@ -1439,11 +1617,12 @@ class GameService:
         promo_code_info = None
         if is_correct:
             from services.streak_promotion_service import StreakPromotionService
+
             promo_service = StreakPromotionService(self.db)
             try:
                 promo_code_info = promo_service.claim_for_streak(
                     user_id=user_id,
-                    game_type='trivia_simple',
+                    game_type="trivia_simple",
                     streak=new_streak,
                     category_id=category_id,
                 )
@@ -1453,8 +1632,13 @@ class GameService:
         remaining_after = max(0, limit - (played + 1))
 
         message_parts = self._build_trivia_simple_message_parts(
-            is_correct, question, besitos, streak_message, streak_bonus,
-            remaining_after, promo_code=promo_code_info
+            is_correct,
+            question,
+            besitos,
+            streak_message,
+            streak_bonus,
+            remaining_after,
+            promo_code=promo_code_info,
         )
         message = self._build_trivia_simple_message(message_parts)
 
@@ -1465,39 +1649,47 @@ class GameService:
         elif promo_code_info:
             session_state = self._build_streak_claim_state(user_id, promo_code_info)
 
-        logger.info(f"game_service - play_trivia_simple - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}")
+        logger.info(
+            f"game_service - play_trivia_simple - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}"
+        )
 
         # Commit del registro dejugada
         self.db.commit()
 
         return {
-            'correct': is_correct,
-            'besitos': besitos,
-            'streak_bonus': streak_bonus,
-            'besitos_total': besitos + streak_bonus,
-            'previous_streak': previous_streak,
-            'new_streak': new_streak,
-            'streak_message': streak_message,
-            'promo_code': promo_code_info,
-            'message': message,
-            'message_parts': message_parts,
-            'remaining_after': remaining_after,
-            'limit_reached': False,
-            'session_state': session_state,
+            "correct": is_correct,
+            "besitos": besitos,
+            "streak_bonus": streak_bonus,
+            "besitos_total": besitos + streak_bonus,
+            "previous_streak": previous_streak,
+            "new_streak": new_streak,
+            "streak_message": streak_message,
+            "promo_code": promo_code_info,
+            "message": message,
+            "message_parts": message_parts,
+            "remaining_after": remaining_after,
+            "limit_reached": False,
+            "session_state": session_state,
         }
 
-    def _build_trivia_simple_message_parts(self, is_correct: bool, question: dict,
-                                              besitos: int, streak_message: Optional[str],
-                                              streak_bonus: int, remaining: int,
-                                              promo_code: Optional[dict] = None) -> dict:
+    def _build_trivia_simple_message_parts(
+        self,
+        is_correct: bool,
+        question: dict,
+        besitos: int,
+        streak_message: str | None,
+        streak_bonus: int,
+        remaining: int,
+        promo_code: dict | None = None,
+    ) -> dict:
         """Construye las partes del mensaje de trivia simple."""
-        correct_letter = ["A", "B", "C", "D"][question['answer']]
+        correct_letter = ["A", "B", "C", "D"][question["answer"]]
         correct_answer_text = f"{correct_letter}) {question['opts'][question['answer']]}"
 
         if is_correct:
-            header = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['correct'])
+            header = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["correct"])
         else:
-            header_template = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES['incorrect'])
+            header_template = self._select_template(self.TRIVIA_SIMPLE_TEMPLATES["incorrect"])
             header = header_template.format(correct_answer=correct_answer_text)
 
         reward_text = None
@@ -1516,8 +1708,8 @@ class GameService:
 
         # Phase 17: Promo code line
         promo_code_line = None
-        if promo_code and promo_code.get('code'):
-            code = promo_code['code']
+        if promo_code and promo_code.get("code"):
+            code = promo_code["code"]
             promo_code_line = (
                 f"\U0001f39f️ <b>¡Código de descuento ganado!</b>\n"
                 f"<i>Su racha le ha otorgado: <code>{code}</code></i>\n"
@@ -1525,38 +1717,36 @@ class GameService:
             )
 
         return {
-            'header': header,
-            'reward_text': reward_text,
-            'streak_text': streak_text,
-            'encouragement': encouragement,
-            'promo_code_line': promo_code_line,
+            "header": header,
+            "reward_text": reward_text,
+            "streak_text": streak_text,
+            "encouragement": encouragement,
+            "promo_code_line": promo_code_line,
         }
 
     def _build_trivia_simple_message(self, parts: dict) -> str:
         """Construye mensaje final de trivia simple."""
-        lines = [parts['header']]
-        if parts.get('reward_text'):
-            lines.extend(['', parts['reward_text']])
-        if parts.get('streak_text'):
-            lines.extend(['', parts['streak_text']])
-        if parts.get('promo_code_line'):
-            lines.extend(['', parts['promo_code_line']])
-        if parts.get('encouragement'):
-            lines.extend(['', parts['encouragement']])
-        return '\n'.join(lines)
+        lines = [parts["header"]]
+        if parts.get("reward_text"):
+            lines.extend(["", parts["reward_text"]])
+        if parts.get("streak_text"):
+            lines.extend(["", parts["streak_text"]])
+        if parts.get("promo_code_line"):
+            lines.extend(["", parts["promo_code_line"]])
+        if parts.get("encouragement"):
+            lines.extend(["", parts["encouragement"]])
+        return "\n".join(lines)
 
-    def get_active_special_info(self) -> Optional[dict]:
+    def get_active_special_info(self) -> dict | None:
         """Consulta categoria activa y retorna {category_id, display_name} o None."""
         from services.trivia_service import TriviaCategoryService
+
         tcs = TriviaCategoryService(self.db)
         try:
             active = tcs.get_active_category()
             if not active:
                 return None
-            return {
-                'category_id': active['category_id'],
-                'display_name': active['display_name']
-            }
+            return {"category_id": active["category_id"], "display_name": active["display_name"]}
         finally:
             tcs.close()
 

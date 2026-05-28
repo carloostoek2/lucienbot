@@ -4,15 +4,18 @@ Analytics Handlers - Lucien Bot
 Comandos de estadisticas y exportacion para Custodios.
 Solo Custodios (ADMIN_IDS) pueden acceder.
 """
+
+import logging
+
 from aiogram import Router
-from aiogram.types import Message
-from aiogram.filters import Command
 from aiogram.enums import ParseMode
+from aiogram.filters import Command
+from aiogram.types import Message
+
 from config.settings import bot_config
 from services import get_service
 from services.analytics_service import AnalyticsService
 from utils.lucien_voice import LucienVoice
-import logging
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -27,19 +30,13 @@ def is_admin(user_id: int) -> bool:
 async def show_stats(message: Message):
     """Muestra dashboard de metricas del bot."""
     if not is_admin(message.from_user.id):
-        await message.answer(
-            LucienVoice.analytics_access_denied(),
-            parse_mode=ParseMode.HTML
-        )
+        await message.answer(LucienVoice.analytics_access_denied(), parse_mode=ParseMode.HTML)
         return
 
     try:
         with get_service(AnalyticsService) as svc:
             stats = svc.get_dashboard_stats()
-        await message.answer(
-            LucienVoice.analytics_dashboard(stats),
-            parse_mode=ParseMode.HTML
-        )
+        await message.answer(LucienVoice.analytics_dashboard(stats), parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Error showing stats: {e}")
         await message.answer(LucienVoice.error_message())
@@ -49,10 +46,7 @@ async def show_stats(message: Message):
 async def export_data(message: Message):
     """Exporta datos de visitantes como CSV."""
     if not is_admin(message.from_user.id):
-        await message.answer(
-            LucienVoice.analytics_access_denied(),
-            parse_mode=ParseMode.HTML
-        )
+        await message.answer(LucienVoice.analytics_access_denied(), parse_mode=ParseMode.HTML)
         return
 
     # Default to users export
@@ -71,10 +65,7 @@ async def export_data(message: Message):
                 filename = "actividad_export.csv"
 
         if csv_path is None:
-            await message.answer(
-                LucienVoice.export_no_data(),
-                parse_mode=ParseMode.HTML
-            )
+            await message.answer(LucienVoice.export_no_data(), parse_mode=ParseMode.HTML)
             return
 
         # Send CSV via bot

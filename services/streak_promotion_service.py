@@ -4,25 +4,26 @@ Streak Promotion Service - Lucien Bot
 Gestiona promociones por racha de trivia: creacion, activacion, reclamo automatico
 de codigos de descuento cuando un usuario alcanza una racha objetivo.
 """
+
+import json
 import logging
 import secrets
-import json
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
+
+from models.database import SessionLocal
 from models.models import (
     StreakPromotion,
-    StreakPromotionLevel,
     StreakPromotionCode,
     StreakPromotionCodeStatus,
-    StreakPromotionStatus,
+    StreakPromotionLevel,
     StreakPromotionRedemption,
+    StreakPromotionStatus,
     StreakSession,
 )
-from models.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -81,19 +82,36 @@ class StreakPromotionService:
             f"level_id:{level.id} - count:{generated}"
         )
 
-    def create_promotion(self, name: str, description: str, levels: list,
-                         duration_mode: str, start_date=None, end_date=None,
-                         duration_hours=None, category_id=None,
-                         include_general=True, include_vip=False,
-                         include_simple=True, created_by=None) -> StreakPromotion:
+    def create_promotion(
+        self,
+        name: str,
+        description: str,
+        levels: list,
+        duration_mode: str,
+        start_date=None,
+        end_date=None,
+        duration_hours=None,
+        category_id=None,
+        include_general=True,
+        include_vip=False,
+        include_simple=True,
+        created_by=None,
+    ) -> StreakPromotion:
         """Crea una promocion por racha con niveles y codigos pre-generados."""
         db = self._get_db()
         promotion = StreakPromotion(
-            name=name, description=description, duration_mode=duration_mode,
-            start_date=start_date, end_date=end_date, duration_hours=duration_hours,
-            category_id=category_id, include_general=include_general,
-            include_vip=include_vip, include_simple=include_simple,
-            created_by=created_by, status=StreakPromotionStatus.PENDING,
+            name=name,
+            description=description,
+            duration_mode=duration_mode,
+            start_date=start_date,
+            end_date=end_date,
+            duration_hours=duration_hours,
+            category_id=category_id,
+            include_general=include_general,
+            include_vip=include_vip,
+            include_simple=include_simple,
+            created_by=created_by,
+            status=StreakPromotionStatus.PENDING,
         )
         db.add(promotion)
         db.flush()
@@ -109,18 +127,17 @@ class StreakPromotionService:
             self._pre_generate_codes(level)
         db.commit()
         db.refresh(promotion)
-        logger.info(f"streak_promotion_service - create_promotion - name:{name} - levels:{len(levels)}")
+        logger.info(
+            f"streak_promotion_service - create_promotion - name:{name} - levels:{len(levels)}"
+        )
         return promotion
 
-    def get_promotion(self, promo_id: int) -> Optional[StreakPromotion]:
+    def get_promotion(self, promo_id: int) -> StreakPromotion | None:
         """Obtiene una promocion por su ID."""
         db = self._get_db()
         return (
             db.query(StreakPromotion)
-            .options(
-                joinedload(StreakPromotion.levels)
-                .joinedload(StreakPromotionLevel.codes)
-            )
+            .options(joinedload(StreakPromotion.levels).joinedload(StreakPromotionLevel.codes))
             .filter(StreakPromotion.id == promo_id)
             .first()
         )
@@ -130,10 +147,7 @@ class StreakPromotionService:
         db = self._get_db()
         return (
             db.query(StreakPromotion)
-            .options(
-                joinedload(StreakPromotion.levels)
-                .joinedload(StreakPromotionLevel.codes)
-            )
+            .options(joinedload(StreakPromotion.levels).joinedload(StreakPromotionLevel.codes))
             .order_by(StreakPromotion.created_at.desc())
             .all()
         )
@@ -143,12 +157,13 @@ class StreakPromotionService:
     ) -> list[StreakPromotion]:
         """Retorna promociones activas, opcionalmente filtradas por tipo y categoria."""
         db = self._get_db()
-        query = db.query(StreakPromotion).options(
-            joinedload(StreakPromotion.levels)
-            .joinedload(StreakPromotionLevel.codes)
-        ).filter(
-            StreakPromotion.is_active == True,
-            StreakPromotion.status == StreakPromotionStatus.ACTIVE,
+        query = (
+            db.query(StreakPromotion)
+            .options(joinedload(StreakPromotion.levels).joinedload(StreakPromotionLevel.codes))
+            .filter(
+                StreakPromotion.is_active == True,
+                StreakPromotion.status == StreakPromotionStatus.ACTIVE,
+            )
         )
         if game_type:
             game_map = {
@@ -177,9 +192,7 @@ class StreakPromotionService:
         )
         return existing is not None
 
-    def _get_available_code(
-        self, level_id: int
-    ) -> Optional[StreakPromotionCode]:
+    def _get_available_code(self, level_id: int) -> StreakPromotionCode | None:
         """Obtiene un codigo disponible para el nivel dado."""
         db = self._get_db()
         return (
@@ -192,8 +205,9 @@ class StreakPromotionService:
             .first()
         )
 
-    def claim_for_streak(self, user_id: int, game_type: str, streak: int,
-                         category_id: str = None) -> Optional[dict]:
+    def claim_for_streak(
+        self, user_id: int, game_type: str, streak: int, category_id: str = None
+    ) -> dict | None:
         """Reclama un codigo de descuento cuando el usuario alcanza una racha objetivo."""
         db = self._get_db()
         promotions = self.get_active_promotions(game_type, category_id)
@@ -208,7 +222,7 @@ class StreakPromotionService:
                     continue
                 code.status = StreakPromotionCodeStatus.DELIVERED
                 code.user_id = user_id
-                code.delivered_at = datetime.now(timezone.utc)
+                code.delivered_at = datetime.now(UTC)
                 # Phase 18: Link code to active session
                 session = self._get_or_create_session(user_id, promo.id)
                 code.session_id = session.id
@@ -216,18 +230,24 @@ class StreakPromotionService:
                 codes_list.append(code.id)
                 session.codes_delivered = json.dumps(codes_list)
                 redemption = StreakPromotionRedemption(
-                    user_id=user_id, level_id=level.id, code_id=code.id,
+                    user_id=user_id,
+                    level_id=level.id,
+                    code_id=code.id,
                     streak_achieved=streak,
                 )
                 db.add(redemption)
                 db.commit()
-                logger.info(f"streak_promotion_service - claim_for_streak - user:{user_id} - game_type:{game_type} - streak:{streak} - result:claimed")
+                logger.info(
+                    f"streak_promotion_service - claim_for_streak - user:{user_id} - game_type:{game_type} - streak:{streak} - result:claimed"
+                )
                 return {
                     "code": code.code_value,
                     "discount_pct": level.discount_pct,
                     "promotion_name": promo.name,
                 }
-        logger.info(f"streak_promotion_service - claim_for_streak - user:{user_id} - game_type:{game_type} - streak:{streak} - result:none")
+        logger.info(
+            f"streak_promotion_service - claim_for_streak - user:{user_id} - game_type:{game_type} - streak:{streak} - result:none"
+        )
         return None
 
     def calculate_protection_cost(self, streak: int) -> int:
@@ -237,14 +257,14 @@ class StreakPromotionService:
         """
         return 5 + (streak // 3) * 5
 
-    def get_active_session(self, user_id: int) -> Optional[StreakSession]:
+    def get_active_session(self, user_id: int) -> StreakSession | None:
         """Retorna la sesion activa de promociones del usuario, o None.
         NO filtra por expires_at=None para que las sesiones con timeout
         (expires_at futuro) sigan siendo visibles y se pueda verificar
         la expiracion en la logica posterior.
         """
         db = self._get_db()
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         session = (
             db.query(StreakSession)
             .filter(
@@ -300,6 +320,7 @@ class StreakPromotionService:
         cost = self.calculate_protection_cost(streak)
         from models.models import TransactionSource
         from services.besito_service import BesitoService
+
         besito_service = BesitoService(db)
         if not besito_service.debit_besitos(
             user_id=user_id,
@@ -332,9 +353,7 @@ class StreakPromotionService:
         code_ids = json.loads(session.codes_delivered or "[]")
         cancelled = 0
         for code_id in code_ids:
-            code = db.query(StreakPromotionCode).filter(
-                StreakPromotionCode.id == code_id
-            ).first()
+            code = db.query(StreakPromotionCode).filter(StreakPromotionCode.id == code_id).first()
             if code and code.status == StreakPromotionCodeStatus.DELIVERED:
                 code.status = StreakPromotionCodeStatus.CANCELLED
                 cancelled += 1
@@ -356,7 +375,7 @@ class StreakPromotionService:
             return
         if not retire:
             self.cancel_session_codes(session.id)
-        session.expires_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        session.expires_at = datetime.now(UTC).replace(tzinfo=None)
         db.flush()
         logger.info(
             f"streak_promotion_service - close_session - "
@@ -375,23 +394,17 @@ class StreakPromotionService:
         session.is_in_risk_mode = True
         db.commit()
         logger.info(
-            f"streak_promotion_service - set_risk_mode - "
-            f"user:{user_id} - session:{session.id}"
+            f"streak_promotion_service - set_risk_mode - " f"user:{user_id} - session:{session.id}"
         )
         return True
 
     def activate(self, promo_id: int) -> bool:
         """Activa una promocion y su categoria asociada si existe."""
         db = self._get_db()
-        promotion = (
-            db.query(StreakPromotion)
-            .filter(StreakPromotion.id == promo_id)
-            .first()
-        )
+        promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - activate - "
-                f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - activate - " f"promo_id:{promo_id} - not_found"
             )
             return False
 
@@ -407,24 +420,16 @@ class StreakPromotionService:
             )
 
         db.commit()
-        logger.info(
-            f"streak_promotion_service - activate - "
-            f"promo_id:{promo_id} - activated"
-        )
+        logger.info(f"streak_promotion_service - activate - " f"promo_id:{promo_id} - activated")
         return True
 
     def deactivate(self, promo_id: int) -> bool:
         """Desactiva una promocion y su categoria si no hay otras activas usandola."""
         db = self._get_db()
-        promotion = (
-            db.query(StreakPromotion)
-            .filter(StreakPromotion.id == promo_id)
-            .first()
-        )
+        promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - deactivate - "
-                f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - deactivate - " f"promo_id:{promo_id} - not_found"
             )
             return False
 
@@ -445,14 +450,11 @@ class StreakPromotionService:
             if not other_active:
                 from services.trivia_service import TriviaCategoryService
 
-                TriviaCategoryService(db).deactivate(
-                    category_id=promotion.category_id
-                )
+                TriviaCategoryService(db).deactivate(category_id=promotion.category_id)
 
         db.commit()
         logger.info(
-            f"streak_promotion_service - deactivate - "
-            f"promo_id:{promo_id} - deactivated"
+            f"streak_promotion_service - deactivate - " f"promo_id:{promo_id} - deactivated"
         )
         return True
 
@@ -460,15 +462,10 @@ class StreakPromotionService:
         """Elimina una promocion permanentemente. Los niveles, codigos
         y redenciones se eliminan en cascada."""
         db = self._get_db()
-        promotion = (
-            db.query(StreakPromotion)
-            .filter(StreakPromotion.id == promo_id)
-            .first()
-        )
+        promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - delete_promotion - "
-                f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - delete_promotion - " f"promo_id:{promo_id} - not_found"
             )
             return False
 
@@ -488,23 +485,17 @@ class StreakPromotionService:
             )
 
         logger.info(
-            f"streak_promotion_service - delete_promotion - "
-            f"promo_id:{promo_id} - deleted"
+            f"streak_promotion_service - delete_promotion - " f"promo_id:{promo_id} - deleted"
         )
         return True
 
     def pause_promotion(self, promo_id: int) -> bool:
         """Pausa una promocion temporalmente."""
         db = self._get_db()
-        promotion = (
-            db.query(StreakPromotion)
-            .filter(StreakPromotion.id == promo_id)
-            .first()
-        )
+        promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - pause_promotion - "
-                f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - pause_promotion - " f"promo_id:{promo_id} - not_found"
             )
             return False
 
@@ -512,8 +503,7 @@ class StreakPromotionService:
         promotion.is_active = False
         db.commit()
         logger.info(
-            f"streak_promotion_service - pause_promotion - "
-            f"promo_id:{promo_id} - paused"
+            f"streak_promotion_service - pause_promotion - " f"promo_id:{promo_id} - paused"
         )
         return True
 
@@ -533,9 +523,7 @@ class StreakPromotionService:
         for level in promotion.levels:
             total_codes = len(level.codes)
             delivered = sum(
-                1
-                for c in level.codes
-                if c.status == StreakPromotionCodeStatus.DELIVERED
+                1 for c in level.codes if c.status == StreakPromotionCodeStatus.DELIVERED
             )
             redemptions = (
                 db.query(StreakPromotionRedemption)
@@ -554,9 +542,7 @@ class StreakPromotionService:
                         {
                             "user_id": r.user_id,
                             "streak_achieved": r.streak_achieved,
-                            "redeemed_at": r.redeemed_at.isoformat()
-                            if r.redeemed_at
-                            else None,
+                            "redeemed_at": r.redeemed_at.isoformat() if r.redeemed_at else None,
                         }
                         for r in redemptions
                     ],

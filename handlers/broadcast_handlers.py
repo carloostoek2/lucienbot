@@ -3,17 +3,28 @@ Handlers de Broadcasting - Lucien Bot
 
 Flujo conversacional completo para enviar mensajes con reacciones.
 """
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+import logging
+
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
 from config.settings import bot_config
+from keyboards.callback_data import (
+    BroadcastChannelCallback,
+    BroadcastProtectCallback,
+    ToggleReactionCallback,
+)
+from keyboards.inline_keyboards import (
+    back_keyboard,
+    broadcast_back_keyboard,
+    cancel_keyboard,
+)
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
-from keyboards.inline_keyboards import back_keyboard, confirmation_keyboard, cancel_keyboard, broadcast_back_keyboard
-from keyboards.callback_data import BroadcastChannelCallback, ToggleReactionCallback, BroadcastProtectCallback
 from utils.lucien_voice import LucienVoice
-import logging
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -38,6 +49,7 @@ class BroadcastStates(StatesGroup):
 
 # ==================== INICIAR BROADCAST ====================
 
+
 @router.callback_query(F.data == "send_broadcast", lambda cb: is_admin(cb.from_user.id))
 async def send_broadcast_start(callback: CallbackQuery, state: FSMContext):
     """Inicia el flujo de broadcast - seleccionar canal"""
@@ -49,48 +61,51 @@ async def send_broadcast_start(callback: CallbackQuery, state: FSMContext):
 
     if not channels:
         await callback.message.edit_text(
-            f"""🎩 <b>Lucien:</b>
+            """🎩 <b>Lucien:</b>
 
 <i>No hay dominios registrados para enviar mensajes...</i>
 
 👉 <i>Registre un canal primero desde el panel de administración.</i>""",
             reply_markup=back_keyboard("admin_gamification"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await callback.answer()
         return
-    
+
     # Crear botones para cada canal
     buttons = []
     for ch in channels:
         emoji = "🚪" if ch.channel_type.value == "free" else "👑"
-        buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {ch.channel_name or 'Sin nombre'}",
-            callback_data=BroadcastChannelCallback(channel_id=ch.channel_id).pack()
-        )])
-    
-    buttons.append([InlineKeyboardButton(
-        text="🔙 Cancelar",
-        callback_data="admin_gamification"
-    )])
-    
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{emoji} {ch.channel_name or 'Sin nombre'}",
+                    callback_data=BroadcastChannelCallback(channel_id=ch.channel_id).pack(),
+                )
+            ]
+        )
+
+    buttons.append([InlineKeyboardButton(text="🔙 Cancelar", callback_data="admin_gamification")])
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    
+
     await callback.message.edit_text(
-        f"""🎩 <b>Lucien:</b>
+        """🎩 <b>Lucien:</b>
 
 <i>¿A qué dominio desea enviar su mensaje?</i>
 
 📋 Seleccione el canal:""",
         reply_markup=keyboard,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await state.set_state(BroadcastStates.selecting_channel)
     await callback.answer()
 
 
 @router.callback_query(BroadcastStates.selecting_channel, BroadcastChannelCallback.filter())
-async def select_channel_for_broadcast(callback: CallbackQuery, state: FSMContext, callback_data: BroadcastChannelCallback):
+async def select_channel_for_broadcast(
+    callback: CallbackQuery, state: FSMContext, callback_data: BroadcastChannelCallback
+):
     """Canal seleccionado, pedir texto"""
     channel_id = callback_data.channel_id
 
@@ -103,12 +118,9 @@ async def select_channel_for_broadcast(callback: CallbackQuery, state: FSMContex
     if not channel:
         await callback.answer("Canal no encontrado", show_alert=True)
         return
-    
-    await state.update_data(
-        channel_id=channel_id,
-        channel_name=channel.channel_name
-    )
-    
+
+    await state.update_data(channel_id=channel_id, channel_name=channel.channel_name)
+
     try:
         await callback.message.edit_text(
             f"""🎩 <b>Lucien:</b>
@@ -122,7 +134,7 @@ Envíe el texto que desea publicar. Puede usar formato HTML:
 • &lt;i&gt;cursiva&lt;/i&gt;
 • &lt;code&gt;código&lt;/code&gt;""",
             reply_markup=broadcast_back_keyboard("waiting_text"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -137,18 +149,20 @@ Envíe el texto que desea publicar. Puede usar formato HTML:
 async def process_broadcast_text(message: Message, state: FSMContext):
     """Procesa el texto del mensaje"""
     text = message.text or message.caption or ""
-    
+
     await state.update_data(text=text)
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📎 Adjuntar foto/archivo", callback_data="attach_yes")],
-        [InlineKeyboardButton(text="⏭️ Omitir adjunto", callback_data="attach_no")],
-        [InlineKeyboardButton(text="🔙 Volver al texto", callback_data="broadcast_back_text")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
-    
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📎 Adjuntar foto/archivo", callback_data="attach_yes")],
+            [InlineKeyboardButton(text="⏭️ Omitir adjunto", callback_data="attach_no")],
+            [InlineKeyboardButton(text="🔙 Volver al texto", callback_data="broadcast_back_text")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
     await message.answer(
-        f"""🎩 <b>Lucien:</b>
+        """🎩 <b>Lucien:</b>
 
 <i>Texto recibido. ¿Desea incluir algún adjunto?</i>
 
@@ -156,7 +170,7 @@ async def process_broadcast_text(message: Message, state: FSMContext):
 
 Puede agregar una foto, video o archivo al mensaje.""",
         reply_markup=keyboard,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await state.set_state(BroadcastStates.waiting_attachment_decision)
 
@@ -178,7 +192,7 @@ Envíe el texto que desea publicar. Puede usar formato HTML:
 • &lt;i&gt;cursiva&lt;/i&gt;
 • &lt;code&gt;código&lt;/code&gt;""",
             reply_markup=broadcast_back_keyboard("waiting_text"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -194,7 +208,7 @@ async def want_attachment(callback: CallbackQuery, state: FSMContext):
     """Usuario quiere adjuntar algo"""
     try:
         await callback.message.edit_text(
-            f"""🎩 <b>Lucien:</b>
+            """🎩 <b>Lucien:</b>
 
 <i>Envíe la foto o archivo que desea adjuntar...</i>
 
@@ -205,7 +219,7 @@ Puede enviar:
 • Video
 • Documento/Archivo""",
             reply_markup=broadcast_back_keyboard("waiting_attachment"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -219,11 +233,7 @@ Puede enviar:
 @router.callback_query(BroadcastStates.waiting_attachment_decision, F.data == "attach_no")
 async def skip_attachment(callback: CallbackQuery, state: FSMContext):
     """Usuario omite adjunto"""
-    await state.update_data(
-        has_attachment=False,
-        attachment_type=None,
-        attachment_file_id=None
-    )
+    await state.update_data(has_attachment=False, attachment_type=None, attachment_file_id=None)
     await ask_for_reactions(callback, state)
 
 
@@ -232,7 +242,7 @@ async def process_attachment(message: Message, state: FSMContext):
     """Procesa el archivo adjunto"""
     file_id = None
     attachment_type = None
-    
+
     if message.photo:
         file_id = message.photo[-1].file_id  # Mejor calidad
         attachment_type = "photo"
@@ -247,40 +257,40 @@ async def process_attachment(message: Message, state: FSMContext):
         attachment_type = "animation"
     else:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>No pude reconocer el tipo de archivo.\n"
-            f"Por favor envíe una foto, video o documento...</i>",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>No pude reconocer el tipo de archivo.\n"
+            "Por favor envíe una foto, video o documento...</i>",
             reply_markup=cancel_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         return
-    
+
     await state.update_data(
-        has_attachment=True,
-        attachment_type=attachment_type,
-        attachment_file_id=file_id
+        has_attachment=True, attachment_type=attachment_type, attachment_file_id=file_id
     )
-    
+
     await ask_for_reactions(message, state)
 
 
 async def ask_for_reactions(target, state: FSMContext):
     """Pregunta si quiere agregar reacciones"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
-        [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
-    
-    text = f"""🎩 <b>Lucien:</b>
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
+            [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
+    text = """🎩 <b>Lucien:</b>
 
 <i>¿Desea incluir botones de reacción?</i>
 
 📋 <b>Paso 3 de 6:</b> Reacciones
 
 Los usuarios podrán reaccionar y recibir besitos."""
-    
+
     try:
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -291,23 +301,27 @@ Los usuarios podrán reaccionar y recibir besitos."""
             pass
         else:
             raise
-    
+
     await state.set_state(BroadcastStates.waiting_reaction_decision)
 
 
-@router.callback_query(BroadcastStates.waiting_reaction_decision, F.data == "broadcast_back_attachment")
+@router.callback_query(
+    BroadcastStates.waiting_reaction_decision, F.data == "broadcast_back_attachment"
+)
 async def back_to_attachment_decision(callback: CallbackQuery, state: FSMContext):
     """Regresar a decisión de adjunto"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📎 Adjuntar foto/archivo", callback_data="attach_yes")],
-        [InlineKeyboardButton(text="⏭️ Omitir adjunto", callback_data="attach_no")],
-        [InlineKeyboardButton(text="🔙 Volver al texto", callback_data="broadcast_back_text")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
-    
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📎 Adjuntar foto/archivo", callback_data="attach_yes")],
+            [InlineKeyboardButton(text="⏭️ Omitir adjunto", callback_data="attach_no")],
+            [InlineKeyboardButton(text="🔙 Volver al texto", callback_data="broadcast_back_text")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
     try:
         await callback.message.edit_text(
-            f"""🎩 <b>Lucien:</b>
+            """🎩 <b>Lucien:</b>
 
 <i>¿Desea incluir algún adjunto?</i>
 
@@ -315,7 +329,7 @@ async def back_to_attachment_decision(callback: CallbackQuery, state: FSMContext
 
 Puede agregar una foto, video o archivo al mensaje.""",
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -338,13 +352,13 @@ async def want_reactions(callback: CallbackQuery, state: FSMContext):
     if not emojis:
         try:
             await callback.message.edit_text(
-                f"""🎩 <b>Lucien:</b>
+                """🎩 <b>Lucien:</b>
 
 <i>No hay emojis configurados para reacciones...</i>
 
 👉 <i>Configure emojis primero desde "Configurar besitos".</i>""",
                 reply_markup=back_keyboard("admin_gamification"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception as e:
             if "message is not modified" in str(e).lower():
@@ -354,10 +368,10 @@ async def want_reactions(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         await callback.answer()
         return
-    
+
     # Guardar emojis seleccionados temporalmente
     await state.update_data(selected_emojis=[])
-    
+
     await show_reaction_selection(callback, state)
     await callback.answer()
 
@@ -370,35 +384,32 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
     finally:
         broadcast_service.close()
     data = await state.get_data()
-    selected = data.get('selected_emojis', [])
-    
+    selected = data.get("selected_emojis", [])
+
     buttons = []
     for emoji in emojis:
         is_selected = emoji.id in selected
         check = "✅ " if is_selected else "⬜ "
-        buttons.append([InlineKeyboardButton(
-            text=f"{check}{emoji.emoji} = {emoji.besito_value} besitos",
-            callback_data=ToggleReactionCallback(emoji_id=emoji.id).pack()
-        )])
-    
-    buttons.append([InlineKeyboardButton(
-        text="✅ Continuar",
-        callback_data="reactions_selected"
-    )])
-    buttons.append([InlineKeyboardButton(
-        text="🔙 Volver",
-        callback_data="broadcast_back_reactions"
-    )])
-    buttons.append([InlineKeyboardButton(
-        text="❌ Cancelar",
-        callback_data="admin_gamification"
-    )])
-    
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{check}{emoji.emoji} = {emoji.besito_value} besitos",
+                    callback_data=ToggleReactionCallback(emoji_id=emoji.id).pack(),
+                )
+            ]
+        )
+
+    buttons.append([InlineKeyboardButton(text="✅ Continuar", callback_data="reactions_selected")])
+    buttons.append(
+        [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_reactions")]
+    )
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")])
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    
+
     try:
         await callback.message.edit_text(
-            f"""🎩 <b>Lucien:</b>
+            """🎩 <b>Lucien:</b>
 
 <i>Seleccione los emojis para este mensaje...</i>
 
@@ -406,7 +417,7 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
 
 Toque para seleccionar/deseleccionar:""",
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -419,16 +430,18 @@ Toque para seleccionar/deseleccionar:""",
 @router.callback_query(BroadcastStates.selecting_reactions, F.data == "broadcast_back_reactions")
 async def back_from_reaction_selection(callback: CallbackQuery, state: FSMContext):
     """Regresar desde selección de reacciones"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
-        [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
-    
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
+            [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
     try:
         await callback.message.edit_text(
-            f"""🎩 <b>Lucien:</b>
+            """🎩 <b>Lucien:</b>
 
 <i>¿Desea incluir botones de reacción?</i>
 
@@ -436,7 +449,7 @@ async def back_from_reaction_selection(callback: CallbackQuery, state: FSMContex
 
 Los usuarios podrán reaccionar y recibir besitos.""",
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -448,17 +461,19 @@ Los usuarios podrán reaccionar y recibir besitos.""",
 
 
 @router.callback_query(BroadcastStates.selecting_reactions, ToggleReactionCallback.filter())
-async def toggle_reaction_selection(callback: CallbackQuery, state: FSMContext, callback_data: ToggleReactionCallback):
+async def toggle_reaction_selection(
+    callback: CallbackQuery, state: FSMContext, callback_data: ToggleReactionCallback
+):
     """Toggle selección de emoji"""
     emoji_id = callback_data.emoji_id
     data = await state.get_data()
-    selected = data.get('selected_emojis', [])
-    
+    selected = data.get("selected_emojis", [])
+
     if emoji_id in selected:
         selected.remove(emoji_id)
     else:
         selected.append(emoji_id)
-    
+
     await state.update_data(selected_emojis=selected)
     await show_reaction_selection(callback, state)
     await callback.answer()
@@ -468,12 +483,12 @@ async def toggle_reaction_selection(callback: CallbackQuery, state: FSMContext, 
 async def reactions_selected(callback: CallbackQuery, state: FSMContext):
     """Emojis seleccionados, continuar"""
     data = await state.get_data()
-    selected = data.get('selected_emojis', [])
-    
+    selected = data.get("selected_emojis", [])
+
     if not selected:
         await callback.answer("Seleccione al menos un emoji", show_alert=True)
         return
-    
+
     await ask_for_protection(callback, state)
     await callback.answer()
 
@@ -488,14 +503,26 @@ async def skip_reactions(callback: CallbackQuery, state: FSMContext):
 
 async def ask_for_protection(target, state: FSMContext):
     """Pregunta por protección del mensaje"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes").pack())],
-        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no").pack())],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔒 Proteger mensaje",
+                    callback_data=BroadcastProtectCallback(action="yes").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⏭️ Sin protección",
+                    callback_data=BroadcastProtectCallback(action="no").pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
 
-    text = f"""🎩 <b>Lucien:</b>
+    text = """🎩 <b>Lucien:</b>
 
 <i>¿Desea proteger el mensaje?</i>
 
@@ -519,38 +546,50 @@ async def ask_for_protection(target, state: FSMContext):
     await state.set_state(BroadcastStates.waiting_protection_decision)
 
 
-@router.callback_query(BroadcastStates.waiting_protection_decision, BroadcastProtectCallback.filter())
-async def set_protection(callback: CallbackQuery, state: FSMContext, callback_data: BroadcastProtectCallback):
+@router.callback_query(
+    BroadcastStates.waiting_protection_decision, BroadcastProtectCallback.filter()
+)
+async def set_protection(
+    callback: CallbackQuery, state: FSMContext, callback_data: BroadcastProtectCallback
+):
     """Establece protección y muestra preview"""
     is_protected = callback_data.action == "yes"
     await state.update_data(is_protected=is_protected)
-    
+
     await show_broadcast_preview(callback, state)
     await callback.answer()
 
 
-@router.callback_query(BroadcastStates.waiting_protection_decision, F.data == "broadcast_back_protection")
+@router.callback_query(
+    BroadcastStates.waiting_protection_decision, F.data == "broadcast_back_protection"
+)
 async def back_from_protection(callback: CallbackQuery, state: FSMContext):
     """Regresar desde protección a reacciones"""
     data = await state.get_data()
-    has_reactions = len(data.get('selected_emojis', [])) > 0
-    
+    has_reactions = len(data.get("selected_emojis", [])) > 0
+
     if has_reactions:
         # Si tiene reacciones, volver a selección
         await state.update_data(selected_emojis=[])
         await show_reaction_selection(callback, state)
     else:
         # Si no tiene reacciones, volver a decisión de reacciones
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
-            [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-        ])
-        
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💋 Sí, agregar reacciones", callback_data="reaction_yes"
+                    )
+                ],
+                [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
+                [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+            ]
+        )
+
         try:
             await callback.message.edit_text(
-                f"""🎩 <b>Lucien:</b>
+                """🎩 <b>Lucien:</b>
 
 <i>¿Desea incluir botones de reacción?</i>
 
@@ -558,7 +597,7 @@ async def back_from_protection(callback: CallbackQuery, state: FSMContext):
 
 Los usuarios podrán reaccionar y recibir besitos.""",
                 reply_markup=keyboard,
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception as e:
             if "message is not modified" in str(e).lower():
@@ -572,13 +611,13 @@ Los usuarios podrán reaccionar y recibir besitos.""",
 async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
     """Muestra preview del mensaje antes de enviar"""
     data = await state.get_data()
-    
+
     # Construir preview
-    preview_text = data.get('text', '')
-    has_attachment = data.get('has_attachment', False)
-    has_reactions = len(data.get('selected_emojis', [])) > 0
-    is_protected = data.get('is_protected', False)
-    
+    preview_text = data.get("text", "")
+    has_attachment = data.get("has_attachment", False)
+    has_reactions = len(data.get("selected_emojis", [])) > 0
+    is_protected = data.get("is_protected", False)
+
     info_text = f"""🎩 <b>Lucien:</b>
 
 <i>Así se verá su mensaje en el canal...</i>
@@ -599,19 +638,17 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
 ---
 
 <i>¿Desea enviar este mensaje?</i>"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Confirmar", callback_data="confirm_broadcast")],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_preview")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
-    
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Confirmar", callback_data="confirm_broadcast")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_preview")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
     try:
-        await callback.message.edit_text(
-            info_text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
+        await callback.message.edit_text(info_text, reply_markup=keyboard, parse_mode="HTML")
     except Exception as e:
         if "message is not modified" in str(e).lower():
             pass
@@ -623,16 +660,28 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(BroadcastStates.confirming, F.data == "broadcast_back_preview")
 async def back_from_preview(callback: CallbackQuery, state: FSMContext):
     """Regresar desde preview a protección"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔒 Proteger mensaje", callback_data=BroadcastProtectCallback(action="yes").pack())],
-        [InlineKeyboardButton(text="⏭️ Sin protección", callback_data=BroadcastProtectCallback(action="no").pack())],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
-        [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")]
-    ])
-    
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔒 Proteger mensaje",
+                    callback_data=BroadcastProtectCallback(action="yes").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⏭️ Sin protección",
+                    callback_data=BroadcastProtectCallback(action="no").pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_protection")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
     try:
         await callback.message.edit_text(
-            f"""🎩 <b>Lucien:</b>
+            """🎩 <b>Lucien:</b>
 
 <i>¿Desea proteger el mensaje?</i>
 
@@ -642,7 +691,7 @@ async def back_from_preview(callback: CallbackQuery, state: FSMContext):
 
 ⚠️ <b>Nota:</b> La protección solo funciona en canales con contenido protegido habilitado.""",
             reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     except Exception as e:
         if "message is not modified" in str(e).lower():
@@ -658,13 +707,13 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
     """Envía el mensaje al canal"""
     data = await state.get_data()
 
-    channel_id = data.get('channel_id')
-    text = data.get('text', '')
-    has_attachment = data.get('has_attachment', False)
-    attachment_type = data.get('attachment_type')
-    attachment_file_id = data.get('attachment_file_id')
-    selected_emojis = data.get('selected_emojis', [])
-    is_protected = data.get('is_protected', False)
+    channel_id = data.get("channel_id")
+    text = data.get("text", "")
+    has_attachment = data.get("has_attachment", False)
+    attachment_type = data.get("attachment_type")
+    attachment_file_id = data.get("attachment_file_id")
+    selected_emojis = data.get("selected_emojis", [])
+    is_protected = data.get("is_protected", False)
 
     broadcast_service = BroadcastService()
     try:
@@ -675,16 +724,18 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
             for emoji_id in selected_emojis:
                 emoji = broadcast_service.get_reaction_emoji(emoji_id)
                 if emoji:
-                    buttons.append(InlineKeyboardButton(
-                        text=f"{emoji.emoji}",
-                        callback_data=f"react_0_{emoji.id}"  # broadcast_id se actualizará después
-                    ))
+                    buttons.append(
+                        InlineKeyboardButton(
+                            text=f"{emoji.emoji}",
+                            callback_data=f"react_0_{emoji.id}",  # broadcast_id se actualizará después
+                        )
+                    )
             if buttons:
                 reply_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
-        
+
         # Enviar mensaje
         protect_content = is_protected
-        
+
         if has_attachment and attachment_file_id:
             # Enviar con adjunto
             if attachment_type == "photo":
@@ -693,7 +744,7 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                     photo=attachment_file_id,
                     caption=text,
                     reply_markup=reply_markup,
-                    protect_content=protect_content
+                    protect_content=protect_content,
                 )
             elif attachment_type == "video":
                 sent_message = await bot.send_video(
@@ -701,7 +752,7 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                     video=attachment_file_id,
                     caption=text,
                     reply_markup=reply_markup,
-                    protect_content=protect_content
+                    protect_content=protect_content,
                 )
             elif attachment_type == "document":
                 sent_message = await bot.send_document(
@@ -709,7 +760,7 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                     document=attachment_file_id,
                     caption=text,
                     reply_markup=reply_markup,
-                    protect_content=protect_content
+                    protect_content=protect_content,
                 )
             elif attachment_type == "animation":
                 sent_message = await bot.send_animation(
@@ -717,13 +768,11 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                     animation=attachment_file_id,
                     caption=text,
                     reply_markup=reply_markup,
-                    protect_content=protect_content
+                    protect_content=protect_content,
                 )
             else:
                 sent_message = await bot.send_message(
-                    chat_id=channel_id,
-                    text=text,
-                    reply_markup=reply_markup
+                    chat_id=channel_id, text=text, reply_markup=reply_markup
                 )
         else:
             # Enviar solo texto
@@ -731,11 +780,11 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
                 chat_id=channel_id,
                 text=text,
                 reply_markup=reply_markup,
-                protect_content=protect_content
+                protect_content=protect_content,
             )
-        
+
         # Registrar en base de datos
-        selected_emoji_ids_str = ','.join(str(eid) for eid in selected_emojis)
+        selected_emoji_ids_str = ",".join(str(eid) for eid in selected_emojis)
         broadcast = broadcast_service.create_broadcast_message(
             message_id=sent_message.message_id,
             channel_id=channel_id,
@@ -746,32 +795,31 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
             attachment_file_id=attachment_file_id,
             has_reactions=len(selected_emojis) > 0,
             is_protected=is_protected,
-            selected_emoji_ids=selected_emoji_ids_str
+            selected_emoji_ids=selected_emoji_ids_str,
         )
-        
+
         # Actualizar callback_data de los botones con el ID real del broadcast
         if reply_markup and selected_emojis:
             buttons = []
             for emoji_id in selected_emojis:
                 emoji = broadcast_service.get_reaction_emoji(emoji_id)
                 if emoji:
-                    buttons.append(InlineKeyboardButton(
-                        text=f"{emoji.emoji}",
-                        callback_data=f"react_{broadcast.id}_{emoji.id}"
-                    ))
+                    buttons.append(
+                        InlineKeyboardButton(
+                            text=f"{emoji.emoji}", callback_data=f"react_{broadcast.id}_{emoji.id}"
+                        )
+                    )
             new_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
             try:
                 await bot.edit_message_reply_markup(
-                    chat_id=channel_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=new_markup
+                    chat_id=channel_id, message_id=sent_message.message_id, reply_markup=new_markup
                 )
             except Exception as e:
                 if "message is not modified" in str(e).lower():
                     pass  # Ignorar si no hay cambios
                 else:
                     logger.warning(f"Error actualizando reply markup: {e}")
-        
+
         try:
             await callback.message.edit_text(
                 f"""🎩 <b>Lucien:</b>
@@ -787,23 +835,23 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
 
 <i>Los visitantes podrán interactuar con él.</i>""",
                 reply_markup=back_keyboard("admin_gamification"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception as e:
             if "message is not modified" in str(e).lower():
                 pass
             else:
                 raise
-        
+
         logger.info(f"Broadcast enviado: channel={channel_id}, message={sent_message.message_id}")
-        
+
     except Exception as e:
         logger.error(f"Error enviando broadcast: {e}")
         try:
             await callback.message.edit_text(
                 LucienVoice.error_message("el envío del mensaje"),
                 reply_markup=back_keyboard("admin_gamification"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception as e2:
             if "message is not modified" in str(e2).lower():

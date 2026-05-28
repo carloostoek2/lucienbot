@@ -386,22 +386,25 @@ def protection_keyboard(protection_cost: int) -> InlineKeyboardMarkup:
 | A5 | `claim_for_streak()` is the right place to create/link sessions, not play_trivia | Architecture Patterns | If session needs to exist before first correct answer, creation point must move |
 | A6 | Lazy timeout verification is the right approach (Claude's discretion per D-06) | Standard Stack | If user wants scheduled-job approach, implementation changes significantly |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Trivia promo entry point (D-16 mentions `game_trivia_promo` handler)**
    - What we know: D-16 lists 6 new handlers including `game_trivia_promo` as an entry point
    - What's unclear: Whether this entry point is user-visible (a new menu button) or internal (redirected from normal trivia when promotions are active). Current game menu has one "El examen de Diana" button for normal trivia.
    - Recommendation: Two possible implementations: (A) Redirect from normal trivia if active promotions exist, or (B) add new menu button "Las promociones de Diana" visible only when promotions are active. Plan both options and let discuss-phase decide.
+   - **RESOLVED (Phase 18 Plan):** Protection/risk flows integrate into the existing 3 `trivia_answer` handlers (general/VIP/simple) rather than adding a separate entry point. When active promotions exist and a user starts trivia, the session is created lazily on first code delivery in `claim_for_streak()`. No new menu button needed; the existing trivia entry points (`/trivia`, `/trivia_vip`, `/trivia_simple`) cover this transparently. The 2-minute timeout state is handled via lazy verification (checking `expires_at` on next interaction) within these same handlers, avoiding the need for a dedicated `in_timeout` FSM state.
 
 2. **Timeout trivia_free interaction (D-09, D-13)**
    - What we know: User plays "trivia libre" to earn besitos during timeout
    - What's unclear: Whether the free trivia during timeout should be limited (fewer questions? same limits?) or treat it as normal trivia. Whether earning enough besitos auto-clears the timeout state.
    - Recommendation: Free trivia uses normal limit. On each correct answer in free trivia mode, re-check `has_sufficient_balance()`. If now sufficient, auto-offer protection. The timeout check on next interaction handles expiration.
+   - **RESOLVED (Phase 18 Plan):** Free trivia during timeout uses normal limits and question count. On each correct answer, the `_build_streak_failure_state()` method re-checks `has_sufficient_balance()`. If balance is now sufficient, the method returns `offer_protection` action so the handler shows the protection keyboard. Timeout enforcement is lazy: `get_active_session()` checks `expires_at` on every session access and cancels if expired. A 60-minute SchedulerService cleanup job handles stale sessions for users who never return.
 
 3. **Session cleanup strategy (Claude's discretion)**
    - What we know: Sessions with expires_at in the past are "expired" but may remain in DB
    - What's unclear: Whether to add a scheduled cleanup job or rely on lazy expiration
    - Recommendation: Lazy + optional cron. Check `expires_at` on every session access; if expired, cancel and close. Add a daily cleanup cron via SchedulerService to remove truly stale sessions (>24h past expiration) as a safety net. This avoids scheduled-per-session complexity while preventing DB bloat.
+   - **RESOLVED (Phase 18 Plan):** Hybrid approach: lazy verification + scheduled cleanup. Every `get_active_session()` call checks `expires_at` and cancels expired sessions on access. A 60-minute interval job in SchedulerService (`cleanup_streak_sessions`) handles sessions where the user never returns after timeout, preventing DB bloat. This avoids per-session scheduled jobs while maintaining data hygiene.
 
 ## Environment Availability
 

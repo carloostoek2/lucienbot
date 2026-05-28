@@ -4,14 +4,17 @@ Rate Limiting Middleware - Lucien Bot
 Throttles per-user requests using aiolimiter sliding window.
 Custodios (admins) bypass rate limiting entirely.
 """
+
 import asyncio
+import logging
 import time
-from aiolimiter import AsyncLimiter
+from typing import Any
+
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
 from aiogram.types import TelegramObject
-from typing import Any
-from config.settings import rate_limit_config, bot_config
-import logging
+from aiolimiter import AsyncLimiter
+
+from config.settings import bot_config, rate_limit_config
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +53,7 @@ class ThrottlingMiddleware(BaseMiddleware):
         """Remove limiter entries that have been idle for more than _LIMITER_TTL seconds."""
         now = time.monotonic()
         expired = [
-            uid for uid, (_, last_seen) in self._limiters.items()
-            if now - last_seen > _LIMITER_TTL
+            uid for uid, (_, last_seen) in self._limiters.items() if now - last_seen > _LIMITER_TTL
         ]
         for uid in expired:
             del self._limiters[uid]
@@ -84,9 +86,9 @@ class ThrottlingMiddleware(BaseMiddleware):
         try:
             await event.answer(
                 text="🎩 <i>Lucien:</i>\n\n"
-                     "<i>Espera un momento... no tan rapido.</i>\n\n"
-                     "<i>Los secretos de Diana requieren calma.</i>",
-                show_alert=True
+                "<i>Espera un momento... no tan rapido.</i>\n\n"
+                "<i>Los secretos de Diana requieren calma.</i>",
+                show_alert=True,
             )
         except Exception as e:
             logger.warning(f"Could not send throttling reply to {user_id}: {e}")

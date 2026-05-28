@@ -3,12 +3,14 @@ Servicio de Canales - Lucien Bot
 
 Gestiona la lógica de canales Free y VIP.
 """
+
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy.orm import Session
-from models.models import Channel, ChannelType, PendingRequest, User
+
 from models.database import SessionLocal
+from models.models import Channel, ChannelType, PendingRequest
 
 logger = logging.getLogger(__name__)
 
@@ -34,53 +36,54 @@ class ChannelService:
 
     # ==================== CANALES ====================
 
-    def create_channel(self, channel_id: int, channel_name: str,
-                       channel_type: ChannelType, wait_time: int = 3) -> Channel:
+    def create_channel(
+        self, channel_id: int, channel_name: str, channel_type: ChannelType, wait_time: int = 3
+    ) -> Channel:
         """Crea un nuevo canal"""
         db = self._get_db()
         channel = Channel(
             channel_id=channel_id,
             channel_name=channel_name,
             channel_type=channel_type,
-            wait_time_minutes=wait_time if channel_type == ChannelType.FREE else 0
+            wait_time_minutes=wait_time if channel_type == ChannelType.FREE else 0,
         )
         db.add(channel)
         db.commit()
         db.refresh(channel)
         return channel
 
-    def get_channel_by_id(self, channel_id: int) -> Optional[Channel]:
+    def get_channel_by_id(self, channel_id: int) -> Channel | None:
         """Obtiene un canal por su ID de Telegram"""
         db = self._get_db()
-        return db.query(Channel).filter(
-            Channel.channel_id == channel_id
-        ).first()
+        return db.query(Channel).filter(Channel.channel_id == channel_id).first()
 
-    def get_channel_by_db_id(self, db_id: int) -> Optional[Channel]:
+    def get_channel_by_db_id(self, db_id: int) -> Channel | None:
         """Obtiene un canal por su ID de base de datos"""
         db = self._get_db()
         return db.query(Channel).filter(Channel.id == db_id).first()
 
-    def get_all_channels(self) -> List[Channel]:
+    def get_all_channels(self) -> list[Channel]:
         """Obtiene todos los canales"""
         db = self._get_db()
         return db.query(Channel).filter(Channel.is_active == True).all()
 
-    def get_free_channels(self) -> List[Channel]:
+    def get_free_channels(self) -> list[Channel]:
         """Obtiene todos los canales Free"""
         db = self._get_db()
-        return db.query(Channel).filter(
-            Channel.channel_type == ChannelType.FREE,
-            Channel.is_active == True
-        ).all()
+        return (
+            db.query(Channel)
+            .filter(Channel.channel_type == ChannelType.FREE, Channel.is_active == True)
+            .all()
+        )
 
-    def get_vip_channels(self) -> List[Channel]:
+    def get_vip_channels(self) -> list[Channel]:
         """Obtiene todos los canales VIP"""
         db = self._get_db()
-        return db.query(Channel).filter(
-            Channel.channel_type == ChannelType.VIP,
-            Channel.is_active == True
-        ).all()
+        return (
+            db.query(Channel)
+            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active == True)
+            .all()
+        )
 
     def delete_channel(self, channel_id: int) -> bool:
         """Elimina un canal de la base de datos"""
@@ -117,70 +120,73 @@ class ChannelService:
 
     # ==================== SOLICITUDES PENDIENTES ====================
 
-    def create_pending_request(self, user_id: int, channel_id: int,
-                               username: str = None, first_name: str = None) -> PendingRequest:
+    def create_pending_request(
+        self, user_id: int, channel_id: int, username: str = None, first_name: str = None
+    ) -> PendingRequest:
         """Crea una solicitud pendiente de acceso"""
         db = self._get_db()
         channel = self.get_channel_by_db_id(channel_id)
         if not channel:
             raise ValueError("Canal no encontrado")
 
-        scheduled_time = datetime.now(timezone.utc) + timedelta(minutes=channel.wait_time_minutes)
+        scheduled_time = datetime.now(UTC) + timedelta(minutes=channel.wait_time_minutes)
 
         request = PendingRequest(
             user_id=user_id,
             channel_id=channel_id,
             username=username,
             first_name=first_name,
-            scheduled_approval_at=scheduled_time
+            scheduled_approval_at=scheduled_time,
         )
         db.add(request)
         db.commit()
         db.refresh(request)
         return request
 
-    def get_pending_request(self, user_id: int, channel_id: int) -> Optional[PendingRequest]:
+    def get_pending_request(self, user_id: int, channel_id: int) -> PendingRequest | None:
         """Obtiene una solicitud pendiente específica"""
         db = self._get_db()
-        return db.query(PendingRequest).filter(
-            PendingRequest.user_id == user_id,
-            PendingRequest.channel_id == channel_id,
-            PendingRequest.status == "pending"
-        ).first()
+        return (
+            db.query(PendingRequest)
+            .filter(
+                PendingRequest.user_id == user_id,
+                PendingRequest.channel_id == channel_id,
+                PendingRequest.status == "pending",
+            )
+            .first()
+        )
 
-    def get_pending_requests_by_channel(self, channel_id: int) -> List[PendingRequest]:
+    def get_pending_requests_by_channel(self, channel_id: int) -> list[PendingRequest]:
         """Obtiene todas las solicitudes pendientes de un canal"""
         db = self._get_db()
-        return db.query(PendingRequest).filter(
-            PendingRequest.channel_id == channel_id,
-            PendingRequest.status == "pending"
-        ).all()
+        return (
+            db.query(PendingRequest)
+            .filter(PendingRequest.channel_id == channel_id, PendingRequest.status == "pending")
+            .all()
+        )
 
-    def get_all_pending_requests(self) -> List[PendingRequest]:
+    def get_all_pending_requests(self) -> list[PendingRequest]:
         """Obtiene todas las solicitudes pendientes"""
         db = self._get_db()
-        return db.query(PendingRequest).filter(
-            PendingRequest.status == "pending"
-        ).all()
+        return db.query(PendingRequest).filter(PendingRequest.status == "pending").all()
 
-    def get_ready_to_approve(self) -> List[PendingRequest]:
+    def get_ready_to_approve(self) -> list[PendingRequest]:
         """Obtiene solicitudes listas para aprobar (tiempo vencido)"""
         db = self._get_db()
-        now = datetime.now(timezone.utc)
-        return db.query(PendingRequest).filter(
-            PendingRequest.status == "pending",
-            PendingRequest.scheduled_approval_at <= now
-        ).all()
+        now = datetime.now(UTC)
+        return (
+            db.query(PendingRequest)
+            .filter(PendingRequest.status == "pending", PendingRequest.scheduled_approval_at <= now)
+            .all()
+        )
 
     def approve_request(self, request_id: int) -> bool:
         """Aprueba una solicitud específica"""
         db = self._get_db()
-        request = db.query(PendingRequest).filter(
-            PendingRequest.id == request_id
-        ).first()
+        request = db.query(PendingRequest).filter(PendingRequest.id == request_id).first()
         if request:
             request.status = "approved"
-            request.approved_at = datetime.now(timezone.utc)
+            request.approved_at = datetime.now(UTC)
             db.commit()
             return True
         return False
@@ -206,7 +212,7 @@ class ChannelService:
         count = 0
         for req in requests:
             req.status = "approved"
-            req.approved_at = datetime.now(timezone.utc)
+            req.approved_at = datetime.now(UTC)
             count += 1
 
         db.commit()
