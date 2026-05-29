@@ -193,14 +193,8 @@ async def _process_expired_subscriptions():
                     continue
 
                 # Verificar si el usuario tiene otra suscripción activa en cualquier canal
-                other_active = (
-                    db.query(Subscription)
-                    .filter(
-                        Subscription.user_id == subscription.user_id,
-                        Subscription.is_active == True,
-                        Subscription.id != subscription.id,
-                    )
-                    .first()
+                other_active = vip_service.has_other_active_subscription(
+                    subscription.user_id, subscription.id
                 )
 
                 if other_active:
@@ -208,7 +202,7 @@ async def _process_expired_subscriptions():
                     subscription.is_active = False
                     db.commit()
                     logger.info(
-                        f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}, other_sub_id={other_active.id}"
+                        f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}"
                     )
                     continue
 
@@ -374,7 +368,7 @@ class SchedulerService:
         self._scheduler.add_job(
             _process_expired_subscriptions,
             trigger="cron",
-            hour=0,
+            hour="0,6,12,18",
             minute=5,
             id="expire_subscriptions",
             name="Process expired VIP subscriptions",

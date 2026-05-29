@@ -215,10 +215,12 @@ class VIPService:
 
         # Normalizar a timezone-aware: SQLite no preserva tzinfo en DateTime(timezone=True)
         sub_end_date = (
-            _ensure_aware(existing_subscription.end_date) if existing_subscription else None
+            _ensure_aware(existing_subscription.end_date)
+            if existing_subscription and existing_subscription.end_date is not None
+            else None
         )
 
-        if existing_subscription and sub_end_date > now:
+        if existing_subscription and sub_end_date is not None and sub_end_date > now:
             # Usuario activo: extender la suscripción existente
             existing_subscription.end_date = sub_end_date + timedelta(days=tariff.duration_days)
             # Mantener la nueva referencia del token aunque sea extensión
@@ -326,12 +328,16 @@ class VIPService:
         return query.first()
 
     def get_active_subscriptions(self, channel_id: int = None) -> list[Subscription]:
-        """Obtiene todas las suscripciones activas"""
+        """Obtiene todas las suscripciones activas (no expiradas)"""
         db = self._get_db()
+        now = datetime.now(UTC)
         query = (
             db.query(Subscription)
             .options(joinedload(Subscription.token).joinedload(Token.tariff))
-            .filter(Subscription.is_active == True)
+            .filter(
+                Subscription.is_active == True,
+                Subscription.end_date > now,
+            )
         )
         if channel_id:
             query = query.filter(Subscription.channel_id == channel_id)
