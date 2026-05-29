@@ -199,16 +199,16 @@ class StoreService:
         return True
 
     def delete_product(self, product_id: int) -> bool:
-        """Elimina un producto de la base de datos"""
+        """Elimina un producto de la base de datos (soft delete)"""
         db = self._get_db()
         product = db.query(StoreProduct).filter(StoreProduct.id == product_id).first()
         if not product:
             logger.warning(f"Producto {product_id} no encontrado para eliminar")
             return False
 
-        db.delete(product)
+        product.is_active = False
         db.commit()
-        logger.info(f"Producto {product_id} eliminado permanentemente")
+        logger.info(f"Producto {product_id} desactivado (soft delete)")
         return True
 
     # ==================== CARRITO ====================
@@ -449,7 +449,7 @@ class StoreService:
             return False, "Orden no encontrada"
 
         if order.status != OrderStatus.PENDING:
-            return False, "La orden ya fue procesada"
+            return False, LucienVoice.store_order_already_processed()
 
         user_id = order.user_id
 
@@ -511,7 +511,7 @@ class StoreService:
             await self.notify_stock_alert(bot, product_id)
 
         logger.info(f"Orden completada: {order.id}")
-        return True, f"Compra completada! Se debitaron {order.total_price} besitos."
+        return True, LucienVoice.store_purchase_completed(order.total_price)
 
     def cancel_order(self, order_id: int) -> bool:
         """Cancela una orden pendiente"""
@@ -622,7 +622,7 @@ class StoreService:
         """Verifica el estado de stock de un producto y retorna alerta si aplica"""
         product = self.get_product(product_id)
         if not product:
-            return {"alert": False, "message": "Producto no encontrado"}
+            return {"alert": False, "message": LucienVoice.store_product_not_found()}
 
         if product.stock == -1:
             return {"alert": False, "status": "unlimited"}

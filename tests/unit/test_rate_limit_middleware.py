@@ -2,11 +2,11 @@
 Tests unitarios para ThrottlingMiddleware.
 """
 import pytest
-import asyncio
 from unittest.mock import MagicMock, AsyncMock
 
+from pathlib import Path
 import sys
-sys.path.insert(0, '/data/data/com.termux/files/home/repos/lucien_bot')
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from handlers.rate_limit_middleware import ThrottlingMiddleware, _LIMITER_TTL
 
@@ -90,6 +90,12 @@ class TestThrottlingMiddleware:
     async def test_rate_limit_exceeded_returns_no_handler_result(self):
         """Test que al exceder el rate limit no se ejecuta el handler."""
         mw = ThrottlingMiddleware()
+        user_id = 7777
+
+        # Trigger rate limit: max_rate=0 makes acquire raise ValueError
+        limiter = mw._get_limiter(user_id)
+        orig_max = limiter.max_rate
+        limiter.max_rate = 0
 
         handler_called = False
 
@@ -99,26 +105,14 @@ class TestThrottlingMiddleware:
             return "handled"
 
         event = MockEvent()
-        user_id = 7777
         data = {"event_from_user": MockUser(user_id)}
 
-        # Simulate rate limit exceeded by exhausting the limiter
-        limiter = mw._get_limiter(user_id)
-        for _ in range(100):  # Burst enough to exceed the 5-per-10s limit
-            # Consume tokens (try to acquire without blocking)
-            try:
-                async with limiter:
-                    pass
-            except Exception:
-                break  # Already at limit
+        await mw(mock_handler, event, data)
 
-        result = await mw(mock_handler, event, data)
+        assert event.answered is True
+        assert handler_called is False
 
-        # Either handler was called (under limit) or event was answered (throttled)
-        # Key: they should NOT both be true
-        if event.answered:
-            assert handler_called is False  # Throttled — no handler call
-        # If handler was called, the user was under limit (expected on fresh limiter)
+        limiter.max_rate = orig_max
 
     @pytest.mark.asyncio
     async def test_none_user_passes_through(self):
@@ -140,7 +134,8 @@ class TestThrottlingMiddleware:
         assert handler_called is True
         assert result == "handled"
 
-    def test_cleanup_idle_removes_expired_entries(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_idle_removes_expired_entries(self):
         """Test que _cleanup_idle elimina entradas idle."""
         mw = ThrottlingMiddleware()
 
@@ -155,8 +150,8 @@ class TestThrottlingMiddleware:
             limiter, _ = mw._limiters[uid]
             mw._limiters[uid] = (limiter, old_time)
 
-        # Run cleanup synchronously (normally async but can call directly)
-        asyncio.get_event_loop().run_until_complete(mw._cleanup_idle())
+        # Run cleanup
+        await mw._cleanup_idle()
 
         # All entries should be removed since they all expired
         assert len(mw._limiters) == 0

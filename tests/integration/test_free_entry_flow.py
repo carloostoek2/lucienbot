@@ -141,7 +141,7 @@ class TestFreeEntryFlow:
         assert mock_bot.send_message.called
         call_kwargs = mock_bot.send_message.call_args.kwargs
         text_lower = call_kwargs["text"].lower()
-        assert "deseo de entrar" in text_lower or "puerta se abrir" in text_lower
+        assert "puertas se abren" in text_lower or "impaciencia" in text_lower
 
 
 @pytest.mark.integration

@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, AsyncMock
 
 # Importar modelos
 import sys
-sys.path.insert(0, '/data/data/com.termux/files/home/repos/lucien_bot')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from models.database import Base
 from models.models import (

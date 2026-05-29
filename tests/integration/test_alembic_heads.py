@@ -7,6 +7,7 @@ asegurando que no hay bifurcaciones (múltiples heads) en la historia de migraci
 import pytest
 import subprocess
 import os
+import sys
 
 
 @pytest.mark.integration
@@ -21,9 +22,10 @@ class TestAlembicHeads:
         de migraciones, lo cual es el estado deseado.
         """
         # Ejecutar alembic heads para obtener los heads actuales
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         result = subprocess.run(
-            ["python", "-m", "alembic", "heads"],
-            cwd="/data/data/com.termux/files/home/repos/lucien_bot",
+            [sys.executable, "-m", "alembic", "heads"],
+            cwd=project_root,
             capture_output=True,
             text=True
         )
@@ -55,9 +57,10 @@ class TestAlembicHeads:
         La base de datos debería tener un stamp que apunte al head más reciente.
         """
         # Obtener el head actual
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         heads_result = subprocess.run(
-            ["python", "-m", "alembic", "heads"],
-            cwd="/data/data/com.termux/files/home/repos/lucien_bot",
+            [sys.executable, "-m", "alembic", "heads"],
+            cwd=project_root,
             capture_output=True,
             text=True
         )
@@ -71,7 +74,7 @@ class TestAlembicHeads:
         # Usamos un script simple que consulta la tabla alembic_version
         import sqlite3
 
-        db_path = "/data/data/com.termux/files/home/repos/lucien_bot/lucien_dev.db"
+        db_path = os.path.join(project_root, "lucien_dev.db")
 
         # Verificar si existe la base de datos
         if os.path.exists(db_path):
@@ -118,9 +121,10 @@ class TestAlembicHeads:
         a una migración existente.
         """
         # Obtener la historia de migraciones
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         result = subprocess.run(
-            ["python", "-m", "alembic", "history"],
-            cwd="/data/data/com.termux/files/home/repos/lucien_bot",
+            [sys.executable, "-m", "alembic", "history"],
+            cwd=project_root,
             capture_output=True,
             text=True
         )
