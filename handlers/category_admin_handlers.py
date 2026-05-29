@@ -12,6 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from keyboards.callback_data import (
     CategoryAdminConfirmDeleteCallback,
     CategoryAdminDeleteCallback,
@@ -41,9 +42,6 @@ class AssignCategoryStates(StatesGroup):
     confirming = State()
 
 
-# Función helper para verificar admin
-def is_admin(user_id: int) -> bool:
-    return user_id in bot_config.ADMIN_IDS
 
 
 # ==================== MENÚ PRINCIPAL ====================

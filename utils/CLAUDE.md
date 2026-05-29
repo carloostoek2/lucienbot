@@ -3,12 +3,14 @@
 Utilidades y helpers del bot.
 
 ## Archivos
+- [admin.py](admin.py) - Utilidades de administración (is_admin)
 - [helpers.py](helpers.py) - Funciones helper
 - [lucien_voice.py](lucien_voice.py) - Plantillas de mensajes
 
 <!-- AUTO:FUNCTIONS -->
 | Módulo | Función | Descripción |
 |--------|---------|-------------|
+| `admin` | `is_admin(user_id)` | Verifica si un usuario es administrador (ADMIN_IDS) |
 | `helpers` | `get_current_time()` | Obtiene la hora actual en la zona horaria configurada |
 | `helpers` | `format_datetime(dt, format_str)` | Formatea una fecha/hora |
 | `helpers` | `escape_markdown(text)` | Escapa caracteres especiales de Markdown |

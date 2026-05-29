@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from models.database import SessionLocal
+from services.streak_scheduler_bridge import remove_streak_promotion_jobs
 from models.models import (
     StreakPromotion,
     StreakPromotionCode,
@@ -473,11 +474,7 @@ class StreakPromotionService:
         db.commit()
 
         try:
-            from services.scheduler_service import get_scheduler
-
-            scheduler = get_scheduler()
-            if scheduler:
-                scheduler.remove_streak_promotion_jobs(promo_id)
+            remove_streak_promotion_jobs(promo_id)
         except Exception as e:
             logger.warning(
                 f"streak_promotion_service - delete_promotion - "

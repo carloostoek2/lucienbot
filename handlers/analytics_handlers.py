@@ -13,6 +13,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from services import get_service
 from services.analytics_service import AnalyticsService
 from utils.lucien_voice import LucienVoice
@@ -21,9 +22,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    """Check if user is a Custodio (admin)."""
-    return user_id in bot_config.ADMIN_IDS
 
 
 @router.message(Command("stats"))

@@ -15,6 +15,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from keyboards.callback_data import (
     BlockedUserDetailCallback,
     BlockInterestCallback,
@@ -61,8 +62,6 @@ class BlockUserStates(StatesGroup):
     confirming = State()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in bot_config.ADMIN_IDS
 
 
 # ==================== MENU PRINCIPAL ====================

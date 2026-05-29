@@ -22,6 +22,7 @@ from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
 from services.channel_service import ChannelService
+from services.streak_scheduler_bridge import activate_streak_promotion, deactivate_streak_promotion
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
 
@@ -239,35 +240,6 @@ async def _process_expired_subscriptions():
         db.close()
 
 
-async def _activate_streak_promotion(promo_id: int):
-    """Activa una promocion por racha en su fecha de inicio (DateTrigger job)."""
-    db = SessionLocal()
-    try:
-        from services.streak_promotion_service import StreakPromotionService
-
-        service = StreakPromotionService(db)
-        service.activate(promo_id)
-        logger.info(f"Scheduler activated streak promotion: promo_id={promo_id}")
-    except Exception as e:
-        logger.error(f"Error activating streak promotion {promo_id}: {e}")
-    finally:
-        db.close()
-
-
-async def _deactivate_streak_promotion(promo_id: int):
-    """Desactiva una promocion por racha en su fecha de expiracion (DateTrigger job)."""
-    db = SessionLocal()
-    try:
-        from services.streak_promotion_service import StreakPromotionService
-
-        service = StreakPromotionService(db)
-        service.deactivate(promo_id)
-        logger.info(f"Scheduler deactivated streak promotion: promo_id={promo_id}")
-    except Exception as e:
-        logger.error(f"Error deactivating streak promotion {promo_id}: {e}")
-    finally:
-        db.close()
-
 
 def _cleanup_expired_streak_sessions():
     """Cancela sesiones de racha expiradas que no fueron cerradas por interaccion."""
@@ -420,7 +392,7 @@ class SchedulerService:
         """
         if start_date:
             self._scheduler.add_job(
-                _activate_streak_promotion,
+                activate_streak_promotion,
                 trigger=DateTrigger(run_date=start_date),
                 id=f"streak_promo_activate_{promo_id}",
                 replace_existing=True,
@@ -431,7 +403,7 @@ class SchedulerService:
             )
         if end_date:
             self._scheduler.add_job(
-                _deactivate_streak_promotion,
+                deactivate_streak_promotion,
                 trigger=DateTrigger(run_date=end_date),
                 id=f"streak_promo_deactivate_{promo_id}",
                 replace_existing=True,

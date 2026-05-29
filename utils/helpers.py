@@ -42,9 +42,7 @@ def generate_invite_link(bot_username: str, token: str) -> str:
     return f"https://t.me/{bot_username}?start={token}"
 
 
-def is_admin(user_id: int) -> bool:
-    """Verifica si un usuario es administrador"""
-    return user_id in bot_config.ADMIN_IDS
+from utils.admin import is_admin  # noqa: F401 — re-exported for backwards compat
 
 
 def parse_duration(text: str) -> Optional[int]:

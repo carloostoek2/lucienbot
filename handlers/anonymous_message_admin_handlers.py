@@ -12,6 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from keyboards.callback_data import (
     AnonAllCallback,
     AnonDeleteCallback,
@@ -32,9 +33,6 @@ class AnonymousReplyStates(StatesGroup):
     waiting_reply = State()
 
 
-def is_admin(user_id: int) -> bool:
-    """Verifica si el usuario es admin"""
-    return user_id in bot_config.ADMIN_IDS
 
 
 def anonymous_messages_menu_keyboard() -> InlineKeyboardMarkup:
