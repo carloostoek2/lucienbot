@@ -205,48 +205,37 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
         return
 
     broadcast_service = BroadcastService()
-
-    # Registrar reacción con entrega automática de recompensas (verificación y registro atómico)
-    reaction = await broadcast_service.check_and_register_reaction(
-        broadcast_id=broadcast_id,
-        user_id=user.id,
-        emoji_id=emoji_id,
-        username=user.username,
-        bot=callback.bot,
-    )
+    try:
+        reaction = await broadcast_service.check_and_register_reaction(
+            broadcast_id=broadcast_id,
+            user_id=user.id,
+            emoji_id=emoji_id,
+            username=user.username,
+            bot=callback.bot,
+        )
+    finally:
+        broadcast_service.close()
 
     if reaction:
-        # reaction ahora es un diccionario, usar los datos directamente
-        emoji_char = reaction.get("emoji_char", "💋")
         besitos = reaction.get("besitos_awarded", 0)
 
         # Obtener el broadcast para actualizar el mensaje
         broadcast = broadcast_service.get_broadcast(broadcast_id)
         if broadcast and broadcast.has_reactions:
-            # Obtener TODOS los emojis originales del broadcast
             selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
-
-            # Obtener conteo actualizado de reacciones
             reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
-
-            # Contar reacciones por emoji
             emoji_counts = {}
             for r in reactions:
                 if r.reaction_emoji:
                     emoji_id_val = r.reaction_emoji.id
                     emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
-
-            # Construir lista de emojis para el keyboard
             emojis = []
             for emoji_id in selected_emoji_ids:
                 emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
                 if emoji_obj:
                     emojis.append((emoji_id, emoji_obj.emoji))
-
-            # Usar función extractada para reconstruir el teclado
             if emojis:
                 new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
-                # Usar método extractado para actualizar mensaje
                 await broadcast_service.update_reaction_message(
                     bot=callback.bot,
                     channel_id=broadcast.channel_id,
@@ -254,12 +243,9 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
                     new_markup=new_markup,
                 )
 
-        # Logging de la reacción recibida
         logger.info(
             f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}"
         )
-
-        # Solo notificar via callback (sin mensaje privado)
         await callback.answer(f"¡+{besitos} besitos! 💋")
     else:
         await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
