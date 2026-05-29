@@ -3,44 +3,39 @@ Handlers de Minijuegos - Lucien Bot
 
 Maneja los flujos de usuario para dados y trivia.
 """
+
 import json
 import logging
 
 from aiogram import Router
 from aiogram.types import CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
+
 from keyboards.callback_data import (
-    TriviaAnswerCallback,
-    TriviaVipAnswerCallback,
-    TriviaSimpleAnswerCallback,
+    StreakContinueCallback,
     StreakProtectAcceptCallback,
     StreakProtectDeclineCallback,
     StreakRetireCallback,
-    StreakContinueCallback,
+    TriviaAnswerCallback,
+    TriviaSimpleAnswerCallback,
+    TriviaVipAnswerCallback,
 )
 from keyboards.inline_keyboards import (
-    game_menu_keyboard,
     dice_play_keyboard,
-    trivia_keyboard,
-    trivia_vip_keyboard,
-    trivia_vip_result_keyboard,
-    trivia_simple_keyboard,
-    trivia_simple_result_keyboard,
+    game_menu_keyboard,
     protection_keyboard,
     risk_mode_keyboard,
+    trivia_keyboard,
+    trivia_simple_keyboard,
+    trivia_simple_result_keyboard,
+    trivia_vip_keyboard,
+    trivia_vip_result_keyboard,
 )
-from services import get_service, GameService, StreakPromotionService
+from services import GameService, StreakPromotionService, get_service
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
 router = Router()
-
-
-class TriviaStreakStates(StatesGroup):
-    waiting_protection_choice = State()
-    waiting_retire_choice = State()
 
 
 @router.callback_query(lambda c: c.data == "game_menu")
@@ -54,7 +49,7 @@ async def game_menu(callback: CallbackQuery):
 
     special_button = None
     if special_info:
-        special_button = (special_info['display_name'], "game_trivia_simple")
+        special_button = (special_info["display_name"], "game_trivia_simple")
 
     text = (
         f"🎩 Lucien: <b>{data['title']}</b>\n\n"
@@ -71,7 +66,9 @@ async def game_menu(callback: CallbackQuery):
     )
     await callback.answer()
     if special_info:
-        logger.info(f"game_user_handlers - game_menu - {user_id} - shown with special:{special_info['category_id']}")
+        logger.info(
+            f"game_user_handlers - game_menu - {user_id} - shown with special:{special_info['category_id']}"
+        )
     else:
         logger.info(f"game_user_handlers - game_menu - {user_id} - shown")
 
@@ -104,10 +101,7 @@ async def dice_play(callback: CallbackQuery):
     with get_service(GameService) as service:
         result = service.play_dice_game(user_id)
 
-    await callback.message.edit_text(
-        result['message'],
-        reply_markup=dice_play_keyboard()
-    )
+    await callback.message.edit_text(result["message"], reply_markup=dice_play_keyboard())
     await callback.answer()
     logger.info(f"game_user_handlers - dice_play - {user_id} - completed")
 
@@ -120,10 +114,9 @@ async def game_trivia(callback: CallbackQuery):
     with get_service(GameService) as service:
         data = service.get_trivia_entry_data(user_id)
 
-        if not data['can_play']:
+        if not data["can_play"]:
             await callback.message.edit_text(
-                data['limit_message'],
-                reply_markup=game_menu_keyboard()
+                data["limit_message"], reply_markup=game_menu_keyboard()
             )
             await callback.answer()
             return
@@ -133,18 +126,15 @@ async def game_trivia(callback: CallbackQuery):
         if question is None:
             await callback.message.edit_text(
                 "Las preguntas están en el taller de Lucien. Regresa más tarde.",
-                reply_markup=game_menu_keyboard()
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
 
-    counter_text = data['counter_template'].format(
-        remaining=data['remaining'],
-        limit=data['limit']
-    )
+    counter_text = data["counter_template"].format(remaining=data["remaining"], limit=data["limit"])
 
     streak_text = ""
-    if data['current_streak'] > 0:
+    if data["current_streak"] > 0:
         streak_text = f"\n🔥 Racha actual: {data['current_streak']}"
 
     text = (
@@ -155,8 +145,7 @@ async def game_trivia(callback: CallbackQuery):
     )
 
     await callback.message.edit_text(
-        text=text,
-        reply_markup=trivia_keyboard(question, question_idx)
+        text=text, reply_markup=trivia_keyboard(question, question_idx)
     )
     await callback.answer()
     logger.info(f"game_user_handlers - game_trivia - {user_id} - shown")
@@ -172,56 +161,52 @@ async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCall
     with get_service(GameService) as service:
         result = service.play_trivia(user_id, question_idx, answer_idx)
 
-    session_state = result.get('session_state')
+    session_state = result.get("session_state")
     if session_state:
-        if session_state['action'] == 'offer_protection':
+        if session_state["action"] == "offer_protection":
             await callback.message.edit_text(
                 LucienVoice.streak_protection_offer(
-                    session_state['protection_cost'], session_state['streak']
+                    session_state["protection_cost"], session_state["streak"]
                 ),
                 reply_markup=protection_keyboard(
-                    session_state['protection_cost'],
-                    session_state['streak'],
-                    question_idx
-                )
+                    session_state["protection_cost"], session_state["streak"], "trivia"
+                ),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'offer_retire':
-            code = session_state['code']
+        elif session_state["action"] == "offer_retire":
+            code = session_state["code"]
             await callback.message.edit_text(
                 LucienVoice.streak_risk_mode_offer(
-                    code['code'], code['discount_pct'], code['promotion_name']
+                    code["code"], code["discount_pct"], code["promotion_name"]
                 ),
-                reply_markup=risk_mode_keyboard()
+                reply_markup=risk_mode_keyboard(),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'timeout':
+        elif session_state["action"] == "timeout":
             await callback.message.edit_text(
-                LucienVoice.streak_timeout_granted(2, session_state['streak']),
-                reply_markup=game_menu_keyboard()
+                LucienVoice.streak_timeout_granted(2, session_state["streak"]),
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'cancelled':
-            code_count = session_state.get('codes_cancelled', 0)
+        elif session_state["action"] == "cancelled":
+            code_count = session_state.get("codes_cancelled", 0)
             await callback.message.edit_text(
-                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
-                reply_markup=game_menu_keyboard()
+                result["message"] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
 
-    await callback.message.edit_text(
-        result['message'],
-        reply_markup=game_menu_keyboard()
-    )
+    await callback.message.edit_text(result["message"], reply_markup=game_menu_keyboard())
     await callback.answer()
     logger.info(f"game_user_handlers - trivia_answer - {user_id} - correct:{result['correct']}")
 
 
 # ==================== TRIVIA VIP ====================
+
 
 @router.callback_query(lambda c: c.data == "game_trivia_vip")
 async def game_trivia_vip(callback: CallbackQuery):
@@ -231,10 +216,9 @@ async def game_trivia_vip(callback: CallbackQuery):
     with get_service(GameService) as service:
         data = service.get_trivia_vip_entry_data(user_id)
 
-        if not data['can_play']:
+        if not data["can_play"]:
             await callback.message.edit_text(
-                data['limit_message'],
-                reply_markup=game_menu_keyboard()
+                data["limit_message"], reply_markup=game_menu_keyboard()
             )
             await callback.answer()
             return
@@ -244,18 +228,15 @@ async def game_trivia_vip(callback: CallbackQuery):
         if question is None:
             await callback.message.edit_text(
                 "Las preguntas secretas están en el taller de Lucien. Regresa más tarde.",
-                reply_markup=game_menu_keyboard()
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
 
-    counter_text = data['counter_template'].format(
-        remaining=data['remaining'],
-        limit=data['limit']
-    )
+    counter_text = data["counter_template"].format(remaining=data["remaining"], limit=data["limit"])
 
     streak_text = ""
-    if data['current_streak'] > 0:
+    if data["current_streak"] > 0:
         streak_text = f"\n🔥 Tu racha VIP: {data['current_streak']}"
 
     text = (
@@ -266,8 +247,7 @@ async def game_trivia_vip(callback: CallbackQuery):
     )
 
     await callback.message.edit_text(
-        text=text,
-        reply_markup=trivia_vip_keyboard(question, question_idx)
+        text=text, reply_markup=trivia_vip_keyboard(question, question_idx)
     )
     await callback.answer()
     logger.info(f"game_user_handlers - game_trivia_vip - {user_id} - shown")
@@ -283,55 +263,54 @@ async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAns
     with get_service(GameService) as service:
         result = service.play_trivia_vip(user_id, question_idx, answer_idx)
 
-    session_state = result.get('session_state')
+    session_state = result.get("session_state")
     if session_state:
-        if session_state['action'] == 'offer_protection':
+        if session_state["action"] == "offer_protection":
             await callback.message.edit_text(
                 LucienVoice.streak_protection_offer(
-                    session_state['protection_cost'], session_state['streak']
+                    session_state["protection_cost"], session_state["streak"]
                 ),
                 reply_markup=protection_keyboard(
-                    session_state['protection_cost'],
-                    session_state['streak'],
-                    question_idx
-                )
+                    session_state["protection_cost"], session_state["streak"], "trivia_vip"
+                ),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'offer_retire':
-            code = session_state['code']
+        elif session_state["action"] == "offer_retire":
+            code = session_state["code"]
             await callback.message.edit_text(
                 LucienVoice.streak_risk_mode_offer(
-                    code['code'], code['discount_pct'], code['promotion_name']
+                    code["code"], code["discount_pct"], code["promotion_name"]
                 ),
-                reply_markup=risk_mode_keyboard()
+                reply_markup=risk_mode_keyboard(),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'timeout':
+        elif session_state["action"] == "timeout":
             await callback.message.edit_text(
-                LucienVoice.streak_timeout_granted(2, session_state['streak']),
-                reply_markup=trivia_vip_result_keyboard()
+                LucienVoice.streak_timeout_granted(2, session_state["streak"]),
+                reply_markup=trivia_vip_result_keyboard(),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'cancelled':
+        elif session_state["action"] == "cancelled":
+            code_count = session_state.get("codes_cancelled", 0)
             await callback.message.edit_text(
-                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(0),
-                reply_markup=trivia_vip_result_keyboard()
+                result["message"] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
+                reply_markup=trivia_vip_result_keyboard(),
             )
             await callback.answer()
             return
 
-    await callback.message.edit_text(
-        result['message'],
-        reply_markup=trivia_vip_result_keyboard()
-    )
+    await callback.message.edit_text(result["message"], reply_markup=trivia_vip_result_keyboard())
     await callback.answer()
-    logger.info(f"game_user_handlers - trivia_vip_answer - {user_id} - correct:{result['correct']}, besitos:{result['besitos']}")
+    logger.info(
+        f"game_user_handlers - trivia_vip_answer - {user_id} - correct:{result['correct']}, besitos:{result['besitos']}"
+    )
 
 
 # ==================== TRIVIA ESPECIAL (PHASE 16) ====================
+
 
 @router.callback_query(lambda c: c.data == "game_trivia_simple")
 async def game_trivia_simple(callback: CallbackQuery):
@@ -344,49 +323,42 @@ async def game_trivia_simple(callback: CallbackQuery):
         if not special_info:
             await callback.message.edit_text(
                 "No hay dinamicas especiales activas en este momento.",
-                reply_markup=game_menu_keyboard()
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
 
-        category_id = special_info['category_id']
+        category_id = special_info["category_id"]
         data = service.get_trivia_simple_entry_data(user_id)
 
-        if not data['can_play']:
+        if not data["can_play"]:
             await callback.message.edit_text(
-                data['limit_message'],
-                reply_markup=game_menu_keyboard()
+                data["limit_message"], reply_markup=game_menu_keyboard()
             )
             await callback.answer()
             return
 
         question, question_idx = service.get_random_simple_question(user_id, category_id)
 
+        if question_idx == -2:
+            exhausted_msg = service._select_template(
+                service.TRIVIA_SIMPLE_TEMPLATES["deck_exhausted"]
+            )
+            await callback.message.edit_text(exhausted_msg, reply_markup=game_menu_keyboard())
+            await callback.answer()
+            return
         if question is None:
             await callback.message.edit_text(
                 "Los pergaminos especiales estan en el taller de Lucien.",
-                reply_markup=game_menu_keyboard()
-            )
-            await callback.answer()
-            return
-        if question_idx == -2:
-            exhausted_msg = service._select_template(
-                service.TRIVIA_SIMPLE_TEMPLATES['deck_exhausted']
-            )
-            await callback.message.edit_text(
-                exhausted_msg,
-                reply_markup=game_menu_keyboard()
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
 
-    counter_text = data['counter_template'].format(
-        remaining=data['remaining'],
-        limit=data['limit']
-    )
+    counter_text = data["counter_template"].format(remaining=data["remaining"], limit=data["limit"])
 
     streak_text = ""
-    if data['current_streak'] > 0:
+    if data["current_streak"] > 0:
         streak_text = f"\n🔥 Racha special: {data['current_streak']}"
 
     text = (
@@ -397,11 +369,12 @@ async def game_trivia_simple(callback: CallbackQuery):
     )
 
     await callback.message.edit_text(
-        text=text,
-        reply_markup=trivia_simple_keyboard(question, question_idx)
+        text=text, reply_markup=trivia_simple_keyboard(question, question_idx)
     )
     await callback.answer()
-    logger.info(f"game_user_handlers - game_trivia_simple - {user_id} - shown - category:{category_id}")
+    logger.info(
+        f"game_user_handlers - game_trivia_simple - {user_id} - shown - category:{category_id}"
+    )
 
 
 @router.callback_query(TriviaSimpleAnswerCallback.filter())
@@ -419,59 +392,56 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
         special_info = service.get_active_special_info()
         if not special_info:
             await callback.message.edit_text(
-                "La dinamica especial ha finalizado.",
-                reply_markup=game_menu_keyboard()
+                "La dinamica especial ha finalizado.", reply_markup=game_menu_keyboard()
             )
             await callback.answer()
             return
 
         result = service.play_trivia_simple(
-            user_id, question_idx, answer_idx, special_info['category_id']
+            user_id, question_idx, answer_idx, special_info["category_id"]
         )
 
-    session_state = result.get('session_state')
+    session_state = result.get("session_state")
     if session_state:
-        if session_state['action'] == 'offer_protection':
+        if session_state["action"] == "offer_protection":
             await callback.message.edit_text(
                 LucienVoice.streak_protection_offer(
-                    session_state['protection_cost'], session_state['streak']
+                    session_state["protection_cost"], session_state["streak"]
                 ),
                 reply_markup=protection_keyboard(
-                    session_state['protection_cost'],
-                    session_state['streak'],
-                    question_idx
-                )
+                    session_state["protection_cost"], session_state["streak"], "trivia_simple"
+                ),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'offer_retire':
-            code = session_state['code']
+        elif session_state["action"] == "offer_retire":
+            code = session_state["code"]
             await callback.message.edit_text(
                 LucienVoice.streak_risk_mode_offer(
-                    code['code'], code['discount_pct'], code['promotion_name']
+                    code["code"], code["discount_pct"], code["promotion_name"]
                 ),
-                reply_markup=risk_mode_keyboard()
+                reply_markup=risk_mode_keyboard(),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'timeout':
+        elif session_state["action"] == "timeout":
             await callback.message.edit_text(
-                LucienVoice.streak_timeout_granted(2, session_state['streak']),
-                reply_markup=trivia_simple_result_keyboard()
+                LucienVoice.streak_timeout_granted(2, session_state["streak"]),
+                reply_markup=trivia_simple_result_keyboard(),
             )
             await callback.answer()
             return
-        elif session_state['action'] == 'cancelled':
+        elif session_state["action"] == "cancelled":
+            code_count = session_state.get("codes_cancelled", 0)
             await callback.message.edit_text(
-                result['message'] + "\n\n" + LucienVoice.streak_codes_cancelled(0),
-                reply_markup=trivia_simple_result_keyboard()
+                result["message"] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
+                reply_markup=trivia_simple_result_keyboard(),
             )
             await callback.answer()
             return
 
     await callback.message.edit_text(
-        result['message'],
-        reply_markup=trivia_simple_result_keyboard()
+        result["message"], reply_markup=trivia_simple_result_keyboard()
     )
     await callback.answer()
     logger.info(
@@ -485,14 +455,13 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
 
 
 @router.callback_query(StreakProtectAcceptCallback.filter())
-async def handle_protection_accept(callback: CallbackQuery,
-                                    callback_data: StreakProtectAcceptCallback):
-    """Acepta proteccion de racha y debita besitos.
-    Delega en StreakPromotionService.protect_streak() que encapsula
-    BesitoService debit + session update en una operacion atomica.
-    """
+async def handle_protection_accept(
+    callback: CallbackQuery, callback_data: StreakProtectAcceptCallback
+):
+    """Acepta proteccion de racha, debita besitos, y continua la trivia."""
     user_id = callback.from_user.id
     streak = callback_data.streak
+    game_type = callback_data.game_type
 
     with get_service(StreakPromotionService) as promo_svc:
         if not promo_svc.protect_streak(user_id, streak):
@@ -500,20 +469,21 @@ async def handle_protection_accept(callback: CallbackQuery,
             return
         cost = promo_svc.calculate_protection_cost(streak)
 
-    await callback.message.edit_text(
-        LucienVoice.streak_protection_accepted(cost, streak),
-        reply_markup=game_menu_keyboard()
+    await callback.answer(f"Proteccion aplicada. -{cost} besitos. Continua la trivia.")
+    logger.info(
+        f"game_user_handlers - handle_protection_accept - {user_id} - cost:{cost} - streak:{streak}"
     )
-    await callback.answer()
-    logger.info(f"game_user_handlers - handle_protection_accept - {user_id} - cost:{cost} - streak:{streak}")
+    await _redirect_to_trivia(callback, game_type)
 
 
 @router.callback_query(StreakProtectDeclineCallback.filter())
-async def handle_protection_decline(callback: CallbackQuery,
-                                     callback_data: StreakProtectDeclineCallback):
-    """Rechaza proteccion de racha: cancela codigos y cierra sesion."""
+async def handle_protection_decline(
+    callback: CallbackQuery, callback_data: StreakProtectDeclineCallback
+):
+    """Rechaza proteccion de racha: cancela codigos, cierra sesion."""
     user_id = callback.from_user.id
     streak = callback_data.streak
+    game_type = callback_data.game_type
 
     with get_service(StreakPromotionService) as promo_svc:
         session = promo_svc.get_active_session(user_id)
@@ -521,12 +491,19 @@ async def handle_protection_decline(callback: CallbackQuery,
             promo_svc.cancel_session_codes(session.id)
             promo_svc.close_session(user_id, retire=False)
 
-    await callback.message.edit_text(
-        LucienVoice.streak_protection_declined(streak),
-        reply_markup=game_menu_keyboard()
-    )
-    await callback.answer()
+    await callback.answer("Proteccion rechazada. La racha se ha roto.")
     logger.info(f"game_user_handlers - handle_protection_decline - {user_id}")
+    await _redirect_to_trivia(callback, game_type)
+
+
+async def _redirect_to_trivia(callback: CallbackQuery, game_type: str):
+    """Redirige al usuario a la trivia correspondiente tras proteccion."""
+    if game_type == "trivia_vip":
+        await game_trivia_vip(callback)
+    elif game_type == "trivia_simple":
+        await game_trivia_simple(callback)
+    else:
+        await game_trivia(callback)
 
 
 @router.callback_query(StreakRetireCallback.filter())
@@ -543,8 +520,7 @@ async def handle_streak_retire(callback: CallbackQuery):
             promo_svc.close_session(user_id, retire=True)
 
     await callback.message.edit_text(
-        LucienVoice.streak_retire_confirmed(code_count),
-        reply_markup=game_menu_keyboard()
+        LucienVoice.streak_retire_confirmed(code_count), reply_markup=game_menu_keyboard()
     )
     await callback.answer()
     logger.info(f"game_user_handlers - handle_streak_retire - {user_id} - codes:{code_count}")
@@ -559,8 +535,7 @@ async def handle_streak_continue(callback: CallbackQuery):
         promo_svc.set_risk_mode(user_id)
 
     await callback.message.edit_text(
-        LucienVoice.streak_continue_confirmed(),
-        reply_markup=game_menu_keyboard()
+        LucienVoice.streak_continue_confirmed(), reply_markup=game_menu_keyboard()
     )
     await callback.answer()
     logger.info(f"game_user_handlers - handle_streak_continue - {user_id} - risk_mode")

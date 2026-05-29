@@ -5,7 +5,7 @@ Teclados personalizados con la estética elegante de Diana.
 """
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from keyboards.callback_data import (
-    SelectTariffCallback, CopyTokenCallback,
+    SelectTariffCallback, CopyTokenCallback, ToggleGiftCallback,
     ChannelDetailCallback, ConfigWaitCallback, ConfigInviteCallback,
     PendingReqCallback, ApproveAllCallback, DeleteChannelCallback,
     ConfirmDeleteChannelCallback, WaitTimeCallback,
@@ -381,12 +381,17 @@ def vip_management_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def token_actions_keyboard(token_id: int) -> InlineKeyboardMarkup:
+def token_actions_keyboard(token_id: int, is_gift: bool = False) -> InlineKeyboardMarkup:
     """Acciones para un token específico"""
+    gift_label = "🎁 Quitar marca de regalo" if is_gift else "🎁 Convertir en regalo"
     buttons = [
         [InlineKeyboardButton(
             text="📋 Copiar enlace",
             callback_data=CopyTokenCallback(token_id=token_id).pack()
+        )],
+        [InlineKeyboardButton(
+            text=gift_label,
+            callback_data=ToggleGiftCallback(token_id=token_id, is_gift=not is_gift).pack()
         )],
         [InlineKeyboardButton(
             text="🗑️ Revocar token",
@@ -540,16 +545,16 @@ def trivia_simple_result_keyboard() -> InlineKeyboardMarkup:
 # ==================== PHASE 18: PROTECCION DE RACHA ====================
 
 
-def protection_keyboard(protection_cost: int, streak: int, question_idx: int) -> InlineKeyboardMarkup:
+def protection_keyboard(protection_cost: int, streak: int, game_type: str) -> InlineKeyboardMarkup:
     """Teclado para decision de proteccion de racha."""
     buttons = [
         [InlineKeyboardButton(
             text=f"Proteger (-{protection_cost} besitos)",
-            callback_data=StreakProtectAcceptCallback(streak=streak, question_idx=question_idx).pack()
+            callback_data=StreakProtectAcceptCallback(streak=streak, game_type=game_type).pack()
         )],
         [InlineKeyboardButton(
             text="No proteger",
-            callback_data=StreakProtectDeclineCallback(streak=streak, question_idx=question_idx).pack()
+            callback_data=StreakProtectDeclineCallback(streak=streak, game_type=game_type).pack()
         )]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

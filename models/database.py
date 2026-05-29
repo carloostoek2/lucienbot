@@ -1,10 +1,13 @@
 """
 Configuración de base de datos - Lucien Bot
 """
+
 from contextlib import contextmanager
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
 from config.settings import bot_config
 
 # Crear engine con pool configuration optimizada para producción
@@ -23,7 +26,7 @@ engine = create_engine(
     bot_config.DATABASE_URL,
     connect_args={"check_same_thread": False} if "sqlite" in bot_config.DATABASE_URL else {},
     echo=False,
-    **pool_kwargs
+    **pool_kwargs,
 )
 
 # Session factory

@@ -3,21 +3,22 @@ Handlers de Administración - Lucien Bot
 
 Handlers para el panel de administración conversacional.
 """
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from config.settings import bot_config
-from services.user_service import UserService
-from services.channel_service import ChannelService
-from services.vip_service import VIPService
-from keyboards.inline_keyboards import (
-    admin_menu_keyboard, channel_management_keyboard, 
-    vip_management_keyboard, back_keyboard
-)
-from utils.lucien_voice import LucienVoice
+
 import logging
+
+from aiogram import F, Router
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery
+
+from config.settings import bot_config
+from keyboards.inline_keyboards import (
+    back_keyboard,
+    channel_management_keyboard,
+    vip_management_keyboard,
+)
+from services.channel_service import ChannelService
+from services.user_service import UserService
+from services.vip_service import VIPService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -35,6 +36,7 @@ class AdminStates(StatesGroup):
 # Nota: Los filtros de admin se aplican en cada handler específico
 # para no bloquear otros routers como el de gamificación de usuarios
 
+
 # Función helper para verificar admin
 def is_admin(user_id: int) -> bool:
     return user_id in bot_config.ADMIN_IDS
@@ -42,15 +44,16 @@ def is_admin(user_id: int) -> bool:
 
 # ==================== MENÚ PRINCIPAL ADMIN ====================
 
+
 @router.callback_query(F.data == "admin_channels", lambda cb: is_admin(cb.from_user.id))
 async def admin_channels(callback: CallbackQuery):
     """Gestión de canales"""
     await callback.message.edit_text(
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Los dominios bajo nuestra gestión...</i>\n\n"
-        f"¿Qué desea hacer con los vestíbulos y círculos de Diana?",
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>Los dominios bajo nuestra gestión...</i>\n\n"
+        "¿Qué desea hacer con los vestíbulos y círculos de Diana?",
         reply_markup=channel_management_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -59,12 +62,12 @@ async def admin_channels(callback: CallbackQuery):
 async def admin_vip(callback: CallbackQuery):
     """Gestión VIP"""
     await callback.message.edit_text(
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>El Diván donde Diana comparte sus secretos\n"
-        f"más íntimos con los selectos...</i>\n\n"
-        f"¿Cómo desea calibrar los privilegios VIP?",
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>El Diván donde Diana comparte sus secretos\n"
+        "más íntimos con los selectos...</i>\n\n"
+        "¿Cómo desea calibrar los privilegios VIP?",
         reply_markup=vip_management_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -87,9 +90,7 @@ async def admin_users(callback: CallbackQuery):
         user_service.close()
 
     await callback.message.edit_text(
-        text,
-        reply_markup=back_keyboard("back_to_admin"),
-        parse_mode="HTML"
+        text, reply_markup=back_keyboard("back_to_admin"), parse_mode="HTML"
     )
     await callback.answer()
 
@@ -125,9 +126,7 @@ async def admin_analytics(callback: CallbackQuery):
         vip_service.close()
 
     await callback.message.edit_text(
-        text,
-        reply_markup=back_keyboard("back_to_admin"),
-        parse_mode="HTML"
+        text, reply_markup=back_keyboard("back_to_admin"), parse_mode="HTML"
     )
     await callback.answer()
 
@@ -143,6 +142,6 @@ async def admin_settings(callback: CallbackQuery):
         f"   • Administradores: {len(bot_config.ADMIN_IDS)}\n\n"
         f"<i>Estas configuraciones se ajustan en las variables de entorno.</i>",
         reply_markup=back_keyboard("back_to_admin"),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer()

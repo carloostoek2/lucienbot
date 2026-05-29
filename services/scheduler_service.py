@@ -10,20 +10,20 @@ de serialización con APScheduler + SQLAlchemyJobStore:
   2. Funciones de módulo (no bound methods) para evitar que APScheduler
      detecte ciclos de serialización en self._scheduler
 """
-from datetime import datetime, timedelta, timezone
+
+import logging
+from datetime import UTC, datetime, timedelta
+
 from aiogram import Bot
-from aiogram.types import BotCommandScopeAllPrivateChats
-from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
+from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
-from models.models import ChannelType
 from services.backup_service import BackupService
 from services.channel_service import ChannelService
 from services.vip_service import VIPService
-from services.user_service import UserService
 from utils.lucien_voice import LucienVoice
-from keyboards.inline_keyboards import social_links_keyboard
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ def _get_bot() -> Bot:
 # Job handlers como funciones de módulo (NO métodos de instancia).
 # Esto evita que APScheduler intente picklear self._scheduler.
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 async def _run_backup_job():
     """Ejecuta backup de base de datos (llamado por APScheduler)."""
@@ -83,7 +84,7 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
             chat_id=user_id,
             text=LucienVoice.free_entry_ritual(channel.channel_name or "Los Kinkys"),
             parse_mode="HTML",
-            reply_markup=social_links_keyboard()
+            reply_markup=social_links_keyboard(),
         )
 
         logger.info(f"Mensaje ritual enviado: user={user_id}, channel={channel_id}")
@@ -109,12 +110,11 @@ async def _process_pending_requests():
                     continue
 
                 await bot.approve_chat_join_request(
-                    chat_id=channel.channel_id,
-                    user_id=request.user_id
+                    chat_id=channel.channel_id, user_id=request.user_id
                 )
 
                 request.status = "approved"
-                request.approved_at = datetime.now(timezone.utc)
+                request.approved_at = datetime.now(UTC)
                 db.commit()
 
                 # Enviar mensaje de bienvenida directamente.
@@ -129,13 +129,17 @@ async def _process_pending_requests():
                         chat_id=request.user_id,
                         text=message,
                         parse_mode="HTML",
-                        reply_markup=social_links_keyboard()
+                        reply_markup=social_links_keyboard(),
                     )
-                    logger.info(f"Mensaje bienvenida enviado a user={request.user_id} tras aprobacion automatica")
+                    logger.info(
+                        f"Mensaje bienvenida enviado a user={request.user_id} tras aprobacion automatica"
+                    )
                 except Exception as e:
                     logger.error(f"Error enviando bienvenida a user={request.user_id}: {e}")
 
-                logger.info(f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}")
+                logger.info(
+                    f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}"
+                )
 
             except Exception as e:
                 logger.error(f"Error aprobando solicitud {request.id}: {e}")
@@ -158,7 +162,7 @@ async def _process_expiring_subscriptions():
                 await bot.send_message(
                     chat_id=subscription.user_id,
                     text=LucienVoice.vip_renewal_reminder(subscription.end_date),
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
 
                 subscription.reminder_sent = True
@@ -189,33 +193,36 @@ async def _process_expired_subscriptions():
                     continue
 
                 # Verificar si el usuario tiene otra suscripción activa en cualquier canal
-                other_active = db.query(Subscription).filter(
-                    Subscription.user_id == subscription.user_id,
-                    Subscription.is_active == True,
-                    Subscription.id != subscription.id
-                ).first()
+                other_active = (
+                    db.query(Subscription)
+                    .filter(
+                        Subscription.user_id == subscription.user_id,
+                        Subscription.is_active == True,
+                        Subscription.id != subscription.id,
+                    )
+                    .first()
+                )
 
                 if other_active:
                     # El usuario tiene otra suscripción activa, solo marcar esta como inactiva
                     subscription.is_active = False
                     db.commit()
-                    logger.info(f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}, other_sub_id={other_active.id}")
+                    logger.info(
+                        f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}, other_sub_id={other_active.id}"
+                    )
                     continue
 
                 # Es la única suscripción del usuario: ban/unban y notificar
-                await bot.ban_chat_member(
-                    chat_id=channel.channel_id,
-                    user_id=subscription.user_id
-                )
+                await bot.ban_chat_member(chat_id=channel.channel_id, user_id=subscription.user_id)
                 await bot.unban_chat_member(
-                    chat_id=channel.channel_id,
-                    user_id=subscription.user_id
+                    chat_id=channel.channel_id, user_id=subscription.user_id
                 )
 
                 subscription.is_active = False
 
                 # Limpiar estado VIP del usuario para evitar inconsistencias
                 from models.models import User
+
                 user = db.query(User).filter(User.telegram_id == subscription.user_id).first()
                 if user and user.vip_entry_status is not None:
                     user.vip_entry_status = None
@@ -225,9 +232,7 @@ async def _process_expired_subscriptions():
                 db.commit()
 
                 await bot.send_message(
-                    chat_id=subscription.user_id,
-                    text=LucienVoice.vip_expired(),
-                    parse_mode="HTML"
+                    chat_id=subscription.user_id, text=LucienVoice.vip_expired(), parse_mode="HTML"
                 )
 
                 logger.info(f"Suscripción expirada (única): subscription={subscription.id}")
@@ -272,13 +277,14 @@ async def _deactivate_streak_promotion(promo_id: int):
 
 def _cleanup_expired_streak_sessions():
     """Cancela sesiones de racha expiradas que no fueron cerradas por interaccion."""
-    from datetime import datetime, timezone
-    from models.models import StreakSession, StreakPromotionCode, StreakPromotionCodeStatus
     import json
+    from datetime import datetime
+
+    from models.models import StreakPromotionCode, StreakPromotionCodeStatus, StreakSession
 
     db = SessionLocal()
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC).replace(tzinfo=None)
         expired = (
             db.query(StreakSession)
             .filter(
@@ -291,9 +297,9 @@ def _cleanup_expired_streak_sessions():
         for session in expired:
             code_ids = json.loads(session.codes_delivered or "[]")
             for code_id in code_ids:
-                code = db.query(StreakPromotionCode).filter(
-                    StreakPromotionCode.id == code_id
-                ).first()
+                code = (
+                    db.query(StreakPromotionCode).filter(StreakPromotionCode.id == code_id).first()
+                )
                 if code and code.status == StreakPromotionCodeStatus.DELIVERED:
                     code.status = StreakPromotionCodeStatus.CANCELLED
                     cancelled += 1
@@ -312,13 +318,15 @@ def _cleanup_expired_streak_sessions():
 # SchedulerService — solo maneja el ciclo de vida de APScheduler
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class SchedulerService:
     """Gestiona APScheduler con SQLAlchemyJobStore. No contiene lógica de jobs."""
 
     def __init__(self, bot: Bot):
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
         from apscheduler.executors.asyncio import AsyncIOExecutor
+        from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
         from config.settings import bot_config
 
         global _bot_token
@@ -327,12 +335,8 @@ class SchedulerService:
         self.running = False
         self._scheduler = None
 
-        jobstores = {
-            "default": SQLAlchemyJobStore(url=bot_config.DATABASE_URL)
-        }
-        executors = {
-            "default": AsyncIOExecutor()
-        }
+        jobstores = {"default": SQLAlchemyJobStore(url=bot_config.DATABASE_URL)}
+        executors = {"default": AsyncIOExecutor()}
         job_defaults = {
             "coalesce": True,
             "max_instances": 1,
@@ -361,7 +365,8 @@ class SchedulerService:
         self._scheduler.add_job(
             _process_expiring_subscriptions,
             trigger="cron",
-            hour=8, minute=0,
+            hour=8,
+            minute=0,
             id="expiry_reminders",
             name="Send VIP expiry reminders",
             replace_existing=True,
@@ -369,7 +374,8 @@ class SchedulerService:
         self._scheduler.add_job(
             _process_expired_subscriptions,
             trigger="cron",
-            hour=0, minute=5,
+            hour=0,
+            minute=5,
             id="expire_subscriptions",
             name="Process expired VIP subscriptions",
             replace_existing=True,
@@ -377,7 +383,8 @@ class SchedulerService:
         self._scheduler.add_job(
             _run_backup_job,
             trigger="cron",
-            hour=3, minute=0,
+            hour=3,
+            minute=0,
             id="daily_backup",
             name="Daily database backup",
             replace_existing=True,
@@ -400,7 +407,7 @@ class SchedulerService:
         después de la solicitud de unión al canal Free.
         """
         job_id = f"free_welcome_{user_id}_{channel_id}"
-        run_date = datetime.now(timezone.utc) + timedelta(seconds=30)
+        run_date = datetime.now(UTC) + timedelta(seconds=30)
         self._scheduler.add_job(
             _send_free_welcome_job,
             trigger=DateTrigger(run_date=run_date),
@@ -408,7 +415,9 @@ class SchedulerService:
             replace_existing=True,
             kwargs={"user_id": user_id, "channel_id": channel_id},
         )
-        logger.info(f"Scheduled free welcome job: user={user_id}, channel={channel_id}, run_at={run_date}")
+        logger.info(
+            f"Scheduled free welcome job: user={user_id}, channel={channel_id}, run_at={run_date}"
+        )
 
     def schedule_streak_promotion(self, promo_id: int, start_date=None, end_date=None):
         """Programa jobs de activacion/desactivacion automatica para una promocion por racha.
@@ -423,7 +432,9 @@ class SchedulerService:
                 replace_existing=True,
                 kwargs={"promo_id": promo_id},
             )
-            logger.info(f"Scheduled streak promotion activation: promo_id={promo_id}, at={start_date}")
+            logger.info(
+                f"Scheduled streak promotion activation: promo_id={promo_id}, at={start_date}"
+            )
         if end_date:
             self._scheduler.add_job(
                 _deactivate_streak_promotion,
@@ -432,7 +443,9 @@ class SchedulerService:
                 replace_existing=True,
                 kwargs={"promo_id": promo_id},
             )
-            logger.info(f"Scheduled streak promotion deactivation: promo_id={promo_id}, at={end_date}")
+            logger.info(
+                f"Scheduled streak promotion deactivation: promo_id={promo_id}, at={end_date}"
+            )
         logger.info(
             f"scheduler_service - schedule_streak_promotion - "
             f"promo_id:{promo_id} - start:{start_date} - end:{end_date}"
@@ -444,8 +457,12 @@ class SchedulerService:
             try:
                 self._scheduler.remove_job(job_id)
             except Exception as e:
-                logger.warning(f"scheduler_service - remove_streak_promotion_jobs - job:{job_id} - error:{e}")
-        logger.info(f"scheduler_service - remove_streak_promotion_jobs - promo_id:{promo_id} - removed")
+                logger.warning(
+                    f"scheduler_service - remove_streak_promotion_jobs - job:{job_id} - error:{e}"
+                )
+        logger.info(
+            f"scheduler_service - remove_streak_promotion_jobs - promo_id:{promo_id} - removed"
+        )
 
     async def stop(self):
         """Detiene el scheduler."""

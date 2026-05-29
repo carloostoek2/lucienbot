@@ -3,15 +3,17 @@ Handlers de Canal Free - Lucien Bot
 
 Gestiona las solicitudes de acceso a canales gratuitos.
 """
-from aiogram import Router, F
-from aiogram.types import ChatJoinRequest, ChatMemberUpdated
-from aiogram.filters import ChatMemberUpdatedFilter, JOIN_TRANSITION, LEAVE_TRANSITION
-from services.channel_service import ChannelService
-from services.user_service import UserService
-from services.scheduler_service import get_scheduler
-from utils.lucien_voice import LucienVoice
-from datetime import datetime
+
 import logging
+
+from aiogram import Router
+from aiogram.filters import JOIN_TRANSITION, LEAVE_TRANSITION, ChatMemberUpdatedFilter
+from aiogram.types import ChatJoinRequest, ChatMemberUpdated
+
+from services.channel_service import ChannelService
+from services.scheduler_service import get_scheduler
+from services.user_service import UserService
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -37,7 +39,7 @@ async def handle_join_request(join_request: ChatJoinRequest):
             telegram_id=user.id,
             username=user.username,
             first_name=user.first_name,
-            last_name=user.last_name
+            last_name=user.last_name,
         )
 
         # Verificar si el canal está registrado
@@ -60,7 +62,7 @@ async def handle_join_request(join_request: ChatJoinRequest):
             await join_request.bot.send_message(
                 chat_id=user.id,
                 text=LucienVoice.free_entry_impatient(channel.channel_name or "Los Kinkys"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             return
 
@@ -70,7 +72,7 @@ async def handle_join_request(join_request: ChatJoinRequest):
                 user_id=user.id,
                 channel_id=channel.id,
                 username=user.username,
-                first_name=user.first_name
+                first_name=user.first_name,
             )
 
             # Programar mensaje ritual con delay de 30 segundos
@@ -80,7 +82,9 @@ async def handle_join_request(join_request: ChatJoinRequest):
             if scheduler:
                 scheduler.schedule_free_welcome(user.id, chat.id)
 
-            logger.info(f"Solicitud pendiente creada: id={pending.id}, approve_at={pending.scheduled_approval_at}")
+            logger.info(
+                f"Solicitud pendiente creada: id={pending.id}, approve_at={pending.scheduled_approval_at}"
+            )
 
         except Exception as e:
             logger.error(f"Error procesando solicitud: {e}")
@@ -119,9 +123,7 @@ async def handle_member_leave(event: ChatMemberUpdated):
             # Notificar al usuario
             try:
                 await event.bot.send_message(
-                    chat_id=user.id,
-                    text=LucienVoice.free_request_cancelled(),
-                    parse_mode="HTML"
+                    chat_id=user.id, text=LucienVoice.free_request_cancelled(), parse_mode="HTML"
                 )
             except Exception as e:
                 logger.error(f"Error notificando cancelación: {e}")
@@ -164,7 +166,7 @@ async def handle_member_join(event: ChatMemberUpdated):
                     chat_id=user.id,
                     text=message,
                     parse_mode="HTML",
-                    reply_markup=social_links_keyboard()
+                    reply_markup=social_links_keyboard(),
                 )
 
                 logger.info(f"Mensaje de bienvenida enviado a user={user.id}")

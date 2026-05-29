@@ -3,17 +3,16 @@ Servicio de Misiones - Lucien Bot
 
 Gestiona la creacion, progreso y completacion de misiones.
 """
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from models.models import (
-    Mission, MissionType, MissionFrequency, UserMissionProgress,
-    Reward, RewardType
-)
-from models.database import SessionLocal
-from services.reward_service import RewardService
+
 import logging
+from datetime import UTC, datetime
+
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from models.database import SessionLocal
+from models.models import Mission, MissionFrequency, MissionType, UserMissionProgress
+from services.reward_service import RewardService
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +38,18 @@ class MissionService:
 
     # ==================== CREACION DE MISIONES ====================
 
-    def create_mission(self, name: str, description: str, mission_type: MissionType,
-                       target_value: int, reward_id: int = None,
-                       frequency: MissionFrequency = MissionFrequency.ONE_TIME,
-                       start_date: datetime = None, end_date: datetime = None,
-                       created_by: int = None) -> Mission:
+    def create_mission(
+        self,
+        name: str,
+        description: str,
+        mission_type: MissionType,
+        target_value: int,
+        reward_id: int = None,
+        frequency: MissionFrequency = MissionFrequency.ONE_TIME,
+        start_date: datetime = None,
+        end_date: datetime = None,
+        created_by: int = None,
+    ) -> Mission:
         """Crea una nueva mision"""
         db = self._get_db()
         mission = Mission(
@@ -56,7 +62,7 @@ class MissionService:
             start_date=start_date,
             end_date=end_date,
             created_by=created_by,
-            is_active=True
+            is_active=True,
         )
         db.add(mission)
         db.commit()
@@ -66,12 +72,12 @@ class MissionService:
 
     # ==================== CONSULTAS ====================
 
-    def get_mission(self, mission_id: int) -> Optional[Mission]:
+    def get_mission(self, mission_id: int) -> Mission | None:
         """Obtiene una mision por ID"""
         db = self._get_db()
         return db.query(Mission).filter(Mission.id == mission_id).first()
 
-    def get_all_missions(self, active_only: bool = True) -> List[Mission]:
+    def get_all_missions(self, active_only: bool = True) -> list[Mission]:
         """Obtiene todas las misiones"""
         db = self._get_db()
         query = db.query(Mission)
@@ -79,23 +85,29 @@ class MissionService:
             query = query.filter(Mission.is_active == True)
         return query.order_by(desc(Mission.created_at)).all()
 
-    def get_available_missions(self) -> List[Mission]:
+    def get_available_missions(self) -> list[Mission]:
         """Obtiene misiones disponibles actualmente"""
         db = self._get_db()
-        now = datetime.now(timezone.utc)
-        return db.query(Mission).filter(
-            Mission.is_active == True,
-            (Mission.start_date == None) | (Mission.start_date <= now),
-            (Mission.end_date == None) | (Mission.end_date >= now)
-        ).order_by(desc(Mission.created_at)).all()
+        now = datetime.now(UTC)
+        return (
+            db.query(Mission)
+            .filter(
+                Mission.is_active == True,
+                (Mission.start_date == None) | (Mission.start_date <= now),
+                (Mission.end_date == None) | (Mission.end_date >= now),
+            )
+            .order_by(desc(Mission.created_at))
+            .all()
+        )
 
-    def get_missions_by_type(self, mission_type: MissionType) -> List[Mission]:
+    def get_missions_by_type(self, mission_type: MissionType) -> list[Mission]:
         """Obtiene misiones por tipo"""
         db = self._get_db()
-        return db.query(Mission).filter(
-            Mission.mission_type == mission_type,
-            Mission.is_active == True
-        ).all()
+        return (
+            db.query(Mission)
+            .filter(Mission.mission_type == mission_type, Mission.is_active == True)
+            .all()
+        )
 
     # ==================== PROGRESO DE USUARIO ====================
 
@@ -106,10 +118,13 @@ class MissionService:
         if not mission:
             raise ValueError("Mision no encontrada")
 
-        progress = db.query(UserMissionProgress).filter(
-            UserMissionProgress.user_id == user_id,
-            UserMissionProgress.mission_id == mission_id
-        ).first()
+        progress = (
+            db.query(UserMissionProgress)
+            .filter(
+                UserMissionProgress.user_id == user_id, UserMissionProgress.mission_id == mission_id
+            )
+            .first()
+        )
 
         if not progress:
             progress = UserMissionProgress(
@@ -117,7 +132,7 @@ class MissionService:
                 mission_id=mission_id,
                 target_value=mission.target_value,
                 current_value=0,
-                is_completed=False
+                is_completed=False,
             )
             db.add(progress)
             db.commit()
@@ -126,22 +141,28 @@ class MissionService:
 
         return progress
 
-    def get_user_progress(self, user_id: int, mission_id: int) -> Optional[UserMissionProgress]:
+    def get_user_progress(self, user_id: int, mission_id: int) -> UserMissionProgress | None:
         """Obtiene el progreso de un usuario en una mision"""
         db = self._get_db()
-        return db.query(UserMissionProgress).filter(
-            UserMissionProgress.user_id == user_id,
-            UserMissionProgress.mission_id == mission_id
-        ).first()
+        return (
+            db.query(UserMissionProgress)
+            .filter(
+                UserMissionProgress.user_id == user_id, UserMissionProgress.mission_id == mission_id
+            )
+            .first()
+        )
 
-    def get_user_all_progress(self, user_id: int) -> List[UserMissionProgress]:
+    def get_user_all_progress(self, user_id: int) -> list[UserMissionProgress]:
         """Obtiene todo el progreso de un usuario"""
         db = self._get_db()
-        return db.query(UserMissionProgress).filter(
-            UserMissionProgress.user_id == user_id
-        ).order_by(desc(UserMissionProgress.last_updated)).all()
+        return (
+            db.query(UserMissionProgress)
+            .filter(UserMissionProgress.user_id == user_id)
+            .order_by(desc(UserMissionProgress.last_updated))
+            .all()
+        )
 
-    def get_user_active_missions(self, user_id: int) -> List[dict]:
+    def get_user_active_missions(self, user_id: int) -> list[dict]:
         """Obtiene las misiones activas de un usuario con su progreso"""
         available_missions = self.get_available_missions()
         result = []
@@ -149,21 +170,29 @@ class MissionService:
         for mission in available_missions:
             progress = self.get_user_progress(user_id, mission.id)
 
-            if progress and progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+            if (
+                progress
+                and progress.is_completed
+                and mission.frequency == MissionFrequency.ONE_TIME
+            ):
                 continue  # Mision completada y no recurrente
 
             if not progress:
                 progress = self.get_or_create_progress(user_id, mission.id)
 
-            result.append({
-                'mission': mission,
-                'progress': progress,
-                'percentage': min(100, int((progress.current_value / mission.target_value) * 100))
-            })
+            result.append(
+                {
+                    "mission": mission,
+                    "progress": progress,
+                    "percentage": min(
+                        100, int((progress.current_value / mission.target_value) * 100)
+                    ),
+                }
+            )
 
         return result
 
-    def get_available_rewards_for_user(self, user_id: int) -> List[dict]:
+    def get_available_rewards_for_user(self, user_id: int) -> list[dict]:
         """
         Obtiene recompensas disponibles para un usuario con sus misiones asociadas.
         Retorna lista de dicts con mission, reward, y progress.
@@ -177,24 +206,25 @@ class MissionService:
                 continue
 
             progress = self.get_user_progress(user_id, mission.id)
-            if progress and progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+            if (
+                progress
+                and progress.is_completed
+                and mission.frequency == MissionFrequency.ONE_TIME
+            ):
                 continue
 
             reward_service = RewardService(db)
             reward = reward_service.get_reward(mission.reward_id)
             if reward and reward.is_active:
-                result.append({
-                    'mission': mission,
-                    'reward': reward,
-                    'progress': progress
-                })
+                result.append({"mission": mission, "reward": reward, "progress": progress})
 
         return result
 
     # ==================== ACTUALIZACION DE PROGRESO ====================
 
-    def increment_progress(self, user_id: int, mission_type: MissionType,
-                           amount: int = 1, reference_id: int = None) -> List[UserMissionProgress]:
+    def increment_progress(
+        self, user_id: int, mission_type: MissionType, amount: int = 1, reference_id: int = None
+    ) -> list[UserMissionProgress]:
         """
         Incrementa el progreso del usuario en todas las misiones del tipo especificado.
         Retorna las misiones completadas.
@@ -240,7 +270,7 @@ class MissionService:
             # Verificar completitud
             if progress.current_value >= mission.target_value:
                 progress.is_completed = True
-                progress.completed_at = datetime.now(timezone.utc)
+                progress.completed_at = datetime.now(UTC)
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
 
@@ -248,8 +278,14 @@ class MissionService:
 
         return completed
 
-    async def increment_progress_and_deliver(self, user_id: int, mission_type: MissionType,
-                           amount: int = 1, bot=None, reference_id: int = None) -> List[UserMissionProgress]:
+    async def increment_progress_and_deliver(
+        self,
+        user_id: int,
+        mission_type: MissionType,
+        amount: int = 1,
+        bot=None,
+        reference_id: int = None,
+    ) -> list[UserMissionProgress]:
         """
         Incrementa el progreso y entrega recompensas automaticamente.
         Retorna las misiones completadas.
@@ -296,7 +332,7 @@ class MissionService:
             # Verificar completitud
             if progress.current_value >= mission.target_value:
                 progress.is_completed = True
-                progress.completed_at = datetime.now(timezone.utc)
+                progress.completed_at = datetime.now(UTC)
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
 
@@ -305,9 +341,13 @@ class MissionService:
                     # Verificar cooldown para misiones RECURRING
                     if mission.frequency == MissionFrequency.RECURRING and mission.cooldown_hours:
                         if progress.last_updated:
-                            hours_since = (datetime.now(timezone.utc) - progress.last_updated).total_seconds() / 3600
+                            hours_since = (
+                                datetime.now(UTC) - progress.last_updated
+                            ).total_seconds() / 3600
                             if hours_since < mission.cooldown_hours:
-                                logger.info(f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa")
+                                logger.info(
+                                    f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa"
+                                )
                                 continue
 
                     reward_service = RewardService(db)
@@ -315,13 +355,15 @@ class MissionService:
                         bot=bot, user_id=user_id, reward_id=mission.reward_id, mission_id=mission.id
                     )
                     if success:
-                        logger.info(f"Recompensa entregada: user={user_id}, reward={mission.reward_id}")
+                        logger.info(
+                            f"Recompensa entregada: user={user_id}, reward={mission.reward_id}"
+                        )
 
             db.commit()
 
         return completed
 
-    def set_progress(self, user_id: int, mission_id: int, value: int) -> Optional[UserMissionProgress]:
+    def set_progress(self, user_id: int, mission_id: int, value: int) -> UserMissionProgress | None:
         """Establece el progreso de un usuario a un valor especifico"""
         db = self._get_db()
         mission = self.get_mission(mission_id)
@@ -333,7 +375,7 @@ class MissionService:
 
         if progress.current_value >= mission.target_value:
             progress.is_completed = True
-            progress.completed_at = datetime.now(timezone.utc)
+            progress.completed_at = datetime.now(UTC)
         else:
             progress.is_completed = False
             progress.completed_at = None
@@ -350,8 +392,16 @@ class MissionService:
         if not mission:
             return False
 
-        allowed_fields = ['name', 'description', 'target_value', 'reward_id',
-                         'frequency', 'start_date', 'end_date', 'is_active']
+        allowed_fields = [
+            "name",
+            "description",
+            "target_value",
+            "reward_id",
+            "frequency",
+            "start_date",
+            "end_date",
+            "is_active",
+        ]
 
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(mission, field):
@@ -383,18 +433,18 @@ class MissionService:
         if not mission:
             return {}
 
-        progress_list = db.query(UserMissionProgress).filter(
-            UserMissionProgress.mission_id == mission_id
-        ).all()
+        progress_list = (
+            db.query(UserMissionProgress).filter(UserMissionProgress.mission_id == mission_id).all()
+        )
 
         total_users = len(progress_list)
         completed = sum(1 for p in progress_list if p.is_completed)
         in_progress = total_users - completed
 
         return {
-            'mission_name': mission.name,
-            'total_users': total_users,
-            'completed': completed,
-            'in_progress': in_progress,
-            'completion_rate': round((completed / total_users * 100), 2) if total_users > 0 else 0
+            "mission_name": mission.name,
+            "total_users": total_users,
+            "completed": completed,
+            "in_progress": in_progress,
+            "completion_rate": round((completed / total_users * 100), 2) if total_users > 0 else 0,
         }

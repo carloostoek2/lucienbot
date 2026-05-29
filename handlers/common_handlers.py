@@ -3,17 +3,24 @@ Handlers Comunes - Lucien Bot
 
 Handlers para comandos básicos y flujos generales.
 """
+
+import logging
 from datetime import timedelta
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import CommandStart, Command
-from aiogram.enums import ChatType
+
+from aiogram import F, Router
+from aiogram.filters import Command, CommandStart
+from aiogram.types import CallbackQuery, Message
+
 from config.settings import bot_config
+from keyboards.inline_keyboards import (
+    admin_menu_keyboard,
+    main_menu_keyboard,
+    returning_user_keyboard,
+    vip_access_keyboard,
+)
 from services.user_service import UserService
 from services.vip_service import VIPService
-from keyboards.inline_keyboards import main_menu_keyboard, admin_menu_keyboard, returning_user_keyboard, vip_access_keyboard
 from utils.lucien_voice import LucienVoice
-import logging
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -41,8 +48,7 @@ async def cmd_start(message: Message):
             if vip_channel:
                 try:
                     chat_member = await message.bot.get_chat_member(
-                        chat_id=vip_channel.channel_id,
-                        user_id=user.id
+                        chat_id=vip_channel.channel_id, user_id=user.id
                     )
                     is_vip_member = chat_member.status in ["member", "administrator", "creator"]
                     logger.info(f"Usuario {user.id} membresía VIP: {chat_member.status}")
@@ -51,10 +57,7 @@ async def cmd_start(message: Message):
 
             # Si es miembro VIP, enviar mensaje especial
             if is_vip_member:
-                await message.answer(
-                    LucienVoice.vip_member_free_link_greeting(),
-                    parse_mode="HTML"
-                )
+                await message.answer(LucienVoice.vip_member_free_link_greeting(), parse_mode="HTML")
                 return
 
             # Si no es VIP, verificar si es usuario existente para flujo de "viejo conocido"
@@ -66,12 +69,12 @@ async def cmd_start(message: Message):
                     telegram_id=user.id,
                     username=user.username,
                     first_name=user.first_name,
-                    last_name=user.last_name
+                    last_name=user.last_name,
                 )
                 await message.answer(
                     LucienVoice.returning_user_greeting(),
                     reply_markup=returning_user_keyboard(),
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
                 return
 
@@ -84,7 +87,7 @@ async def cmd_start(message: Message):
             telegram_id=user.id,
             username=user.username,
             first_name=user.first_name,
-            last_name=user.last_name
+            last_name=user.last_name,
         )
 
         # Verificar si es token de acceso VIP
@@ -103,17 +106,19 @@ async def cmd_start(message: Message):
                             name=f"VIP {user.id}",
                             creates_join_request=False,
                             member_limit=1,
-                            expire_date=timedelta(days=VIPService.INVITE_LINK_EXPIRATION_DAYS)
+                            expire_date=timedelta(days=VIPService.INVITE_LINK_EXPIRATION_DAYS),
                         )
                         invite_link = invite_link_obj.invite_link
                     except Exception as e:
-                        logger.error(f"Error creando invite link para canal {vip_channel.channel_id}: {e}")
+                        logger.error(
+                            f"Error creando invite link para canal {vip_channel.channel_id}: {e}"
+                        )
                         invite_link = vip_channel.invite_link
 
                 await message.answer(
                     LucienVoice.vip_direct_access(invite_link),
                     reply_markup=vip_access_keyboard(),
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
                 return
             else:
@@ -132,9 +137,7 @@ async def cmd_start(message: Message):
 
         if is_admin:
             await message.answer(
-                LucienVoice.admin_greeting(),
-                reply_markup=admin_menu_keyboard(),
-                parse_mode="HTML"
+                LucienVoice.admin_greeting(), reply_markup=admin_menu_keyboard(), parse_mode="HTML"
             )
         else:
             # Verificar si es VIP
@@ -143,7 +146,7 @@ async def cmd_start(message: Message):
             await message.answer(
                 LucienVoice.greeting(user.first_name),
                 reply_markup=main_menu_keyboard(is_vip),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
     finally:
         if user_service:
@@ -175,7 +178,7 @@ async def cmd_help(message: Message):
 3. Su membresía se activará automáticamente
 
 <i>Diana observa con interés su participación...</i>"""
-    
+
     await message.answer(help_text, parse_mode="HTML")
 
 
@@ -192,7 +195,7 @@ async def back_to_main(callback: CallbackQuery):
         await callback.message.edit_text(
             LucienVoice.greeting(user.first_name),
             reply_markup=main_menu_keyboard(is_vip),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     finally:
         vip_service.close()
@@ -207,9 +210,7 @@ async def back_to_main(callback: CallbackQuery):
 async def back_to_admin(callback: CallbackQuery):
     """Volver al menú de administrador"""
     await callback.message.edit_text(
-        LucienVoice.admin_greeting(),
-        reply_markup=admin_menu_keyboard(),
-        parse_mode="HTML"
+        LucienVoice.admin_greeting(), reply_markup=admin_menu_keyboard(), parse_mode="HTML"
     )
     await callback.answer()
 
@@ -218,9 +219,8 @@ async def back_to_admin(callback: CallbackQuery):
 async def cancel_action(callback: CallbackQuery):
     """Cancelar acción actual"""
     await callback.message.edit_text(
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Acción cancelada. Diana aprecia la deliberación...</i>",
-        parse_mode="HTML"
+        "🎩 <b>Lucien:</b>\n\n" "<i>Acción cancelada. Diana aprecia la deliberación...</i>",
+        parse_mode="HTML",
     )
     await callback.answer("Acción cancelada")
 
@@ -229,8 +229,6 @@ async def cancel_action(callback: CallbackQuery):
 async def coming_soon_features(callback: CallbackQuery):
     """Features aún no implementadas"""
     await callback.message.edit_text(
-        LucienVoice.coming_soon(),
-        reply_markup=main_menu_keyboard(),
-        parse_mode="HTML"
+        LucienVoice.coming_soon(), reply_markup=main_menu_keyboard(), parse_mode="HTML"
     )
     await callback.answer()

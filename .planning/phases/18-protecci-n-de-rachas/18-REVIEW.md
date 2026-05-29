@@ -1,8 +1,8 @@
 ---
 phase: 18-protecci-n-de-rachas
-reviewed: 2026-05-23T14:30:00Z
+reviewed: 2026-05-27T00:00:00Z
 depth: standard
-files_reviewed: 13
+files_reviewed: 12
 files_reviewed_list:
   - models/models.py
   - services/streak_promotion_service.py
@@ -16,131 +16,53 @@ files_reviewed_list:
   - alembic/versions/20260523_streak_sessions_table.py
   - tests/test_streak_protection.py
   - tests/test_streak_fsm.py
-  - tests/conftest.py
 findings:
-  critical: 2
-  warning: 5
+  critical: 1
+  warning: 2
   info: 3
-  total: 10
+  total: 6
 status: issues_found
 ---
 
-# Phase 18: Code Review Report — Proteccion de Rachas
+# Phase 18: Code Review Report -- RE-review
 
-**Reviewed:** 2026-05-23T14:30:00Z
+**Reviewed:** 2026-05-27T00:00:00Z
 **Depth:** standard
-**Files Reviewed:** 13
+**Files Reviewed:** 12
 **Status:** issues_found
 
 ## Summary
 
-The streak protection implementation introduces new models (StreakSession, StreakPromotion), a new service (StreakPromotionService), and integrates with existing game flow (GameService) and handlers. The architecture is sound overall, but there are two critical bugs that break core functionality of the timeout mechanism and transaction integrity during code pre-generation. Several migration/model inconsistencies and quality issues are also present.
+This is a RE-review following commits dabe16b, e02ecaa, cc2e344, 1d1ac61, and 93bdb42 that addressed issues from the original review on 2026-05-23.
+
+**Of the 10 previously-identified issues, 4 are fixed and 6 remain unresolved:**
+
+Fixed: CR-01 (timeout filter), WR-02 (dead question_idx), WR-05 (direct db.commit in handler), IN-02 (hardcoded code_count=0).
+
+Not fixed: CR-02 (rollback in _pre_generate_codes), WR-01 (missing FK in migration), WR-03 (hardcoded path in conftest.py), WR-04 (duplicate fixtures), IN-01 (unused FSM states), IN-03 (claimed_in_risk not handled).
+
+One new Warning was introduced (timezone inconsistency in cleanup) and one new Info finding (dead code after return).
 
 ---
 
 ## Critical Issues
 
-### CR-01: `get_active_session` filter breaks timeout mechanism entirely
+### CR-01: `_pre_generate_codes` rollback destroys parent transaction (REOPENED -- NOT FIXED)
 
-**File:** `services/streak_promotion_service.py:240-258`
-**Issue:** `get_active_session()` filters for `StreakSession.expires_at == None` at line 248. However, when `_build_streak_failure_state` (game_service.py:848-849) sets `session.expires_at` to `now + 2 minutes` to grant a timeout, the session becomes invisible to `get_active_session()` on subsequent calls. This means:
+**File:** `services/streak_promotion_service.py:74`
+**Issue:** When `_pre_generate_codes` encounters an `IntegrityError` on the `code_value` unique constraint, it calls `db.rollback()` at line 74. This rolls back the **entire** current transaction, which includes:
 
-- `_get_or_create_session` (line 260) calls `get_active_session`, finds nothing, and creates a **brand new session**, completely bypassing the timeout.
-- The `if session.expires_at and now > session.expires_at` check at line 254 is **dead code** — it can never be true because the query already filtered `expires_at == None`.
-- The timed-out session is orphaned, and its codes are only cleaned up later by the 60-minute scheduler job (`_cleanup_expired_streak_sessions`).
-
-**Impact:** Any user who receives a 2-minute timeout can immediately continue playing with a fresh session. The timeout mechanism is entirely ineffective.
-
-**Fix:** Remove the `expires_at == None` filter from `get_active_session`. The method should find ANY active session for the user (including those with a future `expires_at`), then check the expiration:
-
-```python
-def get_active_session(self, user_id: int) -> Optional[StreakSession]:
-    db = self._get_db()
-    now = datetime.now(timezone.utc)
-    session = (
-        db.query(StreakSession)
-        .filter(
-            StreakSession.user_id == user_id,
-        )
-        .order_by(StreakSession.started_at.desc())
-        .first()
-    )
-    if not session:
-        return None
-    if session.expires_at and now > session.expires_at:
-        self.cancel_session_codes(session.id)
-        self.close_session(user_id, retire=False)
-        return None
-    return session
-```
-
-There is a design question: should there be only one active session per user? If so, enforce uniqueness at the application level or add a unique constraint (which may require a new boolean column like `is_active`). Currently, without the filter, all old sessions will be returned. The `order_by(...started_at.desc()).first()` pattern above picks the most recent session, which is the simplest fix. A more robust approach would add an `is_active` boolean column.
-
-### CR-02: `_pre_generate_codes` rollback destroys parent transaction
-
-**File:** `services/streak_promotion_service.py:54-82`
-
-**Issue:** When `_pre_generate_codes` encounters a code collision (IntegrityError on the `code_value` unique constraint), it calls `db.rollback()` at line 74. This rolls back the **entire** current transaction, which includes:
 - The `promotion` insert (flushed at line 99 in `create_promotion`)
 - The `level` insert (flushed at line 108 in `create_promotion`)
 - Any successfully inserted codes from earlier iterations
 
 After the rollback, the `level` object is in a detached state (its DB identity was rolled back), but `level.id` still holds the old value. Subsequent retries create `StreakPromotionCode` objects referencing that now-nonexistent `level_id`, which will fail with a foreign key violation.
 
-**Impact:** If a code collision occurs (extremely rare but possible with `secrets.token_hex(6)`), the entire promotion creation fails and the database is left in an inconsistent state. The `create_promotion` method at line 110 then calls `db.commit()`, which may commit garbage or nothing at all depending on the session state.
+NOTE: The fix suggested in the original review on 2026-05-23 was **not applied**. The `db.rollback()` is still present at line 74.
 
-**Fix:** Use a savepoint (nested transaction) instead of a full rollback:
+**Impact:** If a code collision occurs (extremely rare but possible with `secrets.token_hex(6)`), the entire promotion creation fails and the database is left in an inconsistent state.
 
-```python
-def _pre_generate_codes(self, level: StreakPromotionLevel, prefix: str = "SK"):
-    count = level.codes_available
-    db = self._get_db()
-    generated = 0
-    max_attempts = count * 3
-    attempt = 0
-    while generated < count and attempt < max_attempts:
-        attempt += 1
-        code_value = self._generate_code(prefix)
-        code = StreakPromotionCode(
-            level_id=level.id,
-            code_value=code_value,
-            status=StreakPromotionCodeStatus.AVAILABLE,
-        )
-        db.add(code)
-        try:
-            db.flush()
-            generated += 1
-        except IntegrityError:
-            db.rollback()  # <-- PROBLEM: rolls back entire transaction
-```
-
-Replace with a savepoint:
-
-```python
-def _pre_generate_codes(self, level: StreakPromotionLevel, prefix: str = "SK"):
-    count = level.codes_available
-    db = self._get_db()
-    generated = 0
-    max_attempts = count * 3
-    attempt = 0
-    while generated < count and attempt < max_attempts:
-        attempt += 1
-        code_value = self._generate_code(prefix)
-        code = StreakPromotionCode(
-            level_id=level.id,
-            code_value=code_value,
-            status=StreakPromotionCodeStatus.AVAILABLE,
-        )
-        db.add(code)
-        try:
-            with db.begin_nested():
-                db.flush()
-            generated += 1
-        except IntegrityError:
-            logger.warning(...)
-```
-
-Alternatively, since collisions are extremely rare with 12 random hex chars, simply generate a new code and retry the flush without a rollback — the broken code object is local and can be replaced:
+**Fix:** Use a savepoint (nested transaction) or expunge the failed object instead of a full rollback:
 
 ```python
 def _pre_generate_codes(self, level: StreakPromotionLevel, prefix: str = "SK"):
@@ -163,27 +85,34 @@ def _pre_generate_codes(self, level: StreakPromotionLevel, prefix: str = "SK"):
             generated += 1
         except IntegrityError:
             db.expunge(code)  # remove failed object from session
-            logger.warning(...)
+            logger.warning(
+                f"streak_promotion_service - _pre_generate_codes - "
+                f"level_id:{level.id} - code collision, retrying"
+            )
+    logger.info(
+        f"streak_promotion_service - _pre_generate_codes - "
+        f"level_id:{level.id} - count:{generated}"
+    )
 ```
 
 ---
 
 ## Warnings
 
-### WR-01: Missing ForeignKey constraint on `streak_sessions.promotion_id` in migration
+### WR-01: Missing ForeignKey constraint on `streak_sessions.promotion_id` in migration (REOPENED -- NOT FIXED)
 
-**File:** `alembic/versions/20260523_streak_sessions_table.py:19-37`
+**File:** `alembic/versions/20260523_streak_sessions_table.py:24`
 **File:** `models/models.py:1238`
 
-**Issue:** The `StreakSession` model at models.py:1238 declares `promotion_id = Column(Integer, ForeignKey("streak_promotions.id"), nullable=False)`, but the migration at `20260523_streak_sessions_table.py` creates the column without the foreign key:
+**Issue:** The `StreakSession` model declares `promotion_id = Column(Integer, ForeignKey("streak_promotions.id"), nullable=False)`, but the migration creates the column without the foreign key constraint:
 
 ```python
 sa.Column('promotion_id', sa.Integer(), nullable=False),
 ```
 
-Compare how the `session_id` FK on `streak_promotion_codes` IS properly added via `batch_op.create_foreign_key` (lines 33-36). The `promotion_id` FK is entirely missing from the migration.
+No `create_foreign_key` call exists for this column, unlike the `session_id` FK on `streak_promotion_codes` which IS properly created at lines 33-36 of the same migration.
 
-**Impact:** In production PostgreSQL, no referential integrity is enforced for `streak_sessions.promotion_id` -> `streak_promotions.id`. Orphaned session rows can exist if a promotion is deleted.
+**Impact:** In production PostgreSQL, no referential integrity is enforced. Orphaned `StreakSession` rows can exist if a `StreakPromotion` is deleted.
 
 **Fix:** Add the foreign key to the migration:
 
@@ -196,132 +125,109 @@ with op.batch_alter_table('streak_sessions', schema=None) as batch_op:
     )
 ```
 
-### WR-02: Dead `question_idx` field in streak protection callbacks
+### WR-02: Timezone inconsistency in `_cleanup_expired_streak_sessions` (NEW)
 
-**Files:**
-- `keyboards/callback_data.py:620-629` (both `StreakProtectAcceptCallback` and `StreakProtectDeclineCallback`)
-- `keyboards/inline_keyboards.py:543-554` (`protection_keyboard`)
-- `handlers/game_user_handlers.py:486-528` (both `handle_protection_accept` and `handle_protection_decline`)
+**File:** `services/scheduler_service.py:281`
+**File:** `services/streak_promotion_service.py:247, 359, 849`
 
-**Issue:** `StreakProtectAcceptCallback` and `StreakProtectDeclineCallback` both define a `question_idx: int` field, and `protection_keyboard` passes it in the callback data. However, none of the handlers that receive these callbacks ever read `question_idx`. The field is serialized into the callback payload for no benefit, bloating the callback data string unnecessarily.
-
-**Fix:** Remove `question_idx` from both callback classes and from `protection_keyboard`:
+**Issue:** The cleanup job `_cleanup_expired_streak_sessions` constructs `now` as a timezone-aware datetime:
 
 ```python
-class StreakProtectAcceptCallback(CallbackData, prefix="streak_protect_accept"):
-    streak: int
-
-class StreakProtectDeclineCallback(CallbackData, prefix="streak_protect_decline"):
-    streak: int
+now = datetime.now(timezone.utc)
 ```
 
-And update `protection_keyboard` to not pass `question_idx`.
-
-### WR-03: Hardcoded path in conftest.py prevents portability
-
-**File:** `tests/conftest.py:13`
-
-**Issue:** The sys.path insertion at line 13 uses a hardcoded path:
-```python
-sys.path.insert(0, '/data/data/com.termux/files/home/repos/lucien_bot')
-```
-
-This path is specific to a Termux environment on a single developer's device. This will prevent tests from running on any other machine, CI server, or developer workstation. The test file's imports rely on this path to find the project modules.
-
-**Fix:** Use a relative path derived from the test file location:
+However, every location that sets `expires_at` strips timezone info:
 
 ```python
-import os
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# streak_promotion_service.py:247 (get_active_session)
+now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+# streak_promotion_service.py:359 (close_session)
+session.expires_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+# game_service.py:849 (_build_streak_failure_state)
+session.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=2)
 ```
 
-### WR-04: Duplicate fixture definitions override each other silently
+This means the stored `expires_at` values are naive datetimes but the query uses a timezone-aware `now`. The comparison `StreakSession.expires_at < now` may behave differently depending on database backend:
 
-**File:** `tests/conftest.py`
-- `sample_package`: lines 276-289 AND lines 479-492 (different `store_stock` defaults: 10 vs -1)
-- `sample_promotion`: lines 309-323 AND lines 495-509
-- `sample_reaction_emoji`: lines 327-338 AND lines 513-524 (different `besito_value`: 1 vs 5)
-- `sample_broadcast_message`: lines 341-354 AND lines 527-540
+- **PostgreSQL with TIMESTAMPTZ**: naive timestamps are interpreted as UTC by the driver, so the comparison works correctly.
+- **SQLite**: the comparison depends on string representation and may silently fail to match expired sessions.
 
-**Issue:** pytest does not allow duplicate fixture names. The second definition silently overrides the first. Any test that depends on `sample_package` with `store_stock=10` will unexpectedly get `store_stock=-1` because the second definition (line 479) wins. This changes the behavior of tests that rely on stock decrement logic.
+Commit dabe16b explicitly adopted timezone-naive datetimes for SQLite compatibility. The cleanup job should use the same convention.
 
-**Impact:** Subtle test failures or false passes. A test expecting limited stock behavior will get unlimited stock behavior.
-
-**Fix:** Remove the duplicate fixture definitions. Keep only the version that reflects the most common test scenario, or better, make separate fixtures with distinct names (e.g., `sample_package_limited_stock`, `sample_package_unlimited_stock`).
-
-### WR-05: Direct `db.commit()` called from handler code
-
-**File:** `handlers/game_user_handlers.py:559-559`
-
-**Issue:** In `handle_streak_continue`, the handler calls `promo_svc.db.commit()` directly:
-```python
-with get_service(StreakPromotionService) as promo_svc:
-    session = promo_svc.get_active_session(user_id)
-    if session:
-        session.is_in_risk_mode = True
-        promo_svc.db.commit()  # <-- direct commit from handler
-```
-
-Per the architecture rules (`handlers/CLAUDE.md`): handlers must **not** access the database. While this goes through a service attribute, it still performs a write operation from the handler layer. The commit should be handled by the service itself via a dedicated method.
-
-**Fix:** Add a `set_risk_mode` method to `StreakPromotionService`:
+**Fix:** Make the cleanup job consistent with the storage convention:
 
 ```python
-def set_risk_mode(self, user_id: int) -> bool:
-    session = self.get_active_session(user_id)
-    if not session:
-        return False
-    session.is_in_risk_mode = True
-    self.db.commit()
-    return True
+now = datetime.now(timezone.utc).replace(tzinfo=None)
 ```
-
-Then the handler simply calls `promo_svc.set_risk_mode(user_id)`.
 
 ---
 
 ## Info
 
-### IN-01: TriviaStreakStates FSM states defined but never used
+### IN-01: Duplicate fixture definitions in conftest.py (REOPENED -- NOT FIXED)
+
+**File:** `tests/conftest.py`
+
+**Issue:** pytest silently uses the last definition when duplicate fixture names exist. Four fixture pairs have different default parameter values:
+
+| Fixture | Line 1 | Line 2 | Value Diff |
+|---------|--------|--------|------------|
+| `sample_package` | 277 | 480 | `store_stock`: 10 vs -1 |
+| `sample_promotion` | 310 | 496 | identical except `price_mxn` format |
+| `sample_reaction_emoji` | 327 | 513 | `besito_value`: 1 vs 5 |
+| `sample_broadcast_message` | 342 | 528 | second uses `AsyncMock` admin, first uses sample_admin |
+
+The second definition (lines 480-540) always wins. Any test depending on `sample_package` with `store_stock=10` unexpectedly gets `store_stock=-1` (unlimited stock). This changes the behavior of stock decrement logic tests.
+
+**Fix:** Remove the duplicate block (lines 478-540) or rename the second set with distinct fixture names.
+
+### IN-02: Dead unreachable code in `game_trivia_simple` handler (NEW)
+
+**File:** `handlers/game_user_handlers.py:383-384`
+
+**Issue:** Lines 383-384 are unreachable dead code after the `return` statement on line 382:
+
+```python
+        if question is None:
+            await callback.message.edit_text(
+                "Los pergaminos especiales estan en el taller de Lucien.",
+                reply_markup=game_menu_keyboard()
+            )
+            await callback.answer()
+            return              # <-- line 382
+            await callback.answer()   # <-- DEAD CODE, unreachable
+            return                     # <-- DEAD CODE, unreachable
+```
+
+This appears to be a copy-paste artifact or unfinished edit. While not a functional bug (the code never executes), it indicates a lack of cleanup and could confuse future maintainers.
+
+**Fix:** Remove lines 383-384.
+
+### IN-03: TriviaStreakStates FSM states remain unused (REOPENED -- NOT FIXED)
 
 **File:** `handlers/game_user_handlers.py:41-43`
 
-**Issue:** The `TriviaStreakStates` class defines `waiting_protection_choice` and `waiting_retire_choice` states, but no handler ever sets or checks FSM states. The entire protection flow operates via direct session updates without FSM state management, leaving the FSM states as dead code.
+**Issue:** The `TriviaStreakStates` class defines `waiting_protection_choice` and `waiting_retire_choice` states, but no handler ever sets or checks FSM state transitions. The protection/retire/continue flow operates entirely through `session_state` dict values from the service layer, bypassing the FSM.
 
-**Fix:** Either implement FSM state transitions (set state before showing protection/risk-mode keyboard, check/clear state when handling responses) or remove the unused FSM states.
-
-### IN-02: `streak_codes_cancelled(0)` hardcoded in all handler calls
-
-**Files:**
-- `handlers/game_user_handlers.py:209`
-- `handlers/game_user_handlers.py:319`
-- `handlers/game_user_handlers.py:465`
-
-**Issue:** All handler invocations of `LucienVoice.streak_codes_cancelled()` pass a hardcoded `0` for the `code_count` parameter. The resulting message says "Los 0 codigo(s)..." regardless of how many codes were actually cancelled. This is misleading to the user.
-
-**Fix:** Return the count of cancelled codes from `cancel_session_codes` and pass it to the voice method:
-
-```python
-def cancel_session_codes(self, session_id: uuid.UUID) -> int:
-    """Returns number of codes cancelled."""
-    ...
-    return cancelled
-```
-
-### IN-03: `claimed_in_risk` session_state action not handled explicitly in handlers
-
-**Files:**
-- `handlers/game_user_handlers.py:176-213` (trivia_answer)
-- `handlers/game_user_handlers.py:285-323` (trivia_vip_answer)
-- `handlers/game_user_handlers.py:431-469` (trivia_simple_answer)
-
-**Issue:** The `_build_streak_claim_state` service method can return `{"action": "claimed_in_risk"}` (when the user is already in risk mode and claims another code). None of the three handler methods have a branch for this action, so it falls through to the default message display. While the promo code line IS still shown in the default message (because `_build_trivia_message_parts` renders it from the `promo_code` dict), the session_state branching infrastructure implies an intent to handle it specially. The mismatch can confuse future maintainers.
-
-**Fix:** Either add an explicit handler branch for `claimed_in_risk` (even if it just shows the normal result) or document in the service method that `claimed_in_risk` is intentionally consumed by the normal message flow.
+**Fix:** Either implement FSM state management for the protection flow or remove the unused `TriviaStreakStates` class.
 
 ---
 
-_Reviewed: 2026-05-23T14:30:00Z_
+## Previously Fixed Issues (Verified)
+
+The following issues from the 2026-05-23 review have been successfully resolved:
+
+| Issue | Fix | Verification |
+|-------|-----|--------------|
+| **CR-01** timeout filter | Removed `expires_at == None` from `get_active_session` filter | Confirmed at `streak_promotion_service.py:250` -- only filters by `user_id`, checks expiration in application logic |
+| **WR-02** dead `question_idx` | Removed from callback classes and keyboard | `StreakProtectAcceptCallback` and `StreakProtectDeclineCallback` now only have `streak: int, game_type: str` |
+| **WR-05** `db.commit()` in handler | Moved to `StreakPromotionService.set_risk_mode()` | Handler at line 566 calls `promo_svc.set_risk_mode(user_id)`; service method properly encapsulates the commit |
+| **IN-02** hardcoded `code_count=0` | Returns actual count from `cancel_session_codes()` | `cancel_session_codes` returns `cancelled` count; handlers use `session_state.get('codes_cancelled', 0)` |
+
+---
+
+_Reviewed: 2026-05-27T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_

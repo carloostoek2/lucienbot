@@ -3,23 +3,26 @@ Servicio de Configuracion de Trivia - Lucien Bot
 
 Gestiona la configuracion de limites diarios de minijuegos (dados, trivia).
 """
+
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
-from models.models import TriviaConfig
+
 from models.database import SessionLocal
+from models.models import TriviaConfig
 
 logger = logging.getLogger(__name__)
 
 # Valores por defecto (fallback si no hay row en BD)
 DEFAULTS = {
-    'dice_limit_free': 10,
-    'dice_limit_vip': 20,
-    'trivia_limit_free': 5,
-    'trivia_limit_vip': 10,
-    'trivia_vip_limit': 5,
-    'trivia_simple_limit_free': 5,
-    'trivia_simple_limit_vip': 10,
+    "dice_limit_free": 10,
+    "dice_limit_vip": 20,
+    "trivia_limit_free": 5,
+    "trivia_limit_vip": 10,
+    "trivia_vip_limit": 5,
+    "trivia_simple_limit_free": 5,
+    "trivia_simple_limit_vip": 10,
 }
 
 
@@ -51,13 +54,13 @@ class TriviaConfigService:
             db.refresh(config)
             logger.info("TriviaConfig creada con valores por defecto")
         return {
-            'dice_limit_free': config.dice_limit_free,
-            'dice_limit_vip': config.dice_limit_vip,
-            'trivia_limit_free': config.trivia_limit_free,
-            'trivia_limit_vip': config.trivia_limit_vip,
-            'trivia_vip_limit': config.trivia_vip_limit,
-            'trivia_simple_limit_free': config.trivia_simple_limit_free,
-            'trivia_simple_limit_vip': config.trivia_simple_limit_vip,
+            "dice_limit_free": config.dice_limit_free,
+            "dice_limit_vip": config.dice_limit_vip,
+            "trivia_limit_free": config.trivia_limit_free,
+            "trivia_limit_vip": config.trivia_limit_vip,
+            "trivia_vip_limit": config.trivia_vip_limit,
+            "trivia_simple_limit_free": config.trivia_simple_limit_free,
+            "trivia_simple_limit_vip": config.trivia_simple_limit_vip,
         }
 
     def update_config(self, admin_id: int, **kwargs) -> dict:
@@ -74,7 +77,7 @@ class TriviaConfigService:
                 setattr(config, key, value)
 
         config.updated_by = admin_id
-        config.updated_at = datetime.now(timezone.utc)
+        config.updated_at = datetime.now(UTC)
         db.commit()
         db.refresh(config)
         logger.info(f"TriviaConfig actualizada por admin {admin_id}: {kwargs}")

@@ -3,13 +3,16 @@ Analytics Service - Lucien Bot
 
 Agregacion de metricas y exportacion de datos para Custodios.
 """
+
 import csv
-import tempfile
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
-from models.models import User, Subscription, BesitoTransaction, BesitoBalance
-from models.database import SessionLocal
 import logging
+import tempfile
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy.orm import Session
+
+from models.database import SessionLocal
+from models.models import BesitoBalance, BesitoTransaction, Subscription, User
 
 logger = logging.getLogger(__name__)
 
@@ -41,28 +44,28 @@ class AnalyticsService:
         total_users = db.query(User).count()
 
         # Active VIP subscriptions
-        active_vip = db.query(Subscription).filter(
-            Subscription.is_active == True
-        ).count()
+        active_vip = db.query(Subscription).filter(Subscription.is_active == True).count()
 
         # Total besitos in circulation
         balances = db.query(BesitoBalance).all()
         total_besitos = sum(b.balance for b in balances)
 
         # Expiring soon (next 48h)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         threshold = now + timedelta(hours=48)
-        expiring_soon = db.query(Subscription).filter(
-            Subscription.is_active == True,
-            Subscription.end_date <= threshold,
-            Subscription.end_date > now
-        ).count()
+        expiring_soon = (
+            db.query(Subscription)
+            .filter(
+                Subscription.is_active == True,
+                Subscription.end_date <= threshold,
+                Subscription.end_date > now,
+            )
+            .count()
+        )
 
         # New users today
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        new_today = db.query(User).filter(
-            User.created_at >= today_start
-        ).count()
+        new_today = db.query(User).filter(User.created_at >= today_start).count()
 
         return {
             "total_users": total_users,
@@ -85,16 +88,18 @@ class AnalyticsService:
         if not users:
             return None
 
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False, newline=""
-        )
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="")
         try:
             writer = csv.DictWriter(
                 tmp,
                 fieldnames=[
-                    "telegram_id", "username", "balance",
-                    "vip_active", "is_active", "created_at"
-                ]
+                    "telegram_id",
+                    "username",
+                    "balance",
+                    "vip_active",
+                    "is_active",
+                    "created_at",
+                ],
             )
             writer.writeheader()
 
@@ -102,28 +107,31 @@ class AnalyticsService:
                 vip_active = (
                     db.query(Subscription)
                     .filter(
-                        Subscription.user_id == user.telegram_id,
-                        Subscription.is_active == True
+                        Subscription.user_id == user.telegram_id, Subscription.is_active == True
                     )
-                    .first() is not None
+                    .first()
+                    is not None
                 )
 
-                balance = db.query(BesitoBalance).filter(
-                    BesitoBalance.user_id == user.telegram_id
-                ).first()
+                balance = (
+                    db.query(BesitoBalance)
+                    .filter(BesitoBalance.user_id == user.telegram_id)
+                    .first()
+                )
                 user_balance = balance.balance if balance else 0
 
-                writer.writerow({
-                    "telegram_id": user.telegram_id,
-                    "username": user.username or "",
-                    "balance": user_balance,
-                    "vip_active": "Si" if vip_active else "No",
-                    "is_active": "Si" if user.is_active else "No",
-                    "created_at": (
-                        user.created_at.strftime("%Y-%m-%d %H:%M:%S")
-                        if user.created_at else ""
-                    ),
-                })
+                writer.writerow(
+                    {
+                        "telegram_id": user.telegram_id,
+                        "username": user.username or "",
+                        "balance": user_balance,
+                        "vip_active": "Si" if vip_active else "No",
+                        "is_active": "Si" if user.is_active else "No",
+                        "created_at": (
+                            user.created_at.strftime("%Y-%m-%d %H:%M:%S") if user.created_at else ""
+                        ),
+                    }
+                )
 
             tmp.close()
             return tmp.name
@@ -149,31 +157,28 @@ class AnalyticsService:
         if not transactions:
             return None
 
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False, newline=""
-        )
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="")
         try:
             writer = csv.DictWriter(
-                tmp,
-                fieldnames=[
-                    "id", "user_id", "amount",
-                    "type", "source", "created_at"
-                ]
+                tmp, fieldnames=["id", "user_id", "amount", "type", "source", "created_at"]
             )
             writer.writeheader()
 
             for tx in transactions:
-                writer.writerow({
-                    "id": tx.id,
-                    "user_id": tx.user_id,
-                    "amount": tx.amount,
-                    "type": tx.type.value if hasattr(tx.type, 'value') else str(tx.type),
-                    "source": tx.source.value if hasattr(tx.source, 'value') else str(tx.source),
-                    "created_at": (
-                        tx.created_at.strftime("%Y-%m-%d %H:%M:%S")
-                        if tx.created_at else ""
-                    ),
-                })
+                writer.writerow(
+                    {
+                        "id": tx.id,
+                        "user_id": tx.user_id,
+                        "amount": tx.amount,
+                        "type": tx.type.value if hasattr(tx.type, "value") else str(tx.type),
+                        "source": tx.source.value
+                        if hasattr(tx.source, "value")
+                        else str(tx.source),
+                        "created_at": (
+                            tx.created_at.strftime("%Y-%m-%d %H:%M:%S") if tx.created_at else ""
+                        ),
+                    }
+                )
 
             tmp.close()
             return tmp.name

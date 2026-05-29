@@ -4,16 +4,21 @@ Servicio de Promociones - Lucien Bot
 Gestiona promociones comerciales con precio en dinero real (MXN)
 y el sistema de "Me Interesa" para notificar a administradores.
 """
-from datetime import datetime, timezone
-from typing import Optional, List
-from sqlalchemy.orm import Session
-from sqlalchemy import asc, desc, and_
-from models.models import (
-    Promotion, PromotionStatus, PromotionInterest, InterestStatus,
-    BlockedPromotionUser, Package
-)
-from models.database import SessionLocal
+
 import logging
+from datetime import UTC, datetime
+
+from sqlalchemy import and_, asc, desc
+from sqlalchemy.orm import Session
+
+from models.database import SessionLocal
+from models.models import (
+    BlockedPromotionUser,
+    InterestStatus,
+    Promotion,
+    PromotionInterest,
+    PromotionStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +44,17 @@ class PromotionService:
 
     # ==================== PROMOCIONES ====================
 
-    def create_promotion(self, name: str, description: str, package_id: int = None,
-                         manual_file_count: int = None, price_mxn: int = None,
-                         created_by: int = None, start_date: datetime = None,
-                         end_date: datetime = None) -> Promotion:
+    def create_promotion(
+        self,
+        name: str,
+        description: str,
+        package_id: int = None,
+        manual_file_count: int = None,
+        price_mxn: int = None,
+        created_by: int = None,
+        start_date: datetime = None,
+        end_date: datetime = None,
+    ) -> Promotion:
         """
         Crea una nueva promocion comercial.
 
@@ -67,20 +79,22 @@ class PromotionService:
             start_date=start_date,
             end_date=end_date,
             status=PromotionStatus.ACTIVE,
-            is_active=True
+            is_active=True,
         )
         db.add(promotion)
         db.commit()
         db.refresh(promotion)
-        logger.info(f"Promocion creada: {name} (ID: {promotion.id}) - Precio: {promotion.price_display}")
+        logger.info(
+            f"Promocion creada: {name} (ID: {promotion.id}) - Precio: {promotion.price_display}"
+        )
         return promotion
 
-    def get_promotion(self, promotion_id: int) -> Optional[Promotion]:
+    def get_promotion(self, promotion_id: int) -> Promotion | None:
         """Obtiene una promocion por ID"""
         db = self._get_db()
         return db.query(Promotion).filter(Promotion.id == promotion_id).first()
 
-    def get_all_promotions(self, active_only: bool = False) -> List[Promotion]:
+    def get_all_promotions(self, active_only: bool = False) -> list[Promotion]:
         """Obtiene todas las promociones"""
         db = self._get_db()
         query = db.query(Promotion)
@@ -88,37 +102,39 @@ class PromotionService:
             query = query.filter(Promotion.is_active == True)
         return query.order_by(desc(Promotion.created_at)).all()
 
-    def get_available_promotions(self) -> List[Promotion]:
+    def get_available_promotions(self) -> list[Promotion]:
         """Obtiene promociones disponibles para los usuarios (no VIP exclusivas)"""
         db = self._get_db()
-        now = datetime.now(timezone.utc)
-        return db.query(Promotion).filter(
-            Promotion.is_active == True,
-            Promotion.status == PromotionStatus.ACTIVE,
-            Promotion.is_vip_exclusive == False,  # Excluir promociones VIP
-            and_(
-                Promotion.start_date.is_(None) | (Promotion.start_date <= now)
-            ),
-            and_(
-                Promotion.end_date.is_(None) | (Promotion.end_date >= now)
+        now = datetime.now(UTC)
+        return (
+            db.query(Promotion)
+            .filter(
+                Promotion.is_active == True,
+                Promotion.status == PromotionStatus.ACTIVE,
+                Promotion.is_vip_exclusive == False,  # Excluir promociones VIP
+                and_(Promotion.start_date.is_(None) | (Promotion.start_date <= now)),
+                and_(Promotion.end_date.is_(None) | (Promotion.end_date >= now)),
             )
-        ).order_by(desc(Promotion.created_at)).all()
+            .order_by(desc(Promotion.created_at))
+            .all()
+        )
 
-    def get_vip_exclusive_promotions(self) -> List[Promotion]:
+    def get_vip_exclusive_promotions(self) -> list[Promotion]:
         """Obtiene promociones exclusivas para VIPs"""
         db = self._get_db()
-        now = datetime.now(timezone.utc)
-        return db.query(Promotion).filter(
-            Promotion.is_active == True,
-            Promotion.status == PromotionStatus.ACTIVE,
-            Promotion.is_vip_exclusive == True,
-            and_(
-                Promotion.start_date.is_(None) | (Promotion.start_date <= now)
-            ),
-            and_(
-                Promotion.end_date.is_(None) | (Promotion.end_date >= now)
+        now = datetime.now(UTC)
+        return (
+            db.query(Promotion)
+            .filter(
+                Promotion.is_active == True,
+                Promotion.status == PromotionStatus.ACTIVE,
+                Promotion.is_vip_exclusive == True,
+                and_(Promotion.start_date.is_(None) | (Promotion.start_date <= now)),
+                and_(Promotion.end_date.is_(None) | (Promotion.end_date >= now)),
             )
-        ).order_by(asc(Promotion.price_mxn)).all()
+            .order_by(asc(Promotion.price_mxn))
+            .all()
+        )
 
     def update_promotion(self, promotion_id: int, **kwargs) -> bool:
         """Actualiza una promocion"""
@@ -127,8 +143,16 @@ class PromotionService:
         if not promotion:
             return False
 
-        allowed_fields = ['name', 'description', 'price_mxn', 'status',
-                         'start_date', 'end_date', 'is_active', 'manual_file_count']
+        allowed_fields = [
+            "name",
+            "description",
+            "price_mxn",
+            "status",
+            "start_date",
+            "end_date",
+            "is_active",
+            "manual_file_count",
+        ]
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(promotion, field):
                 setattr(promotion, field, value)
@@ -163,16 +187,16 @@ class PromotionService:
     def is_user_blocked(self, user_id: int) -> bool:
         """Verifica si un usuario esta bloqueado del sistema de promociones"""
         db = self._get_db()
-        blocked = db.query(BlockedPromotionUser).filter(
-            BlockedPromotionUser.user_id == user_id
-        ).first()
+        blocked = (
+            db.query(BlockedPromotionUser).filter(BlockedPromotionUser.user_id == user_id).first()
+        )
 
         if not blocked:
             return False
 
         # Si no es permanente, verificar si expiro el bloqueo
         if not blocked.is_permanent and blocked.expires_at:
-            if datetime.now(timezone.utc) > blocked.expires_at:
+            if datetime.now(UTC) > blocked.expires_at:
                 # Desbloquear automaticamente
                 db.delete(blocked)
                 db.commit()
@@ -180,33 +204,44 @@ class PromotionService:
 
         return True
 
-    def get_blocked_user_info(self, user_id: int) -> Optional[BlockedPromotionUser]:
+    def get_blocked_user_info(self, user_id: int) -> BlockedPromotionUser | None:
         """Obtiene informacion de un usuario bloqueado"""
         db = self._get_db()
-        return db.query(BlockedPromotionUser).filter(
-            BlockedPromotionUser.user_id == user_id
-        ).first()
+        return (
+            db.query(BlockedPromotionUser).filter(BlockedPromotionUser.user_id == user_id).first()
+        )
 
     def has_user_expressed_interest(self, user_id: int, promotion_id: int) -> bool:
         """Verifica si un usuario ya expreso interes en una promocion"""
         db = self._get_db()
-        existing = db.query(PromotionInterest).filter(
-            PromotionInterest.user_id == user_id,
-            PromotionInterest.promotion_id == promotion_id
-        ).first()
+        existing = (
+            db.query(PromotionInterest)
+            .filter(
+                PromotionInterest.user_id == user_id, PromotionInterest.promotion_id == promotion_id
+            )
+            .first()
+        )
         return existing is not None
 
-    def get_user_interest(self, user_id: int, promotion_id: int) -> Optional[PromotionInterest]:
+    def get_user_interest(self, user_id: int, promotion_id: int) -> PromotionInterest | None:
         """Obtiene el registro de interes de un usuario en una promocion"""
         db = self._get_db()
-        return db.query(PromotionInterest).filter(
-            PromotionInterest.user_id == user_id,
-            PromotionInterest.promotion_id == promotion_id
-        ).first()
+        return (
+            db.query(PromotionInterest)
+            .filter(
+                PromotionInterest.user_id == user_id, PromotionInterest.promotion_id == promotion_id
+            )
+            .first()
+        )
 
-    def express_interest(self, user_id: int, promotion_id: int,
-                         username: str = None, first_name: str = None,
-                         last_name: str = None) -> tuple:
+    def express_interest(
+        self,
+        user_id: int,
+        promotion_id: int,
+        username: str = None,
+        first_name: str = None,
+        last_name: str = None,
+    ) -> tuple:
         """
         Registra el interes de un usuario en una promocion.
 
@@ -228,10 +263,14 @@ class PromotionService:
             return False, "Esta promocion no esta disponible actualmente", None
 
         # Verificar si ya expreso interes (con lock para evitar race conditions)
-        existing = db.query(PromotionInterest).filter(
-            PromotionInterest.user_id == user_id,
-            PromotionInterest.promotion_id == promotion_id
-        ).with_for_update().first()
+        existing = (
+            db.query(PromotionInterest)
+            .filter(
+                PromotionInterest.user_id == user_id, PromotionInterest.promotion_id == promotion_id
+            )
+            .with_for_update()
+            .first()
+        )
         if existing:
             return False, "Ya has expresado interes en esta promocion", None
 
@@ -242,7 +281,7 @@ class PromotionService:
             first_name=first_name,
             last_name=last_name,
             promotion_id=promotion_id,
-            status=InterestStatus.PENDING
+            status=InterestStatus.PENDING,
         )
         db.add(interest)
         db.commit()
@@ -251,14 +290,12 @@ class PromotionService:
         logger.info(f"Usuario {user_id} expreso interes en promocion {promotion_id}")
         return True, "Interes registrado correctamente", interest
 
-    def get_interest(self, interest_id: int) -> Optional[PromotionInterest]:
+    def get_interest(self, interest_id: int) -> PromotionInterest | None:
         """Obtiene un registro de interes por ID"""
         db = self._get_db()
-        return db.query(PromotionInterest).filter(
-            PromotionInterest.id == interest_id
-        ).first()
+        return db.query(PromotionInterest).filter(PromotionInterest.id == interest_id).first()
 
-    def get_pending_interests(self, promotion_id: int = None) -> List[PromotionInterest]:
+    def get_pending_interests(self, promotion_id: int = None) -> list[PromotionInterest]:
         """Obtiene intereses pendientes, opcionalmente filtrados por promocion"""
         db = self._get_db()
         query = db.query(PromotionInterest).filter(
@@ -268,7 +305,9 @@ class PromotionService:
             query = query.filter(PromotionInterest.promotion_id == promotion_id)
         return query.order_by(desc(PromotionInterest.created_at)).all()
 
-    def get_all_interests(self, user_id: int = None, status: InterestStatus = None) -> List[PromotionInterest]:
+    def get_all_interests(
+        self, user_id: int = None, status: InterestStatus = None
+    ) -> list[PromotionInterest]:
         """Obtiene todos los intereses con filtros opcionales"""
         db = self._get_db()
         query = db.query(PromotionInterest)
@@ -286,7 +325,7 @@ class PromotionService:
             return False
 
         interest.status = InterestStatus.ATTENDED
-        interest.attended_at = datetime.now(timezone.utc)
+        interest.attended_at = datetime.now(UTC)
         interest.attended_by = admin_id
         db.commit()
 
@@ -295,11 +334,17 @@ class PromotionService:
 
     # ==================== BLOQUEO DE USUARIOS ====================
 
-    def block_user(self, user_id: int, blocked_by: int = None,
-                   reason: str = None, is_permanent: bool = True,
-                   expires_at: datetime = None,
-                   username: str = None, first_name: str = None,
-                   last_name: str = None) -> BlockedPromotionUser:
+    def block_user(
+        self,
+        user_id: int,
+        blocked_by: int = None,
+        reason: str = None,
+        is_permanent: bool = True,
+        expires_at: datetime = None,
+        username: str = None,
+        first_name: str = None,
+        last_name: str = None,
+    ) -> BlockedPromotionUser:
         """
         Bloquea a un usuario del sistema de promociones.
 
@@ -312,9 +357,9 @@ class PromotionService:
         """
         db = self._get_db()
         # Verificar si ya esta bloqueado
-        existing = db.query(BlockedPromotionUser).filter(
-            BlockedPromotionUser.user_id == user_id
-        ).first()
+        existing = (
+            db.query(BlockedPromotionUser).filter(BlockedPromotionUser.user_id == user_id).first()
+        )
 
         if existing:
             # Actualizar bloqueo existente
@@ -322,7 +367,7 @@ class PromotionService:
             existing.is_permanent = is_permanent
             existing.expires_at = expires_at
             existing.blocked_by = blocked_by
-            existing.blocked_at = datetime.now(timezone.utc)
+            existing.blocked_at = datetime.now(UTC)
             db.commit()
             logger.info(f"Bloqueo actualizado para usuario {user_id}")
             return existing
@@ -336,15 +381,19 @@ class PromotionService:
             blocked_by=blocked_by,
             reason=reason,
             is_permanent=is_permanent,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
         db.add(blocked)
 
         # Tambien actualizar intereses pendientes del usuario a bloqueados
-        pending_interests = db.query(PromotionInterest).filter(
-            PromotionInterest.user_id == user_id,
-            PromotionInterest.status == InterestStatus.PENDING
-        ).all()
+        pending_interests = (
+            db.query(PromotionInterest)
+            .filter(
+                PromotionInterest.user_id == user_id,
+                PromotionInterest.status == InterestStatus.PENDING,
+            )
+            .all()
+        )
 
         for interest in pending_interests:
             interest.status = InterestStatus.BLOCKED
@@ -356,9 +405,9 @@ class PromotionService:
     def unblock_user(self, user_id: int) -> bool:
         """Desbloquea a un usuario"""
         db = self._get_db()
-        blocked = db.query(BlockedPromotionUser).filter(
-            BlockedPromotionUser.user_id == user_id
-        ).first()
+        blocked = (
+            db.query(BlockedPromotionUser).filter(BlockedPromotionUser.user_id == user_id).first()
+        )
 
         if blocked:
             db.delete(blocked)
@@ -367,12 +416,10 @@ class PromotionService:
             return True
         return False
 
-    def get_blocked_users(self) -> List[BlockedPromotionUser]:
+    def get_blocked_users(self) -> list[BlockedPromotionUser]:
         """Obtiene todos los usuarios bloqueados"""
         db = self._get_db()
-        return db.query(BlockedPromotionUser).order_by(
-            desc(BlockedPromotionUser.blocked_at)
-        ).all()
+        return db.query(BlockedPromotionUser).order_by(desc(BlockedPromotionUser.blocked_at)).all()
 
     # ==================== ESTADISTICAS ====================
 
@@ -380,18 +427,14 @@ class PromotionService:
         """Obtiene estadisticas de promociones"""
         db = self._get_db()
         # Estadisticas generales
-        total_promotions = db.query(Promotion).filter(
-            Promotion.is_active == True
-        ).count()
+        total_promotions = db.query(Promotion).filter(Promotion.is_active == True).count()
 
         active_promotions = len(self.get_available_promotions())
 
         # Estadisticas de intereses
         query_interests = db.query(PromotionInterest)
         if promotion_id:
-            query_interests = query_interests.filter(
-                PromotionInterest.promotion_id == promotion_id
-            )
+            query_interests = query_interests.filter(PromotionInterest.promotion_id == promotion_id)
 
         total_interests = query_interests.count()
         pending_interests = query_interests.filter(
@@ -405,17 +448,20 @@ class PromotionService:
         blocked_count = db.query(BlockedPromotionUser).count()
 
         return {
-            'total_promotions': total_promotions,
-            'active_promotions': active_promotions,
-            'total_interests': total_interests,
-            'pending_interests': pending_interests,
-            'attended_interests': attended_interests,
-            'blocked_users': blocked_count
+            "total_promotions": total_promotions,
+            "active_promotions": active_promotions,
+            "total_interests": total_interests,
+            "pending_interests": pending_interests,
+            "attended_interests": attended_interests,
+            "blocked_users": blocked_count,
         }
 
-    def get_user_interest_history(self, user_id: int) -> List[PromotionInterest]:
+    def get_user_interest_history(self, user_id: int) -> list[PromotionInterest]:
         """Obtiene el historial de intereses de un usuario"""
         db = self._get_db()
-        return db.query(PromotionInterest).filter(
-            PromotionInterest.user_id == user_id
-        ).order_by(desc(PromotionInterest.created_at)).all()
+        return (
+            db.query(PromotionInterest)
+            .filter(PromotionInterest.user_id == user_id)
+            .order_by(desc(PromotionInterest.created_at))
+            .all()
+        )

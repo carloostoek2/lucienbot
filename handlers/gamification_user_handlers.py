@@ -3,15 +3,19 @@ Handlers de Gamificación para Usuarios - Lucien Bot
 
 Handlers para funcionalidades de gamificación accesibles por usuarios.
 """
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
-from services.besito_service import BesitoService
-from services.daily_gift_service import DailyGiftService
-from services.broadcast_service import BroadcastService
-from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard, reactions_keyboard_with_counts
-from utils.lucien_voice import LucienVoice
+
 import logging
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
+from keyboards.inline_keyboards import (
+    back_keyboard,
+    reactions_keyboard_with_counts,
+)
+from services.besito_service import BesitoService
+from services.broadcast_service import BroadcastService
+from services.daily_gift_service import DailyGiftService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -21,6 +25,7 @@ _reaction_callbacks_being_processed = set()
 
 
 # ==================== CONSULTAR SALDO ====================
+
 
 @router.callback_query(F.data == "my_balance")
 async def show_balance(callback: CallbackQuery):
@@ -32,7 +37,7 @@ async def show_balance(callback: CallbackQuery):
         stats = besito_service.get_balance_with_stats(user_id)
     finally:
         besito_service.close()
-    
+
     text = f"""🎩 <b>Lucien:</b>
 
 <i>Permíteme consultar los fragmentos de atención que ha acumulado...</i>
@@ -44,11 +49,9 @@ async def show_balance(callback: CallbackQuery):
    • Total gastado: {stats['total_spent']}
 
 <i>Diana aprecia cada momento de su atención...</i>"""
-    
+
     await callback.message.edit_text(
-        text,
-        reply_markup=back_keyboard("back_to_main"),
-        parse_mode="HTML"
+        text, reply_markup=back_keyboard("back_to_main"), parse_mode="HTML"
     )
     await callback.answer()
 
@@ -63,9 +66,9 @@ async def show_transaction_history(callback: CallbackQuery):
         transactions = besito_service.get_transaction_history(user_id, limit=10)
     finally:
         besito_service.close()
-    
+
     if not transactions:
-        text = f"""🎩 <b>Lucien:</b>
+        text = """🎩 <b>Lucien:</b>
 
 <i>Aún no hay movimientos registrados en su cuenta...</i>
 
@@ -73,7 +76,7 @@ async def show_transaction_history(callback: CallbackQuery):
 
 <i>Interactúe más con el reino para acumular besitos.</i>"""
     else:
-        text = f"""🎩 <b>Lucien:</b>
+        text = """🎩 <b>Lucien:</b>
 
 <i>Los movimientos de su moneda especial...</i>
 
@@ -91,21 +94,20 @@ async def show_transaction_history(callback: CallbackQuery):
                 "admin": "Admin",
                 "anonymous_message": "Mensaje anónimo",
                 "GAME": "Juego",
-                "TRIVIA": "Trivia"
+                "TRIVIA": "Trivia",
             }.get(tx.source.value, tx.source.value)
-            
+
             text += f"{emoji} <b>{'+' if tx.amount > 0 else ''}{tx.amount}</b> - {source_name}\n"
             text += f"   <i>{date_str}</i>\n\n"
-    
+
     await callback.message.edit_text(
-        text,
-        reply_markup=back_keyboard("my_balance"),
-        parse_mode="HTML"
+        text, reply_markup=back_keyboard("my_balance"), parse_mode="HTML"
     )
     await callback.answer()
 
 
 # ==================== REGALO DIARIO ====================
+
 
 @router.callback_query(F.data == "daily_gift")
 async def daily_gift_menu(callback: CallbackQuery):
@@ -117,7 +119,7 @@ async def daily_gift_menu(callback: CallbackQuery):
         can_claim, time_remaining, message = gift_service.can_claim(user_id)
     finally:
         gift_service.close()
-    
+
     if can_claim:
         amount = gift_service.get_gift_amount()
         text = f"""🎩 <b>Lucien:</b>
@@ -129,11 +131,13 @@ async def daily_gift_menu(callback: CallbackQuery):
 💋 <b>Cantidad:</b> {amount} besitos
 
 <i>¿Desea reclamar su regalo?</i>"""
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎁 Reclamar regalo", callback_data="claim_gift")],
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")]
-        ])
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🎁 Reclamar regalo", callback_data="claim_gift")],
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")],
+            ]
+        )
     else:
         text = f"""🎩 <b>Lucien:</b>
 
@@ -144,9 +148,9 @@ async def daily_gift_menu(callback: CallbackQuery):
 {message}
 
 <i>Vuelva más tarde para recibir su próximo obsequio.</i>"""
-        
+
         keyboard = back_keyboard("back_to_main")
-    
+
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
@@ -161,7 +165,7 @@ async def claim_daily_gift(callback: CallbackQuery):
         success, amount, message = gift_service.claim_gift(user_id)
     finally:
         gift_service.close()
-    
+
     if success:
         text = f"""🎩 <b>Lucien:</b>
 
@@ -178,11 +182,9 @@ async def claim_daily_gift(callback: CallbackQuery):
 <i>Hmm... algo ocurrió con su solicitud...</i>
 
 ⚠️ {message}"""
-    
+
     await callback.message.edit_text(
-        text,
-        reply_markup=back_keyboard("back_to_main"),
-        parse_mode="HTML"
+        text, reply_markup=back_keyboard("back_to_main"), parse_mode="HTML"
     )
     await callback.answer()
 
@@ -190,6 +192,7 @@ async def claim_daily_gift(callback: CallbackQuery):
 # ==================== REACCIONES A BROADCAST ====================
 
 from keyboards.callback_data import ReactionCallback
+
 
 @router.callback_query(ReactionCallback.filter())
 async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallback):
@@ -221,13 +224,13 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
             user_id=user.id,
             emoji_id=emoji_id,
             username=user.username,
-            bot=callback.bot
+            bot=callback.bot,
         )
 
         if reaction:
             # reaction ahora es un diccionario, usar los datos directamente
-            emoji_char = reaction.get('emoji_char', '💋')
-            besitos = reaction.get('besitos_awarded', 0)
+            emoji_char = reaction.get("emoji_char", "💋")
+            besitos = reaction.get("besitos_awarded", 0)
 
             # Obtener el broadcast para actualizar el mensaje
             broadcast = broadcast_service.get_broadcast(broadcast_id)
@@ -254,19 +257,19 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
 
                 # Usar función extractada para reconstruir el teclado
                 if emojis:
-                    new_markup = reactions_keyboard_with_counts(
-                        broadcast_id, emojis, emoji_counts
-                    )
+                    new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
                     # Usar método extractado para actualizar mensaje
                     await broadcast_service.update_reaction_message(
                         bot=callback.bot,
                         channel_id=broadcast.channel_id,
                         message_id=broadcast.message_id,
-                        new_markup=new_markup
+                        new_markup=new_markup,
                     )
 
             # Logging de la reacción recibida
-            logger.info(f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}")
+            logger.info(
+                f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}"
+            )
 
             # Solo notificar via callback (sin mensaje privado)
             await callback.answer(f"¡+{besitos} besitos! 💋")
@@ -276,6 +279,3 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
     finally:
         # Siempre remover el dedup key al finalizar
         _reaction_callbacks_being_processed.discard(dedup_key)
-
-
-

@@ -5,20 +5,26 @@ Handlers exclusivos para suscriptores VIP:
 - Menú de El Diván
 - Mensajes anónimos a Diana
 """
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+import logging
+
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from services.vip_service import VIPService
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
+from handlers.promotion_user_handlers import notify_admins_about_interest
+from keyboards.callback_data import VipPromoDetailCallback, VipPromoInterestCallback
+from keyboards.inline_keyboards import (
+    admin_anonymous_notification_keyboard,
+    back_keyboard,
+    main_menu_keyboard,
+)
+from models.models import TransactionSource
 from services.anonymous_message_service import AnonymousMessageService
 from services.besito_service import BesitoService
 from services.promotion_service import PromotionService
-from models.models import TransactionSource
-from keyboards.inline_keyboards import back_keyboard, main_menu_keyboard, admin_anonymous_notification_keyboard
-from keyboards.callback_data import VipPromoDetailCallback, VipPromoInterestCallback
-from utils.lucien_voice import LucienVoice
-from handlers.promotion_user_handlers import notify_admins_about_interest
-import logging
+from services.vip_service import VIPService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -36,22 +42,14 @@ class AnonymousMessageStates(StatesGroup):
 def vip_area_keyboard() -> InlineKeyboardMarkup:
     """Menú de El Diván VIP"""
     buttons = [
-        [InlineKeyboardButton(
-            text="🗺️ El Mapa del Deseo",
-            callback_data="vip_map_of_desire"
-        )],
-        [InlineKeyboardButton(
-            text="💎 Trivia VIP",
-            callback_data="game_trivia_vip"
-        )],
-        [InlineKeyboardButton(
-            text="💌 Mensajes anónimos a Diana",
-            callback_data="send_anonymous_message"
-        )],
-        [InlineKeyboardButton(
-            text="🔙 Volver al menú principal",
-            callback_data="back_to_main"
-        )]
+        [InlineKeyboardButton(text="🗺️ El Mapa del Deseo", callback_data="vip_map_of_desire")],
+        [InlineKeyboardButton(text="💎 Trivia VIP", callback_data="game_trivia_vip")],
+        [
+            InlineKeyboardButton(
+                text="💌 Mensajes anónimos a Diana", callback_data="send_anonymous_message"
+            )
+        ],
+        [InlineKeyboardButton(text="🔙 Volver al menú principal", callback_data="back_to_main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -61,13 +59,14 @@ def anonymous_message_confirm_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(text="✅ Enviar", callback_data="confirm_anonymous_send"),
-            InlineKeyboardButton(text="❌ Cancelar", callback_data="cancel_anonymous")
+            InlineKeyboardButton(text="❌ Cancelar", callback_data="cancel_anonymous"),
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # ==================== MENÚ DE EL DIVÁN ====================
+
 
 @router.callback_query(F.data == "vip_area")
 async def vip_area_menu(callback: CallbackQuery):
@@ -80,24 +79,24 @@ async def vip_area_menu(callback: CallbackQuery):
         is_vip = vip_service.is_user_vip(user.id)
         if not is_vip:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>El Diván es solo para los privilegiados...</i>\n\n"
-                f"Su suscripción VIP no está activa.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>El Diván es solo para los privilegiados...</i>\n\n"
+                "Su suscripción VIP no está activa.",
                 reply_markup=main_menu_keyboard(is_vip=False),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await callback.answer()
             return
 
         await callback.message.edit_text(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Bienvenido a El Diván, donde los privilegiados "
-            f"tienen acceso a experiencias únicas...</i>\n\n"
-            f"💎 <b>El Diván</b>\n\n"
-            f"Aquí encontrará funciones reservadas solo para quienes "
-            f"han sido admitidos en la intimidad de Diana.",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>Bienvenido a El Diván, donde los privilegiados "
+            "tienen acceso a experiencias únicas...</i>\n\n"
+            "💎 <b>El Diván</b>\n\n"
+            "Aquí encontrará funciones reservadas solo para quienes "
+            "han sido admitidos en la intimidad de Diana.",
             reply_markup=vip_area_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await callback.answer()
     finally:
@@ -105,6 +104,7 @@ async def vip_area_menu(callback: CallbackQuery):
 
 
 # ==================== EL MAPA DEL DESEO ====================
+
 
 @router.callback_query(F.data == "vip_map_of_desire")
 async def show_map_of_desire(callback: CallbackQuery):
@@ -117,11 +117,11 @@ async def show_map_of_desire(callback: CallbackQuery):
         is_vip = vip_service.is_user_vip(user.id)
         if not is_vip:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>El Mapa del Deseo solo se revela a quienes tienen acceso privilegiado...</i>\n\n"
-                f"Su suscripción VIP no está activa.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>El Mapa del Deseo solo se revela a quienes tienen acceso privilegiado...</i>\n\n"
+                "Su suscripción VIP no está activa.",
                 reply_markup=main_menu_keyboard(is_vip=False),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await callback.answer()
             return
@@ -132,36 +132,49 @@ async def show_map_of_desire(callback: CallbackQuery):
             vip_promos = promotion_service.get_vip_exclusive_promotions()
 
             if not vip_promos:
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Volver a El Diván", callback_data="vip_area")]
-                ])
-                text = ("🎩 <b>Lucien:</b>\n\n"
-                        "<i>El Mapa del Deseo está... momentáneamente en blanco.</i>\n\n"
-                        "Diana está preparando nuevas experiencias exclusivas. "
-                        "Las oportunidades más exquisitas requieren su tiempo...")
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="🔙 Volver a El Diván", callback_data="vip_area"
+                            )
+                        ]
+                    ]
+                )
+                text = (
+                    "🎩 <b>Lucien:</b>\n\n"
+                    "<i>El Mapa del Deseo está... momentáneamente en blanco.</i>\n\n"
+                    "Diana está preparando nuevas experiencias exclusivas. "
+                    "Las oportunidades más exquisitas requieren su tiempo..."
+                )
                 await callback.message.edit_text(text, reply_markup=keyboard)
                 await callback.answer()
                 return
 
             # Construir mensaje y botones
-            text = ("🎩 <b>Lucien:</b>\n\n"
-                    "<i>Bienvenido al Mapa del Deseo...</i>\n\n"
-                    "Aquí se encuentran las experiencias más exclusivas que Diana "
-                    "ha reservado solo para quienes han demostrado su compromiso.\n\n"
-                    "Cada nivel ofrece una intimidad diferente con ella. "
-                    "Elija sabiamente...")
+            text = (
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>Bienvenido al Mapa del Deseo...</i>\n\n"
+                "Aquí se encuentran las experiencias más exclusivas que Diana "
+                "ha reservado solo para quienes han demostrado su compromiso.\n\n"
+                "Cada nivel ofrece una intimidad diferente con ella. "
+                "Elija sabiamente..."
+            )
 
             buttons = []
             for promo in vip_promos:
-                buttons.append([InlineKeyboardButton(
-                    text=f"✨ {promo.name}",
-                    callback_data=VipPromoDetailCallback(promo_id=promo.id).pack()
-                )])
+                buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            text=f"✨ {promo.name}",
+                            callback_data=VipPromoDetailCallback(promo_id=promo.id).pack(),
+                        )
+                    ]
+                )
 
-            buttons.append([InlineKeyboardButton(
-                text="🔙 Volver a El Diván",
-                callback_data="vip_area"
-            )])
+            buttons.append(
+                [InlineKeyboardButton(text="🔙 Volver a El Diván", callback_data="vip_area")]
+            )
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -190,7 +203,7 @@ async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipP
         has_interest = promotion_service.has_user_expressed_interest(user_id, promo_id)
         is_blocked = promotion_service.is_user_blocked(user_id)
 
-        text = f"🎩 <b>Lucien:</b>\n\n"
+        text = "🎩 <b>Lucien:</b>\n\n"
         text += f"✨ <b>{promo.name}</b>\n\n"
 
         if promo.description:
@@ -207,19 +220,19 @@ async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipP
             text += "<i>Su cuenta tiene ciertas... limitaciones.</i>\n"
         else:
             text += "<i>Si esta experiencia despierta su curiosidad...</i>\n"
-            buttons.append([InlineKeyboardButton(
-                text="💕 Me interesa",
-                callback_data=VipPromoInterestCallback(promo_id=promo.id).pack()
-            )])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text="💕 Me interesa",
+                        callback_data=VipPromoInterestCallback(promo_id=promo.id).pack(),
+                    )
+                ]
+            )
 
-        buttons.append([InlineKeyboardButton(
-            text="🔙 Volver al Mapa",
-            callback_data="vip_map_of_desire"
-        )])
-        buttons.append([InlineKeyboardButton(
-            text="🏠 El Diván",
-            callback_data="vip_area"
-        )])
+        buttons.append(
+            [InlineKeyboardButton(text="🔙 Volver al Mapa", callback_data="vip_map_of_desire")]
+        )
+        buttons.append([InlineKeyboardButton(text="🏠 El Diván", callback_data="vip_area")])
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -229,7 +242,9 @@ async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipP
 
 
 @router.callback_query(VipPromoInterestCallback.filter())
-async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot, callback_data: VipPromoInterestCallback):
+async def express_vip_promo_interest(
+    callback: CallbackQuery, bot: Bot, callback_data: VipPromoInterestCallback
+):
     """Procesa interés en promoción VIP exclusiva"""
     promo_id = callback_data.promo_id
 
@@ -240,17 +255,13 @@ async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot, callback
         # Verificar bloqueo
         if promotion_service.is_user_blocked(user.id):
             await callback.answer(
-                "No puede expresar interés. Hay restricciones en su cuenta.",
-                show_alert=True
+                "No puede expresar interés. Hay restricciones en su cuenta.", show_alert=True
             )
             return
 
         # Verificar si ya expresó interés
         if promotion_service.has_user_expressed_interest(user.id, promo_id):
-            await callback.answer(
-                "Ya ha expresado interés en esta experiencia.",
-                show_alert=True
-            )
+            await callback.answer("Ya ha expresado interés en esta experiencia.", show_alert=True)
             return
 
         # Registrar interés
@@ -259,7 +270,7 @@ async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot, callback
             promotion_id=promo_id,
             username=user.username,
             first_name=user.first_name,
-            last_name=user.last_name
+            last_name=user.last_name,
         )
 
         if not success:
@@ -274,26 +285,33 @@ async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot, callback
 
         # Mostrar confirmación
         from config.settings import bot_config
-        creator_username = getattr(bot_config, 'CREATOR_USERNAME', None)
+
+        creator_username = getattr(bot_config, "CREATOR_USERNAME", None)
 
         keyboard_buttons = [
             [InlineKeyboardButton(text="🔙 Volver al Mapa", callback_data="vip_map_of_desire")],
-            [InlineKeyboardButton(text="🏠 El Diván", callback_data="vip_area")]
+            [InlineKeyboardButton(text="🏠 El Diván", callback_data="vip_area")],
         ]
 
         if creator_username:
-            keyboard_buttons.insert(0, [InlineKeyboardButton(
-                text="💬 Contactar a Diana",
-                url=f"https://t.me/{creator_username}"
-            )])
+            keyboard_buttons.insert(
+                0,
+                [
+                    InlineKeyboardButton(
+                        text="💬 Contactar a Diana", url=f"https://t.me/{creator_username}"
+                    )
+                ],
+            )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
-        text = (f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>Su interés ha sido... registrado.</i>\n\n"
-                f"✨ <b>{promo_name}</b>\n\n"
-                f"<i>Diana ha sido notificada de su curiosidad. "
-                f"En breve se pondrá en contacto con usted...</i>")
+        text = (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>Su interés ha sido... registrado.</i>\n\n"
+            f"✨ <b>{promo_name}</b>\n\n"
+            f"<i>Diana ha sido notificada de su curiosidad. "
+            f"En breve se pondrá en contacto con usted...</i>"
+        )
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer("Interés registrado")
@@ -303,6 +321,7 @@ async def express_vip_promo_interest(callback: CallbackQuery, bot: Bot, callback
 
 
 # ==================== MENSAJES ANÓNIMOS ====================
+
 
 @router.callback_query(F.data == "send_anonymous_message")
 async def start_anonymous_message(callback: CallbackQuery, state: FSMContext):
@@ -315,26 +334,26 @@ async def start_anonymous_message(callback: CallbackQuery, state: FSMContext):
         is_vip = vip_service.is_user_vip(user.id)
         if not is_vip:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>Esta función es exclusiva del círculo...</i>\n\n"
-                f"Su suscripción VIP no está activa.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>Esta función es exclusiva del círculo...</i>\n\n"
+                "Su suscripción VIP no está activa.",
                 reply_markup=main_menu_keyboard(is_vip=False),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await callback.answer()
             return
 
         await callback.message.edit_text(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"Este es uno de los pocos espacios donde puede dirigirse a Diana… sin ser visto.\n\n"
-            f"Su mensaje será completamente anónimo.\n"
-            f"Sin nombre. Sin rastro.\n\n"
-            f"Algo que debe saber:\n"
-            f"Diana <b>no</b> responde a todo.\n"
-            f"Solo a lo que… le interesa.\n\n"
-            f"📝 <i>Envíe su mensaje ahora</i>",
+            "🎩 <b>Lucien:</b>\n\n"
+            "Este es uno de los pocos espacios donde puede dirigirse a Diana… sin ser visto.\n\n"
+            "Su mensaje será completamente anónimo.\n"
+            "Sin nombre. Sin rastro.\n\n"
+            "Algo que debe saber:\n"
+            "Diana <b>no</b> responde a todo.\n"
+            "Solo a lo que… le interesa.\n\n"
+            "📝 <i>Envíe su mensaje ahora</i>",
             reply_markup=back_keyboard("vip_area"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await state.set_state(AnonymousMessageStates.waiting_message)
         await callback.answer()
@@ -349,21 +368,21 @@ async def process_anonymous_message(message: Message, state: FSMContext):
 
     if len(content) < 3:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>El mensaje es demasiado breve...</i>\n\n"
-            f"Por favor, escriba al menos unas palabras para Diana.",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>El mensaje es demasiado breve...</i>\n\n"
+            "Por favor, escriba al menos unas palabras para Diana.",
             reply_markup=back_keyboard("vip_area"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         return
 
     if len(content) > 4000:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>El mensaje excede el límite permitido...</i>\n\n"
-            f"Por favor, sea más conciso. Máximo 4000 caracteres.",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>El mensaje excede el límite permitido...</i>\n\n"
+            "Por favor, sea más conciso. Máximo 4000 caracteres.",
             reply_markup=back_keyboard("vip_area"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         return
 
@@ -381,7 +400,7 @@ async def process_anonymous_message(message: Message, state: FSMContext):
         f"💋 <b>Costo: {ANONYMOUS_MESSAGE_COST} besitos</b>\n\n"
         f"¿Está seguro de que esto… merece su atención?",
         reply_markup=anonymous_message_confirm_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await state.set_state(AnonymousMessageStates.confirming_send)
 
@@ -395,11 +414,11 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
 
     if not content:
         await callback.message.edit_text(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Ha ocurrido un error...</i>\n\n"
-            f"No se encontró el contenido del mensaje.",
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>Ha ocurrido un error...</i>\n\n"
+            "No se encontró el contenido del mensaje.",
             reply_markup=back_keyboard("vip_area"),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         await state.clear()
         await callback.answer()
@@ -412,11 +431,11 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
         is_vip = vip_service.is_user_vip(user.id)
         if not is_vip:
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>Su suscripción VIP ya no está activa...</i>\n\n"
-                f"El mensaje no pudo ser enviado.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>Su suscripción VIP ya no está activa...</i>\n\n"
+                "El mensaje no pudo ser enviado.",
                 reply_markup=main_menu_keyboard(is_vip=False),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await state.clear()
             await callback.answer()
@@ -434,7 +453,7 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
                 f"Participe en la comunidad, reaccione a las publicaciones de Diana "
                 f"o reclame su regalo diario para acumular más.",
                 reply_markup=back_keyboard("vip_area"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await state.clear()
             await callback.answer()
@@ -446,17 +465,17 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
             amount=ANONYMOUS_MESSAGE_COST,
             source=TransactionSource.ANONYMOUS_MESSAGE,
             description="Envío de mensaje anónimo a Diana",
-            commit=True
+            commit=True,
         )
 
         if not debit_success:
             logger.error(f"Fallo al debitar besitos para mensaje anónimo: user={user.id}")
             await callback.message.edit_text(
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>Ha ocurrido un error inesperado...</i>\n\n"
-                f"No se pudo procesar el pago. Intente nuevamente.",
+                "🎩 <b>Lucien:</b>\n\n"
+                "<i>Ha ocurrido un error inesperado...</i>\n\n"
+                "No se pudo procesar el pago. Intente nuevamente.",
                 reply_markup=back_keyboard("vip_area"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             await state.clear()
             await callback.answer()
@@ -467,17 +486,20 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
         try:
             message = anon_service.send_message(user.id, content)
 
-            logger.info(f"Mensaje anónimo enviado: id={message.id}, sender={user.id}, cost={ANONYMOUS_MESSAGE_COST}")
+            logger.info(
+                f"Mensaje anónimo enviado: id={message.id}, sender={user.id}, cost={ANONYMOUS_MESSAGE_COST}"
+            )
 
             # Notificar a admins (no fallar si no se puede notificar)
             from config.settings import bot_config
+
             for admin_id in bot_config.ADMIN_IDS:
                 try:
                     await callback.bot.send_message(
                         chat_id=admin_id,
                         text="🎩 <b>Lucien:</b>\n\nAlguien ha buscado su atención de manera anónima",
                         reply_markup=admin_anonymous_notification_keyboard(message.id),
-                        parse_mode="HTML"
+                        parse_mode="HTML",
                     )
                 except Exception as e:
                     logger.warning(f"No se pudo notificar al admin {admin_id}: {e}")
@@ -491,7 +513,7 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
                 f"o simplemente recuerda.\n\n"
                 f"<i>Le sugiero no obsesionarse con la respuesta.</i>",
                 reply_markup=back_keyboard("vip_area"),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         finally:
             anon_service.close()
@@ -508,10 +530,10 @@ async def cancel_anonymous_message(callback: CallbackQuery, state: FSMContext):
     """Cancela el envío del mensaje anónimo"""
     await state.clear()
     await callback.message.edit_text(
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>El mensaje ha sido descartado...</i>\n\n"
-        f"Diana no recibirá nada. Puede escribir otro mensaje cuando lo desee.",
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>El mensaje ha sido descartado...</i>\n\n"
+        "Diana no recibirá nada. Puede escribir otro mensaje cuando lo desee.",
         reply_markup=vip_area_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer("Mensaje cancelado")

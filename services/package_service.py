@@ -3,38 +3,45 @@ Servicio de Paquetes - Lucien Bot
 
 Gestiona la creación, edición y entrega de paquetes de contenido.
 """
-from typing import Optional, List, Tuple
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from aiogram.types import InputMediaPhoto, InputMediaVideo
-from models.models import Package, PackageFile, Category
-from models.database import SessionLocal
+
 import logging
+
+from aiogram.types import InputMediaPhoto, InputMediaVideo
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from models.database import SessionLocal
+from models.models import Category, Package, PackageFile
 
 logger = logging.getLogger(__name__)
 
 
 class PackageService:
     """Servicio para gestión de paquetes"""
-    
+
     def __init__(self, db: Session = None):
         self.db = db or SessionLocal()
-    
+
     # ==================== CREACIÓN DE PAQUETES ====================
-    
-    def create_package(self, name: str, description: str = None,
-                       store_stock: int = -1, reward_stock: int = -1,
-                       created_by: int = None) -> Package:
+
+    def create_package(
+        self,
+        name: str,
+        description: str = None,
+        store_stock: int = -1,
+        reward_stock: int = -1,
+        created_by: int = None,
+    ) -> Package:
         """
         Crea un nuevo paquete.
-        
+
         Args:
             name: Nombre del paquete
             description: Descripción opcional
             store_stock: Stock para tienda (-1 = ilimitado)
             reward_stock: Stock para recompensas (-1 = ilimitado)
             created_by: ID del admin que crea el paquete
-        
+
         Returns:
             El paquete creado
         """
@@ -44,21 +51,26 @@ class PackageService:
             store_stock=store_stock,
             reward_stock=reward_stock,
             created_by=created_by,
-            is_active=True
+            is_active=True,
         )
         self.db.add(package)
         self.db.commit()
         self.db.refresh(package)
         logger.info(f"Paquete creado: {name} (ID: {package.id})")
         return package
-    
-    def add_file_to_package(self, package_id: int, file_id: str,
-                            file_type: str, file_name: str = None,
-                            file_size: int = None,
-                            order_index: int = 0) -> PackageFile:
+
+    def add_file_to_package(
+        self,
+        package_id: int,
+        file_id: str,
+        file_type: str,
+        file_name: str = None,
+        file_size: int = None,
+        order_index: int = 0,
+    ) -> PackageFile:
         """
         Agrega un archivo a un paquete.
-        
+
         Args:
             package_id: ID del paquete
             file_id: ID del archivo en Telegram
@@ -66,7 +78,7 @@ class PackageService:
             file_name: Nombre original del archivo
             file_size: Tamaño en bytes
             order_index: Orden en la secuencia
-        
+
         Returns:
             El archivo creado
         """
@@ -76,73 +88,84 @@ class PackageService:
             file_type=file_type,
             file_name=file_name,
             file_size=file_size,
-            order_index=order_index
+            order_index=order_index,
         )
         self.db.add(file_entry)
         self.db.commit()
         self.db.refresh(file_entry)
         logger.info(f"Archivo agregado al paquete {package_id}: {file_type}")
         return file_entry
-    
+
     # ==================== CONSULTAS ====================
-    
-    def get_package(self, package_id: int) -> Optional[Package]:
+
+    def get_package(self, package_id: int) -> Package | None:
         """Obtiene un paquete por ID"""
         return self.db.query(Package).filter(Package.id == package_id).first()
-    
-    def get_all_packages(self, active_only: bool = True) -> List[Package]:
+
+    def get_all_packages(self, active_only: bool = True) -> list[Package]:
         """Obtiene todos los paquetes"""
         query = self.db.query(Package)
         if active_only:
             query = query.filter(Package.is_active == True)
         return query.order_by(desc(Package.created_at)).all()
-    
-    def get_available_packages_for_store(self) -> List[Package]:
+
+    def get_available_packages_for_store(self) -> list[Package]:
         """Obtiene paquetes disponibles en tienda"""
-        return self.db.query(Package).filter(
-            Package.is_active == True,
-            (Package.store_stock == -1) | (Package.store_stock > 0)
-        ).order_by(desc(Package.created_at)).all()
-    
-    def get_available_packages_for_rewards(self) -> List[Package]:
+        return (
+            self.db.query(Package)
+            .filter(
+                Package.is_active == True, (Package.store_stock == -1) | (Package.store_stock > 0)
+            )
+            .order_by(desc(Package.created_at))
+            .all()
+        )
+
+    def get_available_packages_for_rewards(self) -> list[Package]:
         """Obtiene paquetes disponibles para recompensas"""
-        return self.db.query(Package).filter(
-            Package.is_active == True,
-            (Package.reward_stock == -1) | (Package.reward_stock > 0)
-        ).order_by(desc(Package.created_at)).all()
-    
-    def get_package_files(self, package_id: int) -> List[PackageFile]:
+        return (
+            self.db.query(Package)
+            .filter(
+                Package.is_active == True, (Package.reward_stock == -1) | (Package.reward_stock > 0)
+            )
+            .order_by(desc(Package.created_at))
+            .all()
+        )
+
+    def get_package_files(self, package_id: int) -> list[PackageFile]:
         """Obtiene los archivos de un paquete ordenados"""
-        return self.db.query(PackageFile).filter(
-            PackageFile.package_id == package_id
-        ).order_by(PackageFile.order_index).all()
-    
+        return (
+            self.db.query(PackageFile)
+            .filter(PackageFile.package_id == package_id)
+            .order_by(PackageFile.order_index)
+            .all()
+        )
+
     # ==================== ACTUALIZACIÓN ====================
-    
+
     def update_package(self, package_id: int, **kwargs) -> bool:
         """
         Actualiza un paquete.
-        
+
         Args:
             package_id: ID del paquete
             **kwargs: Campos a actualizar (name, description, store_stock, reward_stock, is_active)
-        
+
         Returns:
             True si se actualizó correctamente
         """
         package = self.get_package(package_id)
         if not package:
             return False
-        
-        allowed_fields = ['name', 'description', 'store_stock', 'reward_stock', 'is_active']
+
+        allowed_fields = ["name", "description", "store_stock", "reward_stock", "is_active"]
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(package, field):
                 setattr(package, field, value)
-        
+
         self.db.commit()
         logger.info(f"Paquete {package_id} actualizado")
         return True
-    
+
     def delete_package(self, package_id: int) -> bool:
         """
         Elimina un paquete de la base de datos (soft delete).
@@ -164,14 +187,14 @@ class PackageService:
         self.db.commit()
         logger.info(f"Paquete {package_id} desactivado (soft delete)")
         return True
-    
+
     def remove_file_from_package(self, file_id: int) -> bool:
         """
         Elimina un archivo de un paquete.
-        
+
         Args:
             file_id: ID del archivo en la base de datos
-        
+
         Returns:
             True si se eliminó correctamente
         """
@@ -182,76 +205,76 @@ class PackageService:
             logger.info(f"Archivo {file_id} eliminado del paquete")
             return True
         return False
-    
+
     # ==================== STOCK ====================
-    
+
     def decrement_store_stock(self, package_id: int) -> bool:
         """
         Decrementa el stock de tienda de un paquete.
-        
+
         Args:
             package_id: ID del paquete
-        
+
         Returns:
             True si había stock disponible y se decrementó
         """
         package = self.get_package(package_id)
         if not package:
             return False
-        
+
         success = package.decrement_store_stock()
         if success:
             self.db.commit()
             logger.info(f"Stock de tienda decrementado para paquete {package_id}")
         return success
-    
+
     def decrement_reward_stock(self, package_id: int) -> bool:
         """
         Decrementa el stock de recompensas de un paquete.
-        
+
         Args:
             package_id: ID del paquete
-        
+
         Returns:
             True si había stock disponible y se decrementó
         """
         package = self.get_package(package_id)
         if not package:
             return False
-        
+
         success = package.decrement_reward_stock()
         if success:
             self.db.commit()
             logger.info(f"Stock de recompensas decrementado para paquete {package_id}")
         return success
-    
+
     def add_store_stock(self, package_id: int, amount: int) -> bool:
         """Agrega stock a la tienda"""
         package = self.get_package(package_id)
         if not package:
             return False
-        
+
         if package.store_stock >= 0:
             package.store_stock += amount
             self.db.commit()
             logger.info(f"Agregados {amount} al stock de tienda del paquete {package_id}")
         return True
-    
+
     def add_reward_stock(self, package_id: int, amount: int) -> bool:
         """Agrega stock a recompensas"""
         package = self.get_package(package_id)
         if not package:
             return False
-        
+
         if package.reward_stock >= 0:
             package.reward_stock += amount
             self.db.commit()
             logger.info(f"Agregados {amount} al stock de recompensas del paquete {package_id}")
         return True
-    
+
     # ==================== ENTREGA ====================
-    
-    def _build_media_groups(self, files: List[PackageFile]) -> Tuple[List[List], List[PackageFile]]:
+
+    def _build_media_groups(self, files: list[PackageFile]) -> tuple[list[list], list[PackageFile]]:
         """
         Construye grupos de media para enviar como album.
 
@@ -289,7 +312,7 @@ class PackageService:
 
         return media_groups, individual_files
 
-    async def deliver_package_to_user(self, bot, user_id: int, package_id: int) -> Tuple[bool, str]:
+    async def deliver_package_to_user(self, bot, user_id: int, package_id: int) -> tuple[bool, str]:
         """
         Entrega un paquete a un usuario enviando todos los archivos.
         Fotos y videos se agrupan en albums; animaciones y documentos se envían individual.
@@ -326,16 +349,13 @@ class PackageService:
 <i>{package.description or 'Un obsequio del reino...'}</i>
 
 Enviando {len(files)} archivo(s)...""",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
 
             # Enviar media groups (fotos y videos agrupados)
             for media_group in media_groups:
                 try:
-                    await bot.send_media_group(
-                        chat_id=user_id,
-                        media=media_group
-                    )
+                    await bot.send_media_group(chat_id=user_id, media=media_group)
                 except Exception as e:
                     logger.error(f"Error enviando media_group: {e}")
 
@@ -343,15 +363,12 @@ Enviando {len(files)} archivo(s)...""",
             for file_entry in individual_files:
                 try:
                     if file_entry.file_type == "animation":
-                        await bot.send_animation(
-                            chat_id=user_id,
-                            animation=file_entry.file_id
-                        )
+                        await bot.send_animation(chat_id=user_id, animation=file_entry.file_id)
                     else:  # document y otros
                         await bot.send_document(
                             chat_id=user_id,
                             document=file_entry.file_id,
-                            caption=file_entry.file_name
+                            caption=file_entry.file_name,
                         )
                 except Exception as e:
                     logger.error(f"Error enviando archivo {file_entry.id}: {e}")
@@ -363,33 +380,32 @@ Enviando {len(files)} archivo(s)...""",
         except Exception as e:
             logger.error(f"Error entregando paquete {package_id}: {e}")
             return False, "Error al entregar el paquete"
-    
+
     # ==================== ESTADÍSTICAS ====================
-    
+
     def get_package_stats(self, package_id: int) -> dict:
         """Obtiene estadísticas de un paquete"""
         package = self.get_package(package_id)
         if not package:
             return {}
-        
+
         files = self.get_package_files(package_id)
-        
+
         return {
-            'id': package.id,
-            'name': package.name,
-            'description': package.description,
-            'file_count': len(files),
-            'store_stock': package.store_stock,
-            'reward_stock': package.reward_stock,
-            'is_active': package.is_active,
-            'available_in_store': package.is_available_in_store,
-            'available_for_reward': package.is_available_for_reward
+            "id": package.id,
+            "name": package.name,
+            "description": package.description,
+            "file_count": len(files),
+            "store_stock": package.store_stock,
+            "reward_stock": package.reward_stock,
+            "is_active": package.is_active,
+            "available_in_store": package.is_available_in_store,
+            "available_for_reward": package.is_available_for_reward,
         }
-    
+
     # ==================== CATEGORÍAS ====================
 
-    def create_category(self, name: str, description: str = None,
-                        order_index: int = 0) -> Category:
+    def create_category(self, name: str, description: str = None, order_index: int = 0) -> Category:
         """
         Crea una nueva categoría.
 
@@ -402,10 +418,7 @@ Enviando {len(files)} archivo(s)...""",
             La categoría creada
         """
         category = Category(
-            name=name,
-            description=description,
-            order_index=order_index,
-            is_active=True
+            name=name, description=description, order_index=order_index, is_active=True
         )
         self.db.add(category)
         self.db.commit()
@@ -413,11 +426,11 @@ Enviando {len(files)} archivo(s)...""",
         logger.info(f"Categoría creada: {name} (ID: {category.id})")
         return category
 
-    def get_category(self, category_id: int) -> Optional[Category]:
+    def get_category(self, category_id: int) -> Category | None:
         """Obtiene una categoría por ID"""
         return self.db.query(Category).filter(Category.id == category_id).first()
 
-    def get_all_categories(self, active_only: bool = True) -> List[Category]:
+    def get_all_categories(self, active_only: bool = True) -> list[Category]:
         """Obtiene todas las categorías ordenadas por order_index"""
         query = self.db.query(Category)
         if active_only:
@@ -439,7 +452,7 @@ Enviando {len(files)} archivo(s)...""",
         if not category:
             return False
 
-        allowed_fields = ['name', 'description', 'order_index', 'is_active']
+        allowed_fields = ["name", "description", "order_index", "is_active"]
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(category, field):
                 setattr(category, field, value)
@@ -492,7 +505,7 @@ Enviando {len(files)} archivo(s)...""",
         logger.info(f"Paquete {package_id} asignado a categoría {category_id}")
         return True
 
-    def get_packages_by_category(self, category_id: int, active_only: bool = True) -> List[Package]:
+    def get_packages_by_category(self, category_id: int, active_only: bool = True) -> list[Package]:
         """
         Obtiene los paquetes de una categoría.
 
@@ -510,7 +523,7 @@ Enviando {len(files)} archivo(s)...""",
 
     def close(self):
         """Cierra la sesión de base de datos"""
-        if hasattr(self, 'db') and self.db:
+        if hasattr(self, "db") and self.db:
             self.db.close()
             self.db = None
 

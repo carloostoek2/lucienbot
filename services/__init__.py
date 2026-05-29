@@ -1,47 +1,61 @@
-from .channel_service import ChannelService
-from .vip_service import VIPService
-from .user_service import UserService
-from .scheduler_service import SchedulerService
+# Fase 15 - Mochila
+from .backpack_service import BackpackService
+
 # Fase 1 - Gamificacion
 from .besito_service import BesitoService
 from .broadcast_service import BroadcastService
+from .channel_service import ChannelService
 from .daily_gift_service import DailyGiftService
 from .game_service import GameService
-# Fase 2 - Paquetes
-from .package_service import PackageService
+
 # Fase 3 - Misiones y Recompensas
 from .mission_service import MissionService
+
+# Fase 2 - Paquetes
+from .package_service import PackageService
 from .reward_service import RewardService
+from .scheduler_service import SchedulerService
+
 # Fase 4 - Tienda
 from .store_service import StoreService
-# Fase 15 - Mochila
-from .backpack_service import BackpackService
-# Fase 16 - Trivias Especiales
-from .trivia_service import TriviaCategoryService
+
 # Phase 17 - Promociones por Racha
 from .streak_promotion_service import StreakPromotionService
+
 # Configuracion de Trivias
 from .trivia_config_service import TriviaConfigService
 
+# Fase 16 - Trivias Especiales
+from .trivia_service import TriviaCategoryService
+from .user_service import UserService
+from .vip_service import VIPService
+
 __all__ = [
-    'ChannelService', 'VIPService', 'UserService', 'SchedulerService',
+    "ChannelService",
+    "VIPService",
+    "UserService",
+    "SchedulerService",
     # Fase 1 - Gamificacion
-    'BesitoService', 'BroadcastService', 'DailyGiftService', 'GameService',
+    "BesitoService",
+    "BroadcastService",
+    "DailyGiftService",
+    "GameService",
     # Fase 2 - Paquetes
-    'PackageService',
+    "PackageService",
     # Fase 3 - Misiones y Recompensas
-    'MissionService', 'RewardService',
+    "MissionService",
+    "RewardService",
     # Fase 4 - Tienda
-    'StoreService',
+    "StoreService",
     # Fase 15 - Mochila
-    'BackpackService',
+    "BackpackService",
     # Fase 16 - Trivias Especiales
-    'TriviaCategoryService',
+    "TriviaCategoryService",
     # Phase 17 - Promociones por Racha
-    'StreakPromotionService',
+    "StreakPromotionService",
     # Configuracion de Trivias
-    'TriviaConfigService',
-    'get_service'
+    "TriviaConfigService",
+    "get_service",
 ]
 
 
@@ -75,6 +89,6 @@ class _ServiceContext:
         return self._service
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._service and hasattr(self._service, 'close'):
+        if self._service and hasattr(self._service, "close"):
             self._service.close()
         return False

@@ -2,9 +2,10 @@
 
 Bot de Telegram para la gestión automatizada de canales Free y VIP, con una personalidad elegante y misteriosa inspirada en un mayordomo sofisticado.
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![Aiogram](https://img.shields.io/badge/Aiogram-3.4.1-green.svg)
+![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
+![Aiogram](https://img.shields.io/badge/Aiogram-3.24.0-green.svg)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.28-orange.svg)
+[![CI](https://github.com/carloostoek2/lucienbot/actions/workflows/ci.yml/badge.svg)](https://github.com/carloostoek2/lucienbot/actions/workflows/ci.yml)
 
 ## ✨ Características
 

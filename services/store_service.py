@@ -3,17 +3,26 @@ Servicio de Tienda - Lucien Bot
 
 Gestiona el catalogo de productos, carrito y compras.
 """
-from datetime import datetime, timezone
-from typing import Optional, List
-from sqlalchemy.orm import Session
+
+import logging
+from datetime import UTC, datetime
+
 from sqlalchemy import desc
-from models.models import StoreProduct, CartItem, Order, OrderItem, OrderStatus, Package
+from sqlalchemy.orm import Session
+
 from models.database import SessionLocal
+from models.models import (
+    CartItem,
+    Order,
+    OrderItem,
+    OrderStatus,
+    Package,
+    StoreProduct,
+    TransactionSource,
+)
 from services.besito_service import BesitoService
 from services.package_service import PackageService
-from models.models import TransactionSource
 from utils.lucien_voice import LucienVoice
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +52,18 @@ class StoreService:
         if self._owns_session and self.db:
             self.db.close()
             self.db = None
-    
+
     # ==================== PRODUCTOS ====================
 
-    def create_product(self, name: str, description: str, package_id: int,
-                       price: int, stock: int = -1, created_by: int = None) -> StoreProduct:
+    def create_product(
+        self,
+        name: str,
+        description: str,
+        package_id: int,
+        price: int,
+        stock: int = -1,
+        created_by: int = None,
+    ) -> StoreProduct:
         """Crea un nuevo producto en la tienda"""
         db = self._get_db()
         product = StoreProduct(
@@ -57,7 +73,7 @@ class StoreService:
             price=price,
             stock=stock,
             created_by=created_by,
-            is_active=True
+            is_active=True,
         )
         db.add(product)
         db.commit()
@@ -65,12 +81,12 @@ class StoreService:
         logger.info(f"Producto creado: {name} (ID: {product.id})")
         return product
 
-    def get_product(self, product_id: int) -> Optional[StoreProduct]:
+    def get_product(self, product_id: int) -> StoreProduct | None:
         """Obtiene un producto por ID"""
         db = self._get_db()
         return db.query(StoreProduct).filter(StoreProduct.id == product_id).first()
 
-    def get_all_products(self, active_only: bool = True) -> List[StoreProduct]:
+    def get_all_products(self, active_only: bool = True) -> list[StoreProduct]:
         """Obtiene todos los productos"""
         db = self._get_db()
         query = db.query(StoreProduct)
@@ -78,15 +94,20 @@ class StoreService:
             query = query.filter(StoreProduct.is_active == True)
         return query.order_by(desc(StoreProduct.created_at)).all()
 
-    def get_available_products(self) -> List[StoreProduct]:
+    def get_available_products(self) -> list[StoreProduct]:
         """Obtiene productos disponibles para compra"""
         db = self._get_db()
-        return db.query(StoreProduct).filter(
-            StoreProduct.is_active == True,
-            (StoreProduct.stock == -1) | (StoreProduct.stock > 0)
-        ).order_by(desc(StoreProduct.created_at)).all()
+        return (
+            db.query(StoreProduct)
+            .filter(
+                StoreProduct.is_active == True,
+                (StoreProduct.stock == -1) | (StoreProduct.stock > 0),
+            )
+            .order_by(desc(StoreProduct.created_at))
+            .all()
+        )
 
-    def search_products(self, query: str, active_only: bool = True) -> List[StoreProduct]:
+    def search_products(self, query: str, active_only: bool = True) -> list[StoreProduct]:
         """Busca productos por nombre o descripcion"""
         db = self._get_db()
         search = f"%{query}%"
@@ -97,8 +118,9 @@ class StoreService:
             q = q.filter(StoreProduct.is_active == True)
         return q.order_by(desc(StoreProduct.created_at)).all()
 
-    def get_products_by_price_range(self, min_price: int = 0, max_price: int = None,
-                                    active_only: bool = True) -> List[StoreProduct]:
+    def get_products_by_price_range(
+        self, min_price: int = 0, max_price: int = None, active_only: bool = True
+    ) -> list[StoreProduct]:
         """Obtiene productos en rango de precio"""
         db = self._get_db()
         q = db.query(StoreProduct).filter(StoreProduct.price >= min_price)
@@ -108,7 +130,9 @@ class StoreService:
             q = q.filter(StoreProduct.is_active == True)
         return q.order_by(StoreProduct.price).all()
 
-    def get_products_by_category(self, category_id: int, active_only: bool = True) -> List[StoreProduct]:
+    def get_products_by_category(
+        self, category_id: int, active_only: bool = True
+    ) -> list[StoreProduct]:
         """Obtiene productos por categoria (via package)"""
         db = self._get_db()
         # Get packages in category
@@ -120,9 +144,14 @@ class StoreService:
             q = q.filter(StoreProduct.is_active == True)
         return q.order_by(desc(StoreProduct.created_at)).all()
 
-    def filter_products(self, category_id: int = None, min_price: int = None,
-                        max_price: int = None, in_stock_only: bool = False,
-                        active_only: bool = True) -> List[StoreProduct]:
+    def filter_products(
+        self,
+        category_id: int = None,
+        min_price: int = None,
+        max_price: int = None,
+        in_stock_only: bool = False,
+        active_only: bool = True,
+    ) -> list[StoreProduct]:
         """Filtra productos por multiples criterios"""
         db = self._get_db()
         q = db.query(StoreProduct)
@@ -142,9 +171,7 @@ class StoreService:
             q = q.filter(StoreProduct.price <= max_price)
 
         if in_stock_only:
-            q = q.filter(
-                (StoreProduct.stock == -1) | (StoreProduct.stock > 0)
-            )
+            q = q.filter((StoreProduct.stock == -1) | (StoreProduct.stock > 0))
 
         return q.order_by(desc(StoreProduct.created_at)).all()
 
@@ -155,7 +182,14 @@ class StoreService:
         if not product:
             return False
 
-        allowed_fields = ['name', 'description', 'price', 'stock', 'is_active', 'low_stock_threshold']
+        allowed_fields = [
+            "name",
+            "description",
+            "price",
+            "stock",
+            "is_active",
+            "low_stock_threshold",
+        ]
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(product, field):
                 setattr(product, field, value)
@@ -179,12 +213,15 @@ class StoreService:
 
     # ==================== CARRITO ====================
 
-    def get_cart_items(self, user_id: int) -> List[CartItem]:
+    def get_cart_items(self, user_id: int) -> list[CartItem]:
         """Obtiene los items del carrito de un usuario"""
         db = self._get_db()
-        return db.query(CartItem).filter(
-            CartItem.user_id == user_id
-        ).order_by(desc(CartItem.added_at)).all()
+        return (
+            db.query(CartItem)
+            .filter(CartItem.user_id == user_id)
+            .order_by(desc(CartItem.added_at))
+            .all()
+        )
 
     def get_cart_total(self, user_id: int) -> int:
         """Obtiene el total del carrito en besitos"""
@@ -214,10 +251,11 @@ class StoreService:
             return False, LucienVoice.store_product_unavailable()
 
         # Verificar si ya esta en el carrito
-        existing = db.query(CartItem).filter(
-            CartItem.user_id == user_id,
-            CartItem.product_id == product_id
-        ).first()
+        existing = (
+            db.query(CartItem)
+            .filter(CartItem.user_id == user_id, CartItem.product_id == product_id)
+            .first()
+        )
 
         if existing:
             existing.quantity += quantity
@@ -225,11 +263,7 @@ class StoreService:
             return True, LucienVoice.store_cart_updated(existing.quantity, product.name)
 
         # Crear nuevo item
-        cart_item = CartItem(
-            user_id=user_id,
-            product_id=product_id,
-            quantity=quantity
-        )
+        cart_item = CartItem(user_id=user_id, product_id=product_id, quantity=quantity)
         db.add(cart_item)
         db.commit()
 
@@ -238,10 +272,11 @@ class StoreService:
     def remove_from_cart(self, user_id: int, cart_item_id: int) -> bool:
         """Elimina un item del carrito"""
         db = self._get_db()
-        item = db.query(CartItem).filter(
-            CartItem.id == cart_item_id,
-            CartItem.user_id == user_id
-        ).first()
+        item = (
+            db.query(CartItem)
+            .filter(CartItem.id == cart_item_id, CartItem.user_id == user_id)
+            .first()
+        )
 
         if item:
             db.delete(item)
@@ -255,10 +290,11 @@ class StoreService:
             return self.remove_from_cart(user_id, cart_item_id)
 
         db = self._get_db()
-        item = db.query(CartItem).filter(
-            CartItem.id == cart_item_id,
-            CartItem.user_id == user_id
-        ).first()
+        item = (
+            db.query(CartItem)
+            .filter(CartItem.id == cart_item_id, CartItem.user_id == user_id)
+            .first()
+        )
 
         if item:
             item.quantity = quantity
@@ -302,10 +338,7 @@ class StoreService:
 
         # Crear la orden
         order = Order(
-            user_id=user_id,
-            total_items=1,
-            total_price=product.price,
-            status=OrderStatus.PENDING
+            user_id=user_id, total_items=1, total_price=product.price, status=OrderStatus.PENDING
         )
         db.add(order)
         db.flush()
@@ -317,14 +350,16 @@ class StoreService:
             product_name=product.name,
             quantity=1,
             unit_price=product.price,
-            total_price=product.price
+            total_price=product.price,
         )
         db.add(order_item)
 
         db.commit()
         db.refresh(order)
 
-        logger.info(f"Orden directa creada: {order.id} para usuario {user_id}, producto {product_id}")
+        logger.info(
+            f"Orden directa creada: {order.id} para usuario {user_id}, producto {product_id}"
+        )
         return order, None
 
     # ==================== ORDENES/COMPRAS ====================
@@ -361,12 +396,14 @@ class StoreService:
             total_price += item_total
             total_items += cart_item.quantity
 
-            order_items_data.append({
-                'product': product,
-                'quantity': cart_item.quantity,
-                'unit_price': product.price,
-                'total_price': item_total
-            })
+            order_items_data.append(
+                {
+                    "product": product,
+                    "quantity": cart_item.quantity,
+                    "unit_price": product.price,
+                    "total_price": item_total,
+                }
+            )
 
         # Verificar saldo del usuario
         balance = self.besito_service.get_balance(user_id)
@@ -378,7 +415,7 @@ class StoreService:
             user_id=user_id,
             total_items=total_items,
             total_price=total_price,
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         )
         db.add(order)
         db.flush()  # Para obtener el ID
@@ -387,11 +424,11 @@ class StoreService:
         for data in order_items_data:
             order_item = OrderItem(
                 order_id=order.id,
-                product_id=data['product'].id,
-                product_name=data['product'].name,
-                quantity=data['quantity'],
-                unit_price=data['unit_price'],
-                total_price=data['total_price']
+                product_id=data["product"].id,
+                product_name=data["product"].name,
+                quantity=data["quantity"],
+                unit_price=data["unit_price"],
+                total_price=data["total_price"],
             )
             db.add(order_item)
 
@@ -427,7 +464,7 @@ class StoreService:
             amount=order.total_price,
             source=TransactionSource.PURCHASE,
             description=f"Compra en tienda - Orden #{order.id}",
-            reference_id=order.id
+            reference_id=order.id,
         )
 
         if not success:
@@ -436,9 +473,12 @@ class StoreService:
         # Procesar cada item
         low_stock_products = []
         for order_item in order.items:
-            product = db.query(StoreProduct).filter(
-                StoreProduct.id == order_item.product_id
-            ).with_for_update().first()
+            product = (
+                db.query(StoreProduct)
+                .filter(StoreProduct.id == order_item.product_id)
+                .with_for_update()
+                .first()
+            )
 
             if not product:
                 continue
@@ -458,14 +498,12 @@ class StoreService:
             # Entregar paquete
             if product.package:
                 await self.package_service.deliver_package_to_user(
-                    bot=bot,
-                    user_id=user_id,
-                    package_id=product.package_id
+                    bot=bot, user_id=user_id, package_id=product.package_id
                 )
 
         # Actualizar orden
         order.status = OrderStatus.COMPLETED
-        order.completed_at = datetime.now(timezone.utc)
+        order.completed_at = datetime.now(UTC)
         db.commit()
 
         # Notificar alertas de stock a admins
@@ -486,17 +524,21 @@ class StoreService:
         db.commit()
         return True
 
-    def get_order(self, order_id: int) -> Optional[Order]:
+    def get_order(self, order_id: int) -> Order | None:
         """Obtiene una orden por ID"""
         db = self._get_db()
         return db.query(Order).filter(Order.id == order_id).first()
 
-    def get_user_orders(self, user_id: int, limit: int = 20) -> List[Order]:
+    def get_user_orders(self, user_id: int, limit: int = 20) -> list[Order]:
         """Obtiene las ordenes de un usuario"""
         db = self._get_db()
-        return db.query(Order).filter(
-            Order.user_id == user_id
-        ).order_by(desc(Order.created_at)).limit(limit).all()
+        return (
+            db.query(Order)
+            .filter(Order.user_id == user_id)
+            .order_by(desc(Order.created_at))
+            .limit(limit)
+            .all()
+        )
 
     # ==================== ESTADISTICAS ====================
 
@@ -505,48 +547,61 @@ class StoreService:
         db = self._get_db()
 
         total_products = db.query(StoreProduct).count()
-        available_products = db.query(StoreProduct).filter(
-            StoreProduct.is_active == True,
-            (StoreProduct.stock == -1) | (StoreProduct.stock > 0)
-        ).count()
+        available_products = (
+            db.query(StoreProduct)
+            .filter(
+                StoreProduct.is_active == True,
+                (StoreProduct.stock == -1) | (StoreProduct.stock > 0),
+            )
+            .count()
+        )
 
         total_orders = db.query(Order).count()
-        completed_orders = db.query(Order).filter(
-            Order.status == OrderStatus.COMPLETED
-        ).count()
+        completed_orders = db.query(Order).filter(Order.status == OrderStatus.COMPLETED).count()
 
         from sqlalchemy import func
-        total_besitos_spent = db.query(func.sum(Order.total_price)).filter(
-            Order.status == OrderStatus.COMPLETED
-        ).scalar() or 0
+
+        total_besitos_spent = (
+            db.query(func.sum(Order.total_price))
+            .filter(Order.status == OrderStatus.COMPLETED)
+            .scalar()
+            or 0
+        )
 
         return {
-            'total_products': total_products,
-            'available_products': available_products,
-            'total_orders': total_orders,
-            'completed_orders': completed_orders,
-            'total_besitos_spent': int(total_besitos_spent)
+            "total_products": total_products,
+            "available_products": available_products,
+            "total_orders": total_orders,
+            "completed_orders": completed_orders,
+            "total_besitos_spent": int(total_besitos_spent),
         }
 
     # ==================== ALERTAS DE STOCK ====================
 
-    def get_low_stock_products(self) -> List[StoreProduct]:
+    def get_low_stock_products(self) -> list[StoreProduct]:
         """Obtiene productos con stock bajo"""
         db = self._get_db()
-        return db.query(StoreProduct).filter(
-            StoreProduct.is_active == True,
-            StoreProduct.stock != -1,  # Not unlimited
-            StoreProduct.stock <= StoreProduct.low_stock_threshold,
-            StoreProduct.stock > 0  # Not out of stock
-        ).order_by(StoreProduct.stock).all()
+        return (
+            db.query(StoreProduct)
+            .filter(
+                StoreProduct.is_active == True,
+                StoreProduct.stock != -1,  # Not unlimited
+                StoreProduct.stock <= StoreProduct.low_stock_threshold,
+                StoreProduct.stock > 0,  # Not out of stock
+            )
+            .order_by(StoreProduct.stock)
+            .all()
+        )
 
-    def get_out_of_stock_products(self) -> List[StoreProduct]:
+    def get_out_of_stock_products(self) -> list[StoreProduct]:
         """Obtiene productos agotados"""
         db = self._get_db()
-        return db.query(StoreProduct).filter(
-            StoreProduct.is_active == True,
-            StoreProduct.stock == 0
-        ).order_by(desc(StoreProduct.updated_at)).all()
+        return (
+            db.query(StoreProduct)
+            .filter(StoreProduct.is_active == True, StoreProduct.stock == 0)
+            .order_by(desc(StoreProduct.updated_at))
+            .all()
+        )
 
     def update_low_stock_threshold(self, product_id: int, threshold: int) -> bool:
         """Actualiza el umbral de stock bajo para un producto"""
@@ -567,37 +622,35 @@ class StoreService:
         """Verifica el estado de stock de un producto y retorna alerta si aplica"""
         product = self.get_product(product_id)
         if not product:
-            return {'alert': False, 'message': 'Producto no encontrado'}
+            return {"alert": False, "message": "Producto no encontrado"}
 
         if product.stock == -1:
-            return {'alert': False, 'status': 'unlimited'}
+            return {"alert": False, "status": "unlimited"}
 
         if product.stock == 0:
             return {
-                'alert': True,
-                'status': 'out',
-                'message': f"Producto '{product.name}' AGOTADO",
-                'product': product
+                "alert": True,
+                "status": "out",
+                "message": f"Producto '{product.name}' AGOTADO",
+                "product": product,
             }
 
         if product.stock <= product.low_stock_threshold:
             return {
-                'alert': True,
-                'status': 'low',
-                'message': f"Producto '{product.name}' con stock bajo: {product.stock} unidades restantes",
-                'product': product,
-                'threshold': product.low_stock_threshold
+                "alert": True,
+                "status": "low",
+                "message": f"Producto '{product.name}' con stock bajo: {product.stock} unidades restantes",
+                "product": product,
+                "threshold": product.low_stock_threshold,
             }
 
-        return {'alert': False, 'status': 'available', 'stock': product.stock}
+        return {"alert": False, "status": "available", "stock": product.stock}
 
     async def notify_stock_alert(self, bot, product_id: int):
         """Envia notificacion de alerta de stock a admins"""
-        from config.settings import bot_config
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
         alert = self.check_stock_alert(product_id)
-        if not alert.get('alert'):
+        if not alert.get("alert"):
             return
 
-        product = alert.get('product')
+        product = alert.get("product")

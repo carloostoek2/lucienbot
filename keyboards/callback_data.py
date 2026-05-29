@@ -64,6 +64,12 @@ class CopyTokenCallback(CallbackData, prefix="copy_token"):
     token_id: int
 
 
+class ToggleGiftCallback(CallbackData, prefix="toggle_gift"):
+    """Marcar/desmarcar token como regalo"""
+    token_id: int
+    is_gift: bool = False
+
+
 class VipPromoDetailCallback(CallbackData, prefix="vip_promo_detail"):
     """Detalle de promoción VIP exclusiva"""
     promo_id: int
@@ -546,7 +552,7 @@ class TriviaConfigFieldCallback(CallbackData, prefix="trivia_cfg_field"):
 
 class TriviaCategoryActivateCallback(CallbackData, prefix="trivia_cat_activate"):
     """Activar categoría de trivia"""
-    category_id: int
+    category_id: str
 
 
 # ==================== MISSION USER ====================
@@ -620,13 +626,13 @@ class TriviaSimpleAnswerCallback(CallbackData, prefix="trivia_simple_answer"):
 class StreakProtectAcceptCallback(CallbackData, prefix="streak_protect_accept"):
     """Aceptar proteccion de racha pagando besitos."""
     streak: int
-    question_idx: int
+    game_type: str
 
 
 class StreakProtectDeclineCallback(CallbackData, prefix="streak_protect_decline"):
     """Rechazar proteccion de racha (pierde streak y codigos)."""
     streak: int
-    question_idx: int
+    game_type: str
 
 
 class StreakRetireCallback(CallbackData, prefix="streak_retire"):
