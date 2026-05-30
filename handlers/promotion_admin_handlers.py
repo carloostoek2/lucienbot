@@ -35,6 +35,7 @@ from keyboards.inline_keyboards import (
     promotion_confirm_delete_keyboard,
     promotion_detail_keyboard,
     promotion_source_keyboard,
+    promotions_list_keyboard,
 )
 from models.models import InterestStatus
 from services import get_service
