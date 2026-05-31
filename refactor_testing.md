@@ -1,12 +1,13 @@
 # Refactor y Mejora de Testing - Lucien Bot
 
-**Fecha de última actualización:** 2026-05-31 (continuación Ítem 3/4 + Ítem #5: scheduler jobs + VIPService unit tests for expiration helpers)  
+**Fecha de última actualización:** 2026-05-31 (continuación Ítem 3/4 + Ítem #5 + Ítem #6: GameService/Trivias directed coverage)  
 **Estado:** 
 - Ítem #1 (Reacciones): ✅ Completado
 - Ítem #2 (Limpieza reaction_mission_flow_real): ✅ Completado (reconciliado desde worktree)
 - Ítem #3 (VIP expiration variants + Scheduler loop): ✅ Avanzado (a/b/c + variante #4 entregados; d revisado)
 - Ítem #4 (VIP Expiration variants en fases_refactor_testing.md): ✅ Avanzado (variante ritual + scheduler durante estado entry)
 - Ítem #5 (Scheduler de expiraciones - VIPService privados): ✅ Completado (unit tests en test_vip_service.py para has_other/get_expiring/expired/redeem/expire; ver s.8 + fases row 5)
+- Ítem #6 (GameService / Trivias directed coverage): ✅ Iniciado y entregado (nuevo tests/unit/test_game_service.py: 10 tests unitarios @pytest.mark.unit passing; cubre play_trivia/play_trivia_vip/rachas/entrega códigos/límites/milestones; game_service 28%→61% en slice dirigida; ruff + pytest -k verificados. Ver s.3 + s.8)
 
 **Responsable de la iniciativa:** Trabajo conjunto con el equipo
 
@@ -131,6 +132,8 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 | `tests/integration/test_free_entry_flow.py` | Ampliado (scheduler loop) | Nuevo TestSchedulerPendingRequestsJob (previo) + TestSchedulerFreeWelcomeJob (b: _send_free_welcome_job + ritual). Patrón robusto. |
 | `tests/integration/test_vip_subscription_lifecycle.py` | Ampliado (expiring + errors + variante) | 3 nuevos métodos en TestVIPSubscriptionLifecycle: test_scheduler_expiring_... (a: reminders + sets flag), handles_send_error (c), + ritual_state variant (ítem 4 "scheduler durante estado"). Todos passing. |
 | `tests/unit/test_vip_service.py` | Ampliado (unit tests VIP privados) | **Ítem #5 (Alto) fases** completado: 7 nuevos tests en TestVIPServiceExpirationSupport cubriendo has_other_active_subscription (2-active, only-one, mix expired), get_expiring/get_expired richer (reminder combos, thresholds, multi), redeem extension + expire interaction. Extensión de archivo existente (smallest). Sin nueva extracción en VIPService. |
+| `tests/unit/test_game_service.py` | Nuevo | **Ítem #6 (Alto) fases** iniciado/entregado: 10 tests unitarios dirigidos en TestGameServiceTriviaPaths para play_trivia / play_trivia_vip / play_trivia_simple + rachas + milestones + entrega códigos (claim hook) + límites free/VIP + errores. Mocks load_* + db_session + sample_streak_promotion. 79 tests passing total en -k (sin regresiones). Cobertura game_service 28%→61% en slice. ruff clean. Nuevo archivo justificado (dominio complejo nuevo, cf. item1). |
+| `refactor_testing.md` + `fases_refactor_testing.md` | Actualizado | Estado top, tabla Archivos, nueva sección "Trabajo realizado en esta sesión (punto 6)", s.8 Cómo Retomar actualizada con handoff para siguiente (más error paths, dice, coverage % full run, integration chain). |
 
 ---
 
@@ -181,16 +184,20 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
    - `tests/integration/test_vip_subscription_lifecycle.py` (nuevo Scenario D)
    - `tests/integration/test_free_entry_flow.py` (TestSchedulerFreeWelcomeJob (b) + (d) review note at EOF; PendingRequestsJob was prior session)
    - `services/scheduler_service.py` (las funciones _process_*)
+   - `tests/unit/test_game_service.py` (nuevo; TestGameServiceTriviaPaths + handoff notes al EOF) + `refactor_testing.md` (s.3 trabajo punto 6 + s.8 actualizado)
 3. Estado actual de ítems:
    - #1 y #2: Completados y documentados.
    - #3 (VIP + Scheduler): ✅ Avanzado (a/b/c + variante ritual para #4 entregados en esta sesión; d revisado y documentado).
    - #4 (fases_refactor_testing): Avance vía variante scheduler+ritual_state (el riesgo de expulsiones indebidas durante entry).
+   - #5 (VIPService units): ✅ Completado (extend test_vip_service.py).
+   - #6 (GameService/Trivias): ✅ Iniciado y entregado (nuevo test_game_service.py + docs updates; ver trabajo en s.3 + handoff aquí).
 4. Próximos pasos recomendados (en orden de valor, actualizar al retomar):
    a. ✅ Completado: test directo _process_expiring_subscriptions (reminders) + flag + no side effects.
    b. ✅ Completado: cobertura _send_free_welcome_job (ritual + keyboard).
    c. ✅ Parcial: error handling en loop expiring (send fail → rollback+continue); agregar más (inactive channel en expired, etc.).
    d. Revisado: falta cobertura; se recomienda agregar en dominio streak (evitar setup pesado aquí).
-   Siguientes: unit tests VIPService privados (ítem 5 fases) ✅ completado esta sesión (extend test_vip_service.py con has_other richer + get_* multi + redeem extension cases), matriz completa ritual+scheduler (múltiples canales, renovación mid-ritual - priorizar integration o nuevo si justificado), más errores (inactive channel expired etc).
+   e. ✅ Completado (esta sesión, ítem 6 fases): unit tests dirigidos GameService (nuevo test_game_service.py) para play_trivia/play_trivia_vip/play_trivia_simple + cálculo rachas + milestones + entrega códigos (claim_for_streak hook) + límites + paths VIP/free/error. 10 tests passing + ruff + GSD logs + coverage lift. Patrón: mocks + db_session + fixtures existentes. (Fix round addressed: GSD ts, hardcoded User rows, loose asserts, docstring/casing nits.)
+   Siguientes: unit tests VIPService privados (ítem 5 fases) ✅ completado esta sesión (extend test_vip_service.py con has_other richer + get_* multi + redeem extension cases), matriz completa ritual+scheduler (múltiples canales, renovación mid-ritual - priorizar integration o nuevo si justificado), más errores (inactive channel expired etc), error paths adicionales en game (p.ej. DB fail en claim, config overrides), full dice coverage, integration chain completa trivia→streak→promo, medición cobertura global post-slice. Future debt: modernize tz handling (utcnow/naive in game_service + tests) across slices while preserving reference pattern replication (see item6 fix round review notes + test_game_service.py EOF).
 5. Al terminar la sesión: actualizar esta sección + la tabla de Top 10 + la tabla de "Archivos Clave".
 6. Commits: Esta sesión (GSD quick via /implement) dejó cambios listos + tests passing + ruff limpio. Ver git status al retomar.
 
@@ -202,6 +209,16 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 - Archivos clave añadidos a tabla abajo.
 - ruff format/check + pytest -k específico 100% passing requeridos y ejecutados.
 - Próxima recomendada: más errores en loops scheduler (canal inactivo en expired), matriz ritual completa (múltiples VIP channels + mid-ritual renew), o streak cleanup si factories lo permiten.
+
+**Trabajo realizado en esta sesión (Punto 6 - GameService / Trivias directed coverage):**
+- Siguiendo orden estricto de refactor_testing.md s.8 y "Cómo Retomar": 1) Lectura full de refactor_testing.md (s.3.4/7/8, work items 3/4/5, GSD notes, patrones, fin traspaso) + fases_refactor_testing.md (tabla + row #6 + updates prev). 2) GSD discipline: 4+ appends a .planning/quick/gsd-testing-debt-item6.log (inicio, mid-análisis, pre-write test, pre-docs) usando run_terminal_command ANTES de cualquier search_replace/write.
+- 3) Lectura artefactos previos exactos: test_vip_service.py (TestVIPServiceExpirationSupport: co-location/smallest, model setups ricos, notas decisiones), test_streak_promotion_service.py ~282-340 (GameService inst + patch load_trivia + play_trivia + assert promo_code), test_streak_fsm.py (privates + patch besito), test_vip_subscription_lifecycle.py (SQLite+TestSession), conftest (db_session, samples streak).
+- 4) Análisis (grep + read_file offset/limit): services/game_service.py (play_trivia:781, play_trivia_vip:1178, play_trivia_simple:1533, _get_*_streak, can_play/get_daily_limits, STREAK_MILESTONES={3:2,5:5,7:10,10:20}, promo claim hook en play, load_*, VIP vs free paths). handlers/game_user_handlers.py (call sites solo, sin tocar). Coverage baseline intentado vía pytest --cov (pytest-cov disponible; ~28% inicial en -k relevantes).
+- 5) Decisión scope (directed, smallest, precedent): nuevo tests/unit/test_game_service.py (justificado: dominio nuevo/complejo 1755LOC como item#1 broadcast_flow; no extend parcial streak). 10 tests @pytest.mark.unit determinísticos (mocks load/random indirect, records para streaks/límites, sample_streak_promotion reuse). Cubre: límites enforcement (free/VIP/simple), correct/incorrect (besitos+streak vs reset 0), milestones + VIP*2, entrega códigos (claim hook), errores (no q, idx inválido). Sin handlers, sin full dice, sin 100%.
+- 6) Impl: write nuevo test + 3 logs GSD pre. ruff format + ruff check --fix (3 fixes auto, clean). pytest -k "game_service or play_trivia or streak or trivia" : 79 passed (nuevos + zero regresiones en existentes). game_service cobertura 28%→61% en slice.
+- 7) Docs: actualizaciones precisas (top status, tabla Archivos con entry nuevo test + rationale, nueva subsección "Trabajo realizado... (Punto 6)", s.8 handoff). + update paralelo fases_refactor_testing.md row6.
+- GSD + ruff + pytest + docs drift-free + smallest change + patrones replicados (incl. finally close, strict dict asserts, no test data reuse). Todo aislado, 0 riesgo prod.
+- Handoff para siguiente: ver s.8 actualizado (error paths adicionales, dice game, integration full chain, medición % real post-todos, trivia_config overrides). Fix round (post-review) completado: todos los findings de grok-review-45e0cbeb.md resueltos (2 bugs prioritarios + nits fixed; tz/string/missed edges/pre-existing como wontfix con justificación técnica + deferral en s.8/EOF; 11 tests + ruff + 80 passing post-fix). Ver review_file para Responses detalladas.
 
 **Fin del documento de traspaso.**
 
