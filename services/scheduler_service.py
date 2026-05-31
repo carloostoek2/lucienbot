@@ -240,7 +240,6 @@ async def _process_expired_subscriptions():
         db.close()
 
 
-
 def _cleanup_expired_streak_sessions():
     """Cancela sesiones de racha expiradas que no fueron cerradas por interaccion."""
     import json

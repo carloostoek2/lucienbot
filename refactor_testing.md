@@ -1,11 +1,12 @@
 # Refactor y Mejora de Testing - Lucien Bot
 
-**Fecha de última actualización:** 2026-05-31 (continuación Ítem 3/4: scheduler jobs directos - expiring reminders + free welcome + errores + variante ritual VIP)  
+**Fecha de última actualización:** 2026-05-31 (continuación Ítem 3/4 + Ítem #5: scheduler jobs + VIPService unit tests for expiration helpers)  
 **Estado:** 
 - Ítem #1 (Reacciones): ✅ Completado
 - Ítem #2 (Limpieza reaction_mission_flow_real): ✅ Completado (reconciliado desde worktree)
 - Ítem #3 (VIP expiration variants + Scheduler loop): ✅ Avanzado (a/b/c + variante #4 entregados; d revisado)
-- Ítem #4 (VIP Expiration variants en fases_refactor_testing.md): En progreso (variante ritual + scheduler durante estado entry cubierta en tests de Ítem 3)
+- Ítem #4 (VIP Expiration variants en fases_refactor_testing.md): ✅ Avanzado (variante ritual + scheduler durante estado entry)
+- Ítem #5 (Scheduler de expiraciones - VIPService privados): ✅ Completado (unit tests en test_vip_service.py para has_other/get_expiring/expired/redeem/expire; ver s.8 + fases row 5)
 
 **Responsable de la iniciativa:** Trabajo conjunto con el equipo
 
@@ -53,7 +54,7 @@ Se priorizó el siguiente listado (solo los más relevantes para retomar):
 |---|-----------|------|--------|
 | 1 | Crítico | Flujo completo de Reacción (`check_and_register_reaction` + misión + recompensa + actualización de teclado) | ✅ Completado |
 | 2 | Crítico | Limpieza del test `test_reaction_mission_flow_real.py` (toca DB real) | ✅ Completado (ver 3.4 — trabajo realizado en worktree lucienbot-2026-05-31-0bd7f536 y sincronizado) |
-| 3-10 | Alto | VIP expiration variants, Scheduler, GameService/Trivias, Backpack, Invariantes de negocio, etc. | En progreso (ítem 3/4: a/b/c scheduler jobs + variante ritual VIP entregados; tests passing + doc actualizado) |
+| 3-10 | Alto | VIP expiration variants, Scheduler, GameService/Trivias, Backpack, Invariantes de negocio, etc. | En progreso (ítem 3/4/5: a/b/c + ritual variant + Ítem #5 VIPService units for scheduler helpers completado; tests passing + docs updated) |
 
 ### 3.3 Trabajo realizado en esta sesión (Flujo de Reacciones - Ítem #1)
 
@@ -129,6 +130,7 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 | `tests/integration/test_vip_complete_cycle.py` | Hygiene | Reemplazados `datetime.utcnow()` por `datetime.now(timezone.utc)`. |
 | `tests/integration/test_free_entry_flow.py` | Ampliado (scheduler loop) | Nuevo TestSchedulerPendingRequestsJob (previo) + TestSchedulerFreeWelcomeJob (b: _send_free_welcome_job + ritual). Patrón robusto. |
 | `tests/integration/test_vip_subscription_lifecycle.py` | Ampliado (expiring + errors + variante) | 3 nuevos métodos en TestVIPSubscriptionLifecycle: test_scheduler_expiring_... (a: reminders + sets flag), handles_send_error (c), + ritual_state variant (ítem 4 "scheduler durante estado"). Todos passing. |
+| `tests/unit/test_vip_service.py` | Ampliado (unit tests VIP privados) | **Ítem #5 (Alto) fases** completado: 7 nuevos tests en TestVIPServiceExpirationSupport cubriendo has_other_active_subscription (2-active, only-one, mix expired), get_expiring/get_expired richer (reminder combos, thresholds, multi), redeem extension + expire interaction. Extensión de archivo existente (smallest). Sin nueva extracción en VIPService. |
 
 ---
 
@@ -188,14 +190,21 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
    b. ✅ Completado: cobertura _send_free_welcome_job (ritual + keyboard).
    c. ✅ Parcial: error handling en loop expiring (send fail → rollback+continue); agregar más (inactive channel en expired, etc.).
    d. Revisado: falta cobertura; se recomienda agregar en dominio streak (evitar setup pesado aquí).
-   Siguientes: unit tests VIPService privados (ítem 5 fases), matriz completa ritual+scheduler (múltiples canales, renovación mid-ritual), más errores.
+   Siguientes: unit tests VIPService privados (ítem 5 fases) ✅ completado esta sesión (extend test_vip_service.py con has_other richer + get_* multi + redeem extension cases), matriz completa ritual+scheduler (múltiples canales, renovación mid-ritual - priorizar integration o nuevo si justificado), más errores (inactive channel expired etc).
 5. Al terminar la sesión: actualizar esta sección + la tabla de Top 10 + la tabla de "Archivos Clave".
 6. Commits: Esta sesión (GSD quick via /implement) dejó cambios listos + tests passing + ruff limpio. Ver git status al retomar.
+
+**Actualización de esta sesión (continuación Ítem 5 + handoff):**
+- ✅ Ítem 5 (Alto) de fases_refactor_testing.md avanzado/completado vía unit tests en VIPService (has_other_active_subscription multi-scenarios + filtering, richer get_expiring/get_expired con reminder/thresholds/multi, redeem renewal effects on scheduler "expired" view, expire+has_other interaction).
+- Patrón seguido: extender tests/unit/test_vip_service.py (co-location, smallest change, no new file test_scheduler_expiration.py per refactor_testing.md rec + rules: no new files sin razón clara).
+- Extracción de lógica a VIPService (p.ej. execute_expiration_for_subscription) SKIPPED intencionalmente: viola pickling de APScheduler (jobs requieren funcs módulo), riesgo dupe con bot.py startup, >50 líneas potencial, cross-domain (scheduler System vs VIP domain), refactor rules (solo si reduce complejidad/dupe). Scheduler orchestration + error continue + ban/unban + voice notify permanecen; units ahora cubren los métodos puros de VIP que usa (get/has/expire/redeem). Limitación documentada en test.
+- GSD: 3+ logs pre-edit a .planning/quick/gsd-testing-debt-item5.log (continuación del init previo).
+- Archivos clave añadidos a tabla abajo.
+- ruff format/check + pytest -k específico 100% passing requeridos y ejecutados.
+- Próxima recomendada: más errores en loops scheduler (canal inactivo en expired), matriz ritual completa (múltiples VIP channels + mid-ritual renew), o streak cleanup si factories lo permiten.
 
 **Fin del documento de traspaso.**
 
 ---
-
-**Fin del documento de traspaso.**
 
 Este archivo debe mantenerse actualizado al final de cada sesión de trabajo de testing/refactor.

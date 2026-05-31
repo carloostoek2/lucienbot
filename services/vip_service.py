@@ -292,9 +292,7 @@ class VIPService:
         if token:
             token.is_gift = is_gift
             db.commit()
-            logger.info(
-                f"VIP token gift status: token_id={token_id}, is_gift={is_gift}"
-            )
+            logger.info(f"VIP token gift status: token_id={token_id}, is_gift={is_gift}")
             return True
         return False
 
