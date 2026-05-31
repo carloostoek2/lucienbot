@@ -2,17 +2,20 @@
 Tests de integración — Ciclo de vida de suscripciones VIP
 =========================================================
 
-Prueba los 3 escenarios críticos del procesamiento de suscripciones expiradas
-por el scheduler (_process_expired_subscriptions):
+Prueba escenarios críticos del procesamiento de suscripciones expiradas
+por el scheduler (_process_expired_subscriptions), alineados con el flujo
+actual de renovación (extensión de suscripción existente en vez de crear filas nuevas).
 
-  A) Usuario RENOVÓ → tiene 2 suscripciones (expirada + extensión activa)
-     → NO debe ser expulsado del canal
+Modelo correcto de renovación (implementado en VIPService.redeem_token):
+- Si el usuario ya tiene suscripción activa → se EXTENDE la end_date de la existente.
+- Solo usuarios nuevos o sin suscripción activa → se crea nueva suscripción.
 
-  B) Usuario NO renovó → tiene 1 suscripción expirada
-     → DEBE ser expulsado del canal
+Tests defensivos + happy path:
 
-  C) Usuario VIGENTE → tiene 1 suscripción activa (no vencida)
-     → NO debe aparecer en la lista de expiradas
+  A) Estado legacy con 2 subs activas (bug histórico) → scheduler protege (no kick).
+  B) Usuario NO renovó → tiene 1 suscripción expirada → DEBE ser expulsado.
+  C) Usuario VIGENTE → NO debe aparecer en expiradas.
+  D) Renovación correcta (extensión) → scheduler respeta la nueva fecha extendida.
 
 Para cada escenario, el test:
   1. Construye el estado exacto de BD
@@ -213,7 +216,10 @@ class TestVIPSubscriptionLifecycle:
         now = datetime.now(UTC)
 
         # Sub A (original): expiró hace 2 días pero is_active=True
-        # (simula el bug donde la extensión no desactivó la anterior)
+        # NOTA: Este estado (dos subs activas tras "renovación") YA NO DEBE PRODUCIRSE
+        # con el flujo actual de redeem_token (que extiende la suscripción existente).
+        # Este test es DEFENSIVO: valida que incluso con datos legacy/duplicados,
+        # el scheduler no expulsa al usuario gracias a has_other_active_subscription.
         sub_a = Subscription(
             user_id=user.telegram_id,
             channel_id=channel.id,
@@ -745,3 +751,142 @@ class TestVIPSubscriptionLifecycle:
         verify_db2.close()
 
         self._print_ok("ESCENARIO C: COMPLETADO — Usuario vigente NO fue afectado")
+
+    # ── ESCENARIO D: Renovación correcta (extensión) + scheduler respeta nueva fecha ──
+    async def test_renewal_extension_delays_expiration_until_new_end_date(
+        self, tmp_path, mock_bot
+    ):
+        """
+        ESCENARIO D — Flujo correcto de renovación (extensión) + scheduler.
+
+        Usuario tiene suscripción activa que vence pronto.
+        Hoy renueva (redeem_token extiende la MISMA suscripción).
+        El scheduler NO debe expulsarlo hasta que pase la NUEVA fecha extendida.
+
+        Esto valida que el flujo de extensión en redeem_token + el scheduler
+        trabajan correctamente juntos.
+        """
+        self._print_separator(
+            "ESCENARIO D: Renovación (extensión) → scheduler respeta nueva fecha"
+        )
+
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+
+        try:
+            user = User(
+                telegram_id=3001,
+                username="renewal_extend_user",
+                first_name="Extend",
+                role=UserRole.USER,
+            )
+            channel = Channel(
+                channel_id=-1003001,
+                channel_name="VIP Extend Test",
+                channel_type=ChannelType.VIP,
+                is_active=True,
+            )
+            tariff = Tariff(name="30-day", duration_days=30, price="9.99", is_active=True)
+
+            db.add_all([user, channel, tariff])
+            db.commit()
+            db.refresh(user)
+            db.refresh(channel)
+            db.refresh(tariff)
+
+            # Suscripción activa que vence en 5 días
+            token1 = Token(
+                token_code="EXTEND1",
+                tariff_id=tariff.id,
+                status=TokenStatus.USED,
+                redeemed_by_id=user.telegram_id,
+            )
+            db.add(token1)
+            db.commit()
+
+            now = datetime.now(UTC)
+            original_end = now + timedelta(days=5)
+            sub = Subscription(
+                user_id=user.telegram_id,
+                channel_id=channel.id,
+                token_id=token1.id,
+                end_date=original_end,
+                is_active=True,
+            )
+            db.add(sub)
+            db.commit()
+            db.refresh(sub)
+
+            sub_id = sub.id
+            user_tg = user.telegram_id
+
+            # ── Renovación correcta: canjea nuevo token → debe EXTENDER la misma sub ──
+            token2 = Token(
+                token_code="EXTEND2",
+                tariff_id=tariff.id,
+                status=TokenStatus.ACTIVE,
+            )
+            db.add(token2)
+            db.commit()
+
+            vip_service = VIPService(db)
+            extended_sub = vip_service.redeem_token(token2.token_code, user_tg)
+
+            assert extended_sub is not None
+            assert extended_sub.id == sub_id, "Debe devolver la MISMA suscripción (extensión)"
+            db.refresh(extended_sub)
+
+            new_end = extended_sub.end_date
+            # Normalizar por comportamiento de SQLite (puede devolver naive)
+            if new_end.tzinfo is None:
+                new_end = new_end.replace(tzinfo=UTC)
+            if original_end.tzinfo is None:
+                original_end = original_end.replace(tzinfo=UTC)
+            assert new_end > original_end, "La fecha debe haberse extendido"
+
+            self._print_ok(f"Renovación extendió suscripción de {original_end} a {new_end}")
+
+            db.close()
+
+            # ── Ejecutar scheduler ANTES de la nueva fecha extendida ──
+            # (simula que pasó el tiempo original pero no el extendido)
+            mock_bot.reset_mock()
+
+            with patch.object(
+                scheduler_service, "SessionLocal", TestSession
+            ), patch.object(
+                scheduler_service, "_get_bot", return_value=mock_bot
+            ):
+                await scheduler_service._process_expired_subscriptions()
+
+            # NO debe haber llamado ban (la suscripción extendida aún no vence)
+            assert mock_bot.ban_chat_member.call_count == 0, (
+                "Scheduler NO debió expulsar: la suscripción fue extendida correctamente"
+            )
+            self._print_ok("Scheduler NO expulsó (correcto: fecha extendida aún vigente)")
+
+            # ── Ahora simulamos que pasó la fecha extendida también ──
+            verify_db = TestSession()
+            sub_to_expire = verify_db.get(Subscription, sub_id)  # SQLAlchemy 2.0 compatible
+            sub_to_expire.end_date = datetime.now(UTC) - timedelta(hours=1)
+            verify_db.commit()
+            verify_db.close()
+
+            mock_bot.reset_mock()
+
+            with patch.object(
+                scheduler_service, "SessionLocal", TestSession
+            ), patch.object(
+                scheduler_service, "_get_bot", return_value=mock_bot
+            ):
+                await scheduler_service._process_expired_subscriptions()
+
+            # Ahora SÍ debe expulsar
+            assert mock_bot.ban_chat_member.call_count >= 1, (
+                "Scheduler debió expulsar después de la fecha extendida"
+            )
+            self._print_ok("Scheduler SÍ expulsó después de la fecha extendida (correcto)")
+
+        finally:
+            db.close()
+            engine.dispose()

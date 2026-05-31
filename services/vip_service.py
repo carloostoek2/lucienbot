@@ -223,6 +223,7 @@ class VIPService:
         if existing_subscription and sub_end_date is not None and sub_end_date > now:
             # Usuario activo: extender la suscripción existente
             existing_subscription.end_date = sub_end_date + timedelta(days=tariff.duration_days)
+            existing_subscription.is_active = True  # Defensive: ensure active after extension
             # Mantener la nueva referencia del token aunque sea extensión
             existing_subscription.token_id = token.id
 

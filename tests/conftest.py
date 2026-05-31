@@ -43,7 +43,11 @@ def db_session(engine):
     """Crea una sesión de base de datos limpia para cada test."""
     connection = engine.connect()
     transaction = connection.begin()
-    session = sessionmaker(bind=connection)()
+    # expire_on_commit=False evita que SQLAlchemy expire los objetos del identity map
+    # después de cada commit() interno de los servicios (BroadcastService, MissionService,
+    # RewardService, BesitoService, etc.). Esto previene DetachedInstanceError cuando
+    # los tests acceden a fixtures como sample_user después de flujos con múltiples commits.
+    session = sessionmaker(bind=connection, expire_on_commit=False)()
 
     yield session
 
