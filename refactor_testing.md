@@ -1,10 +1,11 @@
 # Refactor y Mejora de Testing - Lucien Bot
 
-**Fecha de última actualización:** 2026-05-31 (fin de sesión - trabajo en Ítem 3: scheduler loop expansion)  
+**Fecha de última actualización:** 2026-05-31 (continuación Ítem 3/4: scheduler jobs directos - expiring reminders + free welcome + errores + variante ritual VIP)  
 **Estado:** 
 - Ítem #1 (Reacciones): ✅ Completado
 - Ítem #2 (Limpieza reaction_mission_flow_real): ✅ Completado (reconciliado desde worktree)
-- Ítem #3 (VIP expiration variants + Scheduler loop): En progreso avanzado
+- Ítem #3 (VIP expiration variants + Scheduler loop): ✅ Avanzado (a/b/c + variante #4 entregados; d revisado)
+- Ítem #4 (VIP Expiration variants en fases_refactor_testing.md): En progreso (variante ritual + scheduler durante estado entry cubierta en tests de Ítem 3)
 
 **Responsable de la iniciativa:** Trabajo conjunto con el equipo
 
@@ -52,7 +53,7 @@ Se priorizó el siguiente listado (solo los más relevantes para retomar):
 |---|-----------|------|--------|
 | 1 | Crítico | Flujo completo de Reacción (`check_and_register_reaction` + misión + recompensa + actualización de teclado) | ✅ Completado |
 | 2 | Crítico | Limpieza del test `test_reaction_mission_flow_real.py` (toca DB real) | ✅ Completado (ver 3.4 — trabajo realizado en worktree lucienbot-2026-05-31-0bd7f536 y sincronizado) |
-| 3-10 | Alto | VIP expiration variants, Scheduler, GameService/Trivias, Backpack, Invariantes de negocio, etc. | En progreso (ítem 3 - auditoría handlers + tests integrados de renovación/extensión + scheduler completados en esta sesión) |
+| 3-10 | Alto | VIP expiration variants, Scheduler, GameService/Trivias, Backpack, Invariantes de negocio, etc. | En progreso (ítem 3/4: a/b/c scheduler jobs + variante ritual VIP entregados; tests passing + doc actualizado) |
 
 ### 3.3 Trabajo realizado en esta sesión (Flujo de Reacciones - Ítem #1)
 
@@ -126,7 +127,8 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 | `services/vip_service.py` | Pequeña mejora defensiva | `is_active = True` explícito al extender suscripción en `redeem_token`. |
 | `tests/integration/test_vip_subscription_lifecycle.py` | Actualizado + nuevo test | Scenario A clarificado (defensivo). Nuevo Scenario D: extensión + scheduler integrado. |
 | `tests/integration/test_vip_complete_cycle.py` | Hygiene | Reemplazados `datetime.utcnow()` por `datetime.now(timezone.utc)`. |
-| `tests/integration/test_free_entry_flow.py` | Ampliado (scheduler loop) | Nuevo TestSchedulerPendingRequestsJob: cobertura directa de _process_pending_requests (auto-aprobación + welcome). Patrón robusto aplicado. |
+| `tests/integration/test_free_entry_flow.py` | Ampliado (scheduler loop) | Nuevo TestSchedulerPendingRequestsJob (previo) + TestSchedulerFreeWelcomeJob (b: _send_free_welcome_job + ritual). Patrón robusto. |
+| `tests/integration/test_vip_subscription_lifecycle.py` | Ampliado (expiring + errors + variante) | 3 nuevos métodos en TestVIPSubscriptionLifecycle: test_scheduler_expiring_... (a: reminders + sets flag), handles_send_error (c), + ritual_state variant (ítem 4 "scheduler durante estado"). Todos passing. |
 
 ---
 
@@ -142,26 +144,22 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 - Luego seguir el orden de `.planning/phases/` (07.1, 08, 09...).
 - Para cada fase evaluar: qué features se entregaron vs qué tests existen realmente.
 
-**Trabajo realizado en esta sesión (continuación Ítem 3 - Scheduler Loop Expansion):**
+**Trabajo realizado en esta sesión (continuación Ítem 3 + avance Ítem 4 - siguiendo orden exacto a→b→c→d de sección 8):**
+- a. Nuevo test `test_scheduler_expiring_subscriptions_sends_reminders_and_sets_flag` en `TestVIPSubscriptionLifecycle` (test_vip_subscription_lifecycle.py): invocación real de `_process_expiring_subscriptions`, aserciones de send_message (voz Lucien) + reminder_sent=True en verify session, sin side-effects en otras subs. Patrón robusto exacto.
+- b. Nuevo `TestSchedulerFreeWelcomeJob` + `test_send_free_welcome_job_sends_ritual_message_and_keyboard` en test_free_entry_flow.py: cobertura directa de `_send_free_welcome_job(user_id, channel_tg_id)`, verifica LucienVoice.free_entry_ritual + social keyboard.
+- c. Error handling: `test_scheduler_expiring_handles_send_error_with_rollback` (side_effect seq en AsyncMock → rollback parcial de una sub, continue con otras); + canal inactivo/ritual paths en expired ya cubierto indirectamente por suite previa.
+- Variante para Ítem #4 (el bug de expulsiones indebidas): `test_expired_scheduler_while_user_in_ritual_state_clears_state_on_kick` — scheduler _process_expired ejecutándose mientras User.vip_entry_status="pending_entry"/stage=2; verifica kick + limpieza correcta del estado (cubre riesgo "scheduler mientras usuario en ritual").
+- d. Revisado exhaustivamente (grep + lectura de scheduler_service + ausencia de tests previos): `_cleanup_expired_streak_sessions` carece de cobertura directa de job. Se intentó test robusto pero modelos Streak* requieren setup FK pesado (no factories reutilizables pequeños); se documentó recomendación y se removió para mantener tests 100% passing + smallest change. Prioridad baja vs a/b/c.
+- Actualización de `refactor_testing.md` (esta sección + tabla Archivos + sección 8 Cómo Retomar). GSD spirit: nota de tarea vía terminal cmd antes de edits.
+- Decisión: extender test_vip_subscription_lifecycle.py (co-localizar VIP scheduler coverage) y test_free_entry_flow.py (para free/scheduler jobs); no nuevo archivo test_scheduler_jobs.py (crecimiento moderado). Seguir patrón exacto de TestSchedulerPendingRequestsJob y estilo prints de lifecycle. Todos los tests nuevos pasan (pytest -k). ruff format + ruff check --fix ejecutados.
+- No se tocó fases_refactor_testing.md (opcional, tabla truncada).
 
-- Auditoría completa de handlers VIP (common_handlers, vip_handlers, vip_user_handlers): confirmada correcta separación (lógica solo en servicio).
-- Clarificación de modelo de renovación: `redeem_token` ya hace extensión correcta de suscripción existente (no crea duplicados). Test Scenario A del lifecycle era legacy/defensivo.
-- **Nuevo Scenario D** en `test_vip_subscription_lifecycle.py`: Test integrado usando `redeem_token` (extensión) + invocación real de `_process_expired_subscriptions` (antes y después de la nueva fecha). Pasa limpio.
-- Mejora defensiva menor en `services/vip_service.py` (línea ~226): `is_active = True` explícito al extender.
-- Hygiene: Corregidos múltiples `datetime.utcnow()` deprecados en `test_vip_complete_cycle.py`.
-- **Gran ampliación del scheduler loop**: Nuevo `TestSchedulerPendingRequestsJob` + test `test_process_pending_requests_approves_and_sends_welcome` en `test_free_entry_flow.py`.
-  - Invoca directamente `_process_pending_requests()` con el patrón robusto (archivo + TestSession).
-  - Verifica aprobación vía bot + actualización BD + envío de mensaje de bienvenida + invite link.
-  - El archivo pasó de 6 a 7 tests pasando.
-- Actualización de `refactor_testing.md` + reconciliación final de estado de ítems.
-
-**Recomendación para próxima sesión (continuar Ítem 3):**
-- Priorizar más cobertura del scheduler loop:
-  - Invocación directa de `_process_expiring_subscriptions` (reminders) con patrón robusto.
-  - Cobertura de `_send_free_welcome_job` (el job de 30s del canal Free).
-  - Casos de error dentro de los loops (fallos de bot, DB, canales inactivos, usuarios inexistentes, etc.).
-  - Posible cobertura similar para `_cleanup_expired_streak_sessions`.
-- Mantener el estándar de tests: file-based SQLite + TestSession cuando se invoquen jobs del scheduler.
+**Recomendación para próxima sesión (continuar Ítem 3/4/5):**
+- Completar d con test de streak en su dominio (test_streak_* o nuevo scheduler jobs) usando factories existentes si hay.
+- Más errores en loops (inactive channel en expired → comportamiento actual de 'continue' sin desactivar; DB issues simulados).
+- Unit tests privados de VIPService (get_expiring etc) per ítem 5 de fases.
+- Matriz completa ritual + scheduler (múltiples canales VIP, renovación mid-ritual).
+- Mantener estándar: file SQLite + TestSession + patch SessionLocal/_get_bot.
 
 ---
 
@@ -170,6 +168,7 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 - La voz de Lucien y las reglas de arquitectura (handlers → services → models, máximo 50 líneas, etc.) siguen siendo sagradas. Los tests deben ayudar a mantenerlas, no relajarlas.
 - Se detectó que muchos "tests de integración" antiguos dependían demasiado del estado de datos (misiones existentes, etc.). El nuevo enfoque prioriza tests **determinísticos**.
 - El problema de "reacción no funciona" o "conteos de teclado no se actualizan" tiene componentes tanto en la lógica de negocio como en la manipulación de UI/keyboard después de la reacción.
+- **Decisión de esta sesión (continuación testing debt):** Se siguió estrictamente el orden de valor a→b→c→d de "Cómo Retomar". Se prefirió extender archivos existentes (lifecycle para VIP scheduler co-location + ritual variant addressing directamente ítem 4 de fases; free_entry para welcome/streak review) vs crear test_scheduler_jobs.py (smallest change, patrón establecido). Para d se revisó pero se evitó test incompleto (Streak models pesados) priorizando 100% pass + GSD spirit. ruff y pytest obligatorios antes de claim. GSD: comando terminal para registrar tarea antes de 1er edit.
 
 ---
 
@@ -178,18 +177,20 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 1. Leer este archivo (`refactor_testing.md`) — especialmente la sección "Trabajo realizado en esta sesión".
 2. Revisar los archivos clave de la sesión actual:
    - `tests/integration/test_vip_subscription_lifecycle.py` (nuevo Scenario D)
-   - `tests/integration/test_free_entry_flow.py` (nuevo TestSchedulerPendingRequestsJob)
+   - `tests/integration/test_free_entry_flow.py` (TestSchedulerFreeWelcomeJob (b) + (d) review note at EOF; PendingRequestsJob was prior session)
    - `services/scheduler_service.py` (las funciones _process_*)
 3. Estado actual de ítems:
    - #1 y #2: Completados y documentados.
-   - #3 (VIP + Scheduler): Avanzado. Tenemos buena cobertura de happy path de extensión + expired + un nuevo job de pending requests. Falta endurecer con errores y los demás jobs.
-4. Próximos pasos recomendados (en orden de valor):
-   a. Agregar test directo de `_process_expiring_subscriptions` (reminders) usando el mismo patrón robusto.
-   b. Agregar cobertura de ejecución del job `_send_free_welcome_job`.
-   c. Tests de manejo de errores dentro de los loops del scheduler (bot falla, DB issues, etc.).
-   d. Revisar si hace falta cobertura similar para streak cleanup.
+   - #3 (VIP + Scheduler): ✅ Avanzado (a/b/c + variante ritual para #4 entregados en esta sesión; d revisado y documentado).
+   - #4 (fases_refactor_testing): Avance vía variante scheduler+ritual_state (el riesgo de expulsiones indebidas durante entry).
+4. Próximos pasos recomendados (en orden de valor, actualizar al retomar):
+   a. ✅ Completado: test directo _process_expiring_subscriptions (reminders) + flag + no side effects.
+   b. ✅ Completado: cobertura _send_free_welcome_job (ritual + keyboard).
+   c. ✅ Parcial: error handling en loop expiring (send fail → rollback+continue); agregar más (inactive channel en expired, etc.).
+   d. Revisado: falta cobertura; se recomienda agregar en dominio streak (evitar setup pesado aquí).
+   Siguientes: unit tests VIPService privados (ítem 5 fases), matriz completa ritual+scheduler (múltiples canales, renovación mid-ritual), más errores.
 5. Al terminar la sesión: actualizar esta sección + la tabla de Top 10 + la tabla de "Archivos Clave".
-6. Commits: Esta sesión dejó cambios listos. Ver git status al retomar.
+6. Commits: Esta sesión (GSD quick via /implement) dejó cambios listos + tests passing + ruff limpio. Ver git status al retomar.
 
 **Fin del documento de traspaso.**
 

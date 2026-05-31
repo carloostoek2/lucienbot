@@ -26,26 +26,27 @@ Para cada escenario, el test:
   Los prints detallados permiten seguir paso a paso qué ocurre.
 """
 
-import pytest
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from unittest.mock import patch
 
 from models.database import Base
 from models.models import (
-    User,
-    UserRole,
     Channel,
     ChannelType,
+    Subscription,
     Tariff,
     Token,
     TokenStatus,
-    Subscription,
+    User,
+    UserRole,
 )
 from services import scheduler_service
 from services.vip_service import VIPService
+from utils.lucien_voice import LucienVoice
 
 
 @pytest.mark.integration
@@ -160,18 +161,14 @@ class TestVIPSubscriptionLifecycle:
             f"expired={user_expired.telegram_id}, "
             f"active={user_active.telegram_id}"
         )
-        self._print_info(
-            f"Canal VIP: id={channel.id}, channel_id={channel.channel_id}"
-        )
+        self._print_info(f"Canal VIP: id={channel.id}, channel_id={channel.channel_id}")
         self._print_info(f"Tarifa: '{tariff.name}' ({tariff.duration_days} días)")
 
         return user_renewal, user_expired, user_active, channel, tariff
 
     # ── ESCENARIO A ──────────────────────────────────────────────────────
 
-    async def test_scenario_a_renewal_user_not_kicked(
-        self, tmp_path, mock_bot
-    ):
+    async def test_scenario_a_renewal_user_not_kicked(self, tmp_path, mock_bot):
         """
         ESCENARIO A — Usuario que RENOVÓ (tiene extensión activa).
 
@@ -184,9 +181,7 @@ class TestVIPSubscriptionLifecycle:
           - VIPService.has_other_active_subscription()
           - VIPService.get_expired_subscriptions()
         """
-        self._print_separator(
-            "ESCENARIO A: Usuario renovó → NO debe ser expulsado"
-        )
+        self._print_separator("ESCENARIO A: Usuario renovó → NO debe ser expulsado")
 
         # ── Paso 1: Setup de BD ──────────────────────────────────────────
         self._print_step(1, "Preparar BD temporal con datos de prueba")
@@ -254,8 +249,7 @@ class TestVIPSubscriptionLifecycle:
             f"is_active=True (expirada pero activa en BD)"
         )
         self._print_info(
-            f"Sub B (extensión id={sub_b_id}): end_date={sub_b_end_str}, "
-            f"is_active=True (vigente)"
+            f"Sub B (extensión id={sub_b_id}): end_date={sub_b_end_str}, is_active=True (vigente)"
         )
 
         # ── Paso 2: Verificar estado inicial ─────────────────────────────
@@ -264,8 +258,7 @@ class TestVIPSubscriptionLifecycle:
         check_db = TestSession()
         initial_count = self._count_active_subs(check_db, user_tg_id)
         assert initial_count == 2, (
-            f"Setup incorrecto: esperábamos 2 subs activas, "
-            f"encontramos {initial_count}"
+            f"Setup incorrecto: esperábamos 2 subs activas, encontramos {initial_count}"
         )
         self._print_ok(
             f"Estado inicial: {initial_count} suscripciones activas "
@@ -275,16 +268,13 @@ class TestVIPSubscriptionLifecycle:
 
         # ── Paso 3: Ejecutar scheduler ───────────────────────────────────
         self._print_step(3, "Ejecutar _process_expired_subscriptions()")
-        self._print_info(
-            "Método: scheduler_service._process_expired_subscriptions"
-        )
+        self._print_info("Método: scheduler_service._process_expired_subscriptions")
         self._print_info("Mock: _get_bot → mock_bot (AsyncMock)")
         self._print_info("Mock: SessionLocal → TestSession (BD temporal)")
 
-        with patch.object(
-            scheduler_service, "SessionLocal", TestSession
-        ), patch.object(
-            scheduler_service, "_get_bot", return_value=mock_bot
+        with (
+            patch.object(scheduler_service, "SessionLocal", TestSession),
+            patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
         ):
             await scheduler_service._process_expired_subscriptions()
 
@@ -293,13 +283,10 @@ class TestVIPSubscriptionLifecycle:
 
         call_count = mock_bot.ban_chat_member.call_count
         if call_count == 0:
-            self._print_ok(
-                "ban_chat_member no fue llamado → usuario NO expulsado"
-            )
+            self._print_ok("ban_chat_member no fue llamado → usuario NO expulsado")
         else:
             self._print_fail(
-                f"ban_chat_member fue llamado {call_count} vez/veces "
-                "(NO debió llamarse)"
+                f"ban_chat_member fue llamado {call_count} vez/veces (NO debió llamarse)"
             )
         mock_bot.ban_chat_member.assert_not_called()
 
@@ -328,17 +315,12 @@ class TestVIPSubscriptionLifecycle:
             f"pero is_active={sub_b_check.is_active}"
         )
         self._print_ok(
-            f"Sub B (extensión id={sub_b_id}): is_active={sub_b_check.is_active} "
-            f"→ sigue activa"
+            f"Sub B (extensión id={sub_b_id}): is_active={sub_b_check.is_active} → sigue activa"
         )
 
         final_count = self._count_active_subs(verify_db, user_tg_id)
-        assert final_count == 1, (
-            f"Esperábamos 1 suscripción activa, encontramos {final_count}"
-        )
-        self._print_ok(
-            f"Total activas para user {user_tg_id}: {final_count} (correcto)"
-        )
+        assert final_count == 1, f"Esperábamos 1 suscripción activa, encontramos {final_count}"
+        self._print_ok(f"Total activas para user {user_tg_id}: {final_count} (correcto)")
 
         # ── Paso 6: Verificar has_other_active_subscription ──────────────
         self._print_step(6, "Verificar VIPService.has_other_active_subscription()")
@@ -363,9 +345,7 @@ class TestVIPSubscriptionLifecycle:
 
     # ── ESCENARIO B ──────────────────────────────────────────────────────
 
-    async def test_scenario_b_expired_user_is_kicked(
-        self, tmp_path, mock_bot
-    ):
+    async def test_scenario_b_expired_user_is_kicked(self, tmp_path, mock_bot):
         """
         ESCENARIO B — Usuario que NO renovó (única suscripción expirada).
 
@@ -380,9 +360,7 @@ class TestVIPSubscriptionLifecycle:
           - VIPService.get_expired_subscriptions()
           - Telegram ban_chat_member / unban_chat_member
         """
-        self._print_separator(
-            "ESCENARIO B: Usuario no renovó → DEBE ser expulsado"
-        )
+        self._print_separator("ESCENARIO B: Usuario no renovó → DEBE ser expulsado")
 
         # ── Paso 1: Setup ────────────────────────────────────────────────
         self._print_step(1, "Preparar BD temporal — usuario con 1 sub expirada")
@@ -422,15 +400,10 @@ class TestVIPSubscriptionLifecycle:
         db.close()
 
         self._print_info(
-            f"Sub única (id={sub_id}): end_date={sub_end_str}, "
-            f"is_active=True (expirada hace 1 día)"
+            f"Sub única (id={sub_id}): end_date={sub_end_str}, is_active=True (expirada hace 1 día)"
         )
-        self._print_info(
-            f"Usuario: telegram_id={user_tg_id}"
-        )
-        self._print_info(
-            f"Canal: telegram_channel_id={channel_telegram_id}"
-        )
+        self._print_info(f"Usuario: telegram_id={user_tg_id}")
+        self._print_info(f"Canal: telegram_channel_id={channel_telegram_id}")
 
         # ── Paso 2: Verificar estado inicial ─────────────────────────────
         self._print_step(2, "Verificar estado inicial")
@@ -440,26 +413,21 @@ class TestVIPSubscriptionLifecycle:
         assert initial_count == 1, (
             f"Setup incorrecto: esperábamos 1 sub activa, encontramos {initial_count}"
         )
-        self._print_ok(
-            f"Estado inicial: {initial_count} suscripción activa (expirada)"
-        )
+        self._print_ok(f"Estado inicial: {initial_count} suscripción activa (expirada)")
         check_db.close()
 
         # ── Paso 3: Ejecutar scheduler ───────────────────────────────────
         self._print_step(3, "Ejecutar _process_expired_subscriptions()")
-        self._print_info(
-            "Método: scheduler_service._process_expired_subscriptions"
-        )
+        self._print_info("Método: scheduler_service._process_expired_subscriptions")
         self._print_info("Bot mockeado: capturaremos llamadas a Telegram API")
 
         # Limpiar calls acumulados del mock (por si acaso)
         mock_bot.ban_chat_member.reset_mock()
         mock_bot.unban_chat_member.reset_mock()
 
-        with patch.object(
-            scheduler_service, "SessionLocal", TestSession
-        ), patch.object(
-            scheduler_service, "_get_bot", return_value=mock_bot
+        with (
+            patch.object(scheduler_service, "SessionLocal", TestSession),
+            patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
         ):
             await scheduler_service._process_expired_subscriptions()
 
@@ -468,38 +436,30 @@ class TestVIPSubscriptionLifecycle:
 
         call_count = mock_bot.ban_chat_member.call_count
         if call_count >= 1:
-            self._print_ok(
-                f"ban_chat_member llamado {call_count} vez/veces"
-            )
+            self._print_ok(f"ban_chat_member llamado {call_count} vez/veces")
 
             # Mostrar argumentos
             call_kwargs = mock_bot.ban_chat_member.call_args.kwargs
             called_user_id = call_kwargs.get("user_id")
             called_chat_id = call_kwargs.get("chat_id")
-            self._print_info(
-                f"Argumentos: chat_id={called_chat_id}, user_id={called_user_id}"
-            )
+            self._print_info(f"Argumentos: chat_id={called_chat_id}, user_id={called_user_id}")
 
             # Verificar que se llamó con los datos correctos
             assert called_user_id == user_tg_id, (
-                f"ban_chat_member llamado con user_id={called_user_id}, "
-                f"esperábamos {user_tg_id}"
+                f"ban_chat_member llamado con user_id={called_user_id}, esperábamos {user_tg_id}"
             )
             self._print_ok("user_id coincide con el usuario expirado")
         else:
             self._print_fail("ban_chat_member NO fue llamado")
 
         assert call_count >= 1, (
-            f"ban_chat_member debió llamarse al menos 1 vez, "
-            f"se llamó {call_count} veces"
+            f"ban_chat_member debió llamarse al menos 1 vez, se llamó {call_count} veces"
         )
 
         # Verificar también unban
         unbanned = mock_bot.unban_chat_member.call_count >= 1
         if unbanned:
-            self._print_ok(
-                "unban_chat_member también llamado (desbaneo post-expulsión)"
-            )
+            self._print_ok("unban_chat_member también llamado (desbaneo post-expulsión)")
 
         # ── Paso 5: Verificar estado final BD ────────────────────────────
         self._print_step(5, "Verificar estado final de BD")
@@ -511,26 +471,19 @@ class TestVIPSubscriptionLifecycle:
             f"Sub debería estar inactiva, pero is_active={sub_check.is_active}"
         )
         self._print_ok(
-            f"Sub (id={sub_id}): is_active={sub_check.is_active} "
-            f"→ desactivada correctamente"
+            f"Sub (id={sub_id}): is_active={sub_check.is_active} → desactivada correctamente"
         )
 
         final_count = self._count_active_subs(verify_db, user_tg_id)
-        assert final_count == 0, (
-            f"Esperábamos 0 suscripciones activas, encontramos {final_count}"
-        )
-        self._print_ok(
-            f"Total activas para user {user_tg_id}: {final_count} (correcto)"
-        )
+        assert final_count == 0, f"Esperábamos 0 suscripciones activas, encontramos {final_count}"
+        self._print_ok(f"Total activas para user {user_tg_id}: {final_count} (correcto)")
         verify_db.close()
 
         self._print_ok("ESCENARIO B: COMPLETADO — Usuario expirado SÍ fue expulsado")
 
     # ── ESCENARIO C ──────────────────────────────────────────────────────
 
-    async def test_scenario_c_active_user_not_affected(
-        self, tmp_path, mock_bot
-    ):
+    async def test_scenario_c_active_user_not_affected(self, tmp_path, mock_bot):
         """
         ESCENARIO C — Usuario VIGENTE (suscripción activa, no vencida).
 
@@ -546,9 +499,7 @@ class TestVIPSubscriptionLifecycle:
           - VIPService.get_expired_subscriptions()
           - scheduler_service._process_expired_subscriptions()
         """
-        self._print_separator(
-            "ESCENARIO C: Usuario vigente → NO debe ser afectado"
-        )
+        self._print_separator("ESCENARIO C: Usuario vigente → NO debe ser afectado")
 
         # ── Paso 1: Setup ────────────────────────────────────────────────
         self._print_step(1, "Preparar BD — 1 usuario vigente + 1 expirado")
@@ -633,20 +584,13 @@ class TestVIPSubscriptionLifecycle:
 
         db.close()
 
-        self._print_info(
-            f"Usuario vigente ({active_tg}): "
-            f"sub end_date={sub_active_end}"
-        )
-        self._print_info(
-            f"Usuario expirado ({expired_tg}): "
-            f"sub end_date={sub_expired_end}"
-        )
+        self._print_info(f"Usuario vigente ({active_tg}): sub end_date={sub_active_end}")
+        self._print_info(f"Usuario expirado ({expired_tg}): sub end_date={sub_expired_end}")
 
         # ── Paso 2: Verificar get_expired_subscriptions ──────────────────
         self._print_step(
             2,
-            "Verificar VIPService.get_expired_subscriptions() "
-            "(solo retorna la expirada)",
+            "Verificar VIPService.get_expired_subscriptions() (solo retorna la expirada)",
         )
 
         verify_db = TestSession()
@@ -661,15 +605,13 @@ class TestVIPSubscriptionLifecycle:
 
         # El vigente NO debe estar en la lista
         assert active_tg not in expired_user_ids, (
-            f"get_expired_subscriptions() NO debería incluir al usuario "
-            f"vigente {active_tg}"
+            f"get_expired_subscriptions() NO debería incluir al usuario vigente {active_tg}"
         )
         self._print_ok(f"Usuario vigente {active_tg} NO está en la lista")
 
         # El expirado SÍ debe estar
         assert expired_tg in expired_user_ids, (
-            f"get_expired_subscriptions() DEBERÍA incluir al usuario "
-            f"expirado {expired_tg}"
+            f"get_expired_subscriptions() DEBERÍA incluir al usuario expirado {expired_tg}"
         )
         self._print_ok(f"Usuario expirado {expired_tg} SÍ está en la lista")
 
@@ -677,18 +619,15 @@ class TestVIPSubscriptionLifecycle:
 
         # ── Paso 3: Ejecutar scheduler ───────────────────────────────────
         self._print_step(3, "Ejecutar _process_expired_subscriptions()")
-        self._print_info(
-            "Verificaremos que ban_chat_member solo se llama para el expirado"
-        )
+        self._print_info("Verificaremos que ban_chat_member solo se llama para el expirado")
 
         mock_bot.ban_chat_member.reset_mock()
         mock_bot.unban_chat_member.reset_mock()
         mock_bot.send_message.reset_mock()
 
-        with patch.object(
-            scheduler_service, "SessionLocal", TestSession
-        ), patch.object(
-            scheduler_service, "_get_bot", return_value=mock_bot
+        with (
+            patch.object(scheduler_service, "SessionLocal", TestSession),
+            patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
         ):
             await scheduler_service._process_expired_subscriptions()
 
@@ -700,9 +639,7 @@ class TestVIPSubscriptionLifecycle:
             f"ban_chat_member debió llamarse 1 vez (solo usuario expirado), "
             f"se llamó {ban_count} veces"
         )
-        self._print_ok(
-            f"ban_chat_member llamado {ban_count} vez (solo expirado)"
-        )
+        self._print_ok(f"ban_chat_member llamado {ban_count} vez (solo expirado)")
 
         # Confirmar que el baneado fue el expirado
         ban_kwargs = mock_bot.ban_chat_member.call_args.kwargs
@@ -720,8 +657,7 @@ class TestVIPSubscriptionLifecycle:
         # Sub vigente: debe seguir activa e intacta
         sub_active_check = self._get_sub(verify_db2, sub_active_id)
         assert sub_active_check.is_active is True, (
-            f"Sub vigente debería seguir activa, "
-            f"pero is_active={sub_active_check.is_active}"
+            f"Sub vigente debería seguir activa, pero is_active={sub_active_check.is_active}"
         )
         self._print_ok(
             f"Sub vigente (id={sub_active_id}): "
@@ -731,8 +667,7 @@ class TestVIPSubscriptionLifecycle:
         # Sub expirada: debe estar inactiva
         sub_expired_check = self._get_sub(verify_db2, sub_expired_id)
         assert sub_expired_check.is_active is False, (
-            f"Sub expirada debería estar inactiva, "
-            f"pero is_active={sub_expired_check.is_active}"
+            f"Sub expirada debería estar inactiva, pero is_active={sub_expired_check.is_active}"
         )
         self._print_ok(
             f"Sub expirada (id={sub_expired_id}): "
@@ -753,9 +688,7 @@ class TestVIPSubscriptionLifecycle:
         self._print_ok("ESCENARIO C: COMPLETADO — Usuario vigente NO fue afectado")
 
     # ── ESCENARIO D: Renovación correcta (extensión) + scheduler respeta nueva fecha ──
-    async def test_renewal_extension_delays_expiration_until_new_end_date(
-        self, tmp_path, mock_bot
-    ):
+    async def test_renewal_extension_delays_expiration_until_new_end_date(self, tmp_path, mock_bot):
         """
         ESCENARIO D — Flujo correcto de renovación (extensión) + scheduler.
 
@@ -766,9 +699,7 @@ class TestVIPSubscriptionLifecycle:
         Esto valida que el flujo de extensión en redeem_token + el scheduler
         trabajan correctamente juntos.
         """
-        self._print_separator(
-            "ESCENARIO D: Renovación (extensión) → scheduler respeta nueva fecha"
-        )
+        self._print_separator("ESCENARIO D: Renovación (extensión) → scheduler respeta nueva fecha")
 
         engine, TestSession = self._create_engine_and_session(tmp_path)
         db = TestSession()
@@ -852,10 +783,9 @@ class TestVIPSubscriptionLifecycle:
             # (simula que pasó el tiempo original pero no el extendido)
             mock_bot.reset_mock()
 
-            with patch.object(
-                scheduler_service, "SessionLocal", TestSession
-            ), patch.object(
-                scheduler_service, "_get_bot", return_value=mock_bot
+            with (
+                patch.object(scheduler_service, "SessionLocal", TestSession),
+                patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
             ):
                 await scheduler_service._process_expired_subscriptions()
 
@@ -874,10 +804,9 @@ class TestVIPSubscriptionLifecycle:
 
             mock_bot.reset_mock()
 
-            with patch.object(
-                scheduler_service, "SessionLocal", TestSession
-            ), patch.object(
-                scheduler_service, "_get_bot", return_value=mock_bot
+            with (
+                patch.object(scheduler_service, "SessionLocal", TestSession),
+                patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
             ):
                 await scheduler_service._process_expired_subscriptions()
 
@@ -886,6 +815,338 @@ class TestVIPSubscriptionLifecycle:
                 "Scheduler debió expulsar después de la fecha extendida"
             )
             self._print_ok("Scheduler SÍ expulsó después de la fecha extendida (correcto)")
+
+        finally:
+            db.close()
+            engine.dispose()
+
+    # ── SCHEDULER JOBS EXPANSION (Ítem 3/4 continuation) ──────────────────
+    # a. Direct test for _process_expiring_subscriptions (reminders)
+    # c. Error handling in expiring loop + ritual state variant for VIP item #4
+
+    async def test_scheduler_expiring_subscriptions_sends_reminders_and_sets_flag(
+        self, tmp_path, mock_bot
+    ):
+        """
+        Cobertura directa del job _process_expiring_subscriptions (recordatorios 24h).
+
+        Usa patrón robusto (SQLite archivo + TestSession) + patch SessionLocal/_get_bot.
+        Verifica: mensaje enviado con texto de Lucien, reminder_sent=True en BD.
+        No side effects en subs no-expiring.
+        """
+        self._print_separator("SCHEDULER EXPIRING: recordatorio 24h + flag")
+        self._print_step(1, "Setup: sub por vencer (12h) con reminder_sent=False + otra vigente")
+
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+
+        try:
+            user = User(
+                telegram_id=4001,
+                username="expiring_user",
+                first_name="ExpiringSoon",
+                role=UserRole.USER,
+            )
+            channel = Channel(
+                channel_id=-1004001,
+                channel_name="VIP Reminder Test",
+                channel_type=ChannelType.VIP,
+                is_active=True,
+            )
+            tariff = Tariff(name="30d", duration_days=30, price="9.99", is_active=True)
+            db.add_all([user, channel, tariff])
+            db.commit()
+            db.refresh(user)
+            db.refresh(channel)
+            db.refresh(tariff)
+
+            token = Token(
+                token_code="EXPIRING1",
+                tariff_id=tariff.id,
+                status=TokenStatus.USED,
+                redeemed_by_id=user.telegram_id,
+            )
+            db.add(token)
+            db.commit()
+
+            now = datetime.now(UTC)
+            # Expiring in 12h (dentro de 24h), reminder pendiente
+            expiring_sub = Subscription(
+                user_id=user.telegram_id,
+                channel_id=channel.id,
+                token_id=token.id,
+                end_date=now + timedelta(hours=12),
+                is_active=True,
+                reminder_sent=False,
+            )
+            # Otra sub no-expiring (lejos)
+            token2 = Token(
+                token_code="FAR1",
+                tariff_id=tariff.id,
+                status=TokenStatus.USED,
+                redeemed_by_id=user.telegram_id,
+            )
+            db.add(token2)
+            db.commit()
+            far_sub = Subscription(
+                user_id=user.telegram_id,
+                channel_id=channel.id,
+                token_id=token2.id,
+                end_date=now + timedelta(days=20),
+                is_active=True,
+                reminder_sent=False,
+            )
+            db.add_all([expiring_sub, far_sub])
+            db.commit()
+
+            exp_id = expiring_sub.id
+            far_id = far_sub.id
+            user_tg = user.telegram_id
+            db.close()
+
+            self._print_ok(f"Subs preparadas: expiring_id={exp_id}, far_id={far_id}")
+
+            # ── Ejecutar job real ──
+            self._print_step(2, "Invocar _process_expiring_subscriptions() real")
+            mock_bot.reset_mock()
+
+            with (
+                patch.object(scheduler_service, "SessionLocal", TestSession),
+                patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
+            ):
+                await scheduler_service._process_expiring_subscriptions()
+
+            # ── Verificar efectos ──
+            self._print_step(3, "Verificar mensaje de recordatorio + flag en BD")
+
+            verify_db = TestSession()
+            exp_check = self._get_sub(verify_db, exp_id)
+            far_check = self._get_sub(verify_db, far_id)
+
+            assert exp_check.reminder_sent is True, "La sub expiring debe tener reminder_sent=True"
+            assert far_check.reminder_sent is False, "La sub lejana NO debe marcarse"
+
+            self._print_ok("reminder_sent: expiring=True, far=False (correcto, sin side effects)")
+
+            # Verificar llamada al bot con texto de Lucien
+            assert mock_bot.send_message.called
+            send_call = mock_bot.send_message.call_args
+            assert send_call.kwargs["chat_id"] == user_tg
+            text = send_call.kwargs["text"]
+            # Usar el helper real para validar contenido (voz de Lucien) - prueba contrato estricto sobre el *texto enviado*
+            expected = LucienVoice.vip_renewal_reminder(exp_check.end_date)
+            date_str = exp_check.end_date.strftime("%d/%m/%Y")
+            assert expected in text or ("Lucien" in text and date_str in text), (
+                "El texto enviado debe provenir de vip_renewal_reminder(end_date) o contener la voz + fecha específica"
+            )
+            self._print_ok(
+                "Mensaje de recordatorio enviado con voz Lucien (contrato probado en texto enviado)"
+            )
+
+            verify_db.close()
+            self._print_ok("JOB _process_expiring_subscriptions: COMPLETADO")
+
+        finally:
+            db.close()
+            engine.dispose()
+
+    async def test_scheduler_expiring_handles_send_error_with_rollback(self, tmp_path, mock_bot):
+        """
+        Manejo de errores dentro del loop de _process_expiring_subscriptions.
+
+        Si send_message falla para una sub: hace rollback (reminder_sent NO cambia),
+        continúa con otras (no aborta todo el job).
+        """
+        self._print_separator("SCHEDULER EXPIRING: error en envío → rollback + continue")
+        self._print_step(1, "Setup: DOS subs expiring")
+
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+
+        try:
+            user = User(telegram_id=4002, username="erruser", first_name="Err", role=UserRole.USER)
+            channel = Channel(
+                channel_id=-1004002,
+                channel_name="VIP Err Test",
+                channel_type=ChannelType.VIP,
+                is_active=True,
+            )
+            tariff = Tariff(name="err", duration_days=30, price="9.99", is_active=True)
+            db.add_all([user, channel, tariff])
+            db.commit()
+            db.refresh(user)
+            db.refresh(tariff)
+
+            now = datetime.now(UTC)
+            subs = []
+            for i, code in enumerate(["ERR1", "ERR2"]):
+                t = Token(
+                    token_code=code,
+                    tariff_id=tariff.id,
+                    status=TokenStatus.USED,
+                    redeemed_by_id=user.telegram_id,
+                )
+                db.add(t)
+                db.commit()
+                s = Subscription(
+                    user_id=user.telegram_id,
+                    channel_id=channel.id,
+                    token_id=t.id,
+                    end_date=now + timedelta(hours=5 + i),
+                    is_active=True,
+                    reminder_sent=False,
+                )
+                db.add(s)
+                db.commit()
+                subs.append(s)
+
+            id1, id2 = subs[0].id, subs[1].id
+            db.close()
+
+            # Configurar mock para fallar SOLO en la primera llamada (side_effect seq para AsyncMock)
+            mock_bot.reset_mock()
+            mock_bot.send_message.side_effect = [
+                RuntimeError("Simulated bot send failure for reminder"),
+                None,  # segunda llamada "éxito" (await recibe None, suficiente)
+            ]
+
+            self._print_step(2, "Ejecutar job con fallo simulado en primer recordatorio")
+
+            with (
+                patch.object(scheduler_service, "SessionLocal", TestSession),
+                patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
+            ):
+                await scheduler_service._process_expiring_subscriptions()
+
+            self._print_step(3, "Verificar: primera sub sin marcar (rollback), segunda procesada")
+
+            verify_db = TestSession()
+            s1 = self._get_sub(verify_db, id1)
+            s2 = self._get_sub(verify_db, id2)
+
+            # Primera falló → reminder_sent sigue False (rollback)
+            assert s1.reminder_sent is False, (
+                "Fallo en send → no debe marcar reminder_sent (rollback)"
+            )
+            # Segunda OK → marcada
+            assert s2.reminder_sent is True, "Segunda sub debió procesarse OK"
+
+            self._print_ok("Error handling correcto: rollback parcial + continue (no aborta job)")
+            verify_db.close()
+
+        finally:
+            # Garantizar limpieza de side_effect incluso si asserts fallan (higiene para fixture compartido mock_bot)
+            mock_bot.send_message.side_effect = None
+            db.close()
+            engine.dispose()
+
+    async def test_expired_scheduler_clears_vip_entry_state_when_kicking_last_subscription(
+        self, tmp_path, mock_bot
+    ):
+        """
+        Variante crítica para Ítem #4 (VIP Expiration + ritual de entrada).
+
+        Scheduler (_process_expired) se ejecuta mientras usuario está en estado
+        vip_entry_status="pending_entry" / stage=2 (ritual de entrada).
+
+        Verifica: la rama de kick (única sub expirada) limpia vip_entry_* (scheduler_service:222-225),
+        independientemente de si ban/unban/send posterior tienen éxito. Secuencia: kick branch primero.
+        Esto previene el tipo de bug histórico de "expulsiones indebidas" durante ritual.
+
+        (Cubre interacción scheduler + vip_entry_* state mencionada en fases_refactor_testing.md ítem 4)
+        """
+        self._print_separator(
+            "VARIANTE RITUAL: scheduler expirado mientras usuario en ritual de entrada"
+        )
+        self._print_step(1, "Setup: usuario en pending_entry stage=2 + única sub EXPIRADA")
+
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+
+        try:
+            user = User(
+                telegram_id=5001,
+                username="ritual_user",
+                first_name="Ritual",
+                role=UserRole.USER,
+                vip_entry_status="pending_entry",
+                vip_entry_stage=2,
+            )
+            channel = Channel(
+                channel_id=-1005001,
+                channel_name="VIP Ritual Expire",
+                channel_type=ChannelType.VIP,
+                is_active=True,
+            )
+            tariff = Tariff(name="ritual", duration_days=30, price="9.99", is_active=True)
+            db.add_all([user, channel, tariff])
+            db.commit()
+            db.refresh(user)
+            db.refresh(channel)
+            db.refresh(tariff)
+
+            token = Token(
+                token_code="RITUAL1",
+                tariff_id=tariff.id,
+                status=TokenStatus.USED,
+                redeemed_by_id=user.telegram_id,
+            )
+            db.add(token)
+            db.commit()
+
+            now = datetime.now(UTC)
+            sub = Subscription(
+                user_id=user.telegram_id,
+                channel_id=channel.id,
+                token_id=token.id,
+                end_date=now - timedelta(hours=2),  # ya expirada
+                is_active=True,
+            )
+            db.add(sub)
+            db.commit()
+
+            sub_id = sub.id
+            user_tg = user.telegram_id
+            chan_tg = channel.channel_id
+            db.close()
+
+            self._print_info(f"Usuario {user_tg} en ritual stage=2 + sub {sub_id} expirada (única)")
+
+            mock_bot.reset_mock()
+            mock_bot.ban_chat_member.reset_mock()
+            mock_bot.unban_chat_member.reset_mock()
+
+            self._print_step(2, "Ejecutar _process_expired_subscriptions()")
+
+            with (
+                patch.object(scheduler_service, "SessionLocal", TestSession),
+                patch.object(scheduler_service, "_get_bot", return_value=mock_bot),
+            ):
+                await scheduler_service._process_expired_subscriptions()
+
+            self._print_step(3, "Verificar expulsión + limpieza de estado ritual")
+
+            assert mock_bot.ban_chat_member.called
+            ban_call = mock_bot.ban_chat_member.call_args
+            assert ban_call.kwargs["user_id"] == user_tg
+            assert ban_call.kwargs["chat_id"] == chan_tg
+            self._print_ok("ban_chat_member llamado correctamente")
+
+            verify_db = TestSession()
+            sub_check = self._get_sub(verify_db, sub_id)
+            assert sub_check.is_active is False
+
+            # Secuencia explícita: ban ya invocado antes de verificar limpieza de estado (kick branch primero)
+            assert mock_bot.ban_chat_member.called
+            user_check = verify_db.query(User).filter(User.telegram_id == user_tg).first()
+            assert user_check.vip_entry_status is None, (
+                "Estado ritual debe limpiarse en kick de última sub"
+            )
+            assert user_check.vip_entry_stage is None
+            self._print_ok("Estado vip_entry_* limpiado correctamente tras kick (scheduler)")
+
+            verify_db.close()
+            self._print_ok("VARIANTE RITUAL + SCHEDULER: COMPLETADO (protege contra bug histórico)")
 
         finally:
             db.close()

@@ -1,0 +1,128 @@
+#  │ Prioridad │ Área / Flujo │ Problema actual       │ Test recomendado │ Por qué es      │
+     │    │           │              │                       │ (ubicación + qué │ crítico para    │
+     │    │           │              │                       │ validar)         │ tus "sacositas" │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 1  │ Crítico   │ Reacción →   │ check_and_register_   │ Nuevo archivo:   │ Es la fuente    │
+     │    │           │ Misión →     │ reaction es el método │ tests/unit/test_ │ más frecuente   │
+     │    │           │ Besitos      │ más frágil (          │ broadcast        │ de "una         │
+     │    │           │              │ transacciones         │ _service_        │ reacción no     │
+     │    │           │              │ partidas,             │ reaction_flow    │ funcionó".      │
+     │    │           │              │ DetachedInstanceError │ .py. Probar el   │                 │
+     │    │           │              │ workarounds, entrega  │ método real con  │                 │
+     │    │           │              │ de misiones en otra   │ mocks de         │                 │
+     │    │           │              │ tx). No tiene tests   │ MissionService y │                 │
+     │    │           │              │ unitarios propios.    │ BesitoService.   │                 │
+     │    │           │              │                       │ Casos: éxito,    │                 │
+     │    │           │              │                       │ duplicado (      │                 │
+     │    │           │              │                       │ IntegrityError), │                 │
+     │    │           │              │                       │ error en         │                 │
+     │    │           │              │                       │ misiones no debe │                 │
+     │    │           │              │                       │ revertir la      │                 │
+     │    │           │              │                       │ reacción.        │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 2  │ Crítico   │ Reacción →   │ Los tests de          │ Refactorizar     │ Valida "lo que  │
+     │    │           │ Misión →     │ integración de        │ tests/           │ hay ahora" en   │
+     │    │           │ Besitos      │ reacciones son        │ integration      │ vez de "el      │
+     │    │           │              │ mayoritariamente      │ /test_reaction_  │ contrato        │
+     │    │           │              │ scripts de            │ mission_flow.py  │ correcto".      │
+     │    │           │              │ diagnóstico con       │ (y eliminar el _ │                 │
+     │    │           │              │ prints y dependen de  │ real.py). Hacer  │                 │
+     │    │           │              │ misiones que ya       │ tests            │                 │
+     │    │           │              │ existan en la BD del  │ determinísticos: │                 │
+     │    │           │              │ test.                 │ crear misiones + │                 │
+     │    │           │              │                       │ rewards          │                 │
+     │    │           │              │                       │ específicas en   │                 │
+     │    │           │              │                       │ el setup del     │                 │
+     │    │           │              │                       │ test.            │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 3  │ Crítico   │ Reacción     │ No hay tests que      │ En el nuevo test │ Uno de los bugs │
+     │    │           │ duplicada /  │ demuestren que una    │ unitario de #1 + │ clásicos de     │
+     │    │           │ race         │ reacción duplicada (  │ test de          │ gamificación    │
+     │    │           │ condition    │ por race o doble      │ integración con  │ que genera      │
+     │    │           │              │ click) nunca acredita │ dos llamadas     │ quejas de       │
+     │    │           │              │ besitos dos veces.    │ concurrentes     │ usuarios.       │
+     │    │           │              │                       │ simuladas.       │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 4  │ Alto      │ VIP          │ La excelente suite de │ Extender test_   │ Es exactamente  │
+     │    │           │ Expiration + │ test_vip_subscription │ vip_subscription │ el bug que ya   │
+     │    │           │ Renovación   │ _lifecycle.py solo    │ _lifecycle.py +  │ causó           │
+     │    │           │              │ cubre el escenario    │ nuevo test en    │ expulsiones     │
+     │    │           │              │ principal. Faltan     │ test_vip_ritual  │ indebidas.      │
+     │    │           │              │ variantes (múltiples  │ _flow.py.        │                 │
+     │    │           │              │ canales VIP,          │                  │                 │
+     │    │           │              │ renovación durante el │                  │                 │
+     │    │           │              │ ritual de entrada,    │                  │                 │
+     │    │           │              │ scheduler se ejecuta  │                  │                 │
+     │    │           │              │ mientras el usuario   │                  │                 │
+     │    │           │              │ está en estado        │                  │                 │
+
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 5  │ Alto      │ Scheduler de │ _process_expired_     │ Tests unitarios  │ El scheduler es │
+     │    │           │ expiraciones │ subscriptions (y      │ en tests/unit/   │ una de las      │
+     │    │           │              │ funciones hermanas)   │ test_scheduler_  │ fuentes de      │
+     │    │           │              │ solo se prueba vía    │ expiration.py (o │ comportamientos │
+     │    │           │              │ una integración       │ mover lógica a   │ "fantasma".     │
+     │    │           │              │ pesada. No hay unit   │ VIPService y     │                 │      █
+     │    │           │              │ tests de las          │ testearla ahí).  │                 │      █
+     │    │           │              │ funciones privadas ni │                  │                 │      █
+     │    │           │              │ de los casos de error │                  │                 │
+     │    │           │              │ (falla al banear,     │                  │                 │
+     │    │           │              │ falla al enviar       │                  │                 │
+     │    │           │              │ mensaje, etc.).       │                  │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 6  │ Alto      │ GameService  │ game_service.py (1755 │ Plan de          │ Es el dominio   │
+     │    │           │ / Trivias (  │ LOC) tiene solo 34%   │ cobertura        │ más nuevo, más  │
+     │    │           │ Fases 14-17) │ cobertura. La lógica  │ dirigida (no     │ complejo y      │
+     │    │           │              │ de trivias temáticas  │ 100%). Empezar   │ donde más       │
+     │    │           │              │ + rachas está sub-    │ por los caminos  │ cambios         │
+     │    │           │              │ probada.              │ de play_trivia,  │ pequeños rompen │
+     │    │           │              │                       │ play_trivia_vip, │ cosas.          │
+     │    │           │              │                       │ cálculo de       │                 │
+     │    │           │              │                       │ rachas y entrega │                 │
+     │    │           │              │                       │ de códigos.      │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 7  │ Alto      │ Protección   │ Aún en desarrollo.    │ tests/           │ Es el área más  │
+     │    │           │ de Rachas +  │ Los tests existentes  │ integration      │ reciente y con  │
+     │    │           │ Modo         │ (test_streak_         │ /test_streak_    │ más estado/FSM. │
+     │    │           │ Arriesgo (   │ protection.py) cubren │ protection_flow  │ Riesgo alto de  │
+     │    │           │ Fase 18)     │ cálculos básicos pero │ .py + escenarios │ introducir bugs │
+     │    │           │              │ no los flujos         │ de timeout.      │ nuevos.         │
+     │    │           │              │ completos de timeout  │                  │                 │
+     │    │           │              │ de 2 min, compra de   │                  │                 │
+     │    │           │              │ protección, y pérdida │                  │                 │
+     │    │           │              │ de códigos en modo    │                  │                 │
+     │    │           │              │ arriesgo.             │                  │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 8  │ Alto      │ Atomicidad   │ Hay un test (test_    │ Fortalecer       │ Es una de las   │
+     │    │           │ cross-       │ cross_service_        │ tests/           │ causas de "     │
+     │    │           │ service (    │ atomicity.py), pero   │ integration      │ inconsistencias │
+     │    │           │ Reacción +   │ es limitado. No cubre │ /test_cross_     │ económicas" que │
+     │    │           │ Misión +     │ bien el caso en que   │ service_         │ luego son       │
+     │    │           │ Recompensa)  │ falla la entrega de   │ atomicity.py con │ difíciles de    │
+     │    │           │              │ recompensa de misión  │ más escenarios   │ auditar.        │
+     │    │           │              │ después de haber      │ de fallo         │                 │
+     │    │           │              │ acreditado los        │ parcial.         │                 │
+     │    │           │              │ besitos de la         │                  │                 │
+     │    │           │              │ reacción.             │                  │                 │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 9  │ Medio     │ Sistema de   │ 18% de cobertura.     │ tests/unit/test_ │ Nuevo dominio   │
+     │    │ -Alto     │ Mochila (    │ Entrega de paquetes,  │ backpack_service │ que toca varias │
+     │    │           │ Fase 15)     │ contenido y           │ .py +            │ partes (        │
+     │    │           │              │ recompensas desde la  │ integración con  │ recompensas,    │
+     │    │           │              │ mochila está poco     │ RewardService y  │ tienda,         │
+     │    │           │              │ probada.              │ Store.           │ usuario).       │
+     ├────┼───────────┼──────────────┼───────────────────────┼──────────────────┼─────────────────┤
+     │ 10 │ Medio     │ Invariantes  │ Casi no existen tests │ Nuevo estilo de  │ Esto es lo que  │
+     │    │ -Alto     │ de negocio   │ de "propiedades que   │ tests (          │ más protege     │
+     │    │           │ de alto      │ siempre deben         │ posiblemente en  │ contra "agregué │
+     │    │           │ nivel        │ cumplirse",           │ tests/           │ algo chiquito y │
+     │    │           │              │ independientemente    │ integration      │ se rompió otra  │
+     │    │           │              │ del flujo. Ejemplos:  │ /test_invariants │ cosa".          │
+     │    │           │              │ un usuario nunca debe │ .py o usando     │                 │
+     │    │           │              │ poder tener besitos   │ property-based   │                 │
+     │    │           │              │ negativos por         │ testing ligero). │                 │
+     │    │           │              │ reacción, un VIP      │                  │                 │
+     │    │           │              │ expirado nunca debe   │                  │                 │
+     │    │           │              │ seguir teniendo       │                  │                 │
+     │    │           │              │ acceso, etc.          │                  │                 │
+     └────┴───────────┴──────────────┴───────────────────────┴──────────────────┴──────
