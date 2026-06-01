@@ -213,40 +213,40 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
             username=user.username,
             bot=callback.bot,
         )
+
+        if reaction:
+            besitos = reaction.get("besitos_awarded", 0)
+
+            # Obtener el broadcast para actualizar el mensaje
+            broadcast = broadcast_service.get_broadcast(broadcast_id)
+            if broadcast and broadcast.has_reactions:
+                selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
+                reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
+                emoji_counts = {}
+                for r in reactions:
+                    if r.reaction_emoji:
+                        emoji_id_val = r.reaction_emoji.id
+                        emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
+                emojis = []
+                for emoji_id in selected_emoji_ids:
+                    emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
+                    if emoji_obj:
+                        emojis.append((emoji_id, emoji_obj.emoji))
+                if emojis:
+                    new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
+                    await broadcast_service.update_reaction_message(
+                        bot=callback.bot,
+                        channel_id=broadcast.channel_id,
+                        message_id=broadcast.message_id,
+                        new_markup=new_markup,
+                    )
+
+            logger.info(
+                f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}"
+            )
+            await callback.answer(f"¡+{besitos} besitos! 💋")
+        else:
+            await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
     finally:
         broadcast_service.close()
-
-    if reaction:
-        besitos = reaction.get("besitos_awarded", 0)
-
-        # Obtener el broadcast para actualizar el mensaje
-        broadcast = broadcast_service.get_broadcast(broadcast_id)
-        if broadcast and broadcast.has_reactions:
-            selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
-            reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
-            emoji_counts = {}
-            for r in reactions:
-                if r.reaction_emoji:
-                    emoji_id_val = r.reaction_emoji.id
-                    emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
-            emojis = []
-            for emoji_id in selected_emoji_ids:
-                emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
-                if emoji_obj:
-                    emojis.append((emoji_id, emoji_obj.emoji))
-            if emojis:
-                new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
-                await broadcast_service.update_reaction_message(
-                    bot=callback.bot,
-                    channel_id=broadcast.channel_id,
-                    message_id=broadcast.message_id,
-                    new_markup=new_markup,
-                )
-
-        logger.info(
-            f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}"
-        )
-        await callback.answer(f"¡+{besitos} besitos! 💋")
-    else:
-        await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
 
