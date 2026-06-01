@@ -180,13 +180,22 @@ class RewardService:
 
         try:
             if reward.reward_type == RewardType.BESITOS:
-                return await self._deliver_besitos(user_id, reward)
+                success, message = await self._deliver_besitos(user_id, reward)
+                if success:
+                    self.log_reward_delivery(user_id, reward_id, mission_id)
+                return success, message
 
             elif reward.reward_type == RewardType.PACKAGE:
-                return await self._deliver_package(bot, user_id, reward)
+                success, message = await self._deliver_package(bot, user_id, reward)
+                if success:
+                    self.log_reward_delivery(user_id, reward_id, mission_id)
+                return success, message
 
             elif reward.reward_type == RewardType.VIP_ACCESS:
-                return await self._deliver_vip_access(bot, user_id, reward)
+                success, message = await self._deliver_vip_access(bot, user_id, reward)
+                if success:
+                    self.log_reward_delivery(user_id, reward_id, mission_id)
+                return success, message
 
             else:
                 return False, "Tipo de recompensa no soportado"
