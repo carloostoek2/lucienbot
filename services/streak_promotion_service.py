@@ -162,7 +162,7 @@ class StreakPromotionService:
             db.query(StreakPromotion)
             .options(joinedload(StreakPromotion.levels).joinedload(StreakPromotionLevel.codes))
             .filter(
-                StreakPromotion.is_active == True,
+                StreakPromotion.is_active,
                 StreakPromotion.status == StreakPromotionStatus.ACTIVE,
             )
         )
@@ -174,7 +174,7 @@ class StreakPromotionService:
             }
             column = game_map.get(game_type)
             if column is not None:
-                query = query.filter(column == True)
+                query = query.filter(column)
         if category_id:
             query = query.filter(StreakPromotion.category_id == category_id)
         return query.all()
@@ -451,7 +451,7 @@ class StreakPromotionService:
                 .filter(
                     StreakPromotion.id != promo_id,
                     StreakPromotion.category_id == promotion.category_id,
-                    StreakPromotion.is_active == True,
+                    StreakPromotion.is_active,
                     StreakPromotion.status == StreakPromotionStatus.ACTIVE,
                 )
                 .first()

@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     ChangeEmojiValueCallback,
     EditEmojiCallback,
@@ -22,6 +20,7 @@ from keyboards.inline_keyboards import back_keyboard, cancel_keyboard
 from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -38,8 +37,6 @@ class EmojiConfigStates(StatesGroup):
 
 class DailyGiftConfigStates(StatesGroup):
     waiting_amount = State()
-
-
 
 
 # ==================== MENU DE GAMIFICACION ADMIN ====================
@@ -87,9 +84,7 @@ async def config_besitos_menu(callback: CallbackQuery):
         broadcast_service.close()
 
     text = (
-        "🎩 Lucien:\n\n"
-        "Los fragmentos de atencion que Diana otorga...\n\n"
-        "Emojis configurados:\n\n"
+        "🎩 Lucien:\n\nLos fragmentos de atencion que Diana otorga...\n\nEmojis configurados:\n\n"
     )
 
     keyboard_buttons = []
@@ -145,7 +140,7 @@ async def process_emoji(message: Message, state: FSMContext):
     # Validar que sea un solo emoji (aproximado)
     if len(emoji_char) > 2:
         await message.answer(
-            "🎩 Lucien:\n\n" "Por favor, envie solo un emoji...", reply_markup=cancel_keyboard()
+            "🎩 Lucien:\n\nPor favor, envie solo un emoji...", reply_markup=cancel_keyboard()
         )
         return
 
@@ -186,7 +181,7 @@ async def process_emoji_value(message: Message, state: FSMContext):
             raise ValueError("Valor debe ser positivo")
     except ValueError:
         await message.answer(
-            "🎩 Lucien:\n\n" "Por favor, indique un numero valido mayor a cero...",
+            "🎩 Lucien:\n\nPor favor, indique un numero valido mayor a cero...",
             reply_markup=cancel_keyboard(),
         )
         return
@@ -322,7 +317,7 @@ async def process_emoji_value_edit(message: Message, state: FSMContext):
             raise ValueError("Valor debe ser positivo")
     except ValueError:
         await message.answer(
-            "🎩 Lucien:\n\n" "Por favor, indique un numero valido mayor a cero...",
+            "🎩 Lucien:\n\nPor favor, indique un numero valido mayor a cero...",
             reply_markup=cancel_keyboard(),
         )
         return
@@ -338,7 +333,7 @@ async def process_emoji_value_edit(message: Message, state: FSMContext):
 
     if success:
         await message.answer(
-            f"🎩 Lucien:\n\n" f"El valor ha sido actualizado a {value} besitos.",
+            f"🎩 Lucien:\n\nEl valor ha sido actualizado a {value} besitos.",
             reply_markup=back_keyboard("config_besitos"),
         )
     else:
@@ -417,7 +412,7 @@ async def process_gift_amount(message: Message, state: FSMContext):
             raise ValueError("Cantidad debe ser positiva")
     except ValueError:
         await message.answer(
-            "🎩 Lucien:\n\n" "Por favor, indique un numero valido mayor a cero...",
+            "🎩 Lucien:\n\nPor favor, indique un numero valido mayor a cero...",
             reply_markup=cancel_keyboard(),
         )
         return

@@ -482,7 +482,6 @@ async def handle_protection_decline(
 ):
     """Rechaza proteccion de racha: cancela codigos, cierra sesion."""
     user_id = callback.from_user.id
-    streak = callback_data.streak
     game_type = callback_data.game_type
 
     with get_service(StreakPromotionService) as promo_svc:

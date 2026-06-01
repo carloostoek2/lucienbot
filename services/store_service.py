@@ -91,7 +91,7 @@ class StoreService:
         db = self._get_db()
         query = db.query(StoreProduct)
         if active_only:
-            query = query.filter(StoreProduct.is_active == True)
+            query = query.filter(StoreProduct.is_active)
         return query.order_by(desc(StoreProduct.created_at)).all()
 
     def get_available_products(self) -> list[StoreProduct]:
@@ -100,7 +100,7 @@ class StoreService:
         return (
             db.query(StoreProduct)
             .filter(
-                StoreProduct.is_active == True,
+                StoreProduct.is_active,
                 (StoreProduct.stock == -1) | (StoreProduct.stock > 0),
             )
             .order_by(desc(StoreProduct.created_at))
@@ -115,7 +115,7 @@ class StoreService:
             (StoreProduct.name.ilike(search)) | (StoreProduct.description.ilike(search))
         )
         if active_only:
-            q = q.filter(StoreProduct.is_active == True)
+            q = q.filter(StoreProduct.is_active)
         return q.order_by(desc(StoreProduct.created_at)).all()
 
     def get_products_by_price_range(
@@ -127,7 +127,7 @@ class StoreService:
         if max_price is not None:
             q = q.filter(StoreProduct.price <= max_price)
         if active_only:
-            q = q.filter(StoreProduct.is_active == True)
+            q = q.filter(StoreProduct.is_active)
         return q.order_by(StoreProduct.price).all()
 
     def get_products_by_category(
@@ -141,7 +141,7 @@ class StoreService:
 
         q = db.query(StoreProduct).filter(StoreProduct.package_id.in_(package_ids))
         if active_only:
-            q = q.filter(StoreProduct.is_active == True)
+            q = q.filter(StoreProduct.is_active)
         return q.order_by(desc(StoreProduct.created_at)).all()
 
     def filter_products(
@@ -157,7 +157,7 @@ class StoreService:
         q = db.query(StoreProduct)
 
         if active_only:
-            q = q.filter(StoreProduct.is_active == True)
+            q = q.filter(StoreProduct.is_active)
 
         if category_id:
             packages = db.query(Package).filter(Package.category_id == category_id).all()
@@ -550,7 +550,7 @@ class StoreService:
         available_products = (
             db.query(StoreProduct)
             .filter(
-                StoreProduct.is_active == True,
+                StoreProduct.is_active,
                 (StoreProduct.stock == -1) | (StoreProduct.stock > 0),
             )
             .count()
@@ -584,7 +584,7 @@ class StoreService:
         return (
             db.query(StoreProduct)
             .filter(
-                StoreProduct.is_active == True,
+                StoreProduct.is_active,
                 StoreProduct.stock != -1,  # Not unlimited
                 StoreProduct.stock <= StoreProduct.low_stock_threshold,
                 StoreProduct.stock > 0,  # Not out of stock
@@ -598,7 +598,7 @@ class StoreService:
         db = self._get_db()
         return (
             db.query(StoreProduct)
-            .filter(StoreProduct.is_active == True, StoreProduct.stock == 0)
+            .filter(StoreProduct.is_active, StoreProduct.stock == 0)
             .order_by(desc(StoreProduct.updated_at))
             .all()
         )
@@ -653,4 +653,4 @@ class StoreService:
         if not alert.get("alert"):
             return
 
-        product = alert.get("product")
+        alert.get("product")

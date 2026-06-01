@@ -82,7 +82,7 @@ class MissionService:
         db = self._get_db()
         query = db.query(Mission)
         if active_only:
-            query = query.filter(Mission.is_active == True)
+            query = query.filter(Mission.is_active)
         return query.order_by(desc(Mission.created_at)).all()
 
     def get_available_missions(self) -> list[Mission]:
@@ -92,9 +92,9 @@ class MissionService:
         return (
             db.query(Mission)
             .filter(
-                Mission.is_active == True,
-                (Mission.start_date == None) | (Mission.start_date <= now),
-                (Mission.end_date == None) | (Mission.end_date >= now),
+                Mission.is_active,
+                (Mission.start_date == None) | (Mission.start_date <= now),  # noqa: E711
+                (Mission.end_date == None) | (Mission.end_date >= now),  # noqa: E711
             )
             .order_by(desc(Mission.created_at))
             .all()
@@ -104,9 +104,7 @@ class MissionService:
         """Obtiene misiones por tipo"""
         db = self._get_db()
         return (
-            db.query(Mission)
-            .filter(Mission.mission_type == mission_type, Mission.is_active == True)
-            .all()
+            db.query(Mission).filter(Mission.mission_type == mission_type, Mission.is_active).all()
         )
 
     # ==================== PROGRESO DE USUARIO ====================
@@ -339,16 +337,19 @@ class MissionService:
                 # Auto-entregar recompensa si está configurada (verificar cooldown para RECURRING)
                 if mission.reward_id and bot:
                     # Verificar cooldown para misiones RECURRING
-                    if mission.frequency == MissionFrequency.RECURRING and mission.cooldown_hours:
-                        if progress.last_updated:
-                            hours_since = (
-                                datetime.now(UTC) - progress.last_updated
-                            ).total_seconds() / 3600
-                            if hours_since < mission.cooldown_hours:
-                                logger.info(
-                                    f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa"
-                                )
-                                continue
+                    if (
+                        mission.frequency == MissionFrequency.RECURRING
+                        and mission.cooldown_hours
+                        and progress.last_updated
+                    ):
+                        hours_since = (
+                            datetime.now(UTC) - progress.last_updated
+                        ).total_seconds() / 3600
+                        if hours_since < mission.cooldown_hours:
+                            logger.info(
+                                f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa"
+                            )
+                            continue
 
                     reward_service = RewardService(db)
                     success, message = await reward_service.deliver_reward(

@@ -116,7 +116,7 @@ async def mission_detail(callback: CallbackQuery, callback_data: MissionDetailCa
         📋 {mission.name}
 
         📝 Descripcion:
-        {mission.description or 'Sin descripcion'}
+        {mission.description or "Sin descripcion"}
 
         📊 Progreso:
         {bar} {percentage}%

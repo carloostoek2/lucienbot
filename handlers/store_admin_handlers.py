@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     ConfigStockAlertCallback,
     DeleteProductCallback,
@@ -24,6 +22,7 @@ from keyboards.callback_data import (
 from services import get_service
 from services.package_service import PackageService
 from services.store_service import StoreService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -42,8 +41,6 @@ class ProductWizardStates(StatesGroup):
 class ProductRestockStates(StatesGroup):
     waiting_amount = State()
     waiting_threshold = State()
-
-
 
 
 # ==================== MENU PRINCIPAL ====================
@@ -200,7 +197,7 @@ async def restock_unlimited(callback: CallbackQuery, state: FSMContext):
         store_service.update_product(product_id, stock=-1)
 
         await callback.message.edit_text(
-            "🎩 <b>Lucien:</b>\n\n" "✅ Stock actualizado a ilimitado.",
+            "🎩 <b>Lucien:</b>\n\n✅ Stock actualizado a ilimitado.",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 Volver a alertas", callback_data="stock_alerts")]
@@ -339,7 +336,7 @@ async def process_product_description(message: Message, state: FSMContext):
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
 
     await message.answer(
-        "🎩 Lucien:\n\n" "Paso 3 de 5: Seleccionar paquete\n\n" "Elige el paquete que se vendera:",
+        "🎩 Lucien:\n\nPaso 3 de 5: Seleccionar paquete\n\nElige el paquete que se vendera:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
     )
     await state.set_state(ProductWizardStates.selecting_package)
@@ -355,7 +352,7 @@ async def select_package_for_product(
     await state.update_data(package_id=package_id)
 
     await callback.message.edit_text(
-        "🎩 Lucien:\n\n" "Paso 4 de 5: Precio\n\n" "Indica el precio en besitos:\n" "Ejemplo: 100",
+        "🎩 Lucien:\n\nPaso 4 de 5: Precio\n\nIndica el precio en besitos:\nEjemplo: 100",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]
@@ -388,7 +385,7 @@ async def process_product_price(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "🎩 Lucien:\n\n" "Paso 5 de 5: Stock\n\n" "Configura el stock disponible:",
+        "🎩 Lucien:\n\nPaso 5 de 5: Stock\n\nConfigura el stock disponible:",
         reply_markup=keyboard,
     )
     await state.set_state(ProductWizardStates.waiting_stock)
@@ -406,7 +403,7 @@ async def product_stock_unlimited(callback: CallbackQuery, state: FSMContext):
 async def product_stock_limited(callback: CallbackQuery, state: FSMContext):
     """Pide cantidad limitada"""
     await callback.message.edit_text(
-        "🎩 Lucien:\n\n" "Indica la cantidad de unidades disponibles:\n" "Ejemplo: 50",
+        "🎩 Lucien:\n\nIndica la cantidad de unidades disponibles:\nEjemplo: 50",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]
@@ -685,7 +682,7 @@ async def process_stock_threshold(message: Message, state: FSMContext):
 
         if success:
             await message.answer(
-                f"🎩 <b>Lucien:</b>\n\n" f"✅ Umbral de alerta actualizado a {threshold}.",
+                f"🎩 <b>Lucien:</b>\n\n✅ Umbral de alerta actualizado a {threshold}.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -768,7 +765,7 @@ async def handle_delete_product(callback: CallbackQuery, callback_data: DeletePr
 
         if success:
             await callback.message.edit_text(
-                "🎩 Lucien:\n\n" "✅ Producto eliminado correctamente.",
+                "🎩 Lucien:\n\n✅ Producto eliminado correctamente.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]

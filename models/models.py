@@ -27,14 +27,14 @@ from sqlalchemy.sql import func
 from models.database import Base
 
 
-class ChannelType(str, enum.Enum):
+class ChannelType(enum.StrEnum):
     """Tipos de canal"""
 
     FREE = "free"
     VIP = "vip"
 
 
-class TokenStatus(str, enum.Enum):
+class TokenStatus(enum.StrEnum):
     """Estados de un token"""
 
     ACTIVE = "active"
@@ -42,7 +42,7 @@ class TokenStatus(str, enum.Enum):
     EXPIRED = "expired"
 
 
-class UserRole(str, enum.Enum):
+class UserRole(enum.StrEnum):
     """Roles de usuario"""
 
     ADMIN = "admin"
@@ -190,14 +190,14 @@ class PendingRequest(Base):
 # ============================================================
 
 
-class TransactionType(str, enum.Enum):
+class TransactionType(enum.StrEnum):
     """Tipos de transacción de besitos"""
 
     CREDIT = "credit"  # Entrada de besitos
     DEBIT = "debit"  # Salida de besitos
 
 
-class TransactionSource(str, enum.Enum):
+class TransactionSource(enum.StrEnum):
     """Fuentes de transacción de besitos"""
 
     REACTION = "reaction"  # Reacción a mensaje
@@ -500,7 +500,7 @@ class Category(Base):
 # ============================================================
 
 
-class MissionType(str, enum.Enum):
+class MissionType(enum.StrEnum):
     """Tipos de misiones soportados"""
 
     REACTION_COUNT = "reaction_count"  # Reaccionar N veces
@@ -510,7 +510,7 @@ class MissionType(str, enum.Enum):
     VIP_ACTIVE = "vip_active"  # Tener suscripcion VIP activa
 
 
-class MissionFrequency(str, enum.Enum):
+class MissionFrequency(enum.StrEnum):
     """Frecuencia de la mision"""
 
     ONE_TIME = "one_time"  # Se completa una sola vez
@@ -562,10 +562,7 @@ class Mission(Base):
 
         if self.start_date and now < self.start_date:
             return False
-        if self.end_date and now > self.end_date:
-            return False
-
-        return True
+        return not (self.end_date and now > self.end_date)
 
 
 class UserMissionProgress(Base):
@@ -594,7 +591,7 @@ class UserMissionProgress(Base):
     mission = relationship("Mission", back_populates="user_progress")
 
 
-class RewardType(str, enum.Enum):
+class RewardType(enum.StrEnum):
     """Tipos de recompensas"""
 
     BESITOS = "besitos"  # Cantidad de besitos
@@ -689,9 +686,7 @@ class StoreProduct(Base):
         """Verifica si el producto esta disponible"""
         if not self.is_active:
             return False
-        if self.stock == 0:
-            return False
-        return True
+        return self.stock != 0
 
     @property
     def stock_display(self) -> str:
@@ -743,7 +738,7 @@ class CartItem(Base):
     product = relationship("StoreProduct", back_populates="cart_items")
 
 
-class OrderStatus(str, enum.Enum):
+class OrderStatus(enum.StrEnum):
     """Estados de una orden"""
 
     PENDING = "pending"  # Pendiente de pago/confirmacion
@@ -799,7 +794,7 @@ class OrderItem(Base):
 # ============================================================
 
 
-class PromotionStatus(str, enum.Enum):
+class PromotionStatus(enum.StrEnum):
     """Estados de una promoción"""
 
     ACTIVE = "active"  # Activa y visible
@@ -865,10 +860,7 @@ class Promotion(Base):
 
         if self.start_date and now < self.start_date:
             return False
-        if self.end_date and now > self.end_date:
-            return False
-
-        return True
+        return not (self.end_date and now > self.end_date)
 
     @property
     def file_count(self) -> int:
@@ -878,7 +870,7 @@ class Promotion(Base):
         return self.package.file_count if self.package else 0
 
 
-class InterestStatus(str, enum.Enum):
+class InterestStatus(enum.StrEnum):
     """Estados de un interés en promoción"""
 
     PENDING = "pending"  # Pendiente de atención
@@ -944,7 +936,7 @@ class BlockedPromotionUser(Base):
 # ============================================================
 
 
-class NodeType(str, enum.Enum):
+class NodeType(enum.StrEnum):
     """Tipos de nodos de historia"""
 
     NARRATIVE = "narrative"  # Nodo narrativo (solo texto)
@@ -953,7 +945,7 @@ class NodeType(str, enum.Enum):
     QUIZ = "quiz"  # Nodo de cuestionario para arquetipo
 
 
-class ArchetypeType(str, enum.Enum):
+class ArchetypeType(enum.StrEnum):
     """Arquetipos disponibles para los usuarios"""
 
     SEDUCTOR = "seductor"  # El Seductor - busca el placer y la conquista
@@ -1158,7 +1150,7 @@ class UserStoryAchievement(Base):
 # ============================================================
 
 
-class AnonymousMessageStatus(str, enum.Enum):
+class AnonymousMessageStatus(enum.StrEnum):
     """Estados de un mensaje anónimo"""
 
     UNREAD = "unread"  # No leído por Diana
@@ -1229,7 +1221,7 @@ class TriviaCategory(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class StreakPromotionStatus(str, enum.Enum):
+class StreakPromotionStatus(enum.StrEnum):
     """States for a streak promotion lifecycle."""
 
     PENDING = "pending"
@@ -1238,7 +1230,7 @@ class StreakPromotionStatus(str, enum.Enum):
     PAUSED = "paused"
 
 
-class StreakPromotionCodeStatus(str, enum.Enum):
+class StreakPromotionCodeStatus(enum.StrEnum):
     """States for a streak promotion discount code."""
 
     AVAILABLE = "available"

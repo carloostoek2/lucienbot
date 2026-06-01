@@ -49,14 +49,14 @@ def _build_reward_detail_text(
 {reward_emoji} {reward_name}
 
 📝 Descripcion:
-{reward_desc or 'Sin descripcion'}
+{reward_desc or "Sin descripcion"}
 
 🎁 Que otorga:
 {reward_gives}
 
 🎯 Mision asociada:
 {mission_name}
-{mission_desc or ''}
+{mission_desc or ""}
 {status_text}
 
 <i>Completa la mision para recibir esta recompensa.</i>"""

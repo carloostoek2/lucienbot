@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     BroadcastChannelCallback,
     BroadcastProtectCallback,
@@ -25,12 +23,11 @@ from keyboards.inline_keyboards import (
 )
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
-
-
 
 
 # Estados para FSM
@@ -181,7 +178,7 @@ async def back_to_text(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             f"""🎩 <b>Lucien:</b>
 
-<i>Preparando mensaje para <b>{data.get('channel_name', 'Desconocido')}</b>...</i>
+<i>Preparando mensaje para <b>{data.get("channel_name", "Desconocido")}</b>...</i>
 
 📋 <b>Paso 1 de 6:</b> Texto del mensaje
 
@@ -621,17 +618,17 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
 <i>Así se verá su mensaje en el canal...</i>
 
 📋 <b>Resumen:</b>
-   • Canal: {data.get('channel_name', 'Desconocido')}
-   • Texto: {'✅' if preview_text else '❌'}
-   • Adjunto: {'✅ ' + data.get('attachment_type', '') if has_attachment else '❌'}
-   • Reacciones: {'✅' if has_reactions else '❌'}
-   • Protección: {'🔒 Sí' if is_protected else '❌ No'}
+   • Canal: {data.get("channel_name", "Desconocido")}
+   • Texto: {"✅" if preview_text else "❌"}
+   • Adjunto: {"✅ " + data.get("attachment_type", "") if has_attachment else "❌"}
+   • Reacciones: {"✅" if has_reactions else "❌"}
+   • Protección: {"🔒 Sí" if is_protected else "❌ No"}
 
 ---
 
 <b>Preview del mensaje:</b>
 
-{preview_text[:500]}{'...' if len(preview_text) > 500 else ''}
+{preview_text[:500]}{"..." if len(preview_text) > 500 else ""}
 
 ---
 
@@ -827,9 +824,9 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
 ✅ <b>Broadcast enviado exitosamente.</b>
 
 📊 <b>Detalles:</b>
-   • Canal: {data.get('channel_name')}
+   • Canal: {data.get("channel_name")}
    • Mensaje ID: <code>{sent_message.message_id}</code>
-   • Reacciones: {'Sí' if selected_emojis else 'No'}
+   • Reacciones: {"Sí" if selected_emojis else "No"}
 
 <i>Los visitantes podrán interactuar con él.</i>""",
                 reply_markup=back_keyboard("admin_gamification"),

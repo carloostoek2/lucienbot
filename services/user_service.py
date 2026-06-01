@@ -68,7 +68,7 @@ class UserService:
         """Obtiene todos los usuarios"""
         query = self.db.query(User)
         if active_only:
-            query = query.filter(User.is_active == True)
+            query = query.filter(User.is_active)
         return query.all()
 
     def get_admins(self) -> list[User]:

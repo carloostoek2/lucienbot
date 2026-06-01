@@ -11,7 +11,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 
 from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.inline_keyboards import (
     back_keyboard,
     channel_management_keyboard,
@@ -20,6 +19,7 @@ from keyboards.inline_keyboards import (
 from services.channel_service import ChannelService
 from services.user_service import UserService
 from services.vip_service import VIPService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()

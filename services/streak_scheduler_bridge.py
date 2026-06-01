@@ -5,6 +5,7 @@ Este es el UNICO modulo que importa de ambos servicios (via lazy imports interno
 Tanto scheduler_service como streak_promotion_service importan desde aqui
 con imports de nivel superior, eliminando el ciclo.
 """
+
 import logging
 
 from models.database import SessionLocal

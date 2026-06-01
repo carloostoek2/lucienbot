@@ -173,13 +173,13 @@ class BackpackService:
 
         subscriptions = (
             db.query(Subscription)
-            .filter(Subscription.user_id == user_id, Subscription.is_active == True)
+            .filter(Subscription.user_id == user_id, Subscription.is_active)
             .all()
         )
 
         result = []
         for sub in subscriptions:
-            tariff = db.query(Package).first()  # Placeholder - using Tariff model
+            db.query(Package).first()  # Placeholder - using Tariff model
             from models.models import Tariff
 
             tariff_obj = (
@@ -232,7 +232,7 @@ class BackpackService:
         # Count VIP subscriptions
         vip_count = (
             db.query(Subscription)
-            .filter(Subscription.user_id == user_id, Subscription.is_active == True)
+            .filter(Subscription.user_id == user_id, Subscription.is_active)
             .count()
         )
 

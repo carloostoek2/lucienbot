@@ -221,7 +221,7 @@ async def back_to_admin(callback: CallbackQuery):
 async def cancel_action(callback: CallbackQuery):
     """Cancelar acción actual"""
     await callback.message.edit_text(
-        "🎩 <b>Lucien:</b>\n\n" "<i>Acción cancelada. Diana aprecia la deliberación...</i>",
+        "🎩 <b>Lucien:</b>\n\n<i>Acción cancelada. Diana aprecia la deliberación...</i>",
         parse_mode="HTML",
     )
     await callback.answer("Acción cancelada")

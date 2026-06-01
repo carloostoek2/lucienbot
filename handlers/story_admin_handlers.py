@@ -721,9 +721,7 @@ async def manage_choices(callback: CallbackQuery):
 
         buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_narrative")])
 
-        text = (
-            "🎩 <b>Lucien:</b>\n\n" "<i>Seleccione el fragmento al que desea agregar opciones:</i>"
-        )
+        text = "🎩 <b>Lucien:</b>\n\n<i>Seleccione el fragmento al que desea agregar opciones:</i>"
 
         await callback.message.edit_text(
             text,
@@ -849,9 +847,9 @@ async def delete_node_confirm(callback: CallbackQuery, callback_data: StoryNodeD
             )
 
             if success:
-                text = "🎩 <b>Lucien:</b>\n\n" "<i>El fragmento ha sido eliminado.</i>"
+                text = "🎩 <b>Lucien:</b>\n\n<i>El fragmento ha sido eliminado.</i>"
             else:
-                text = "🎩 <b>Lucien:</b>\n\n" "<i>No se pudo eliminar el fragmento.</i>"
+                text = "🎩 <b>Lucien:</b>\n\n<i>No se pudo eliminar el fragmento.</i>"
 
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
@@ -1109,7 +1107,7 @@ async def confirm_create_choice(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     with get_service(StoryService) as story_service:
         try:
-            choice = story_service.create_choice(
+            story_service.create_choice(
                 node_id=data.get("choice_node_id"),
                 text=data.get("choice_text"),
                 next_node_id=data.get("choice_next_node_id"),
@@ -1138,7 +1136,7 @@ async def confirm_create_choice(callback: CallbackQuery, state: FSMContext):
                 ]
             )
 
-            text = "🎩 <b>Lucien:</b>\n\n" "<i>La opcion ha sido agregada...</i>"
+            text = "🎩 <b>Lucien:</b>\n\n<i>La opcion ha sido agregada...</i>"
 
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             logger.info(
@@ -1152,7 +1150,7 @@ async def confirm_create_choice(callback: CallbackQuery, state: FSMContext):
                     [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_narrative")]
                 ]
             )
-            text = "🎩 <b>Lucien:</b>\n\n" "<i>Hmm... algo inesperado ha ocurrido.</i>"
+            text = "🎩 <b>Lucien:</b>\n\n<i>Hmm... algo inesperado ha ocurrido.</i>"
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
         await state.clear()
@@ -1411,7 +1409,7 @@ async def confirm_create_archetype(callback: CallbackQuery, state: FSMContext):
                     [InlineKeyboardButton(text="🔙 Volver", callback_data="manage_archetypes")]
                 ]
             )
-            text = "🎩 <b>Lucien:</b>\n\n" "<i>Hmm... algo inesperado ha ocurrido.</i>"
+            text = "🎩 <b>Lucien:</b>\n\n<i>Hmm... algo inesperado ha ocurrido.</i>"
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
         await state.clear()
@@ -1591,7 +1589,7 @@ async def confirm_create_achievement(callback: CallbackQuery, state: FSMContext)
                     [InlineKeyboardButton(text="🔙 Volver", callback_data="manage_achievements")]
                 ]
             )
-            text = "🎩 <b>Lucien:</b>\n\n" "<i>Hmm... algo inesperado ha ocurrido.</i>"
+            text = "🎩 <b>Lucien:</b>\n\n<i>Hmm... algo inesperado ha ocurrido.</i>"
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
         await state.clear()
@@ -1627,9 +1625,7 @@ async def list_achievements(callback: CallbackQuery):
         )
 
         text = (
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>Los reconocimientos disponibles...</i>\n\n"
-            f"{achievements_text}"
+            f"🎩 <b>Lucien:</b>\n\n<i>Los reconocimientos disponibles...</i>\n\n{achievements_text}"
         )
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)

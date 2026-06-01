@@ -44,7 +44,7 @@ class AnalyticsService:
         total_users = db.query(User).count()
 
         # Active VIP subscriptions
-        active_vip = db.query(Subscription).filter(Subscription.is_active == True).count()
+        active_vip = db.query(Subscription).filter(Subscription.is_active).count()
 
         # Total besitos in circulation
         balances = db.query(BesitoBalance).all()
@@ -56,7 +56,7 @@ class AnalyticsService:
         expiring_soon = (
             db.query(Subscription)
             .filter(
-                Subscription.is_active == True,
+                Subscription.is_active,
                 Subscription.end_date <= threshold,
                 Subscription.end_date > now,
             )
@@ -88,53 +88,54 @@ class AnalyticsService:
         if not users:
             return None
 
-        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="")
         try:
-            writer = csv.DictWriter(
-                tmp,
-                fieldnames=[
-                    "telegram_id",
-                    "username",
-                    "balance",
-                    "vip_active",
-                    "is_active",
-                    "created_at",
-                ],
-            )
-            writer.writeheader()
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".csv", delete=False, newline=""
+            ) as tmp:
+                writer = csv.DictWriter(
+                    tmp,
+                    fieldnames=[
+                        "telegram_id",
+                        "username",
+                        "balance",
+                        "vip_active",
+                        "is_active",
+                        "created_at",
+                    ],
+                )
+                writer.writeheader()
 
-            for user in users:
-                vip_active = (
-                    db.query(Subscription)
-                    .filter(
-                        Subscription.user_id == user.telegram_id, Subscription.is_active == True
+                for user in users:
+                    vip_active = (
+                        db.query(Subscription)
+                        .filter(Subscription.user_id == user.telegram_id, Subscription.is_active)
+                        .first()
+                        is not None
                     )
-                    .first()
-                    is not None
-                )
 
-                balance = (
-                    db.query(BesitoBalance)
-                    .filter(BesitoBalance.user_id == user.telegram_id)
-                    .first()
-                )
-                user_balance = balance.balance if balance else 0
+                    balance = (
+                        db.query(BesitoBalance)
+                        .filter(BesitoBalance.user_id == user.telegram_id)
+                        .first()
+                    )
+                    user_balance = balance.balance if balance else 0
 
-                writer.writerow(
-                    {
-                        "telegram_id": user.telegram_id,
-                        "username": user.username or "",
-                        "balance": user_balance,
-                        "vip_active": "Si" if vip_active else "No",
-                        "is_active": "Si" if user.is_active else "No",
-                        "created_at": (
-                            user.created_at.strftime("%Y-%m-%d %H:%M:%S") if user.created_at else ""
-                        ),
-                    }
-                )
+                    writer.writerow(
+                        {
+                            "telegram_id": user.telegram_id,
+                            "username": user.username or "",
+                            "balance": user_balance,
+                            "vip_active": "Si" if vip_active else "No",
+                            "is_active": "Si" if user.is_active else "No",
+                            "created_at": (
+                                user.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                                if user.created_at
+                                else ""
+                            ),
+                        }
+                    )
 
-            tmp.close()
-            return tmp.name
+                return tmp.name
         except Exception as e:
             logger.error(f"CSV export error: {e}")
             return None
@@ -157,31 +158,32 @@ class AnalyticsService:
         if not transactions:
             return None
 
-        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="")
         try:
-            writer = csv.DictWriter(
-                tmp, fieldnames=["id", "user_id", "amount", "type", "source", "created_at"]
-            )
-            writer.writeheader()
-
-            for tx in transactions:
-                writer.writerow(
-                    {
-                        "id": tx.id,
-                        "user_id": tx.user_id,
-                        "amount": tx.amount,
-                        "type": tx.type.value if hasattr(tx.type, "value") else str(tx.type),
-                        "source": tx.source.value
-                        if hasattr(tx.source, "value")
-                        else str(tx.source),
-                        "created_at": (
-                            tx.created_at.strftime("%Y-%m-%d %H:%M:%S") if tx.created_at else ""
-                        ),
-                    }
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".csv", delete=False, newline=""
+            ) as tmp:
+                writer = csv.DictWriter(
+                    tmp, fieldnames=["id", "user_id", "amount", "type", "source", "created_at"]
                 )
+                writer.writeheader()
 
-            tmp.close()
-            return tmp.name
+                for tx in transactions:
+                    writer.writerow(
+                        {
+                            "id": tx.id,
+                            "user_id": tx.user_id,
+                            "amount": tx.amount,
+                            "type": tx.type.value if hasattr(tx.type, "value") else str(tx.type),
+                            "source": tx.source.value
+                            if hasattr(tx.source, "value")
+                            else str(tx.source),
+                            "created_at": (
+                                tx.created_at.strftime("%Y-%m-%d %H:%M:%S") if tx.created_at else ""
+                            ),
+                        }
+                    )
+
+                return tmp.name
         except Exception as e:
             logger.error(f"Activity CSV export error: {e}")
             return None

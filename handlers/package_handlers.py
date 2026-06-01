@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     ConfirmDeleteFileCallback,
     ContinueDeleteFilesCallback,
@@ -31,6 +29,7 @@ from keyboards.callback_data import (
 from keyboards.inline_keyboards import back_keyboard, cancel_keyboard
 from services import get_service
 from services.package_service import PackageService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -65,8 +64,6 @@ class UpdatePackageStates(StatesGroup):
 class DeleteFileStates(StatesGroup):
     selecting_package = State()
     deleting_files = State()
-
-
 
 
 # ==================== MENÚ DE PAQUETES ====================
@@ -167,7 +164,7 @@ async def list_packages(callback: CallbackQuery, callback_data: PackageListCallb
 
         <i>Los tesoros del reino...</i>
 
-        📦 <b>Paquetes {'activos' if active_only else 'registrados'}:</b>
+        📦 <b>Paquetes {"activos" if active_only else "registrados"}:</b>
 
         """
 
@@ -275,7 +272,7 @@ async def package_detail(callback: CallbackQuery, callback_data: PackageDetailCa
         📦 <b>{package.name}</b>
 
         📝 <b>Descripción:</b>
-        <i>{package.description or 'Sin descripción'}</i>
+        <i>{package.description or "Sin descripción"}</i>
 
         📊 <b>Información:</b>
            • Estado: {status}
@@ -309,7 +306,7 @@ async def toggle_package(callback: CallbackQuery, callback_data: TogglePackageCa
         await package_detail(callback, PackageDetailCallback(package_id=package_id))
 
 
-@router.callback_query(DeletePackageCallback.filter(F.confirmed == False))
+@router.callback_query(DeletePackageCallback.filter(not F.confirmed))
 async def delete_package_confirm(callback: CallbackQuery, callback_data: DeletePackageCallback):
     """Confirma eliminación de paquete"""
     if not is_admin(callback.from_user.id):
@@ -350,7 +347,7 @@ Los archivos asociados también serán eliminados.""",
     await callback.answer()
 
 
-@router.callback_query(DeletePackageCallback.filter(F.confirmed == True))
+@router.callback_query(DeletePackageCallback.filter(F.confirmed))
 async def confirm_delete_package(callback: CallbackQuery, callback_data: DeletePackageCallback):
     """Elimina el paquete"""
     if not is_admin(callback.from_user.id):
@@ -408,7 +405,7 @@ async def process_package_name(message: Message, state: FSMContext):
 
     if len(name) < 3:
         await message.answer(
-            "🎩 <b>Lucien:</b>\n\n" "<i>El nombre debe tener al menos 3 caracteres...</i>",
+            "🎩 <b>Lucien:</b>\n\n<i>El nombre debe tener al menos 3 caracteres...</i>",
             reply_markup=cancel_keyboard(),
             parse_mode="HTML",
         )
@@ -436,10 +433,7 @@ O envíe /skip para omitir.""",
 @router.message(PackageWizardStates.waiting_description)
 async def process_package_description(message: Message, state: FSMContext):
     """Procesa la descripción del paquete"""
-    if message.text == "/skip":
-        description = None
-    else:
-        description = message.text.strip()
+    description = None if message.text == "/skip" else message.text.strip()
 
     await state.update_data(description=description)
 
@@ -609,7 +603,7 @@ async def process_store_stock(message: Message, state: FSMContext):
             raise ValueError("Stock no puede ser negativo")
     except ValueError:
         await message.answer(
-            "🎩 <b>Lucien:</b>\n\n" "<i>Por favor, indique un número válido (0 o mayor)...</i>",
+            "🎩 <b>Lucien:</b>\n\n<i>Por favor, indique un número válido (0 o mayor)...</i>",
             reply_markup=cancel_keyboard(),
             parse_mode="HTML",
         )
@@ -688,7 +682,7 @@ async def process_reward_stock(message: Message, state: FSMContext):
             raise ValueError("Stock no puede ser negativo")
     except ValueError:
         await message.answer(
-            "🎩 <b>Lucien:</b>\n\n" "<i>Por favor, indique un número válido (0 o mayor)...</i>",
+            "🎩 <b>Lucien:</b>\n\n<i>Por favor, indique un número válido (0 o mayor)...</i>",
             reply_markup=cancel_keyboard(),
             parse_mode="HTML",
         )
@@ -1566,7 +1560,7 @@ async def execute_delete_file(
 
     data = await state.get_data()
     package_id = data.get("package_id")
-    package_name = data.get("package_name")
+    data.get("package_name")
 
     with get_service(PackageService) as package_service:
         try:
@@ -1613,7 +1607,6 @@ async def continue_delete_files(
     callback: CallbackQuery, state: FSMContext, callback_data: ContinueDeleteFilesCallback
 ):
     """Continúa mostrando archivos para eliminar"""
-    package_id = callback_data.package_id
 
     await callback.message.delete()
     await show_files_for_deletion(callback, state, bot=callback.bot)

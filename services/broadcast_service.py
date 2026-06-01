@@ -55,7 +55,7 @@ class BroadcastService:
         """Obtiene un emoji por su caracter"""
         return (
             self.db.query(ReactionEmoji)
-            .filter(ReactionEmoji.emoji == emoji, ReactionEmoji.is_active == True)
+            .filter(ReactionEmoji.emoji == emoji, ReactionEmoji.is_active)
             .first()
         )
 
@@ -63,7 +63,7 @@ class BroadcastService:
         """Obtiene todos los emojis configurados"""
         query = self.db.query(ReactionEmoji)
         if active_only:
-            query = query.filter(ReactionEmoji.is_active == True)
+            query = query.filter(ReactionEmoji.is_active)
         return query.all()
 
     def update_emoji_value(self, emoji_id: int, besito_value: int) -> bool:
@@ -389,7 +389,7 @@ class BroadcastService:
             "total_reactions": len(reactions),
             "total_besitos_awarded": total_besitos,
             "emoji_breakdown": emoji_counts,
-            "unique_users": len(set(r.user_id for r in reactions)),
+            "unique_users": len({r.user_id for r in reactions}),
         }
 
     def close(self):

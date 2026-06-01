@@ -87,14 +87,14 @@ class StoryService:
         """Obtiene todos los nodos"""
         query = self.db.query(StoryNode)
         if active_only:
-            query = query.filter(StoryNode.is_active == True)
+            query = query.filter(StoryNode.is_active)
         return query.order_by(StoryNode.chapter, StoryNode.order_in_chapter).all()
 
     def get_nodes_by_chapter(self, chapter: int) -> list[StoryNode]:
         """Obtiene nodos de un capitulo especifico"""
         return (
             self.db.query(StoryNode)
-            .filter(StoryNode.chapter == chapter, StoryNode.is_active == True)
+            .filter(StoryNode.chapter == chapter, StoryNode.is_active)
             .order_by(StoryNode.order_in_chapter)
             .all()
         )
@@ -102,9 +102,7 @@ class StoryService:
     def get_starting_node(self) -> StoryNode | None:
         """Obtiene el nodo inicial de la historia"""
         return (
-            self.db.query(StoryNode)
-            .filter(StoryNode.is_starting_node == True, StoryNode.is_active == True)
-            .first()
+            self.db.query(StoryNode).filter(StoryNode.is_starting_node, StoryNode.is_active).first()
         )
 
     def update_node(self, node_id: int, **kwargs) -> bool:
@@ -270,13 +268,14 @@ class StoryService:
             return False, LucienVoice.story_fragment_vip_required()
 
         # Verificar arquetipo requerido
-        if node.required_archetype:
-            if not progress or progress.archetype != node.required_archetype:
-                archetype_name = node.required_archetype.value.title()
-                return (
-                    False,
-                    LucienVoice.story_fragment_archetype_required(archetype_name),
-                )
+        if node.required_archetype and (
+            not progress or progress.archetype != node.required_archetype
+        ):
+            archetype_name = node.required_archetype.value.title()
+            return (
+                False,
+                LucienVoice.story_fragment_archetype_required(archetype_name),
+            )
 
         # Verificar besitos
         if node.cost_besitos > 0:
@@ -363,9 +362,7 @@ class StoryService:
 
     def _check_achievements(self, user_id: int, progress: UserStoryProgress):
         """Verifica y otorga logros al usuario"""
-        achievements = (
-            self.db.query(StoryAchievement).filter(StoryAchievement.is_active == True).all()
-        )
+        achievements = self.db.query(StoryAchievement).filter(StoryAchievement.is_active).all()
 
         for achievement in achievements:
             # Verificar si ya lo tiene
@@ -389,13 +386,17 @@ class StoryService:
                 if achievement.required_node_id in visited:
                     unlocked = True
 
-            if achievement.required_archetype:
-                if progress.archetype == achievement.required_archetype:
-                    unlocked = True
+            if (
+                achievement.required_archetype
+                and progress.archetype == achievement.required_archetype
+            ):
+                unlocked = True
 
-            if achievement.required_chapter:
-                if progress.current_chapter >= achievement.required_chapter:
-                    unlocked = True
+            if (
+                achievement.required_chapter
+                and progress.current_chapter >= achievement.required_chapter
+            ):
+                unlocked = True
 
             if unlocked:
                 self._grant_achievement(user_id, achievement)
@@ -518,7 +519,7 @@ class StoryService:
         """Obtiene todos los logros disponibles"""
         query = self.db.query(StoryAchievement)
         if active_only:
-            query = query.filter(StoryAchievement.is_active == True)
+            query = query.filter(StoryAchievement.is_active)
         return query.order_by(desc(StoryAchievement.created_at)).all()
 
     def get_user_achievements(self, user_id: int) -> list[UserStoryAchievement]:
@@ -627,9 +628,9 @@ class StoryService:
 
     def get_story_stats(self) -> dict:
         """Obtiene estadisticas de la narrativa"""
-        total_nodes = self.db.query(StoryNode).filter(StoryNode.is_active == True).count()
+        total_nodes = self.db.query(StoryNode).filter(StoryNode.is_active).count()
         total_chapters = (
-            self.db.query(StoryNode.chapter).filter(StoryNode.is_active == True).distinct().count()
+            self.db.query(StoryNode.chapter).filter(StoryNode.is_active).distinct().count()
         )
 
         total_users = self.db.query(UserStoryProgress).count()
@@ -649,7 +650,7 @@ class StoryService:
             archetype_counts[archetype.value] = count
 
         total_achievements = (
-            self.db.query(StoryAchievement).filter(StoryAchievement.is_active == True).count()
+            self.db.query(StoryAchievement).filter(StoryAchievement.is_active).count()
         )
 
         return {

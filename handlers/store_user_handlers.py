@@ -97,7 +97,7 @@ async def store_catalog(callback: CallbackQuery):
         await callback.answer()
         return
 
-    text = "🎩 Lucien:\n\n" "Catalogo de productos:\n\n"
+    text = "🎩 Lucien:\n\nCatalogo de productos:\n\n"
 
     buttons = []
     row = []
@@ -155,9 +155,7 @@ async def store_categories(callback: CallbackQuery):
         await callback.answer()
         return
 
-    text = (
-        "🎩 <b>Lucien:</b>\n\n" "<i>Las estanterias de Diana...</i>\n\n" "Selecciona una categoria:"
-    )
+    text = "🎩 <b>Lucien:</b>\n\n<i>Las estanterias de Diana...</i>\n\nSelecciona una categoria:"
 
     buttons = []
     for category in categories:
@@ -217,7 +215,7 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
         await callback.answer()
         return
 
-    text = f"🎩 <b>Lucien:</b>\n\n" f"<i>{category.name}...</i>\n\n"
+    text = f"🎩 <b>Lucien:</b>\n\n<i>{category.name}...</i>\n\n"
 
     if category.description:
         text += f"{category.description}\n\n"
@@ -280,7 +278,7 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
 
 <i>{product.name}</i>
 
-📝 {product.description or 'Un tesoro del reino...'}
+📝 {product.description or "Un tesoro del reino..."}
 
 💰 <b>Precio:</b> {product.price} besitos
 📊 <b>Stock:</b> {stock_text}
@@ -392,7 +390,7 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
 
 <i>{product.name}</i>
 
-📝 {product.description or 'Un tesoro del reino...'}
+📝 {product.description or "Un tesoro del reino..."}
 
 💰 <b>Precio:</b> {product.price} besitos
 📊 <b>Stock:</b> {stock_text}
@@ -567,7 +565,7 @@ async def purchase_history(callback: CallbackQuery):
         await callback.answer()
         return
 
-    text = "🎩 Lucien:\n\n" "Tu historial de compras:\n\n"
+    text = "🎩 Lucien:\n\nTu historial de compras:\n\n"
 
     for order in orders:
         status_emoji = {"completed": "✅", "pending": "⏳", "cancelled": "❌"}.get(
@@ -694,9 +692,7 @@ async def store_filters(callback: CallbackQuery):
     )
 
     await callback.message.edit_text(
-        "🎩 <b>Lucien:</b>\n\n"
-        "<i>Filtrar tesoros...</i>\n\n"
-        "Selecciona como ordenar los productos:",
+        "🎩 <b>Lucien:</b>\n\n<i>Filtrar tesoros...</i>\n\nSelecciona como ordenar los productos:",
         reply_markup=keyboard,
     )
     await callback.answer()
@@ -745,7 +741,7 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
     """Helper para mostrar productos filtrados"""
     if not products:
         await callback.message.edit_text(
-            "🎩 <b>Lucien:</b>\n\n" "<i>No hay tesoros que coincidan...</i>",
+            "🎩 <b>Lucien:</b>\n\n<i>No hay tesoros que coincidan...</i>",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="🔙 Volver", callback_data="shop")]]
             ),
@@ -753,11 +749,7 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
         await callback.answer()
         return
 
-    text = (
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Filtrado: {filter_name}</i>\n\n"
-        f"{len(products)} tesoro(s)\n\n"
-    )
+    text = f"🎩 <b>Lucien:</b>\n\n<i>Filtrado: {filter_name}</i>\n\n{len(products)} tesoro(s)\n\n"
 
     buttons = []
     row = []

@@ -106,16 +106,14 @@ class PackageService:
         """Obtiene todos los paquetes"""
         query = self.db.query(Package)
         if active_only:
-            query = query.filter(Package.is_active == True)
+            query = query.filter(Package.is_active)
         return query.order_by(desc(Package.created_at)).all()
 
     def get_available_packages_for_store(self) -> list[Package]:
         """Obtiene paquetes disponibles en tienda"""
         return (
             self.db.query(Package)
-            .filter(
-                Package.is_active == True, (Package.store_stock == -1) | (Package.store_stock > 0)
-            )
+            .filter(Package.is_active, (Package.store_stock == -1) | (Package.store_stock > 0))
             .order_by(desc(Package.created_at))
             .all()
         )
@@ -124,9 +122,7 @@ class PackageService:
         """Obtiene paquetes disponibles para recompensas"""
         return (
             self.db.query(Package)
-            .filter(
-                Package.is_active == True, (Package.reward_stock == -1) | (Package.reward_stock > 0)
-            )
+            .filter(Package.is_active, (Package.reward_stock == -1) | (Package.reward_stock > 0))
             .order_by(desc(Package.created_at))
             .all()
         )
@@ -346,7 +342,7 @@ class PackageService:
 
 📦 <b>{package.name}</b>
 
-<i>{package.description or 'Un obsequio del reino...'}</i>
+<i>{package.description or "Un obsequio del reino..."}</i>
 
 Enviando {len(files)} archivo(s)...""",
                 parse_mode="HTML",
@@ -434,7 +430,7 @@ Enviando {len(files)} archivo(s)...""",
         """Obtiene todas las categorías ordenadas por order_index"""
         query = self.db.query(Category)
         if active_only:
-            query = query.filter(Category.is_active == True)
+            query = query.filter(Category.is_active)
         return query.order_by(Category.order_index).all()
 
     def update_category(self, category_id: int, **kwargs) -> bool:
@@ -518,7 +514,7 @@ Enviando {len(files)} archivo(s)...""",
         """
         query = self.db.query(Package).filter(Package.category_id == category_id)
         if active_only:
-            query = query.filter(Package.is_active == True)
+            query = query.filter(Package.is_active)
         return query.order_by(desc(Package.created_at)).all()
 
     def close(self):

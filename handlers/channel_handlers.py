@@ -9,7 +9,7 @@ import logging
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
+from aiogram.types import CallbackQuery, Message
 
 from keyboards.callback_data import (
     ApproveAllCallback,
@@ -231,7 +231,7 @@ async def channel_detail(callback: CallbackQuery, callback_data: ChannelDetailCa
 
 <i>Detalles del dominio seleccionado...</i>
 
-{type_emoji} <b>{channel.channel_name or 'Sin nombre'}</b>
+{type_emoji} <b>{channel.channel_name or "Sin nombre"}</b>
 📋 <b>Tipo:</b> {type_text}
 🆔 <b>ID:</b> <code>{channel.channel_id}</code>
 """
@@ -353,10 +353,7 @@ async def process_invite_link(message: Message, state: FSMContext):
     """Procesa el enlace de invitación ingresado"""
     text = message.text.strip()
 
-    if text.lower() == "quitar":
-        link = None
-    else:
-        link = text
+    link = None if text.lower() == "quitar" else text
 
     data = await state.get_data()
     channel_id = data["channel_id"]

@@ -823,10 +823,7 @@ class GameService:
         is_correct = self.check_trivia_answer(question, answer_idx)
 
         # 5. Calcular nueva racha
-        if is_correct:
-            new_streak = previous_streak + 1
-        else:
-            new_streak = 0
+        new_streak = previous_streak + 1 if is_correct else 0
 
         # 6. Obtener mensaje de racha si aplica
         streak_message = None
@@ -1218,10 +1215,7 @@ class GameService:
         is_correct = self.check_trivia_vip_answer(question, answer_idx)
 
         # 5. Calcular nueva racha
-        if is_correct:
-            new_streak = previous_streak + 1
-        else:
-            new_streak = 0
+        new_streak = previous_streak + 1 if is_correct else 0
 
         # 6. Obtener mensaje de racha si aplica
         streak_message = None
@@ -1572,10 +1566,7 @@ class GameService:
         previous_streak = self._get_simple_trivia_streak(user_id)
         is_correct = self.check_trivia_answer(question, answer_idx)
 
-        if is_correct:
-            new_streak = previous_streak + 1
-        else:
-            new_streak = 0
+        new_streak = previous_streak + 1 if is_correct else 0
 
         streak_message = None
         if is_correct:

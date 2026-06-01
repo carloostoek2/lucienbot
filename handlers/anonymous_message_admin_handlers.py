@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     AnonAllCallback,
     AnonDeleteCallback,
@@ -23,6 +21,7 @@ from keyboards.callback_data import (
 )
 from keyboards.inline_keyboards import admin_menu_keyboard, back_keyboard
 from services.anonymous_message_service import AnonymousMessageService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -31,8 +30,6 @@ router = Router()
 # Estados para FSM
 class AnonymousReplyStates(StatesGroup):
     waiting_reply = State()
-
-
 
 
 def anonymous_messages_menu_keyboard() -> InlineKeyboardMarkup:
@@ -140,9 +137,9 @@ async def admin_anonymous_messages_menu(callback: CallbackQuery):
 💌 <b>Mensajes Anónimos VIP</b>
 
 📊 <b>Estadísticas:</b>
-   🔴 No leídos: {counts.get('unread', 0)}
-   🟡 Leídos: {counts.get('read', 0)}
-   🟢 Respondidos: {counts.get('replied', 0)}
+   🔴 No leídos: {counts.get("unread", 0)}
+   🟡 Leídos: {counts.get("read", 0)}
+   🟢 Respondidos: {counts.get("replied", 0)}
 
 <i>Seleccione una opción para gestionar los mensajes.</i>"""
 
@@ -379,7 +376,7 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 
         if not success:
             await message.answer(
-                "🎩 <b>Lucien:</b>\n\n" "<i>No se pudo guardar la respuesta...</i>",
+                "🎩 <b>Lucien:</b>\n\n<i>No se pudo guardar la respuesta...</i>",
                 reply_markup=admin_menu_keyboard(),
                 parse_mode="HTML",
             )
@@ -399,7 +396,7 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 <i>Diana ha respondido a su susurro...</i>
 
 💬 <b>Su mensaje:</b>
-<blockquote>{anon_message.content[:100]}{'...' if len(anon_message.content) > 100 else ''}</blockquote>
+<blockquote>{anon_message.content[:100]}{"..." if len(anon_message.content) > 100 else ""}</blockquote>
 
 💌 <b>Respuesta de Diana:</b>
 <blockquote>{reply_content}</blockquote>

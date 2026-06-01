@@ -13,8 +13,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     TriviaStreakCategoryCallback,
     TriviaStreakConfirmDeleteCallback,
@@ -27,11 +25,10 @@ from keyboards.callback_data import (
 from services import StreakPromotionService, get_service
 from services.scheduler_service import get_scheduler
 from services.trivia_service import TriviaCategoryService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
-
-
 
 
 class StreakPromotionStates(StatesGroup):
@@ -97,17 +94,13 @@ def _build_promotions_list(promotions) -> tuple:
         else:
             icon = "⚪"
         level_desc = ", ".join(
-            f"{l.consecutive_required}r/{l.discount_pct}%({l.codes_available}cod)"
-            for l in promo.levels
+            f"{level.consecutive_required}r/{level.discount_pct}%({level.codes_available}cod)"
+            for level in promo.levels
         )
         desc_short = (promo.description or "")[:50]
         if promo.description and len(promo.description) > 50:
             desc_short += "..."
-        text += (
-            f"{icon} <b>{promo.name}</b>\n"
-            f"   <i>{desc_short}</i>\n"
-            f"   Niveles: {level_desc}\n\n"
-        )
+        text += f"{icon} <b>{promo.name}</b>\n   <i>{desc_short}</i>\n   Niveles: {level_desc}\n\n"
         buttons.append(
             [
                 InlineKeyboardButton(
@@ -333,7 +326,7 @@ async def streak_promo_get_end_date(message, state: FSMContext):
             start_date = datetime.strptime(text, "%d/%m/%Y %H:%M")
         except ValueError:
             await message.answer(
-                "⚠️ Formato invalido. Use <code>DD/MM/AAAA HH:MM</code> " "o <code>ahora</code>.",
+                "⚠️ Formato invalido. Use <code>DD/MM/AAAA HH:MM</code> o <code>ahora</code>.",
                 parse_mode="HTML",
             )
             return
@@ -511,7 +504,7 @@ def _build_game_type_selection_keyboard(gt_flag: dict) -> InlineKeyboardMarkup:
         labels.append("Simple")
     if gt_flag.get("vip"):
         labels.append("VIP")
-    selection = " + ".join(labels) if labels else "Ninguno"
+    " + ".join(labels) if labels else "Ninguno"
     buttons = [
         [
             InlineKeyboardButton(

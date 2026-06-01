@@ -65,14 +65,14 @@ class ChannelService:
     def get_all_channels(self) -> list[Channel]:
         """Obtiene todos los canales"""
         db = self._get_db()
-        return db.query(Channel).filter(Channel.is_active == True).all()
+        return db.query(Channel).filter(Channel.is_active).all()
 
     def get_free_channels(self) -> list[Channel]:
         """Obtiene todos los canales Free"""
         db = self._get_db()
         return (
             db.query(Channel)
-            .filter(Channel.channel_type == ChannelType.FREE, Channel.is_active == True)
+            .filter(Channel.channel_type == ChannelType.FREE, Channel.is_active)
             .all()
         )
 
@@ -81,7 +81,7 @@ class ChannelService:
         db = self._get_db()
         return (
             db.query(Channel)
-            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active == True)
+            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active)
             .all()
         )
 

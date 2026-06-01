@@ -12,16 +12,13 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from services import get_service
 from services.analytics_service import AnalyticsService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
-
-
 
 
 @router.message(Command("stats"))

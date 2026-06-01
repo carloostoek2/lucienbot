@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     RewardAdminDetailCallback,
     RewardDeleteCallback,
@@ -26,6 +24,7 @@ from services import get_service
 from services.package_service import PackageService
 from services.reward_service import RewardService
 from services.vip_service import VIPService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -54,8 +53,6 @@ class PackageFromRewardStates(StatesGroup):
     waiting_store_stock = State()
     waiting_reward_stock = State()
     confirming = State()
-
-
 
 
 # ==================== WIZARD CREAR RECOMPENSA ====================
@@ -830,7 +827,7 @@ async def reward_admin_detail(callback: CallbackQuery, callback_data: RewardAdmi
 
         🎁 {reward.name}
 
-        📝 {reward.description or 'Sin descripcion'}
+        📝 {reward.description or "Sin descripcion"}
 
         📋 Informacion:
            • Tipo: {reward.reward_type.value}
@@ -879,7 +876,7 @@ async def delete_reward_confirm(callback: CallbackQuery, callback_data: RewardDe
 
             if success:
                 await callback.message.edit_text(
-                    "🎩 Lucien:\n\n" "✅ Recompensa eliminada correctamente.",
+                    "🎩 Lucien:\n\n✅ Recompensa eliminada correctamente.",
                     reply_markup=InlineKeyboardMarkup(
                         inline_keyboard=[
                             [InlineKeyboardButton(text="🔙 Volver", callback_data="list_rewards")]

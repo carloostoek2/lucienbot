@@ -65,6 +65,7 @@ from handlers import (
 from middlewares.error_handler import ErrorHandlerMiddleware
 from models.database import init_db
 from services.scheduler_service import get_scheduler
+from services.vip_service import VIPService
 
 # Configurar logging
 logging.basicConfig(
@@ -104,9 +105,6 @@ def create_storage():
             "REDIS_URL not set -- FSM state will not persist across restarts (using MemoryStorage)"
         )
     return MemoryStorage()
-
-
-from services.vip_service import VIPService
 
 
 async def check_expired_subscriptions_on_startup(bot: Bot):

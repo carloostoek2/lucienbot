@@ -187,7 +187,7 @@ async def show_node(callback: CallbackQuery, node_id: int):
                     [InlineKeyboardButton(text="🔙 Volver", callback_data="narrative")]
                 ]
             )
-            text = "🎩 <b>Lucien:</b>\n\n" "<i>Ese fragmento parece haberse desvanecido...</i>"
+            text = "🎩 <b>Lucien:</b>\n\n<i>Ese fragmento parece haberse desvanecido...</i>"
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
             return
@@ -334,7 +334,7 @@ async def make_choice(callback: CallbackQuery, callback_data: StoryChoiceCallbac
 async def start_archetype_quiz(callback: CallbackQuery, state: FSMContext):
     """Inicia el cuestionario de arquetipo - Voz de Lucien"""
     with get_service(StoryService) as story_service:
-        questions = story_service.get_archetype_quiz_questions()
+        story_service.get_archetype_quiz_questions()
 
         await state.update_data(quiz_answers=[], current_question=0)
 
@@ -411,7 +411,7 @@ async def calculate_and_show_archetype(callback: CallbackQuery, state: FSMContex
             story_service.assign_archetype_to_user(user_id, archetype_type)
         else:
             # Crear progreso con el arquetipo
-            progress = story_service.create_user_progress(user_id)
+            story_service.create_user_progress(user_id)
             story_service.assign_archetype_to_user(user_id, archetype_type)
 
         # Obtener descripcion del arquetipo

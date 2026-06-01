@@ -94,15 +94,13 @@ class RewardService:
         """Obtiene todas las recompensas"""
         query = self.db.query(Reward)
         if active_only:
-            query = query.filter(Reward.is_active == True)
+            query = query.filter(Reward.is_active)
         return query.order_by(desc(Reward.created_at)).all()
 
     def get_rewards_by_type(self, reward_type: RewardType) -> list[Reward]:
         """Obtiene recompensas por tipo"""
         return (
-            self.db.query(Reward)
-            .filter(Reward.reward_type == reward_type, Reward.is_active == True)
-            .all()
+            self.db.query(Reward).filter(Reward.reward_type == reward_type, Reward.is_active).all()
         )
 
     # ==================== UI HELPERS ====================

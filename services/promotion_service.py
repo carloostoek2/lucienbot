@@ -99,7 +99,7 @@ class PromotionService:
         db = self._get_db()
         query = db.query(Promotion)
         if active_only:
-            query = query.filter(Promotion.is_active == True)
+            query = query.filter(Promotion.is_active)
         return query.order_by(desc(Promotion.created_at)).all()
 
     def get_available_promotions(self) -> list[Promotion]:
@@ -109,9 +109,9 @@ class PromotionService:
         return (
             db.query(Promotion)
             .filter(
-                Promotion.is_active == True,
+                Promotion.is_active,
                 Promotion.status == PromotionStatus.ACTIVE,
-                Promotion.is_vip_exclusive == False,  # Excluir promociones VIP
+                Promotion.is_vip_exclusive == False,  # noqa: E712
                 and_(Promotion.start_date.is_(None) | (Promotion.start_date <= now)),
                 and_(Promotion.end_date.is_(None) | (Promotion.end_date >= now)),
             )
@@ -126,9 +126,9 @@ class PromotionService:
         return (
             db.query(Promotion)
             .filter(
-                Promotion.is_active == True,
+                Promotion.is_active,
                 Promotion.status == PromotionStatus.ACTIVE,
-                Promotion.is_vip_exclusive == True,
+                Promotion.is_vip_exclusive,
                 and_(Promotion.start_date.is_(None) | (Promotion.start_date <= now)),
                 and_(Promotion.end_date.is_(None) | (Promotion.end_date >= now)),
             )
@@ -195,12 +195,15 @@ class PromotionService:
             return False
 
         # Si no es permanente, verificar si expiro el bloqueo
-        if not blocked.is_permanent and blocked.expires_at:
-            if datetime.now(UTC) > blocked.expires_at:
-                # Desbloquear automaticamente
-                db.delete(blocked)
-                db.commit()
-                return False
+        if (
+            not blocked.is_permanent
+            and blocked.expires_at
+            and datetime.now(UTC) > blocked.expires_at
+        ):
+            # Desbloquear automaticamente
+            db.delete(blocked)
+            db.commit()
+            return False
 
         return True
 
@@ -427,7 +430,7 @@ class PromotionService:
         """Obtiene estadisticas de promociones"""
         db = self._get_db()
         # Estadisticas generales
-        total_promotions = db.query(Promotion).filter(Promotion.is_active == True).count()
+        total_promotions = db.query(Promotion).filter(Promotion.is_active).count()
 
         active_promotions = len(self.get_available_promotions())
 

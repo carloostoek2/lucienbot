@@ -83,7 +83,7 @@ class VIPService:
         db = self._get_db()
         query = db.query(Tariff)
         if active_only:
-            query = query.filter(Tariff.is_active == True)
+            query = query.filter(Tariff.is_active)
         return query.all()
 
     def update_tariff(self, tariff_id: int, **kwargs) -> bool:
@@ -230,7 +230,7 @@ class VIPService:
             # Desactivar cualquier otra suscripción activa del usuario (duplicados por bug anterior)
             db.query(Subscription).filter(
                 Subscription.user_id == user_id,
-                Subscription.is_active == True,
+                Subscription.is_active,
                 Subscription.id != existing_subscription.id,
             ).update({Subscription.is_active: False})
 
@@ -254,13 +254,13 @@ class VIPService:
 
         # Desactivar suscripciones previas (expiradas o duplicadas)
         db.query(Subscription).filter(
-            Subscription.user_id == user_id, Subscription.is_active == True
+            Subscription.user_id == user_id, Subscription.is_active
         ).update({Subscription.is_active: False})
 
         # Buscar canal VIP (asumimos el primero disponible o se especifica)
         vip_channel = (
             db.query(Channel)
-            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active == True)
+            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active)
             .first()
         )
 
@@ -319,7 +319,7 @@ class VIPService:
         now = datetime.now(UTC)
         query = db.query(Subscription).filter(
             Subscription.user_id == user_id,
-            Subscription.is_active == True,
+            Subscription.is_active,
             Subscription.end_date > now,
         )
         if channel_id:
@@ -334,7 +334,7 @@ class VIPService:
             db.query(Subscription)
             .options(joinedload(Subscription.token).joinedload(Token.tariff))
             .filter(
-                Subscription.is_active == True,
+                Subscription.is_active,
                 Subscription.end_date > now,
             )
         )
@@ -351,8 +351,8 @@ class VIPService:
         return (
             db.query(Subscription)
             .filter(
-                Subscription.is_active == True,
-                Subscription.reminder_sent == False,
+                Subscription.is_active,
+                Subscription.reminder_sent == False,  # noqa: E712
                 Subscription.end_date <= threshold,
                 Subscription.end_date > now,
             )
@@ -364,9 +364,7 @@ class VIPService:
         db = self._get_db()
         now = datetime.now(UTC).replace(tzinfo=None)
         return (
-            db.query(Subscription)
-            .filter(Subscription.is_active == True, Subscription.end_date < now)
-            .all()
+            db.query(Subscription).filter(Subscription.is_active, Subscription.end_date < now).all()
         )
 
     def has_other_active_subscription(self, user_id: int, exclude_subscription_id: int) -> bool:
@@ -377,7 +375,7 @@ class VIPService:
             db.query(Subscription)
             .filter(
                 Subscription.user_id == user_id,
-                Subscription.is_active == True,
+                Subscription.is_active,
                 Subscription.end_date > now,
                 Subscription.id != exclude_subscription_id,
             )
@@ -415,7 +413,7 @@ class VIPService:
         db = self._get_db()
         return (
             db.query(Channel)
-            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active == True)
+            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active)
             .first()
         )
 

@@ -10,6 +10,7 @@ from aiogram import Router
 from aiogram.filters import JOIN_TRANSITION, LEAVE_TRANSITION, ChatMemberUpdatedFilter
 from aiogram.types import ChatJoinRequest, ChatMemberUpdated
 
+from keyboards.inline_keyboards import social_links_keyboard
 from services.channel_service import ChannelService
 from services.scheduler_service import get_scheduler
 from services.user_service import UserService

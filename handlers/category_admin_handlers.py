@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     CategoryAdminConfirmDeleteCallback,
     CategoryAdminDeleteCallback,
@@ -23,6 +21,7 @@ from keyboards.callback_data import (
 )
 from services import get_service
 from services.package_service import PackageService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -40,8 +39,6 @@ class AssignCategoryStates(StatesGroup):
     selecting_category = State()
     selecting_package = State()
     confirming = State()
-
-
 
 
 # ==================== MENÚ PRINCIPAL ====================
@@ -334,7 +331,7 @@ async def category_admin_detail(
         <i>Detalles de la estantería:</i>
 
         📁 <b>{category.name}</b>
-        📝 {category.description or 'Sin descripción'}
+        📝 {category.description or "Sin descripción"}
         🔢 Orden: {category.order_index}
         📦 Paquetes: {package_count}
         Estado: {status}
@@ -423,7 +420,7 @@ async def confirm_delete_category(
 
         if success:
             await callback.message.edit_text(
-                "🎩 <b>Lucien:</b>\n\n" "<i>✅ Estantería eliminada...</i>",
+                "🎩 <b>Lucien:</b>\n\n<i>✅ Estantería eliminada...</i>",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text="🔙 Volver", callback_data="list_categories")]
@@ -488,7 +485,7 @@ async def assign_package_category_start(callback: CallbackQuery, state: FSMConte
         )
 
         await callback.message.edit_text(
-            "🎩 <b>Lucien:</b>\n\n" "<i>Selecciona una estantería...</i>",
+            "🎩 <b>Lucien:</b>\n\n<i>Selecciona una estantería...</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         )
         await state.set_state(AssignCategoryStates.selecting_category)
@@ -547,7 +544,7 @@ async def select_category_for_assign(
         )
 
         await callback.message.edit_text(
-            f"🎩 <b>Lucien:</b>\n\n" f"<i>Selecciona un tesoro para '{category.name}'...</i>",
+            f"🎩 <b>Lucien:</b>\n\n<i>Selecciona un tesoro para '{category.name}'...</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         )
         await state.set_state(AssignCategoryStates.selecting_package)
@@ -562,7 +559,7 @@ async def select_package_for_assign(
     package_id = callback_data.package_id
 
     data = await state.get_data()
-    category_id = data.get("category_id")
+    data.get("category_id")
     category_name = data.get("category_name")
 
     with get_service(PackageService) as package_service:

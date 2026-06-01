@@ -93,7 +93,7 @@ class AnonymousMessageService:
         Obtiene información del remitente (solo para casos delicados).
         Esto debe usarse con precaución y solo cuando sea necesario.
         """
-        db = self._get_db()
+        self._get_db()
         message = self.get_message(message_id)
         if message and message.sender:
             return message.sender

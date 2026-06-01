@@ -482,9 +482,9 @@ async def callback_purchase_detail(
 
 📦 <b>Detalle de Compra</b>
 
-🏷️ Producto: {purchase['product_name']}
-📅 Fecha: {purchase['purchased_at'].strftime("%d/%m/%Y") if purchase.get('purchased_at') else 'N/A'}
-💰 Total: {purchase['total_price']} besitos
+🏷️ Producto: {purchase["product_name"]}
+📅 Fecha: {purchase["purchased_at"].strftime("%d/%m/%Y") if purchase.get("purchased_at") else "N/A"}
+💰 Total: {purchase["total_price"]} besitos
 
 <i>Un tesoro valioso del reino de Diana.</i>"""
 
@@ -509,7 +509,9 @@ async def callback_deliver_package(callback: CallbackQuery, callback_data: Backp
 
     try:
         backpack_service = BackpackService()
-        success, message = await backpack_service.deliver_package_content(bot, user_id, package_id)
+        success, message = await backpack_service.deliver_package_content(
+            callback.bot, user_id, package_id
+        )
         backpack_service.close()
 
         if success:
@@ -542,7 +544,7 @@ async def callback_balance(callback: CallbackQuery, bot: Bot):
 
 💋 <b>Su Balance</b>
 
-💰 <b>Besitos disponibles:</b> {summary['besitos_balance']}
+💰 <b>Besitos disponibles:</b> {summary["besitos_balance"]}
 
 <i>Use sus besitos para adquirir tesoros en la tienda
 o completar misiones para ganar más.</i>"""

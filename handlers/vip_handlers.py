@@ -115,7 +115,7 @@ async def process_tariff_days(message: Message, state: FSMContext):
 
     except ValueError:
         await message.answer(
-            "🎩 <b>Lucien:</b>\n\n" "<i>Por favor, indique un número válido de días...</i>",
+            "🎩 <b>Lucien:</b>\n\n<i>Por favor, indique un número válido de días...</i>",
             reply_markup=back_keyboard(),
             parse_mode="HTML",
         )
@@ -150,7 +150,7 @@ async def confirm_tariff(callback: CallbackQuery, state: FSMContext):
     vip_service = VIPService()
 
     try:
-        tariff = vip_service.create_tariff(
+        vip_service.create_tariff(
             name=data["name"], duration_days=data["days"], price=data["price"]
         )
 
@@ -293,7 +293,7 @@ async def list_tokens(callback: CallbackQuery):
 
         if not tokens:
             await callback.message.edit_text(
-                "🎩 <b>Lucien:</b>\n\n" "<i>No hay tokens registrados en los archivos...</i>",
+                "🎩 <b>Lucien:</b>\n\n<i>No hay tokens registrados en los archivos...</i>",
                 reply_markup=vip_management_keyboard(),
                 parse_mode="HTML",
             )
@@ -315,9 +315,7 @@ async def list_tokens(callback: CallbackQuery):
             )
             gift_tag = " 🎁" if token.is_gift else ""
 
-            text += (
-                f"{status_emoji}{gift_tag} <code>{token.token_code[:16]}...</code> - {token.tariff.name}\n"
-            )
+            text += f"{status_emoji}{gift_tag} <code>{token.token_code[:16]}...</code> - {token.tariff.name}\n"
 
             if token.status.value == "active":
                 gift_label = "🎁 " if token.is_gift else ""

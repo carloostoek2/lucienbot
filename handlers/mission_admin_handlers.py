@@ -11,8 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     MissionDeleteCallback,
     MissionDetailCallback,
@@ -26,6 +24,7 @@ from models.models import MissionFrequency, MissionType
 from services import get_service
 from services.mission_service import MissionService
 from services.reward_service import RewardService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -54,8 +53,6 @@ class RewardWizardStates(StatesGroup):
     # VIP
     selecting_tariff = State()
     confirming = State()
-
-
 
 
 # ==================== MENU PRINCIPAL ====================
@@ -371,12 +368,12 @@ async def select_reward_for_mission(
 
 Resumen de la mision:
 
-📋 Nombre: {data.get('name')}
-📝 Descripcion: {data.get('description') or 'Sin descripcion'}
-🎯 Tipo: {data.get('mission_type').value}
-📊 Meta: {data.get('target_value')}
+📋 Nombre: {data.get("name")}
+📝 Descripcion: {data.get("description") or "Sin descripcion"}
+🎯 Tipo: {data.get("mission_type").value}
+📊 Meta: {data.get("target_value")}
 🔄 Frecuencia: {freq_text}
-🎁 Recompensa: {reward.name if reward else 'Ninguna'}
+🎁 Recompensa: {reward.name if reward else "Ninguna"}
 
 Deseas crear esta mision?"""
 
@@ -529,7 +526,7 @@ async def mission_admin_detail(callback: CallbackQuery, callback_data: MissionDe
 
         📋 {mission.name}
 
-        📝 {mission.description or 'Sin descripcion'}
+        📝 {mission.description or "Sin descripcion"}
 
         📊 Informacion:
            • Tipo: {mission.mission_type.value}
@@ -601,7 +598,7 @@ async def show_mission_detail(callback: CallbackQuery, mission):
 
         📋 {mission.name}
 
-        📝 {mission.description or 'Sin descripcion'}
+        📝 {mission.description or "Sin descripcion"}
 
         📊 Informacion:
            • Tipo: {mission.mission_type.value}
@@ -628,7 +625,7 @@ async def delete_mission_confirm(callback: CallbackQuery, callback_data: Mission
 
             if success:
                 await callback.message.edit_text(
-                    "🎩 Lucien:\n\n" "✅ Mision eliminada correctamente.",
+                    "🎩 Lucien:\n\n✅ Mision eliminada correctamente.",
                     reply_markup=InlineKeyboardMarkup(
                         inline_keyboard=[
                             [InlineKeyboardButton(text="🔙 Volver", callback_data="list_missions")]
@@ -668,9 +665,7 @@ async def delete_mission_confirm(callback: CallbackQuery, callback_data: Mission
     )
 
     await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Estas seguro de eliminar esta mision?\n\n"
-        "Esta accion no se puede deshacer.",
+        "🎩 Lucien:\n\nEstas seguro de eliminar esta mision?\n\nEsta accion no se puede deshacer.",
         reply_markup=keyboard,
     )
     await callback.answer()
@@ -732,13 +727,13 @@ async def mission_detail_stats(callback: CallbackQuery, callback_data: MissionSt
         await callback.message.edit_text(
             f"""🎩 Lucien:
 
-        📊 Estadisticas: {stats['mission_name']}
+        📊 Estadisticas: {stats["mission_name"]}
 
         📈 Progreso:
-           • Usuarios participando: {stats['total_users']}
-           • Completadas: {stats['completed']}
-           • En progreso: {stats['in_progress']}
-           • Tasa de completion: {stats['completion_rate']}%
+           • Usuarios participando: {stats["total_users"]}
+           • Completadas: {stats["completed"]}
+           • En progreso: {stats["in_progress"]}
+           • Tasa de completion: {stats["completion_rate"]}%
         """,
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[

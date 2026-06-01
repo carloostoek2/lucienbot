@@ -70,7 +70,7 @@ class TriviaCategoryService:
     def get_active_category(self) -> dict | None:
         """Obtiene la categoria activa actual, o None si no hay ninguna."""
         db = self._get_db()
-        cat = db.query(TriviaCategory).filter(TriviaCategory.is_active == True).first()
+        cat = db.query(TriviaCategory).filter(TriviaCategory.is_active).first()
         if not cat:
             return None
         return {
@@ -87,7 +87,7 @@ class TriviaCategoryService:
         """Activa una categoria (desactiva cualquier otra activa primero). D-06."""
         db = self._get_db()
         try:
-            db.query(TriviaCategory).filter(TriviaCategory.is_active == True).update(
+            db.query(TriviaCategory).filter(TriviaCategory.is_active).update(
                 {"is_active": False, "scheduled_end": None}
             )
             cat = db.query(TriviaCategory).filter(TriviaCategory.category_id == category_id).first()
@@ -119,7 +119,7 @@ class TriviaCategoryService:
         """Desactiva una categoria o la activa si no se especifica."""
         db = self._get_db()
         try:
-            query = db.query(TriviaCategory).filter(TriviaCategory.is_active == True)
+            query = db.query(TriviaCategory).filter(TriviaCategory.is_active)
             if category_id:
                 query = query.filter(TriviaCategory.category_id == category_id)
             query.update({"is_active": False, "scheduled_end": None})

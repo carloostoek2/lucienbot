@@ -14,8 +14,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from config.settings import bot_config
-from utils.admin import is_admin
 from keyboards.callback_data import (
     BlockedUserDetailCallback,
     BlockInterestCallback,
@@ -41,6 +39,7 @@ from models.models import InterestStatus
 from services import get_service
 from services.package_service import PackageService
 from services.promotion_service import PromotionService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -61,8 +60,6 @@ class PromotionWizardStates(StatesGroup):
 class BlockUserStates(StatesGroup):
     waiting_reason = State()
     confirming = State()
-
-
 
 
 # ==================== MENU PRINCIPAL ====================
@@ -597,11 +594,9 @@ async def delete_promotion_confirm(callback: CallbackQuery, callback_data: Promo
             )
 
             if success:
-                text = (
-                    "🎩 <b>Lucien:</b>\n\n" "<i>La experiencia ha sido eliminada del Gabinete.</i>"
-                )
+                text = "🎩 <b>Lucien:</b>\n\n<i>La experiencia ha sido eliminada del Gabinete.</i>"
             else:
-                text = "🎩 <b>Lucien:</b>\n\n" "<i>Hmm... no se pudo eliminar la experiencia.</i>"
+                text = "🎩 <b>Lucien:</b>\n\n<i>Hmm... no se pudo eliminar la experiencia.</i>"
 
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
@@ -704,8 +699,7 @@ async def show_promotion_interests(callback: CallbackQuery, callback_data: Promo
                 ]
             )
             text = (
-                f"🎩 <b>Lucien:</b>\n\n"
-                f"<i>No hay expresiones pendientes para '{promo.name}'...</i>"
+                f"🎩 <b>Lucien:</b>\n\n<i>No hay expresiones pendientes para '{promo.name}'...</i>"
             )
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await callback.answer()
@@ -769,8 +763,6 @@ async def show_interest_detail(callback: CallbackQuery, callback_data: InterestD
         elif interest.first_name:
             user_display = interest.first_name
 
-        user_link = f"tg://user?id={interest.user_id}"
-
         status_emoji = {
             InterestStatus.PENDING: "⏳",
             InterestStatus.ATTENDED: "✅",
@@ -829,7 +821,7 @@ async def block_interest_user(
         # Ejecutar bloqueo
         with get_service(PromotionService) as promotion_service:
             try:
-                blocked = promotion_service.block_user(
+                promotion_service.block_user(
                     user_id=user_id,
                     blocked_by=callback.from_user.id,
                     reason=data.get("block_reason"),
@@ -871,7 +863,7 @@ async def block_interest_user(
                         ]
                     ]
                 )
-                text = "🎩 <b>Lucien:</b>\n\n" "<i>Hmm... no se pudo restringir al visitante.</i>"
+                text = "🎩 <b>Lucien:</b>\n\n<i>Hmm... no se pudo restringir al visitante.</i>"
                 await callback.message.edit_text(
                     text, reply_markup=keyboard, parse_mode=ParseMode.HTML
                 )
@@ -966,7 +958,7 @@ async def confirm_block_user(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     with get_service(PromotionService) as promotion_service:
         try:
-            blocked = promotion_service.block_user(
+            promotion_service.block_user(
                 user_id=data.get("block_user_id"),
                 blocked_by=callback.from_user.id,
                 reason=data.get("block_reason"),
@@ -1008,7 +1000,7 @@ async def confirm_block_user(callback: CallbackQuery, state: FSMContext):
                     ]
                 ]
             )
-            text = "🎩 <b>Lucien:</b>\n\n" "<i>Hmm... no se pudo restringir al visitante.</i>"
+            text = "🎩 <b>Lucien:</b>\n\n<i>Hmm... no se pudo restringir al visitante.</i>"
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
         await state.clear()
