@@ -133,6 +133,8 @@ async def cmd_start(message: Message):
                 return
 
         # Verificar si es administrador
+        # NOTA: Combina ADMIN_IDS + role en BD — NO cambiar a utils.admin.is_admin()
+        # porque esa función solo verifica ADMIN_IDS. Esta línea es intencionalmente diferente.
         is_admin = user.id in bot_config.ADMIN_IDS or db_user.role.value == "admin"
 
         if is_admin:

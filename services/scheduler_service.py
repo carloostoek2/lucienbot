@@ -22,6 +22,7 @@ from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
 from services.channel_service import ChannelService
+from services.streak_scheduler_bridge import activate_streak_promotion, deactivate_streak_promotion
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
 
@@ -193,14 +194,8 @@ async def _process_expired_subscriptions():
                     continue
 
                 # Verificar si el usuario tiene otra suscripción activa en cualquier canal
-                other_active = (
-                    db.query(Subscription)
-                    .filter(
-                        Subscription.user_id == subscription.user_id,
-                        Subscription.is_active == True,
-                        Subscription.id != subscription.id,
-                    )
-                    .first()
+                other_active = vip_service.has_other_active_subscription(
+                    subscription.user_id, subscription.id
                 )
 
                 if other_active:
@@ -208,7 +203,7 @@ async def _process_expired_subscriptions():
                     subscription.is_active = False
                     db.commit()
                     logger.info(
-                        f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}, other_sub_id={other_active.id}"
+                        f"Suscripción {subscription.id} expirada pero usuario tiene otra activa: user_id={subscription.user_id}"
                     )
                     continue
 
@@ -241,36 +236,6 @@ async def _process_expired_subscriptions():
                 logger.error(f"Error expirando suscripción {subscription.id}: {e}")
                 db.rollback()
 
-    finally:
-        db.close()
-
-
-async def _activate_streak_promotion(promo_id: int):
-    """Activa una promocion por racha en su fecha de inicio (DateTrigger job)."""
-    db = SessionLocal()
-    try:
-        from services.streak_promotion_service import StreakPromotionService
-
-        service = StreakPromotionService(db)
-        service.activate(promo_id)
-        logger.info(f"Scheduler activated streak promotion: promo_id={promo_id}")
-    except Exception as e:
-        logger.error(f"Error activating streak promotion {promo_id}: {e}")
-    finally:
-        db.close()
-
-
-async def _deactivate_streak_promotion(promo_id: int):
-    """Desactiva una promocion por racha en su fecha de expiracion (DateTrigger job)."""
-    db = SessionLocal()
-    try:
-        from services.streak_promotion_service import StreakPromotionService
-
-        service = StreakPromotionService(db)
-        service.deactivate(promo_id)
-        logger.info(f"Scheduler deactivated streak promotion: promo_id={promo_id}")
-    except Exception as e:
-        logger.error(f"Error deactivating streak promotion {promo_id}: {e}")
     finally:
         db.close()
 
@@ -374,7 +339,7 @@ class SchedulerService:
         self._scheduler.add_job(
             _process_expired_subscriptions,
             trigger="cron",
-            hour=0,
+            hour="0,6,12,18",
             minute=5,
             id="expire_subscriptions",
             name="Process expired VIP subscriptions",
@@ -426,7 +391,7 @@ class SchedulerService:
         """
         if start_date:
             self._scheduler.add_job(
-                _activate_streak_promotion,
+                activate_streak_promotion,
                 trigger=DateTrigger(run_date=start_date),
                 id=f"streak_promo_activate_{promo_id}",
                 replace_existing=True,
@@ -437,7 +402,7 @@ class SchedulerService:
             )
         if end_date:
             self._scheduler.add_job(
-                _deactivate_streak_promotion,
+                deactivate_streak_promotion,
                 trigger=DateTrigger(run_date=end_date),
                 id=f"streak_promo_deactivate_{promo_id}",
                 replace_existing=True,

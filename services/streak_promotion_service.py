@@ -24,6 +24,7 @@ from models.models import (
     StreakPromotionStatus,
     StreakSession,
 )
+from services.streak_scheduler_bridge import remove_streak_promotion_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,18 @@ class StreakPromotionService:
             return None
         if session.expires_at and now > session.expires_at:
             self.cancel_session_codes(session.id)
-            self.close_session(user_id, retire=False)
+            # Inline expire set (was close_session) to prevent recursion:
+            # close_session calls get_active_session which can re-trigger this
+            # expired branch on boundary (now ~ expires_at set to 'now' in close).
+            # This is defensive minimal fix for discovered cycle (get<->close).
+            # close_session also logs; we log here for the auto-expire case.
+            session.expires_at = datetime.now(UTC).replace(tzinfo=None)
+            db.flush()
+            db.commit()  # ensure side-effects (CANCELLED codes + expires) persist beyond current session (addresses flush-only visibility gap in auto-expire)
+            logger.info(
+                f"streak_promotion_service - get_active_session - "
+                f"user:{user_id} - auto-closed expired session:{session.id}"
+            )
             return None
         return session
 
@@ -313,8 +325,7 @@ class StreakPromotionService:
         session = self.get_active_session(user_id)
         if not session:
             logger.warning(
-                f"streak_promotion_service - protect_streak - "
-                f"user:{user_id} - no_active_session"
+                f"streak_promotion_service - protect_streak - user:{user_id} - no_active_session"
             )
             return False
         cost = self.calculate_protection_cost(streak)
@@ -394,7 +405,7 @@ class StreakPromotionService:
         session.is_in_risk_mode = True
         db.commit()
         logger.info(
-            f"streak_promotion_service - set_risk_mode - " f"user:{user_id} - session:{session.id}"
+            f"streak_promotion_service - set_risk_mode - user:{user_id} - session:{session.id}"
         )
         return True
 
@@ -403,9 +414,7 @@ class StreakPromotionService:
         db = self._get_db()
         promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
-            logger.warning(
-                f"streak_promotion_service - activate - " f"promo_id:{promo_id} - not_found"
-            )
+            logger.warning(f"streak_promotion_service - activate - promo_id:{promo_id} - not_found")
             return False
 
         promotion.is_active = True
@@ -420,7 +429,7 @@ class StreakPromotionService:
             )
 
         db.commit()
-        logger.info(f"streak_promotion_service - activate - " f"promo_id:{promo_id} - activated")
+        logger.info(f"streak_promotion_service - activate - promo_id:{promo_id} - activated")
         return True
 
     def deactivate(self, promo_id: int) -> bool:
@@ -429,7 +438,7 @@ class StreakPromotionService:
         promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - deactivate - " f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - deactivate - promo_id:{promo_id} - not_found"
             )
             return False
 
@@ -453,9 +462,7 @@ class StreakPromotionService:
                 TriviaCategoryService(db).deactivate(category_id=promotion.category_id)
 
         db.commit()
-        logger.info(
-            f"streak_promotion_service - deactivate - " f"promo_id:{promo_id} - deactivated"
-        )
+        logger.info(f"streak_promotion_service - deactivate - promo_id:{promo_id} - deactivated")
         return True
 
     def delete_promotion(self, promo_id: int) -> bool:
@@ -465,7 +472,7 @@ class StreakPromotionService:
         promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - delete_promotion - " f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - delete_promotion - promo_id:{promo_id} - not_found"
             )
             return False
 
@@ -473,20 +480,14 @@ class StreakPromotionService:
         db.commit()
 
         try:
-            from services.scheduler_service import get_scheduler
-
-            scheduler = get_scheduler()
-            if scheduler:
-                scheduler.remove_streak_promotion_jobs(promo_id)
+            remove_streak_promotion_jobs(promo_id)
         except Exception as e:
             logger.warning(
                 f"streak_promotion_service - delete_promotion - "
                 f"promo_id:{promo_id} - failed to remove jobs: {e}"
             )
 
-        logger.info(
-            f"streak_promotion_service - delete_promotion - " f"promo_id:{promo_id} - deleted"
-        )
+        logger.info(f"streak_promotion_service - delete_promotion - promo_id:{promo_id} - deleted")
         return True
 
     def pause_promotion(self, promo_id: int) -> bool:
@@ -495,16 +496,14 @@ class StreakPromotionService:
         promotion = db.query(StreakPromotion).filter(StreakPromotion.id == promo_id).first()
         if not promotion:
             logger.warning(
-                f"streak_promotion_service - pause_promotion - " f"promo_id:{promo_id} - not_found"
+                f"streak_promotion_service - pause_promotion - promo_id:{promo_id} - not_found"
             )
             return False
 
         promotion.status = StreakPromotionStatus.PAUSED
         promotion.is_active = False
         db.commit()
-        logger.info(
-            f"streak_promotion_service - pause_promotion - " f"promo_id:{promo_id} - paused"
-        )
+        logger.info(f"streak_promotion_service - pause_promotion - promo_id:{promo_id} - paused")
         return True
 
     def get_redemption_stats(self, promo_id: int) -> dict:

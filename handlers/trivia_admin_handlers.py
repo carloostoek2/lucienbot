@@ -11,6 +11,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from keyboards.callback_data import TriviaCategoryActivateCallback
 from services import TriviaCategoryService, get_service
 
@@ -18,8 +19,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in bot_config.ADMIN_IDS
 
 
 @router.callback_query(F.data == "admin_trivia_categories", lambda cb: is_admin(cb.from_user.id))

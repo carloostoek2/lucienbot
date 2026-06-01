@@ -654,7 +654,7 @@ def promotion_detail_keyboard(promo_id: int, is_active: bool) -> InlineKeyboardM
 
 def promotion_confirm_delete_keyboard(promo_id: int) -> InlineKeyboardMarkup:
     """Confirmación de eliminación de promoción"""
-    from keyboards.callback_data import PromoDeleteCallback
+    from keyboards.callback_data import PromoDeleteCallback, PromoDetailCallback
     buttons = [
         [InlineKeyboardButton(text="✅ Si, eliminar", callback_data=PromoDeleteCallback(promo_id=promo_id, confirmed=True).pack())],
         [InlineKeyboardButton(text="❌ Cancelar", callback_data=PromoDetailCallback(promo_id=promo_id).pack())]

@@ -23,6 +23,7 @@ class DailyGiftService:
     def __init__(self, db: Session = None):
         self.db = db
         self._owns_session = db is None
+        self._besito_service_instance = None
 
     def _get_db(self) -> Session:
         """Obtiene la sesión de base de datos activa, inicializando lazily si es necesario."""
@@ -40,9 +41,12 @@ class DailyGiftService:
         """Cierra la sesión de base de datos"""
         self.close()
 
-    def _get_besito_service(self) -> BesitoService:
+    @property
+    def besito_service(self) -> BesitoService:
         """Obtiene BesitoService con la misma sesión de BD."""
-        return BesitoService(self._get_db())
+        if self._besito_service_instance is None:
+            self._besito_service_instance = BesitoService(self._get_db())
+        return self._besito_service_instance
 
     # ==================== CONFIGURACIÓN ====================
 
@@ -124,7 +128,10 @@ class DailyGiftService:
 
         # Calcular tiempo desde el último reclamo
         now = datetime.now(UTC)
-        time_since_last = now - last_claim.claimed_at
+        last_claim_at = last_claim.claimed_at
+        if last_claim_at.tzinfo is None:
+            last_claim_at = last_claim_at.replace(tzinfo=UTC)
+        time_since_last = now - last_claim_at
         cooldown = timedelta(hours=24)
 
         # Verificar si han pasado 24 horas
@@ -155,7 +162,7 @@ class DailyGiftService:
         config = self.get_config()
         amount = config.besito_amount
         db = self._get_db()
-        besito_service = self._get_besito_service()
+        besito_service = self.besito_service
 
         try:
             # Registrar el reclamo

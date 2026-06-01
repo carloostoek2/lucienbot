@@ -13,7 +13,7 @@ El test cubre los requerimientos:
 - Expulsión cuando la suscripción vence
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch, AsyncMock
 
 from services.vip_service import VIPService
@@ -79,7 +79,10 @@ class TestVIPCompleteCycle:
         assert subscription.user_id == user.telegram_id
         assert subscription.channel_id == vip_channel.id
         assert subscription.is_active is True
-        assert subscription.end_date > datetime.utcnow()
+        end_date = subscription.end_date
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+        assert end_date > datetime.now(timezone.utc)
 
         # Verificar token marcado como usado
         updated_token = vip_service.get_token(token.id)
@@ -137,7 +140,10 @@ class TestVIPCompleteCycle:
         subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
 
         # La suscripción debería vencer en ~24 horas (1 día)
-        hours_until_expiry = (subscription.end_date - datetime.utcnow()).total_seconds() / 3600
+        end_date = subscription.end_date
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+        hours_until_expiry = (end_date - datetime.now(timezone.utc)).total_seconds() / 3600
 
         # === ASSERT: Verificar que la suscripción está por vencer ===
         #get_expiring_subscriptions(hours=24) debe incluir suscripciones
@@ -211,7 +217,7 @@ class TestVIPCompleteCycle:
         subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
 
         # Modificar la fecha de expiración al pasado (simular suscripción expirada)
-        subscription.end_date = datetime.utcnow() - timedelta(hours=1)
+        subscription.end_date = datetime.now(timezone.utc) - timedelta(hours=1)
         db_session.commit()
 
         # === ASSERT: Obtener suscripciones expiradas ===
@@ -285,7 +291,7 @@ class TestVIPCompleteCycle:
 
         # === FASE 2: Recordatorio (simulado) ===
         # Modificar la fecha para que parezca que马上 va a expirar
-        subscription.end_date = datetime.utcnow() + timedelta(hours=23)
+        subscription.end_date = datetime.now(timezone.utc) + timedelta(hours=23)
         db_session.commit()
 
         expiring = vip_service.get_expiring_subscriptions(hours=24)
@@ -294,7 +300,7 @@ class TestVIPCompleteCycle:
 
         # === FASE 3: Expiración ===
         # Simular que pasó el tiempo
-        subscription.end_date = datetime.utcnow() - timedelta(hours=1)
+        subscription.end_date = datetime.now(timezone.utc) - timedelta(hours=1)
         db_session.commit()
 
         expired = vip_service.get_expired_subscriptions()

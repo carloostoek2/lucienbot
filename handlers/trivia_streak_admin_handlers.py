@@ -14,6 +14,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from keyboards.callback_data import (
     TriviaStreakCategoryCallback,
     TriviaStreakConfirmDeleteCallback,
@@ -31,9 +32,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    """Verifica si un usuario tiene permisos de admin."""
-    return user_id in bot_config.ADMIN_IDS
 
 
 class StreakPromotionStates(StatesGroup):

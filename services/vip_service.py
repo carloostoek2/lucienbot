@@ -215,12 +215,15 @@ class VIPService:
 
         # Normalizar a timezone-aware: SQLite no preserva tzinfo en DateTime(timezone=True)
         sub_end_date = (
-            _ensure_aware(existing_subscription.end_date) if existing_subscription else None
+            _ensure_aware(existing_subscription.end_date)
+            if existing_subscription and existing_subscription.end_date is not None
+            else None
         )
 
-        if existing_subscription and sub_end_date > now:
+        if existing_subscription and sub_end_date is not None and sub_end_date > now:
             # Usuario activo: extender la suscripción existente
             existing_subscription.end_date = sub_end_date + timedelta(days=tariff.duration_days)
+            existing_subscription.is_active = True  # Defensive: ensure active after extension
             # Mantener la nueva referencia del token aunque sea extensión
             existing_subscription.token_id = token.id
 
@@ -289,9 +292,7 @@ class VIPService:
         if token:
             token.is_gift = is_gift
             db.commit()
-            logger.info(
-                f"VIP token gift status: token_id={token_id}, is_gift={is_gift}"
-            )
+            logger.info(f"VIP token gift status: token_id={token_id}, is_gift={is_gift}")
             return True
         return False
 
@@ -326,12 +327,16 @@ class VIPService:
         return query.first()
 
     def get_active_subscriptions(self, channel_id: int = None) -> list[Subscription]:
-        """Obtiene todas las suscripciones activas"""
+        """Obtiene todas las suscripciones activas (no expiradas)"""
         db = self._get_db()
+        now = datetime.now(UTC).replace(tzinfo=None)
         query = (
             db.query(Subscription)
             .options(joinedload(Subscription.token).joinedload(Token.tariff))
-            .filter(Subscription.is_active == True)
+            .filter(
+                Subscription.is_active == True,
+                Subscription.end_date > now,
+            )
         )
         if channel_id:
             query = query.filter(Subscription.channel_id == channel_id)
@@ -340,7 +345,7 @@ class VIPService:
     def get_expiring_subscriptions(self, hours: int = 24) -> list[Subscription]:
         """Obtiene suscripciones que vencen en las próximas X horas"""
         db = self._get_db()
-        now = datetime.now(UTC)
+        now = datetime.now(UTC).replace(tzinfo=None)
         threshold = now + timedelta(hours=hours)
 
         return (
@@ -357,7 +362,7 @@ class VIPService:
     def get_expired_subscriptions(self) -> list[Subscription]:
         """Obtiene suscripciones activas que ya vencieron"""
         db = self._get_db()
-        now = datetime.now(UTC)
+        now = datetime.now(UTC).replace(tzinfo=None)
         return (
             db.query(Subscription)
             .filter(Subscription.is_active == True, Subscription.end_date < now)
@@ -367,7 +372,7 @@ class VIPService:
     def has_other_active_subscription(self, user_id: int, exclude_subscription_id: int) -> bool:
         """Verifica si un usuario tiene otra suscripcion activa a futuro ademas de la dada."""
         db = self._get_db()
-        now = datetime.now(UTC)
+        now = datetime.now(UTC).replace(tzinfo=None)
         other = (
             db.query(Subscription)
             .filter(

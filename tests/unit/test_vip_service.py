@@ -1,12 +1,13 @@
 """
 Tests unitarios para VIPService.
 """
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
 
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from models.models import Channel, ChannelType, Subscription, Token, TokenStatus
 from services.vip_service import VIPService
-from models.models import TokenStatus, Subscription, Token
 
 
 @pytest.mark.unit
@@ -18,10 +19,7 @@ class TestVIPService:
         service = VIPService(db_session)
 
         tariff = service.create_tariff(
-            name="Test Monthly",
-            duration_days=30,
-            price="9.99",
-            currency="USD"
+            name="Test Monthly", duration_days=30, price="9.99", currency="USD"
         )
 
         assert tariff.name == "Test Monthly"
@@ -295,7 +293,9 @@ class TestSubscriptionService:
 class TestVIPServiceRaceCondition:
     """Tests para verificar protección contra race conditions"""
 
-    def test_redeem_token_uses_select_for_update(self, db_session, sample_token, sample_user, sample_vip_channel):
+    def test_redeem_token_uses_select_for_update(
+        self, db_session, sample_token, sample_user, sample_vip_channel
+    ):
         """Test que redeem_token usa SELECT FOR UPDATE - verifica que el query está protegido"""
         # Este test verifica que redeem_token ejecuta la query con el token correcto
         # El flujo real de redeem_token con DB real ya está cubierto por tests de integración
@@ -318,7 +318,9 @@ class TestVIPServiceRaceCondition:
 class TestVIPEntryState:
     """Tests para VIP entry state management (Phase 10)"""
 
-    def test_redeem_token_sets_pending_entry(self, db_session, sample_token, sample_user, sample_vip_channel):
+    def test_redeem_token_sets_pending_entry(
+        self, db_session, sample_token, sample_user, sample_vip_channel
+    ):
         """Test that redeem_token creates subscription with direct access (no pending entry)."""
         service = VIPService(db_session)
 
@@ -357,3 +359,283 @@ class TestVIPEntryState:
         assert sample_user.vip_entry_stage is None
 
 
+@pytest.mark.unit
+class TestVIPServiceExpirationSupport:
+    """Unit tests for VIPService methods relied on by scheduler expiration paths.
+
+    Covers gaps in item #5 of fases_refactor_testing.md (private-ish query + decision
+    logic for has_other, get_expiring/expired, redeem effects on "expired" view).
+    Uses db_session + direct model setup for multi-sub determinism (co-located in
+    existing unit file per smallest-change precedent; no new test file).
+    Does NOT duplicate heavy scheduler orchestration (see integration lifecycle).
+    Extraction of per-sub expiration to VIPService skipped (scheduler pickling
+    requirement for module funcs, potential rule violations on dupe/50lines/domain).
+    See also: Full loop orchestration (incl. inactive channel guards, error continue/rollback,
+    ban paths, ritual+renewal matrix) remains responsibility of tests/integration/test_vip_subscription_lifecycle.py + bot.py startup.
+    """
+
+    def test_has_other_active_subscription_returns_true_when_user_has_another_active(
+        self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
+    ):
+        """has_other returns true for user with 2 active subs (different channels)."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+
+        # Second channel + token + active sub for same user (future end)
+        channel2 = Channel(
+            channel_id=-1009876543210,
+            channel_name="VIP Canal 2",
+            channel_type=ChannelType.VIP,
+            is_active=True,
+        )
+        db_session.add(channel2)
+        db_session.commit()
+        db_session.refresh(channel2)
+
+        token2 = Token(token_code="T2MULTI", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(token2)
+        db_session.commit()
+        db_session.refresh(token2)
+
+        sub1 = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=10),
+            is_active=True,
+        )
+        sub2 = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=channel2.id,
+            token_id=token2.id,
+            end_date=now + timedelta(days=20),
+            is_active=True,
+        )
+        db_session.add_all([sub1, sub2])
+        db_session.commit()
+        db_session.refresh(sub1)
+        db_session.refresh(sub2)
+
+        # Exclude sub1 -> should find sub2 active
+        assert service.has_other_active_subscription(sample_user.telegram_id, sub1.id) is True
+        # Exclude sub2 -> should find sub1
+        assert service.has_other_active_subscription(sample_user.telegram_id, sub2.id) is True
+
+    def test_has_other_active_subscription_returns_false_for_only_one_or_none(
+        self, db_session, sample_user, sample_vip_channel, sample_token
+    ):
+        """has_other false when only the excluded sub is active (or no others).
+        Includes contract test for non-existent exclude_id (returns True if any real active subs exist for user,
+        since scheduler always passes a real subscription.id; this edge is defensive for the helper)."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+
+        sub = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=5),
+            is_active=True,
+        )
+        db_session.add(sub)
+        db_session.commit()
+        db_session.refresh(sub)
+
+        assert service.has_other_active_subscription(sample_user.telegram_id, sub.id) is False
+        # Non-existent exclude when user HAS 1 active: finds the sub (id != 999999) -> True (correct semantic)
+        assert service.has_other_active_subscription(sample_user.telegram_id, 999999) is True
+        # Edge: 0-subs fresh user + bogus exclude -> False
+        fresh_tg = 555000111
+        assert service.has_other_active_subscription(fresh_tg, 999999) is False
+
+    def test_has_other_active_subscription_filters_expired_and_inactive_correctly(
+        self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
+    ):
+        """Mix of active/expired/in-future: only counts is_active + end>now."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+
+        channel2 = Channel(
+            channel_id=-100111222333,
+            channel_name="Ch2",
+            channel_type=ChannelType.VIP,
+            is_active=True,
+        )
+        db_session.add(channel2)
+        db_session.commit()
+        db_session.refresh(channel2)
+
+        t2 = Token(token_code="TEXP", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(t2)
+        db_session.commit()
+        db_session.refresh(t2)
+
+        active_sub = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=5),
+            is_active=True,
+        )
+        expired_sub = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=channel2.id,
+            token_id=t2.id,
+            end_date=now - timedelta(days=1),
+            is_active=True,
+        )  # active flag but past
+        db_session.add_all([active_sub, expired_sub])
+        db_session.commit()
+        db_session.refresh(active_sub)
+
+        # has_other excluding active should be False (expired doesn't count)
+        assert (
+            service.has_other_active_subscription(sample_user.telegram_id, active_sub.id) is False
+        )
+
+    def test_get_expiring_subscriptions_filters_reminder_and_thresholds(
+        self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
+    ):
+        """get_expiring: only active+!reminder+end<=now+hours and >now; multi-user + combos."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+
+        # Multi-sub variants on same user (different reminder/dates/thresholds) for determinism; no extra user import needed.
+        sub_far = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=10),
+            is_active=True,
+            reminder_sent=False,
+        )
+        # Will need extra token for second sub
+        t2 = Token(token_code="TEXP2", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(t2)
+        db_session.commit()
+        db_session.refresh(t2)
+        sub_expiring = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=t2.id,
+            end_date=now + timedelta(hours=12),
+            is_active=True,
+            reminder_sent=False,
+        )
+        # distinct token per sub variant for isolation (pattern from has_other tests; avoids sharing with sample_token)
+        t3 = Token(token_code="TREM3", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(t3)
+        db_session.commit()
+        db_session.refresh(t3)
+        sub_reminded = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=t3.id,
+            end_date=now + timedelta(hours=5),
+            is_active=True,
+            reminder_sent=True,
+        )
+        db_session.add_all([sub_far, sub_expiring, sub_reminded])
+        db_session.commit()
+
+        # Boundary edges (Issue 9): exactly at 24h threshold (included per <=), and now (excluded per >now)
+        t4 = Token(token_code="TBOUND", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(t4)
+        db_session.commit()
+        db_session.refresh(t4)
+        sub_exact = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=t4.id,
+            end_date=now + timedelta(hours=24),
+            is_active=True,
+            reminder_sent=False,
+        )
+        sub_now = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=t4.id,
+            end_date=now,
+            is_active=True,
+            reminder_sent=False,
+        )
+        db_session.add_all([sub_exact, sub_now])
+        db_session.commit()
+
+        expiring = service.get_expiring_subscriptions(hours=24)
+        ids = [s.id for s in expiring]
+        assert sub_expiring.id in ids
+        assert sub_far.id not in ids  # too far
+        assert sub_reminded.id not in ids  # already reminded
+        assert sub_exact.id in ids  # exactly threshold
+        assert sub_now.id not in ids  # end == now excluded by > now
+
+    def test_get_expired_subscriptions_returns_only_past_active(
+        self, db_session, sample_expired_subscription, sample_subscription
+    ):
+        """get_expired: returns active subs with end < now; richer multi + not future ones."""
+        service = VIPService(db_session)
+        expired = service.get_expired_subscriptions()
+        ids = [s.id for s in expired]
+        assert sample_expired_subscription.id in ids
+        # sample_subscription is +30d, must not appear
+        assert sample_subscription.id not in ids
+
+    def test_redeem_token_renewal_extends_end_date_prevents_expired_view(
+        self, db_session, sample_token, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """Redeem on active extends (per business) so get_expired does not see it (affects scheduler)."""
+        service = VIPService(db_session)
+        # First redeem creates active far future
+        sub = service.redeem_token(sample_token.token_code, sample_user.telegram_id)
+        assert sub is not None
+        original_end = sub.end_date
+
+        # Generate + redeem second token -> should extend (not new row)
+        t2 = Token(token_code="TRENOV", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(t2)
+        db_session.commit()
+        db_session.refresh(t2)
+
+        extended = service.redeem_token(t2.token_code, sample_user.telegram_id)
+        assert extended is not None
+        assert extended.id == sub.id  # same row extended
+        assert extended.end_date > original_end
+        assert extended.is_active is True
+
+        # Scheduler view: not in expired
+        expired_list = service.get_expired_subscriptions()
+        assert not any(s.id == extended.id for s in expired_list)
+
+        # Dup-deactivation side-effect (vip_service.py:231-235): redeem deactivates other actives for user
+        # This directly feeds has_other_active_subscription used by _process_expired_subscriptions
+        assert service.has_other_active_subscription(sample_user.telegram_id, extended.id) is False
+
+    def test_expire_subscription_marks_inactive_and_has_other_still_works(
+        self, db_session, sample_user, sample_vip_channel, sample_token
+    ):
+        """expire_subscription + subsequent has_other query reflects deactivation."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+
+        sub = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=1),
+            is_active=True,
+        )
+        db_session.add(sub)
+        db_session.commit()
+        db_session.refresh(sub)
+
+        assert service.expire_subscription(sub.id) is True
+        assert service.has_other_active_subscription(sample_user.telegram_id, sub.id) is False
+
+
+# Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
+# (has_other check + conditional ban/unban + direct User state clear + send + commit/rollback per sub)
+# + similar in bot.py startup remain in place. Unit tests here target the pure VIPService
+# queries/expire/redeem that the orchestration depends on. This fulfills punto 5 via smallest change
+# without risking pickling, dupe, or boundary violations. Full error paths + ritual matrix stay in
+# integration (test_vip_subscription_lifecycle.py + free_entry_flow). See refactor_testing.md s.8.

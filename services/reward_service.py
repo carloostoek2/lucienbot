@@ -14,6 +14,7 @@ from models.models import Reward, RewardType, TransactionSource, UserRewardHisto
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.vip_service import VIPService
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
@@ -142,15 +143,15 @@ class RewardService:
         return True
 
     def delete_reward(self, reward_id: int) -> bool:
-        """Elimina una recompensa de la base de datos"""
+        """Elimina una recompensa de la base de datos (soft delete)"""
         reward = self.get_reward(reward_id)
         if not reward:
             logger.warning(f"Recompensa {reward_id} no encontrada para eliminar")
             return False
 
-        self.db.delete(reward)
+        reward.is_active = False
         self.db.commit()
-        logger.info(f"Recompensa {reward_id} eliminada permanentemente")
+        logger.info(f"Recompensa {reward_id} desactivada (soft delete)")
         return True
 
     # ==================== ENTREGA DE RECOMPENSAS ====================
@@ -179,13 +180,22 @@ class RewardService:
 
         try:
             if reward.reward_type == RewardType.BESITOS:
-                return await self._deliver_besitos(user_id, reward)
+                success, message = await self._deliver_besitos(user_id, reward)
+                if success:
+                    self.log_reward_delivery(user_id, reward_id, mission_id)
+                return success, message
 
             elif reward.reward_type == RewardType.PACKAGE:
-                return await self._deliver_package(bot, user_id, reward)
+                success, message = await self._deliver_package(bot, user_id, reward)
+                if success:
+                    self.log_reward_delivery(user_id, reward_id, mission_id)
+                return success, message
 
             elif reward.reward_type == RewardType.VIP_ACCESS:
-                return await self._deliver_vip_access(bot, user_id, reward)
+                success, message = await self._deliver_vip_access(bot, user_id, reward)
+                if success:
+                    self.log_reward_delivery(user_id, reward_id, mission_id)
+                return success, message
 
             else:
                 return False, "Tipo de recompensa no soportado"
@@ -270,7 +280,7 @@ Diana te ha concedido acceso a El Diván...
 Haz clic para activar tu membresia VIP.""",
         )
 
-        return True, f"Has recibido acceso VIP: {tariff.name} ({tariff.duration_days} dias)"
+        return True, LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)
 
     # ==================== HISTORIAL ====================
 

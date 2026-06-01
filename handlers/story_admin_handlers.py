@@ -28,7 +28,7 @@ from keyboards.callback_data import (
 from models.models import ArchetypeType, NodeType
 from services import get_service
 from services.story_service import StoryService
-from utils.helpers import is_admin
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()

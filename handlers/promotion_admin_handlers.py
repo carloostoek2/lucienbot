@@ -12,9 +12,10 @@ from aiogram import F, Router
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config.settings import bot_config
+from utils.admin import is_admin
 from keyboards.callback_data import (
     BlockedUserDetailCallback,
     BlockInterestCallback,
@@ -34,6 +35,7 @@ from keyboards.inline_keyboards import (
     promotion_confirm_delete_keyboard,
     promotion_detail_keyboard,
     promotion_source_keyboard,
+    promotions_list_keyboard,
 )
 from models.models import InterestStatus
 from services import get_service
@@ -61,8 +63,6 @@ class BlockUserStates(StatesGroup):
     confirming = State()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in bot_config.ADMIN_IDS
 
 
 # ==================== MENU PRINCIPAL ====================

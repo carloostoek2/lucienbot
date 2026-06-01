@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, AsyncMock
 
 # Importar modelos
 import sys
-sys.path.insert(0, '/data/data/com.termux/files/home/repos/lucien_bot')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from models.database import Base
 from models.models import (
@@ -42,7 +43,11 @@ def db_session(engine):
     """Crea una sesión de base de datos limpia para cada test."""
     connection = engine.connect()
     transaction = connection.begin()
-    session = sessionmaker(bind=connection)()
+    # expire_on_commit=False evita que SQLAlchemy expire los objetos del identity map
+    # después de cada commit() interno de los servicios (BroadcastService, MissionService,
+    # RewardService, BesitoService, etc.). Esto previene DetachedInstanceError cuando
+    # los tests acceden a fixtures como sample_user después de flujos con múltiples commits.
+    session = sessionmaker(bind=connection, expire_on_commit=False)()
 
     yield session
 
@@ -550,4 +555,120 @@ def sample_streak_session(db_session, sample_streak_promotion):
     )
     db_session.add(session)
     db_session.commit()
+    db_session.refresh(session)
     return session
+
+
+# ==================== TELEGRAM MOCK FACTORIES ====================
+
+from aiogram.types import User as AiogramUser, Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.base import StorageKey
+@pytest.fixture
+def make_user():
+    """Factory para crear usuarios mock de Telegram."""
+    def _factory(
+        user_id: int = 123456789,
+        username: str = "testuser",
+        first_name: str = "Test",
+        is_bot: bool = False,
+        is_premium: bool = False,
+        last_name: str = None,
+    ):
+        user = MagicMock(spec=AiogramUser)
+        user.id = user_id
+        user.username = username
+        user.first_name = first_name
+        user.last_name = last_name
+        user.full_name = first_name
+        user.is_bot = is_bot
+        user.is_premium = is_premium
+        user.language_code = "es"
+        return user
+    return _factory
+
+
+@pytest.fixture
+def make_message(make_user):
+    """Factory para crear mensajes mock de Telegram."""
+    def _factory(
+        text: str = "/start",
+        user=None,
+        chat_id: int = -1001,
+        message_id: int = 42,
+    ):
+        user = user or make_user()
+        msg = AsyncMock(spec=Message)
+        msg.bot = AsyncMock()
+        msg.bot.get_chat_member = AsyncMock()
+        msg.bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+TestLink")
+        )
+        msg.bot.send_message = AsyncMock()
+        msg.bot.send_photo = AsyncMock()
+        msg.bot.send_video = AsyncMock()
+        msg.bot.send_document = AsyncMock()
+        msg.bot.send_animation = AsyncMock()
+        msg.from_user = user
+        msg.chat = MagicMock()
+        msg.chat.id = chat_id
+        msg.chat.type = "private"
+        msg.text = text
+        msg.message_id = message_id
+        msg.answer = AsyncMock()
+        msg.reply = AsyncMock()
+        msg.delete = AsyncMock()
+        return msg
+    return _factory
+
+
+@pytest.fixture
+def make_callback(make_user):
+    """Factory para crear callbacks mock de Telegram."""
+    def _factory(
+        data: str = "action:test",
+        user=None,
+        message_text: str = "Previous message",
+        callback_id: str = None,
+    ):
+        user = user or make_user()
+        cb = AsyncMock(spec=CallbackQuery)
+        cb.id = callback_id or f"cb_{data}_{id(data)}"
+        cb.bot = AsyncMock()
+        cb.bot.send_message = AsyncMock()
+        cb.bot.send_photo = AsyncMock()
+        cb.from_user = user
+        cb.data = data
+        cb.message = AsyncMock()
+        cb.message.message_id = 100
+        cb.message.chat = MagicMock()
+        cb.message.chat.id = -1001
+        cb.message.text = message_text
+        cb.message.edit_text = AsyncMock()
+        cb.message.edit_caption = AsyncMock()
+        cb.message.edit_reply_markup = AsyncMock()
+        cb.message.delete = AsyncMock()
+        cb.message.answer = AsyncMock()
+        cb.message.bot = cb.bot
+        cb.answer = AsyncMock()
+        return cb
+    return _factory
+
+
+@pytest.fixture
+def make_fsm_context():
+    """Factory para crear FSMContext real con MemoryStorage."""
+    storage = MemoryStorage()
+
+    async def _factory(
+        user_id: int = 123456789,
+        chat_id: int = 1001,
+        bot_id: int = 123,
+    ):
+        key = StorageKey(bot_id=bot_id, chat_id=chat_id, user_id=user_id)
+        return FSMContext(storage=storage, key=key)
+    return _factory
+
+
+

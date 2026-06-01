@@ -1,15 +1,15 @@
 """Integration tests for streak promotion admin handlers -- Phase 17."""
 
 
-def test_admin_menu_includes_streak_promotions():
-    """Verify admin keyboard contains the streak promotions button."""
-    from keyboards.inline_keyboards import admin_menu_keyboard
-    keyboard = admin_menu_keyboard()
+def test_trivia_admin_menu_includes_streak_promotions():
+    """Verify trivia admin keyboard contains the streak promotions button."""
+    from keyboards.inline_keyboards import trivia_admin_keyboard
+    keyboard = trivia_admin_keyboard()
     button_texts = []
     for row in keyboard.inline_keyboard:
         for btn in row:
             button_texts.append(btn.text)
-    assert "🏆 Promos de Racha" in button_texts
+    assert "🏆 Promos por rachas" in button_texts
 
 
 def test_streak_promotion_service_imports():

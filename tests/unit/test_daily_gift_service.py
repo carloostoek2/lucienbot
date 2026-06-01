@@ -2,7 +2,7 @@
 Tests unitarios para DailyGiftService.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from services.daily_gift_service import DailyGiftService
 from models.models import DailyGiftConfig, DailyGiftClaim
@@ -82,7 +82,7 @@ class TestDailyGiftClaims:
         claim = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow() - timedelta(hours=1)
+            claimed_at=datetime.now(UTC) - timedelta(hours=1)
         )
         db_session.add(claim)
         db_session.commit()
@@ -99,7 +99,7 @@ class TestDailyGiftClaims:
         claim = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow() - timedelta(hours=25)
+            claimed_at=datetime.now(UTC) - timedelta(hours=25)
         )
         db_session.add(claim)
         db_session.commit()
@@ -142,7 +142,7 @@ class TestDailyGiftClaims:
         claim = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow() - timedelta(hours=1)
+            claimed_at=datetime.now(UTC) - timedelta(hours=1)
         )
         db_session.add(claim)
         db_session.commit()
@@ -181,7 +181,7 @@ class TestDailyGiftStats:
         claim2 = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow() - timedelta(days=1)
+            claimed_at=datetime.now(UTC) - timedelta(days=1)
         )
         db_session.add(claim2)
         db_session.commit()
@@ -198,7 +198,7 @@ class TestDailyGiftStats:
         claim3 = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=20,
-            claimed_at=datetime.utcnow() - timedelta(days=1)
+            claimed_at=datetime.now(UTC) - timedelta(days=1)
         )
         db_session.add_all([claim1, claim2, claim3])
         db_session.commit()
@@ -213,17 +213,17 @@ class TestDailyGiftStats:
         claim1 = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow() - timedelta(days=2)
+            claimed_at=datetime.now(UTC) - timedelta(days=2)
         )
         claim2 = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow() - timedelta(days=1)
+            claimed_at=datetime.now(UTC) - timedelta(days=1)
         )
         claim3 = DailyGiftClaim(
             user_id=sample_user.id,
             besitos_received=10,
-            claimed_at=datetime.utcnow()
+            claimed_at=datetime.now(UTC)
         )
         db_session.add_all([claim1, claim2, claim3])
         db_session.commit()
@@ -240,7 +240,7 @@ class TestDailyGiftStats:
             claim = DailyGiftClaim(
                 user_id=sample_user.id,
                 besitos_received=10,
-                claimed_at=datetime.utcnow() - timedelta(hours=i)
+                claimed_at=datetime.now(UTC) - timedelta(hours=i)
             )
             db_session.add(claim)
         db_session.commit()

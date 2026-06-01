@@ -25,6 +25,7 @@ from models.models import (
     UserStoryProgress,
 )
 from services.besito_service import BesitoService
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
@@ -260,13 +261,13 @@ class StoryService:
         """
         node = self.get_node(node_id)
         if not node or not node.is_active:
-            return False, "Este fragmento no esta disponible"
+            return False, LucienVoice.story_fragment_unavailable()
 
         progress = self.get_user_progress(user_id)
 
         # Verificar VIP
         if node.required_vip and not is_vip:
-            return False, "Este fragmento requiere acceso a El Diván"
+            return False, LucienVoice.story_fragment_vip_required()
 
         # Verificar arquetipo requerido
         if node.required_archetype:
@@ -274,14 +275,14 @@ class StoryService:
                 archetype_name = node.required_archetype.value.title()
                 return (
                     False,
-                    f"Este fragmento solo esta disponible para quienes han despertado el arquetipo del {archetype_name}",
+                    LucienVoice.story_fragment_archetype_required(archetype_name),
                 )
 
         # Verificar besitos
         if node.cost_besitos > 0:
             balance = self.besito_service.get_balance(user_id)
             if balance < node.cost_besitos:
-                return False, f"Necesita {node.cost_besitos} besitos para acceder a este fragmento"
+                return False, LucienVoice.story_fragment_cost_needed(node.cost_besitos)
 
         return True, None
 
@@ -314,7 +315,7 @@ class StoryService:
                 commit=False,
             )
             if not success:
-                return False, "No se pudo procesar el pago", None
+                return False, LucienVoice.story_payment_failed(), None
 
         # Sumar puntos de arquetipo si viene de una eleccion
         if choice_id:

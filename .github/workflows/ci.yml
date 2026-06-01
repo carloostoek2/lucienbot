@@ -44,8 +44,7 @@ jobs:
           --ignore=tests/e2e
           --ignore=tests/integration/test_alembic_heads.py
           --deselect tests/integration/test_free_entry_flow.py::TestFreeEntryFlow::test_impatience_message_on_repeated_request
-          --deselect tests/integration/test_reaction_mission_flow_real.py::TestReactionMissionFlowRealData::test_e2e_with_real_missions_from_production_db
-          --deselect tests/integration/test_reaction_mission_flow_real.py::TestReactionMissionFlowRealData::test_list_all_active_missions_real_db
+          # Removed obsolete deselects for test_reaction_mission_flow_real.py (cleaned in testing refactor item #2 - the test mutated production DB and was a diagnostic script, not a real test)
           --deselect tests/integration/test_streak_promotion_handler.py::test_admin_menu_includes_streak_promotions
           --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_can_claim_cooldown_active
           --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_can_claim_after_24_hours
