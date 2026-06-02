@@ -1,11 +1,13 @@
 """
 Tests unitarios para ChannelService.
 """
-import pytest
-from datetime import datetime, timedelta
 
-from services.channel_service import ChannelService
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 from models.models import ChannelType
+from services.channel_service import ChannelService
 
 
 @pytest.mark.unit
@@ -17,9 +19,7 @@ class TestChannelService:
         service = ChannelService(db_session)
 
         channel = service.create_channel(
-            channel_id=-1001234567890,
-            channel_name="Canal VIP Test",
-            channel_type=ChannelType.VIP
+            channel_id=-1001234567890, channel_name="Canal VIP Test", channel_type=ChannelType.VIP
         )
 
         assert channel.channel_id == -1001234567890
@@ -36,7 +36,7 @@ class TestChannelService:
             channel_id=-1000987654321,
             channel_name="Canal Free Test",
             channel_type=ChannelType.FREE,
-            wait_time=5
+            wait_time=5,
         )
 
         assert channel.channel_type == ChannelType.FREE
@@ -141,39 +141,38 @@ class TestPendingRequests:
         service = ChannelService(db_session)
 
         request = service.create_pending_request(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             channel_id=sample_free_channel.id,
             username="testuser",
-            first_name="Test"
+            first_name="Test",
         )
 
-        assert request.user_id == sample_user.id
+        assert request.user_id == sample_user.telegram_id
         assert request.channel_id == sample_free_channel.id
         assert request.username == "testuser"
         assert request.first_name == "Test"
         assert request.status == "pending"
 
         # Verificar que la fecha de aprobación programada está en el futuro
-        expected_time = datetime.utcnow() + timedelta(minutes=sample_free_channel.wait_time_minutes)
-        assert abs((request.scheduled_approval_at - expected_time).total_seconds()) < 60
+        expected_time = datetime.now(UTC) + timedelta(minutes=sample_free_channel.wait_time_minutes)
+        sched = request.scheduled_approval_at
+        if sched.tzinfo is None:
+            sched = sched.replace(tzinfo=UTC)
+        assert abs((sched - expected_time).total_seconds()) < 60
 
     def test_create_pending_request_invalid_channel(self, db_session, sample_user):
         """Test crear solicitud para canal inexistente"""
         service = ChannelService(db_session)
 
         with pytest.raises(ValueError, match="Canal no encontrado"):
-            service.create_pending_request(
-                user_id=sample_user.id,
-                channel_id=99999
-            )
+            service.create_pending_request(user_id=sample_user.telegram_id, channel_id=99999)
 
     def test_get_pending_request(self, db_session, sample_pending_request):
         """Test obtener solicitud pendiente específica"""
         service = ChannelService(db_session)
 
         request = service.get_pending_request(
-            user_id=sample_pending_request.user_id,
-            channel_id=sample_pending_request.channel_id
+            user_id=sample_pending_request.user_id, channel_id=sample_pending_request.channel_id
         )
 
         assert request is not None
@@ -204,11 +203,12 @@ class TestPendingRequests:
 
         # Crear una solicitud con tiempo ya vencido
         from models.models import PendingRequest
+
         request = PendingRequest(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             channel_id=sample_free_channel.id,
-            scheduled_approval_at=datetime.utcnow() - timedelta(minutes=1),
-            status="pending"
+            scheduled_approval_at=datetime.now(UTC) - timedelta(minutes=1),
+            status="pending",
         )
         db_session.add(request)
         db_session.commit()
@@ -225,7 +225,11 @@ class TestPendingRequests:
         result = service.approve_request(sample_pending_request.id)
 
         assert result is True
-        approved = db_session.query(type(sample_pending_request)).filter_by(id=sample_pending_request.id).first()
+        approved = (
+            db_session.query(type(sample_pending_request))
+            .filter_by(id=sample_pending_request.id)
+            .first()
+        )
         assert approved.status == "approved"
         assert approved.approved_at is not None
 
@@ -235,11 +239,10 @@ class TestPendingRequests:
 
         # Crear una solicitud primero
         request = service.create_pending_request(
-            user_id=sample_user.id,
-            channel_id=sample_free_channel.id
+            user_id=sample_user.telegram_id, channel_id=sample_free_channel.id
         )
 
-        result = service.cancel_request(sample_user.id, sample_free_channel.id)
+        result = service.cancel_request(sample_user.telegram_id, sample_free_channel.id)
 
         assert result is True
         cancelled = db_session.query(type(request)).filter_by(id=request.id).first()
@@ -251,13 +254,13 @@ class TestPendingRequests:
 
         # Crear algunas solicitudes
         from models.models import User
+
         for i in range(3):
             user = User(telegram_id=1000000 + i, username=f"user{i}")
             db_session.add(user)
             db_session.flush()
             service.create_pending_request(
-                user_id=user.id,
-                channel_id=sample_free_channel.id
+                user_id=user.telegram_id, channel_id=sample_free_channel.id
             )
 
         count = service.approve_all_pending(sample_free_channel.id)
@@ -274,13 +277,14 @@ class TestPendingRequests:
 
         assert count >= 1
 
-    def test_get_pending_request_returns_none_after_approval(self, db_session, sample_user, sample_free_channel):
+    def test_get_pending_request_returns_none_after_approval(
+        self, db_session, sample_user, sample_free_channel
+    ):
         """Regression: after approval, get_pending_request should return None."""
         service = ChannelService(db_session)
         request = service.create_pending_request(
-            user_id=sample_user.id,
-            channel_id=sample_free_channel.id
+            user_id=sample_user.telegram_id, channel_id=sample_free_channel.id
         )
         service.approve_request(request.id)
-        pending = service.get_pending_request(sample_user.id, sample_free_channel.id)
+        pending = service.get_pending_request(sample_user.telegram_id, sample_free_channel.id)
         assert pending is None

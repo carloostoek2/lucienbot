@@ -1,39 +1,62 @@
 """
 Fixtures y configuración para tests de Lucien Bot.
 """
-import pytest
-import asyncio
-from datetime import datetime, timedelta
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from unittest.mock import MagicMock, AsyncMock
 
 # Importar modelos
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from models.database import Base
 from models.models import (
-    User, UserRole, Channel, ChannelType, Tariff, Token, TokenStatus,
-    Subscription, BesitoBalance, Mission, MissionType, MissionFrequency,
-    UserMissionProgress, PendingRequest,
-    StoreProduct, Package, Promotion, PromotionStatus, ReactionEmoji,
-    BroadcastMessage, StoryNode, StoryChoice, NodeType, Archetype,
-    ArchetypeType, DailyGiftConfig, DailyGiftClaim, CartItem, Order,
-    OrderStatus, Reward, RewardType, Category
+    Archetype,
+    ArchetypeType,
+    BesitoBalance,
+    BroadcastMessage,
+    CartItem,
+    Category,
+    Channel,
+    ChannelType,
+    DailyGiftConfig,
+    Mission,
+    MissionFrequency,
+    MissionType,
+    NodeType,
+    Order,
+    OrderStatus,
+    Package,
+    PendingRequest,
+    Promotion,
+    PromotionStatus,
+    ReactionEmoji,
+    Reward,
+    RewardType,
+    StoreProduct,
+    StoryChoice,
+    StoryNode,
+    Subscription,
+    Tariff,
+    Token,
+    TokenStatus,
+    User,
+    UserMissionProgress,
+    UserRole,
 )
 
-
 # ==================== DATABASE FIXTURES ====================
+
 
 @pytest.fixture(scope="session")
 def engine():
     """Crea un engine de SQLite en memoria para tests."""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False}
-    )
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     return engine
 
@@ -58,6 +81,7 @@ def db_session(engine):
 
 # ==================== MODEL FIXTURES ====================
 
+
 @pytest.fixture
 def sample_user(db_session: Session):
     """Crea un usuario de prueba."""
@@ -66,7 +90,7 @@ def sample_user(db_session: Session):
         username="testuser",
         first_name="Test",
         last_name="User",
-        role=UserRole.USER
+        role=UserRole.USER,
     )
     db_session.add(user)
     db_session.commit()
@@ -82,7 +106,7 @@ def sample_admin(db_session: Session):
         username="adminuser",
         first_name="Admin",
         last_name="User",
-        role=UserRole.ADMIN
+        role=UserRole.ADMIN,
     )
     db_session.add(user)
     db_session.commit()
@@ -98,7 +122,7 @@ def sample_vip_channel(db_session: Session):
         channel_name="Canal VIP Test",
         channel_type=ChannelType.VIP,
         is_active=True,
-        invite_link="https://t.me/+TestInviteLink"
+        invite_link="https://t.me/+TestInviteLink",
     )
     db_session.add(channel)
     db_session.commit()
@@ -114,7 +138,7 @@ def sample_free_channel(db_session: Session):
         channel_name="Canal Free Test",
         channel_type=ChannelType.FREE,
         is_active=True,
-        wait_time_minutes=3
+        wait_time_minutes=3,
     )
     db_session.add(channel)
     db_session.commit()
@@ -126,11 +150,7 @@ def sample_free_channel(db_session: Session):
 def sample_tariff(db_session: Session):
     """Crea una tarifa de prueba."""
     tariff = Tariff(
-        name="Test Tariff",
-        duration_days=30,
-        price="9.99",
-        currency="USD",
-        is_active=True
+        name="Test Tariff", duration_days=30, price="9.99", currency="USD", is_active=True
     )
     db_session.add(tariff)
     db_session.commit()
@@ -141,11 +161,7 @@ def sample_tariff(db_session: Session):
 @pytest.fixture
 def sample_token(db_session: Session, sample_tariff):
     """Crea un token activo de prueba."""
-    token = Token(
-        token_code="TEST123456",
-        tariff_id=sample_tariff.id,
-        status=TokenStatus.ACTIVE
-    )
+    token = Token(token_code="TEST123456", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
     db_session.add(token)
     db_session.commit()
     db_session.refresh(token)
@@ -160,7 +176,7 @@ def sample_used_token(db_session: Session, sample_tariff, sample_user):
         tariff_id=sample_tariff.id,
         status=TokenStatus.USED,
         redeemed_by_id=sample_user.id,
-        redeemed_at=datetime.utcnow()
+        redeemed_at=datetime.utcnow(),
     )
     db_session.add(token)
     db_session.commit()
@@ -175,7 +191,7 @@ def sample_expired_token(db_session: Session, sample_tariff):
         token_code="EXPIRED123",
         tariff_id=sample_tariff.id,
         status=TokenStatus.EXPIRED,
-        expires_at=datetime.utcnow() - timedelta(days=1)
+        expires_at=datetime.utcnow() - timedelta(days=1),
     )
     db_session.add(token)
     db_session.commit()
@@ -191,7 +207,7 @@ def sample_subscription(db_session: Session, sample_user, sample_vip_channel, sa
         channel_id=sample_vip_channel.id,
         token_id=sample_token.id,
         end_date=datetime.utcnow() + timedelta(days=30),
-        is_active=True
+        is_active=True,
     )
     db_session.add(subscription)
     db_session.commit()
@@ -207,7 +223,7 @@ def sample_expired_subscription(db_session: Session, sample_user, sample_vip_cha
         channel_id=sample_vip_channel.id,
         token_id=sample_token.id,
         end_date=datetime.utcnow() - timedelta(days=1),
-        is_active=True  # Aún marcada como activa, debería ser corregida por el startup check
+        is_active=True,  # Aún marcada como activa, debería ser corregida por el startup check
     )
     db_session.add(subscription)
     db_session.commit()
@@ -219,10 +235,7 @@ def sample_expired_subscription(db_session: Session, sample_user, sample_vip_cha
 def sample_balance(db_session: Session, sample_user):
     """Crea un balance de besitos de prueba con valores específicos."""
     balance = BesitoBalance(
-        user_id=sample_user.id,
-        balance=1000,
-        total_earned=1500,
-        total_spent=500
+        user_id=sample_user.id, balance=1000, total_earned=1500, total_spent=500
     )
     db_session.add(balance)
     db_session.commit()
@@ -238,7 +251,7 @@ def sample_mission(db_session: Session):
         mission_type=MissionType.REACTION_COUNT,
         target_value=10,
         frequency=MissionFrequency.ONE_TIME,
-        is_active=True
+        is_active=True,
     )
     db_session.add(mission)
     db_session.commit()
@@ -254,7 +267,7 @@ def sample_mission_progress(db_session: Session, sample_user, sample_mission):
         mission_id=sample_mission.id,
         target_value=sample_mission.target_value,
         current_value=5,
-        is_completed=False
+        is_completed=False,
     )
     db_session.add(progress)
     db_session.commit()
@@ -266,11 +279,11 @@ def sample_mission_progress(db_session: Session, sample_user, sample_mission):
 def sample_pending_request(db_session: Session, sample_user, sample_free_channel):
     """Crea una solicitud pendiente de prueba."""
     request = PendingRequest(
-        user_id=sample_user.id,
+        user_id=sample_user.telegram_id,
         channel_id=sample_free_channel.id,
         username="testuser",
         first_name="Test",
-        scheduled_approval_at=datetime.utcnow() + timedelta(minutes=3)
+        scheduled_approval_at=datetime.now(UTC) + timedelta(minutes=3),
     )
     db_session.add(request)
     db_session.commit()
@@ -286,7 +299,7 @@ def sample_package(db_session: Session):
         description="A test package",
         store_stock=10,
         reward_stock=5,
-        is_active=True
+        is_active=True,
     )
     db_session.add(package)
     db_session.commit()
@@ -303,7 +316,7 @@ def sample_store_product(db_session: Session, sample_package):
         package_id=sample_package.id,
         price=100,
         stock=10,
-        is_active=True
+        is_active=True,
     )
     db_session.add(product)
     db_session.commit()
@@ -320,7 +333,7 @@ def sample_promotion(db_session: Session, sample_package):
         package_id=sample_package.id,
         price_mxn=99900,
         is_active=True,
-        status=PromotionStatus.ACTIVE
+        status=PromotionStatus.ACTIVE,
     )
     db_session.add(promotion)
     db_session.commit()
@@ -331,12 +344,7 @@ def sample_promotion(db_session: Session, sample_package):
 @pytest.fixture
 def sample_reaction_emoji(db_session: Session):
     """Crea un emoji de reacción de prueba."""
-    emoji = ReactionEmoji(
-        emoji="💋",
-        name="besito",
-        besito_value=1,
-        is_active=True
-    )
+    emoji = ReactionEmoji(emoji="💋", name="besito", besito_value=1, is_active=True)
     db_session.add(emoji)
     db_session.commit()
     db_session.refresh(emoji)
@@ -351,7 +359,7 @@ def sample_broadcast_message(db_session: Session, sample_free_channel, sample_ad
         channel_id=sample_free_channel.channel_id,
         admin_id=sample_admin.telegram_id,
         text="Test broadcast",
-        has_reactions=True
+        has_reactions=True,
     )
     db_session.add(message)
     db_session.commit()
@@ -368,7 +376,7 @@ def sample_story_node(db_session: Session):
         node_type=NodeType.NARRATIVE,
         chapter=1,
         is_active=True,
-        is_starting_node=True
+        is_starting_node=True,
     )
     db_session.add(node)
     db_session.commit()
@@ -380,10 +388,7 @@ def sample_story_node(db_session: Session):
 def sample_story_choice(db_session: Session, sample_story_node):
     """Crea una opción de historia de prueba."""
     choice = StoryChoice(
-        node_id=sample_story_node.id,
-        text="Go forward",
-        next_node_id=None,
-        archetype_points=0
+        node_id=sample_story_node.id, text="Go forward", next_node_id=None, archetype_points=0
     )
     db_session.add(choice)
     db_session.commit()
@@ -398,7 +403,7 @@ def sample_archetype(db_session: Session):
         archetype_type=ArchetypeType.EXPLORADOR,
         name="El Explorador",
         description="Curioso y aventurero",
-        traits='["curiosidad","aventura"]'
+        traits='["curiosidad","aventura"]',
     )
     db_session.add(archetype)
     db_session.commit()
@@ -409,10 +414,7 @@ def sample_archetype(db_session: Session):
 @pytest.fixture
 def sample_daily_gift_config(db_session: Session):
     """Crea una configuración de regalo diario de prueba."""
-    config = DailyGiftConfig(
-        besito_amount=10,
-        is_active=True
-    )
+    config = DailyGiftConfig(besito_amount=10, is_active=True)
     db_session.add(config)
     db_session.commit()
     db_session.refresh(config)
@@ -422,11 +424,7 @@ def sample_daily_gift_config(db_session: Session):
 @pytest.fixture
 def sample_cart_item(db_session: Session, sample_user, sample_store_product):
     """Crea un item de carrito de prueba."""
-    item = CartItem(
-        user_id=sample_user.id,
-        product_id=sample_store_product.id,
-        quantity=1
-    )
+    item = CartItem(user_id=sample_user.id, product_id=sample_store_product.id, quantity=1)
     db_session.add(item)
     db_session.commit()
     db_session.refresh(item)
@@ -437,10 +435,7 @@ def sample_cart_item(db_session: Session, sample_user, sample_store_product):
 def sample_order(db_session: Session, sample_user):
     """Crea una orden de prueba."""
     order = Order(
-        user_id=sample_user.id,
-        total_items=1,
-        total_price=100,
-        status=OrderStatus.PENDING
+        user_id=sample_user.id, total_items=1, total_price=100, status=OrderStatus.PENDING
     )
     db_session.add(order)
     db_session.commit()
@@ -456,7 +451,7 @@ def sample_reward_besitos(db_session: Session):
         description="A reward",
         reward_type=RewardType.BESITOS,
         besito_amount=50,
-        is_active=True
+        is_active=True,
     )
     db_session.add(reward)
     db_session.commit()
@@ -468,17 +463,16 @@ def sample_reward_besitos(db_session: Session):
 def sample_category(db_session: Session):
     """Crea una categoría de prueba."""
     category = Category(
-        name="Test Category",
-        description="A test category",
-        order_index=1,
-        is_active=True
+        name="Test Category", description="A test category", order_index=1, is_active=True
     )
     db_session.add(category)
     db_session.commit()
     db_session.refresh(category)
     return category
 
+
 # ==================== MOCK FIXTURES ====================
+
 
 @pytest.fixture
 def mock_bot():
@@ -492,7 +486,9 @@ def mock_bot():
     bot.send_media_group = AsyncMock()
     bot.ban_chat_member = AsyncMock()
     bot.unban_chat_member = AsyncMock()
-    bot.create_chat_invite_link = AsyncMock(return_value=MagicMock(invite_link="https://t.me/+NewInviteLink"))
+    bot.create_chat_invite_link = AsyncMock(
+        return_value=MagicMock(invite_link="https://t.me/+NewInviteLink")
+    )
     return bot
 
 
@@ -507,9 +503,13 @@ def mock_dispatcher():
 def sample_streak_promotion(db_session):
     """Create a test streak promotion with one level and codes."""
     from models.models import (
-        StreakPromotion, StreakPromotionLevel, StreakPromotionCode,
-        StreakPromotionCodeStatus, StreakPromotionStatus,
+        StreakPromotion,
+        StreakPromotionCode,
+        StreakPromotionCodeStatus,
+        StreakPromotionLevel,
+        StreakPromotionStatus,
     )
+
     promo = StreakPromotion(
         name="Test Promotion",
         description="Test",
@@ -546,6 +546,7 @@ def sample_streak_promotion(db_session):
 def sample_streak_session(db_session, sample_streak_promotion):
     """Create a test StreakSession."""
     from models.models import StreakSession
+
     session = StreakSession(
         user_id=12345,
         promotion_id=sample_streak_promotion.id,
@@ -561,13 +562,17 @@ def sample_streak_session(db_session, sample_streak_promotion):
 
 # ==================== TELEGRAM MOCK FACTORIES ====================
 
-from aiogram.types import User as AiogramUser, Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.context import FSMContext  # noqa: E402
+from aiogram.fsm.storage.base import StorageKey  # noqa: E402
+from aiogram.fsm.storage.memory import MemoryStorage  # noqa: E402
+from aiogram.types import CallbackQuery, Message  # noqa: E402
+from aiogram.types import User as AiogramUser  # noqa: E402
+
+
 @pytest.fixture
 def make_user():
     """Factory para crear usuarios mock de Telegram."""
+
     def _factory(
         user_id: int = 123456789,
         username: str = "testuser",
@@ -586,12 +591,14 @@ def make_user():
         user.is_premium = is_premium
         user.language_code = "es"
         return user
+
     return _factory
 
 
 @pytest.fixture
 def make_message(make_user):
     """Factory para crear mensajes mock de Telegram."""
+
     def _factory(
         text: str = "/start",
         user=None,
@@ -620,12 +627,14 @@ def make_message(make_user):
         msg.reply = AsyncMock()
         msg.delete = AsyncMock()
         return msg
+
     return _factory
 
 
 @pytest.fixture
 def make_callback(make_user):
     """Factory para crear callbacks mock de Telegram."""
+
     def _factory(
         data: str = "action:test",
         user=None,
@@ -653,6 +662,7 @@ def make_callback(make_user):
         cb.message.bot = cb.bot
         cb.answer = AsyncMock()
         return cb
+
     return _factory
 
 
@@ -668,7 +678,5 @@ def make_fsm_context():
     ):
         key = StorageKey(bot_id=bot_id, chat_id=chat_id, user_id=user_id)
         return FSMContext(storage=storage, key=key)
+
     return _factory
-
-
-

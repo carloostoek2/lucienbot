@@ -15,6 +15,18 @@
 
 **Responsable de la iniciativa:** Trabajo conjunto con el equipo
 
+**Cierre de Fase 1 - Top 10 Críticos:**
+El trabajo de los 10 ítems críticos de testing se considera completado (o suficientemente avanzado con entregas concretas). A partir de esta sesión se inicia formalmente la **Fase 2: Revisión cronológica de testing por fase de desarrollo**, aplicando la metodología de `docs/fase_testing_review_process.md`.
+
+**Nota metodológica (actualización reciente):**  
+La revisión de deuda de testing (especialmente en dominios pre-GSD como Canales) se realiza siguiendo la metodología detallada en `docs/fase_testing_review_process.md`. Esta metodología enfatiza:
+- Uso intensivo de agentes especializados (`explore`, `impact-analyzer`, etc.) antes de cualquier cambio.
+- Escritura de documentación y tests contra el **contrato deseado** (no contra la implementación actual).
+- Investigación de causa raíz ante fallas de tests (antes de asumir que hay que refactorizar código de producción).
+- Inicio de bajo riesgo mediante actualización de documentación + tests piloto de contrato.
+
+**Sesión actual - Cierre revisión Pre-GSD Canales (Fase 2 cronológica inicio):** Reporte estructurado generado siguiendo `docs/fase_testing_review_process.md` (6 Pasos, subagents explore+impact pre, GSD, template). Hallazgos + recs en `fases_refactor_testing.md` (sección Fase Pre-GSD + tabla actualizada). ID fixture complete en tests (conftest + unit). Prods revertidos (git). Reclaims en /tmp + fases summary. Ver GSD log + /tmp/grok-impl-summary-ae9b25c5.md + subagent ids 019e862a-2c24... / 019e862e-344c.... Fase 2 iniciada; recs Alta para pilots follow-up.
+
 ---
 
 ## 1. Objetivo General

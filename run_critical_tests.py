@@ -11,12 +11,12 @@ Uso:
     python run_critical_tests.py --help   # Mostrar ayuda
 """
 
+import json
+import os
 import subprocess
 import sys
-import os
 from datetime import datetime
 from pathlib import Path
-import json
 
 # ==================== CONFIGURACIÓN ====================
 
@@ -28,14 +28,12 @@ CRITICAL_TESTS = {
         "test_partial_reaction_does_not_complete_mission",
         "test_recurring_mission_resets_after_completion",
     ],
-
     # Integridad de Migraciones Alembic
     "tests/integration/test_alembic_heads.py": [
         "test_alembic_single_head_no_branches",
         "test_alembic_current_revision_matches_head",
         "test_alembic_history_no_gaps",
     ],
-
     # Ciclo Completo VIP
     "tests/integration/test_vip_complete_cycle.py": [
         "test_vip_entry_token_to_subscription",
@@ -43,13 +41,11 @@ CRITICAL_TESTS = {
         "test_vip_expiration_and_deactivation",
         "test_vip_complete_lifecycle_integration",
     ],
-
     # Límite de Reacciones (documenta gap)
     "tests/integration/test_reaction_limit.py": [
         "test_no_daily_reaction_limit_exists",
         "test_get_user_reactions_has_default_limit_not_daily",
     ],
-
     # Tests existentes críticos del proyecto
     "tests/integration/test_vip_flow.py": [
         "test_complete_vip_flow",
@@ -57,26 +53,24 @@ CRITICAL_TESTS = {
         "test_subscription_expiration_detection",
         "test_reminder_system_flow",
     ],
-
-    "tests/integration/test_free_entry_flow.py": [
-        "test_free_channel_delayed_approval",
-    ],
+    # test_free_entry_flow.py covered via -k in CI; no stale "test_free_channel_delayed_approval" (obsolete per review Issue 17; removed to avoid dangling).
 }
+
 
 # Colores para output
 class Colors:
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BLUE = '\033[94m'
-    BOLD = '\033[1m'
-    END = '\033[0m'
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BLUE = "\033[94m"
+    BOLD = "\033[1m"
+    END = "\033[0m"
 
 
 def print_header(text: str):
-    print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.END}")
+    print(f"\n{Colors.BOLD}{Colors.BLUE}{'=' * 60}{Colors.END}")
     print(f"{Colors.BOLD}{Colors.BLUE}{text.center(60)}{Colors.END}")
-    print(f"{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.END}\n")
+    print(f"{Colors.BOLD}{Colors.BLUE}{'=' * 60}{Colors.END}\n")
 
 
 def print_success(text: str):
@@ -130,12 +124,10 @@ def run_critical_tests() -> dict:
 
     # Ejecutar pytest directamente con los archivos
     result = subprocess.run(
-        ["python", "-m", "pytest"] + test_files + [
-            "-v", "--tb=short", "--no-cov", "--color=yes"
-        ],
+        ["python", "-m", "pytest"] + test_files + ["-v", "--tb=short", "--no-cov", "--color=yes"],
         capture_output=True,
         text=True,
-        cwd=project_root
+        cwd=project_root,
     )
 
     output = result.stdout + result.stderr
@@ -148,29 +140,30 @@ def run_critical_tests() -> dict:
         "passed_tests": [],
         "failed_tests": [],
         "errors": [],
-        "duration": 0
+        "duration": 0,
     }
 
     # Extraer resumen del output
-    for line in output.split('\n'):
-        if 'passed' in line.lower():
+    for line in output.split("\n"):
+        if "passed" in line.lower():
             # Buscar patrón como "13 passed"
             import re
-            match = re.search(r'(\d+)\s+passed', line)
+
+            match = re.search(r"(\d+)\s+passed", line)
             if match:
                 results["passed"] = int(match.group(1))
-            match = re.search(r'(\d+)\s+failed', line)
+            match = re.search(r"(\d+)\s+failed", line)
             if match:
                 results["failed"] = int(match.group(1))
 
         # Extraer nombres de tests
-        if 'PASSED' in line:
-            parts = line.split('::')
+        if "PASSED" in line:
+            parts = line.split("::")
             if len(parts) > 1:
                 test_name = parts[-1].split()[0]
                 results["passed_tests"].append(test_name)
-        elif 'FAILED' in line:
-            parts = line.split('::')
+        elif "FAILED" in line:
+            parts = line.split("::")
             if len(parts) > 1:
                 test_name = parts[-1].split()[0]
                 results["failed_tests"].append(test_name)
@@ -236,7 +229,7 @@ def main():
 
     # Guardar resultados para referencia
     stats_file = Path(__file__).parent / ".critical_tests_stats.json"
-    with open(stats_file, 'w') as f:
+    with open(stats_file, "w") as f:
         json.dump(results, f, indent=2)
 
     return 0 if success else 1
