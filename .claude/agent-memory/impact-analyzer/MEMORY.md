@@ -1,3 +1,4 @@
 - [channels-impact-map.md](channels-impact-map.md) — Complete trace, call sites, risks, tests, high-risk areas for Channels ID confusion + patterns refactor (pre-GSD)
 - [channels-call-sites.md](channels-call-sites.md) — Raw grep-derived call sites for key methods (ChannelService, scheduler jobs, VIP direct, handlers)
 - [channels-todos.md](channels-todos.md) — Suggested minimal next steps / GSD prep (doc + comments first)
+- [channels-pre-gsd-approval-flows-impact-report.md](channels-pre-gsd-approval-flows-impact-report.md) — Structured impact report on approval flows (ChannelService approve_*/get_ready, scheduler _process_pending_requests, free_channel_handlers join paths, PendingRequest/Channel ID duality PK-vs-TG, all call sites/consumers/tests/risks/arch violations/contract gaps vs desired). Per assigned task; pre-pilot.

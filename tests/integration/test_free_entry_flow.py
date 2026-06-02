@@ -294,6 +294,115 @@ class TestSchedulerPendingRequestsJob:
             db.close()
             engine.dispose()
 
+    @pytest.mark.asyncio
+    async def test_approve_all_pending_marks_db_but_does_not_grant_telegram_membership(
+        self, tmp_path, mock_bot
+    ):
+        """
+        Contract test: admin/system approve_all_pending path vs desired behavior.
+
+        DESIRED CONTRACT (per .planning/ROADMAP.md Phase 2 promise of "auto-aprobación",
+        services/channels/CLAUDE.md ID+flow contract, and scheduler design):
+        - Marking a pending request "approved" (via approve_all_pending from panel or
+          similar admin/system path) should result in the user actually receiving
+          Telegram membership (bot.approve_chat_join_request) + the welcome message
+          + invite link.
+        - The full side effects (TG approve + DB state + welcome) are the responsibility
+          of the scheduler job (_process_pending_requests) or the manual member_join handler.
+
+        CURRENT IMPL REALITY (this test documents the limitation explicitly):
+        - approve_all_pending only mutates the DB (status + approved_at).
+        - It performs NO Telegram API calls and sends NO welcome.
+        - This creates the documented gap: "approved in system but not in the real channel".
+
+        This test validates the contract/limitation (no TG effects from the admin path)
+        using the gold integration pattern, without assuming we change prod code yet.
+        If the desired contract changes (e.g. centralize grant in service), this test
+        will drive the update + force re-run of all dependent paths.
+        """
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+
+        try:
+            # Setup: canal Free + usuario + request lista (same pattern as sibling test)
+            channel = Channel(
+                channel_id=-100888000222,
+                channel_name="Free ApproveAll Contract Test",
+                channel_type=ChannelType.FREE,
+                is_active=True,
+                wait_time_minutes=0,
+                invite_link="https://t.me/+ApproveAllContractTest",
+            )
+            user = User(
+                telegram_id=666000222,
+                username="approveallcontract",
+                first_name="ApproveAllContract",
+                role=UserRole.USER,
+            )
+            db.add_all([channel, user])
+            db.commit()
+            db.refresh(channel)
+            db.refresh(user)
+
+            channel_service = ChannelService(db)
+            request = channel_service.create_pending_request(
+                user_id=user.telegram_id,
+                channel_id=channel.id,  # DB PK internally, per contract
+                username=user.username,
+                first_name=user.first_name,
+            )
+            # Forzar lista
+            request.scheduled_approval_at = datetime.now(UTC) - timedelta(minutes=1)
+            db.commit()
+
+            request_id = request.id
+            channel_db_id = (
+                channel.id
+            )  # capture value before close (avoid DetachedInstanceError on .id after close)
+
+            db.close()
+
+            # Llamar la ruta admin/system (approve_all) — NO scheduler job
+            mock_bot.reset_mock()
+
+            call_db = TestSession()
+            try:
+                call_svc = ChannelService(call_db)
+                count = call_svc.approve_all_pending(channel_db_id)
+                assert count >= 1, "approve_all should mark at least one request"
+            finally:
+                call_db.close()
+
+            # Verificar estado DB (sí cambió)
+            verify_db = TestSession()
+            approved_req = verify_db.get(PendingRequest, request_id)
+            assert approved_req is not None
+            assert approved_req.status == "approved"
+            assert approved_req.approved_at is not None
+            verify_db.close()
+
+            # === CONTRATO DESEADO vs IMPL ACTUAL (aserciones clave) ===
+            # La ruta approve_all NO debe realizar efectos en Telegram.
+            # (El grant real de membresía + welcome lo hace el job del scheduler
+            # o el path de member_join manual.)
+            assert not mock_bot.approve_chat_join_request.called, (
+                "DESIRED CONTRACT: approve_all_pending (admin path) must NOT call "
+                "Telegram approve_chat_join_request. Full TG membership grant is "
+                "scheduler/job responsibility."
+            )
+            assert not mock_bot.send_message.called, (
+                "DESIRED CONTRACT: approve_all_pending must NOT send welcome message. "
+                "Welcome + invite is performed by the scheduler job or handler."
+            )
+
+            # Opcional: si en futuro se centraliza, este test fallará y guiará el refactor
+            # (investigar causa raíz antes de cambiar prod, per methodology).
+
+        finally:
+            # Best effort cleanup (tmp_path scoped) - match sibling style
+            db.close()
+            engine.dispose()
+
 
 # =============================================================================
 # SCHEDULER JOB COVERAGE (continuación Ítem 3/4) - b, c parcial, d
