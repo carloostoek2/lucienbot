@@ -15,6 +15,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -142,6 +143,18 @@ async def _process_pending_requests():
                     f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}"
                 )
 
+            except TelegramBadRequest as e:
+                if "USER_ALREADY_PARTICIPANT" in str(e):
+                    request.status = "approved"
+                    request.approved_at = datetime.now(UTC)
+                    db.commit()
+                    logger.info(
+                        f"Solicitud {request.id}: user={request.user_id} ya era participante, "
+                        f"marcada como aprobada"
+                    )
+                else:
+                    logger.error(f"Error aprobando solicitud {request.id}: {e}")
+                    db.rollback()
             except Exception as e:
                 logger.error(f"Error aprobando solicitud {request.id}: {e}")
                 db.rollback()
