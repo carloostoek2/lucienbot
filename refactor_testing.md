@@ -168,7 +168,7 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 
 ### Opción B: Iniciar Revisión Fase por Fase
 - Empezar por las fases tempranas (Fundación + Fase 1 - Introducción de Lucien y arquitectura estructurada).
-- Luego seguir el orden de `.planning/phases/` (07.1, 08, 09...).
+- Luego seguir el orden de la Hoja de Ruta en `fases_refactor_testing.md` (expandida: Fases 1-7 pre-07.1 según ROADMAP.md + 07.1, 08...). El control de revisiones por fase de desarrollo está ahí (no solo en .planning/phases/).
 - Para cada fase evaluar: qué features se entregaron vs qué tests existen realmente.
 
 **Trabajo realizado en esta sesión (continuación Ítem 3 + avance Ítem 4 - siguiendo orden exacto a→b→c→d de sección 8):**

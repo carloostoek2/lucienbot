@@ -63,12 +63,45 @@ Entidades de SQLAlchemy y acceso a base de datos.
 
 ## Acceso a DB
 
-`from models import User
-from models.database import get_session
+Usar el patrón moderno (context manager) o inyección de sesión en services:
 
-async def get_user(user_id: int):
-    async with get_session() as session:
-        return await session.get(User, user_id)`
+```python
+from models import User
+from models.database import get_db_session  # o SessionLocal según contexto
+
+# Preferido en código nuevo / tests
+async with get_db_session() as session:
+    user = await session.get(User, user_id)
+```
+
+## Dualidad de IDs (crítica - especialmente Canales Pre-GSD / Fundacional)
+
+**Regla que debe mantenerse (ver services/channels/CLAUDE.md y tests de contrato):**
+
+- `Channel.id`: Primary Key entero de la base de datos (surrogate). Se usa internamente para:
+  - `PendingRequest.channel_id` (FK)
+  - `Subscription.channel_id` (FK)
+  - La mayoría de operaciones admin, `get_by_db_id`, `approve_all_pending`, `create_pending_request` (el parámetro `channel_id` aquí **siempre es DB PK**).
+- `Channel.channel_id`: ID real del chat en Telegram (BigInteger, usualmente negativo, ej. -1001234567890). Se usa para:
+  - Todas las llamadas a la API de Telegram (`approve_chat_join_request`, `ban_chat_member`, `send_message`, etc.).
+  - `get_channel_by_id` (siempre espera Telegram ID).
+  - `BroadcastMessage.channel_id` (FK a la columna TG).
+  - Lookups desde eventos de Telegram (ChatJoinRequest.chat.id, etc.).
+  - `schedule_free_welcome` y jobs `_send_free_welcome_job` / `_process_pending_requests` (pasan TG ID).
+
+**Métodos clave en ChannelService:**
+- `get_channel_by_id(tg_id)` → busca por `channel.channel_id`
+- `get_channel_by_db_id(db_pk)` → busca por `channel.id`
+- `create_pending_request(..., channel_id=...)` → **debe recibir DB PK** (documentado en el método).
+
+**Handlers:**
+- free_channel_handlers: recibe TG IDs de eventos Telegram → convierte correctamente (usa `.id` del ORM para pending, `chat.id` TG para schedule).
+
+**Riesgo histórico:** Pasar `channel.id` (PK) donde se esperaba TG ID causaba que rituales de 30s no se enviaran (lookup fallaba silenciosamente). Cubierto por tests de regresión + pilots de contrato.
+
+**Broadcast vs Canales:** Nota la inconsistencia de FK en el modelo (BroadcastMessage apunta a la columna TG, Pending/Subscription a la PK). Usar siempre los helpers del servicio para no confundir.
+
+**Tests de contrato deseado:** Siempre validar ambos lados de la dualidad (PK para relaciones internas, TG para efectos en Telegram). Ver `tests/integration/test_free_entry_flow.py` (TestScheduler*Job y pilots) y `tests/unit/test_channel_service.py` + `test_scheduler.py`.
 
 ## Reglas
 

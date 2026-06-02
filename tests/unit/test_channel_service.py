@@ -288,3 +288,74 @@ class TestPendingRequests:
         service.approve_request(request.id)
         pending = service.get_pending_request(sample_user.telegram_id, sample_free_channel.id)
         assert pending is None
+
+    def test_create_pending_request_on_inactive_channel_succeeds_currently(
+        self, db_session, sample_user
+    ):
+        """Contract: create_pending allows inactive channel (no guard in service)."""
+        from models.models import Channel
+
+        inactive = Channel(
+            channel_id=-100222000222,
+            channel_name="Inactive Create Test",
+            channel_type=ChannelType.FREE,
+            is_active=False,
+            wait_time_minutes=5,
+        )
+        db_session.add(inactive)
+        db_session.commit()
+        db_session.refresh(inactive)
+
+        service = ChannelService(db_session)
+        # Current behavior: succeeds (only existence checked)
+        req = service.create_pending_request(
+            user_id=sample_user.telegram_id, channel_id=inactive.id
+        )
+        assert req is not None
+        assert req.channel_id == inactive.id
+        assert req.status == "pending"
+
+    def test_get_ready_to_approve_includes_pending_for_inactive_channel(
+        self, db_session, sample_user
+    ):
+        """Contract: get_ready_to_approve does not filter by channel.is_active."""
+        from models.models import Channel, PendingRequest
+
+        inactive = Channel(
+            channel_id=-100111000111,
+            channel_name="Inactive Ready Test",
+            channel_type=ChannelType.FREE,
+            is_active=False,
+            wait_time_minutes=0,
+        )
+        db_session.add(inactive)
+        db_session.commit()
+        db_session.refresh(inactive)
+
+        # Direct insert a ready pending (bypass create for this test of get_ready)
+        req = PendingRequest(
+            user_id=sample_user.telegram_id,
+            channel_id=inactive.id,
+            scheduled_approval_at=datetime.now(UTC) - timedelta(minutes=1),
+            status="pending",
+        )
+        db_session.add(req)
+        db_session.commit()
+        db_session.refresh(req)
+
+        service = ChannelService(db_session)
+        ready = service.get_ready_to_approve()
+        ready_ids = [r.id for r in ready]
+        assert req.id in ready_ids, "get_ready currently returns pendings for inactive channels"
+
+    def test_create_pending_request_on_vip_channel_succeeds_currently(
+        self, db_session, sample_user, sample_vip_channel
+    ):
+        """Contract: pending creation not restricted to FREE channels in service."""
+        service = ChannelService(db_session)
+        # VIP channels should not get pendings in practice (token flow), but svc allows
+        req = service.create_pending_request(
+            user_id=sample_user.telegram_id, channel_id=sample_vip_channel.id
+        )
+        assert req is not None
+        assert req.channel_id == sample_vip_channel.id

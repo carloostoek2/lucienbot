@@ -65,3 +65,12 @@ count_pending_requests(channel_id=None) -> int
 2. Lee [@rules.md](../../rules.md)
 3. Verifica métodos en `channel_service.py`
 4. Para wait times, usar `update_wait_time()`, no recrear el canal
+5. Recuerda la dualidad de IDs (ver sección "Contrato de IDs" arriba y models/CLAUDE.md). Los nuevos pilots de contrato en `tests/integration/test_free_entry_flow.py` (TestSchedulerPendingRequestsJob) validan explícitamente el comportamiento deseado vs la implementación actual (approve_all DB-only, error handling con rollback+continue, skip de canales inactivos).
+
+## Pilotos de contrato implementados (fase revisión Pre-GSD)
+- approve_all_pending limitation: marca DB pero **no** produce efectos en Telegram (el grant real lo hace el job del scheduler).
+- Scheduler error resilience: error en un request → rollback solo ese + continue con el resto.
+- Inactive channel: se salta limpiamente sin side effects.
+- (Expansión post-revisión): welcome failure after approve+commit (grant sticks, no rollback); create/get_ready para inactive + VIP (documenta ausencia de guards en svc, get_ready incluye ghosts; job salta inactive).
+Ver tests/integration/test_free_entry_flow.py (TestSchedulerPendingRequestsJob: ~6 tests gold) y tests/unit/test_channel_service.py (TestPendingRequests) para ejemplos de asserts de "contrato deseado" + "CURRENT IMPL REALITY".
+Total protección expandida en Pre-GSD antes de Fase 07.1.
