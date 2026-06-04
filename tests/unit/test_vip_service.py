@@ -181,13 +181,13 @@ class TestSubscriptionService:
     """Tests para gestión de suscripciones"""
 
     def test_redeem_token_success(self, db_session, sample_token, sample_user, sample_vip_channel):
-        """Test canjear token exitosamente"""
+        """Test canjear token exitosamente. DESIRED CONTRACT: redeem accepts TG id (user.id from TG), stores as user_id=telegram_id in Subscription (FK), sets redeemed_by_id=TG; clears entry state."""
         service = VIPService(db_session)
 
-        subscription = service.redeem_token(sample_token.token_code, sample_user.id)
+        subscription = service.redeem_token(sample_token.token_code, sample_user.telegram_id)
 
         assert subscription is not None
-        assert subscription.user_id == sample_user.id
+        assert subscription.user_id == sample_user.telegram_id
         assert subscription.channel_id == sample_vip_channel.id
         assert subscription.token_id == sample_token.id
         assert subscription.is_active is True
@@ -195,14 +195,14 @@ class TestSubscriptionService:
         # Verificar que el token fue marcado como usado
         token = service.get_token(sample_token.id)
         assert token.status == TokenStatus.USED
-        assert token.redeemed_by_id == sample_user.id
+        assert token.redeemed_by_id == sample_user.telegram_id
         assert token.redeemed_at is not None
 
     def test_redeem_token_already_used(self, db_session, sample_used_token, sample_user):
         """Test canjear token ya usado"""
         service = VIPService(db_session)
 
-        subscription = service.redeem_token(sample_used_token.token_code, sample_user.id)
+        subscription = service.redeem_token(sample_used_token.token_code, sample_user.telegram_id)
 
         assert subscription is None
 
@@ -210,7 +210,7 @@ class TestSubscriptionService:
         """Test canjear token expirado"""
         service = VIPService(db_session)
 
-        subscription = service.redeem_token(sample_expired_token.token_code, sample_user.id)
+        subscription = service.redeem_token(sample_expired_token.token_code, sample_user.telegram_id)
 
         assert subscription is None
 
@@ -218,17 +218,17 @@ class TestSubscriptionService:
         """Test obtener suscripción activa de usuario"""
         service = VIPService(db_session)
 
-        subscription = service.get_user_subscription(sample_user.id)
+        subscription = service.get_user_subscription(sample_user.telegram_id)
 
         assert subscription is not None
         assert subscription.id == sample_subscription.id
-        assert subscription.user_id == sample_user.id
+        assert subscription.user_id == sample_user.telegram_id
 
     def test_is_user_vip_true(self, db_session, sample_subscription, sample_user):
         """Test verificar si usuario es VIP (sí lo es)"""
         service = VIPService(db_session)
 
-        is_vip = service.is_user_vip(sample_user.id)
+        is_vip = service.is_user_vip(sample_user.telegram_id)
 
         assert is_vip is True
 
@@ -236,7 +236,7 @@ class TestSubscriptionService:
         """Test verificar si usuario es VIP (no lo es)"""
         service = VIPService(db_session)
 
-        is_vip = service.is_user_vip(sample_user.id)
+        is_vip = service.is_user_vip(sample_user.telegram_id)
 
         assert is_vip is False
 
@@ -631,6 +631,62 @@ class TestVIPServiceExpirationSupport:
 
         assert service.expire_subscription(sub.id) is True
         assert service.has_other_active_subscription(sample_user.telegram_id, sub.id) is False
+
+    def test_redeem_token_clears_vip_entry_state_during_ritual(
+        self, db_session, sample_token, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """
+        DESIRED CONTRACT: redeem_token (even during active vip_entry ritual/pending_entry from Fase10)
+        clears vip_entry_status/stage on user (by TG id), creates/extends sub, marks token used.
+        Prevents ghost ritual state post-VIP grant. Edge: set entry pre-redeem, post assert None + sub active.
+        """
+        service = VIPService(db_session)
+        # Simulate ritual in progress (e.g. user clicked token, started 3-phase before redeem committed)
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 2
+        db_session.commit()
+
+        sub = service.redeem_token(sample_token.token_code, sample_user.telegram_id)
+        assert sub is not None
+        assert sub.is_active is True
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_status is None
+        assert sample_user.vip_entry_stage is None
+        token = service.get_token(sample_token.id)
+        assert token.status == TokenStatus.USED
+        assert token.redeemed_by_id == sample_user.telegram_id
+
+    def test_get_expiring_subscriptions_richer_mix_active_expired_reminded(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """
+        DESIRED CONTRACT: get_expiring_subscriptions(hours=24) returns ONLY active + !reminder_sent + now < end <= now+24h.
+        Richer mix: active far (exclude), expiring soon no-remind (include), reminded (exclude). 
+        (expired/inactive excluded by query semantics; covered in get_expired tests + has_other mix.) Uses explicit per-test models + fresh tokens for isolation (no shared sample).
+        """
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        t1 = Token(token_code="TEXP1", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        t2 = Token(token_code="TEXP2", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        t3 = Token(token_code="TEXP3", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add_all([t1, t2, t3])
+        db_session.commit()
+        db_session.refresh(t1)
+        db_session.refresh(t2)
+        db_session.refresh(t3)
+
+        # mix
+        sub_far = Subscription(user_id=sample_user.telegram_id, channel_id=sample_vip_channel.id, token_id=t1.id, end_date=now + timedelta(days=10), is_active=True, reminder_sent=False)
+        sub_expiring = Subscription(user_id=sample_user.telegram_id, channel_id=sample_vip_channel.id, token_id=t2.id, end_date=now + timedelta(hours=5), is_active=True, reminder_sent=False)
+        sub_reminded = Subscription(user_id=sample_user.telegram_id, channel_id=sample_vip_channel.id, token_id=t3.id, end_date=now + timedelta(hours=3), is_active=True, reminder_sent=True)
+        db_session.add_all([sub_far, sub_expiring, sub_reminded])
+        db_session.commit()
+
+        expiring = service.get_expiring_subscriptions(hours=24)
+        assert len(expiring) == 1
+        assert expiring[0].id == sub_expiring.id
+        assert sub_far.id not in [s.id for s in expiring]
+        assert sub_reminded.id not in [s.id for s in expiring]
 
 
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions

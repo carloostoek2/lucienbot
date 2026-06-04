@@ -2,7 +2,7 @@
 Tests de integración para el flujo VIP completo.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from services.vip_service import VIPService
@@ -12,7 +12,14 @@ from models.models import TokenStatus, ChannelType
 
 @pytest.mark.integration
 class TestVIPFlow:
-    """Tests de integración para flujo VIP completo"""
+    """Tests de integración para flujo VIP completo
+
+    DESIRED CONTRACT (ID duality from models + handlers + vip_service): 
+    - user_id in redeem/get/is_user_vip/get_user_subscription and sub.user_id / token.redeemed_by_id = TG BigInt (from update.effective_user.id / from_user.id, FK to users.telegram_id).
+    - channel_id in sub = DB PK int (ch.id from create/get_by_db_id, for ORM relations; ch.channel_id = TG for bot API).
+    - Manual creates in tests must use .telegram_id for user_id to match real data + prevent silent skips in redeem's User query + clear_vip_entry.
+    - Tests use fresh TG or fixed sample .telegram_id; strict == on IDs.
+    """
 
     def test_complete_vip_flow(self, db_session, sample_admin, sample_user):
         """Test flujo VIP completo: crear tarifa -> generar token -> canjear -> verificar suscripción"""
@@ -50,29 +57,30 @@ class TestVIPFlow:
         assert validated_token.id == token.id
 
         # 5. Canjear token
-        subscription = vip_service.redeem_token(token.token_code, sample_user.id)
+        # DESIRED CONTRACT (ID duality): user_id param + sub.user_id + token.redeemed_by_id use TG BigInt (sample_user.telegram_id / from_user.id), channel_id uses DB PK (ch.id); handlers pass TG, models FK to users.telegram_id.
+        subscription = vip_service.redeem_token(token.token_code, sample_user.telegram_id)
         assert subscription is not None
-        assert subscription.user_id == sample_user.id
-        assert subscription.channel_id == vip_channel.id
+        assert subscription.user_id == sample_user.telegram_id
+        assert subscription.channel_id == vip_channel.id  # PK
         assert subscription.is_active is True
 
         # 6. Verificar token marcado como usado
         updated_token = vip_service.get_token(token.id)
         assert updated_token.status == TokenStatus.USED
-        assert updated_token.redeemed_by_id == sample_user.id
+        assert updated_token.redeemed_by_id == sample_user.telegram_id
         assert updated_token.redeemed_at is not None
 
         # 7. Verificar que el usuario es VIP
-        is_vip = vip_service.is_user_vip(sample_user.id)
+        is_vip = vip_service.is_user_vip(sample_user.telegram_id)
         assert is_vip is True
 
         # 8. Verificar suscripción activa
-        user_subscription = vip_service.get_user_subscription(sample_user.id)
+        user_subscription = vip_service.get_user_subscription(sample_user.telegram_id)
         assert user_subscription is not None
         assert user_subscription.id == subscription.id
 
         # 9. Verificar fecha de expiración (30 días desde ahora)
-        expected_end = datetime.utcnow() + timedelta(days=30)
+        expected_end = datetime.now(UTC) + timedelta(days=30)
         assert abs((subscription.end_date - expected_end).total_seconds()) < 60
 
     def test_token_expiration_flow(self, db_session, sample_tariff, sample_user):
@@ -88,7 +96,7 @@ class TestVIPFlow:
         assert validated_token is None
 
         # Intentar canjear token expirado
-        subscription = vip_service.redeem_token(token.token_code, sample_user.id)
+        subscription = vip_service.redeem_token(token.token_code, sample_user.telegram_id)
         assert subscription is None
 
     def test_token_already_used_flow(self, db_session, sample_token, sample_user, sample_vip_channel):
@@ -96,11 +104,11 @@ class TestVIPFlow:
         vip_service = VIPService(db_session)
 
         # Canjear token por primera vez
-        subscription1 = vip_service.redeem_token(sample_token.token_code, sample_user.id)
+        subscription1 = vip_service.redeem_token(sample_token.token_code, sample_user.telegram_id)
         assert subscription1 is not None
 
         # Intentar canjear el mismo token de nuevo
-        subscription2 = vip_service.redeem_token(sample_token.token_code, sample_user.id)
+        subscription2 = vip_service.redeem_token(sample_token.token_code, sample_user.telegram_id)
         assert subscription2 is None
 
     def test_subscription_expiration_detection(self, db_session, sample_user, sample_vip_channel, sample_token):
@@ -110,10 +118,10 @@ class TestVIPFlow:
         # Crear suscripción expirada
         from models.models import Subscription
         expired_subscription = Subscription(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             channel_id=sample_vip_channel.id,
             token_id=sample_token.id,
-            end_date=datetime.utcnow() - timedelta(days=1),
+            end_date=datetime.now(UTC) - timedelta(days=1),
             is_active=True  # Aún marcada como activa
         )
         db_session.add(expired_subscription)
@@ -138,10 +146,10 @@ class TestVIPFlow:
         # Crear suscripción que vence pronto (12 horas)
         from models.models import Subscription
         subscription = Subscription(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             channel_id=sample_vip_channel.id,
             token_id=sample_token.id,
-            end_date=datetime.utcnow() + timedelta(hours=12),
+            end_date=datetime.now(UTC) + timedelta(hours=12),
             is_active=True,
             reminder_sent=False
         )
@@ -191,20 +199,20 @@ class TestVIPFlow:
         # Crear suscripción activa
         from models.models import Subscription
         active_subscription = Subscription(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             channel_id=sample_vip_channel.id,
             token_id=sample_token.id,
-            end_date=datetime.utcnow() + timedelta(days=30),
+            end_date=datetime.now(UTC) + timedelta(days=30),
             is_active=True
         )
         db_session.add(active_subscription)
 
-        # Crear suscripción inactiva
+        # Crear suscripción inactiva (fresh TG to avoid ID collision)
         inactive_subscription = Subscription(
-            user_id=sample_user.id + 1,
+            user_id=999000999,
             channel_id=sample_vip_channel.id,
             token_id=sample_token.id,
-            end_date=datetime.utcnow() + timedelta(days=30),
+            end_date=datetime.now(UTC) + timedelta(days=30),
             is_active=False
         )
         db_session.add(inactive_subscription)

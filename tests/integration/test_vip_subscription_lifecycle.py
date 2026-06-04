@@ -1151,3 +1151,119 @@ class TestVIPSubscriptionLifecycle:
         finally:
             db.close()
             engine.dispose()
+
+    async def test_multi_vip_channel_expire_only_deactivates_target_no_kick_if_other(
+        self, tmp_path, mock_bot
+    ):
+        """
+        DESIRED CONTRACT (multi VIP channels support via has_other): when user has active subs on 2+ VIP channels,
+        expire of one (via _process_expired) deactivates only that sub (is_active=False), calls has_other true so
+        NO ban/unban/notify, other sub untouched/active. Fresh TG 77703xxx + explicit creates (gold pattern).
+        """
+        self._print_separator("MULTI VIP CH: expire one does not kick if other active")
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+        try:
+            user = User(telegram_id=77703001, username="multich", first_name="Multi", role=UserRole.USER)
+            ch1 = Channel(channel_id=-10077701, channel_name="VIP1", channel_type=ChannelType.VIP, is_active=True)
+            ch2 = Channel(channel_id=-10077702, channel_name="VIP2", channel_type=ChannelType.VIP, is_active=True)
+            tariff = Tariff(name="multi", duration_days=30, price="9.99", is_active=True)
+            db.add_all([user, ch1, ch2, tariff])
+            db.commit()
+            db.refresh(user)
+            db.refresh(ch1)
+            db.refresh(ch2)
+            db.refresh(tariff)
+            t1 = Token(token_code="MT1", tariff_id=tariff.id, status=TokenStatus.USED, redeemed_by_id=user.telegram_id)
+            t2 = Token(token_code="MT2", tariff_id=tariff.id, status=TokenStatus.USED, redeemed_by_id=user.telegram_id)
+            db.add_all([t1, t2])
+            db.commit()
+            db.refresh(t1)
+            db.refresh(t2)
+            now = datetime.now(UTC)
+            sub1 = Subscription(user_id=user.telegram_id, channel_id=ch1.id, token_id=t1.id, end_date=now - timedelta(hours=1), is_active=True)  # expired
+            sub2 = Subscription(user_id=user.telegram_id, channel_id=ch2.id, token_id=t2.id, end_date=now + timedelta(days=5), is_active=True)
+            db.add_all([sub1, sub2])
+            db.commit()
+            sub1_id, sub2_id = sub1.id, sub2.id
+            db.close()
+
+            mock_bot.reset_mock()
+            with patch.object(scheduler_service, "SessionLocal", TestSession), patch.object(scheduler_service, "_get_bot", return_value=mock_bot):
+                await scheduler_service._process_expired_subscriptions()
+
+            verify = TestSession()
+            s1 = self._get_sub(verify, sub1_id)
+            s2 = self._get_sub(verify, sub2_id)
+            assert s1.is_active is False
+            assert s2.is_active is True
+            assert not mock_bot.ban_chat_member.called  # no kick due to has_other
+            verify.close()
+            self._print_ok("MULTI CH: only target deact, no ban, other preserved")
+        finally:
+            db.close()
+            engine.dispose()
+
+    async def test_expired_scheduler_error_on_one_sub_continues_no_side_on_other(
+        self, tmp_path, mock_bot
+    ):
+        """
+        DESIRED CONTRACT: _process_expired loops per-sub with try/except + rollback on error (scheduler_service:248-250);
+        fail on one (e.g. ban exception) must not affect processing of others (continue), no state leak.
+        Setup 2 expired unique subs, mock ban side_effect fail on first call, assert first errored/rolled (still active? or per logic), second processed.
+        """
+        self._print_separator("SCHED ERROR CONTINUE: error on one sub, other processed, no side effects")
+        engine, TestSession = self._create_engine_and_session(tmp_path)
+        db = TestSession()
+        try:
+            u1 = User(telegram_id=77703002, username="err1", first_name="E1", role=UserRole.USER)
+            u2 = User(telegram_id=77703003, username="err2", first_name="E2", role=UserRole.USER)
+            ch = Channel(channel_id=-10077703, channel_name="ErrCh", channel_type=ChannelType.VIP, is_active=True)
+            tariff = Tariff(name="err", duration_days=30, price="9.99", is_active=True)
+            db.add_all([u1, u2, ch, tariff])
+            db.commit()
+            db.refresh(u1)
+            db.refresh(u2)
+            db.refresh(ch)
+            db.refresh(tariff)
+            t1 = Token(token_code="ET1", tariff_id=tariff.id, status=TokenStatus.USED, redeemed_by_id=u1.telegram_id)
+            t2 = Token(token_code="ET2", tariff_id=tariff.id, status=TokenStatus.USED, redeemed_by_id=u2.telegram_id)
+            db.add_all([t1, t2])
+            db.commit()
+            db.refresh(t1)
+            db.refresh(t2)
+            now = datetime.now(UTC)
+            sub_err = Subscription(user_id=u1.telegram_id, channel_id=ch.id, token_id=t1.id, end_date=now - timedelta(hours=2), is_active=True)
+            sub_ok = Subscription(user_id=u2.telegram_id, channel_id=ch.id, token_id=t2.id, end_date=now - timedelta(hours=1), is_active=True)
+            db.add_all([sub_err, sub_ok])
+            db.commit()
+            sub_err_id = sub_err.id
+            sub_ok_id = sub_ok.id
+            db.close()
+
+            # Make first ban fail, second succeed
+            call_count = {"n": 0}
+            async def ban_side(*a, **k):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    raise Exception("sim fail")
+                return None
+            mock_bot.ban_chat_member.side_effect = ban_side
+            mock_bot.unban_chat_member.return_value = None
+            mock_bot.send_message.return_value = None
+
+            with patch.object(scheduler_service, "SessionLocal", TestSession), patch.object(scheduler_service, "_get_bot", return_value=mock_bot):
+                await scheduler_service._process_expired_subscriptions()
+
+            verify = TestSession()
+            se = self._get_sub(verify, sub_err_id)
+            so = self._get_sub(verify, sub_ok_id)
+            # DESIRED: errored sub remains active/unchanged (ban fail before deact line in scheduler_service:224-229; rollback at 250 reverts any partial); good sub fully processed (deact + notify if no other). call_count verifies side effect happened.
+            assert se is not None and se.is_active is True, "errored sub must remain active (rollback before deact)"
+            assert so.is_active is False, "good sub must be processed despite prior error"
+            assert call_count["n"] >= 1
+            verify.close()
+            self._print_ok("SCHED ERROR: continued, other sub processed, no global side effects")
+        finally:
+            db.close()
+            engine.dispose()

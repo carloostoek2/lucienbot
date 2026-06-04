@@ -175,8 +175,8 @@ def sample_used_token(db_session: Session, sample_tariff, sample_user):
         token_code="USED123456",
         tariff_id=sample_tariff.id,
         status=TokenStatus.USED,
-        redeemed_by_id=sample_user.id,
-        redeemed_at=datetime.utcnow(),
+        redeemed_by_id=sample_user.telegram_id,
+        redeemed_at=datetime.now(UTC),
     )
     db_session.add(token)
     db_session.commit()
@@ -201,12 +201,12 @@ def sample_expired_token(db_session: Session, sample_tariff):
 
 @pytest.fixture
 def sample_subscription(db_session: Session, sample_user, sample_vip_channel, sample_token):
-    """Crea una suscripción activa de prueba."""
+    """Crea una suscripción activa de prueba. DESIRED CONTRACT: user_id stores TG BigInt (telegram_id) per model FK to users.telegram_id and real handler flows (user.id from TG); channel_id=DB PK; explicit aware datetimes."""
     subscription = Subscription(
-        user_id=sample_user.id,
+        user_id=sample_user.telegram_id,
         channel_id=sample_vip_channel.id,
         token_id=sample_token.id,
-        end_date=datetime.utcnow() + timedelta(days=30),
+        end_date=datetime.now(UTC) + timedelta(days=30),
         is_active=True,
     )
     db_session.add(subscription)
@@ -217,12 +217,12 @@ def sample_subscription(db_session: Session, sample_user, sample_vip_channel, sa
 
 @pytest.fixture
 def sample_expired_subscription(db_session: Session, sample_user, sample_vip_channel, sample_token):
-    """Crea una suscripción expirada de prueba."""
+    """Crea una suscripción expirada de prueba. DESIRED CONTRACT: user_id=telegram_id (TG value); active flag + past end for scheduler tests."""
     subscription = Subscription(
-        user_id=sample_user.id,
+        user_id=sample_user.telegram_id,
         channel_id=sample_vip_channel.id,
         token_id=sample_token.id,
-        end_date=datetime.utcnow() - timedelta(days=1),
+        end_date=datetime.now(UTC) - timedelta(days=1),
         is_active=True,  # Aún marcada como activa, debería ser corregida por el startup check
     )
     db_session.add(subscription)
