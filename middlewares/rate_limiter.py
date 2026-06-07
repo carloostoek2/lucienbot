@@ -89,6 +89,7 @@ class ThrottlingMiddleware(BaseMiddleware):
 
     async def _on_limit_exceeded(self, event: TelegramObject, user_id: int):
         """Send throttling response to user (Lucien voice, identical to legacy)."""
+        logger.info(f"rate_limiter - limit_exceeded - {user_id} - result: throttled")
         try:
             await event.answer(
                 text="🎩 <i>Lucien:</i>\n\n"

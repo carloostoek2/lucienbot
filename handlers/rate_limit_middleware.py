@@ -1,22 +1,33 @@
 """
-DEPRECATED SHIM - DO NOT USE FOR NEW CODE.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+DEPRECATED SHIM - DO NOT IMPORT OR USE IN NEW CODE OR TESTS (except transitional).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 This module previously contained the ThrottlingMiddleware implementation.
-The canonical, maintained implementation now lives in:
+THE CANONICAL, MAINTAINED, TESTED IMPLEMENTATION NOW LIVES IN:
 
-    middlewares.rate_limiter.ThrottlingMiddleware
+    from middlewares.rate_limiter import ThrottlingMiddleware  # canonical
+    # (also exports RateLimiterMiddleware as alias during transition)
 
-This shim exists only for transitional backward-compatibility during
-gsd-mw-hardening (phase 2). It will be removed in a future cleanup phase.
+This shim exists **only** for transitional backward-compatibility during
+gsd-mw-hardening (phases 2-6). It **will be removed** in a future cleanup.
 
-Any direct import from handlers.rate_limit_middleware will emit
-DeprecationWarning.
+IMPORTING THIS MODULE EMITS DeprecationWarning AT IMPORT TIME.
 
-gsd-mw-hardening: phase 2 - legacy rate_limit_middleware.py converted to shim.
-Refer to middlewares/rate_limiter.py for the authoritative source.
+gsd-mw-hardening: phase 2 - converted to shim + strong header.
+Phase 6 - docs + final verification completed.
 
-Rate limiting config, Lucien voice message, aiolimiter, admin (Custodios) bypass,
-per-user limiters + idle cleanup, and CQ support are all in the new location.
+Refer to:
+- middlewares/rate_limiter.py (full mature logic + tests)
+- middlewares/idempotency.py (IdempotencyMiddleware + cache)
+- bot.py (wiring order)
+- handlers/CLAUDE.md and decisions.md (updated)
+
+Everything (config, Lucien voice exact string, aiolimiter, Custodios bypass using
+real rate_limit_config + bot_config.ADMIN_IDS, cleanup, logging, CQ support via
+event_from_user, robustness) is in the middlewares/ canonical files.
+
+DO NOT ADD NEW LOGIC HERE. DO NOT RELY ON THIS PATH.
 """
 import warnings
 

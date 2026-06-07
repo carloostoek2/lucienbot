@@ -147,3 +147,25 @@ class TestIdempotencyMiddleware:
             # We called is_duplicate 4 times with the ids in order
             calls = [c.args[0] for c in mock_cache.is_duplicate.call_args_list]
             assert calls == ["cbA", "cbA", "cbB", "cbB"]
+
+    @pytest.mark.asyncio
+    async def test_callback_without_id_passes_through_without_cache_check(self):
+        """Edge: callback with no .id (falsy) skips the dupe guard entirely (if cb_id and ...).
+        Passes to handler; no answer from mw; cache never consulted. Covers 'callback sin id' case."""
+        with patch("middlewares.idempotency.idempotency_cache") as mock_cache:
+            mw = IdempotencyMiddleware()
+
+            cb = MagicMock(spec=CallbackQuery)
+            cb.id = None  # or ""
+            cb.from_user = MagicMock()
+            cb.from_user.id = 424242
+            cb.answer = AsyncMock()
+
+            handler = AsyncMock(return_value="ok-no-id")
+
+            result = await mw(handler, cb, {})
+
+            mock_cache.is_duplicate.assert_not_called()
+            cb.answer.assert_not_called()
+            handler.assert_called_once()
+            assert result == "ok-no-id"

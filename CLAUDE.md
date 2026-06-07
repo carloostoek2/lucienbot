@@ -85,7 +85,12 @@ Cada dominio tiene su propio CLAUDE.md con contexto específico.
 - Verificar permisos admin con `is_admin()` antes de cualquier acción admin
 - Verificar saldos (`has_sufficient_balance`) antes de transacciones
 - Usar transacciones en BD para operaciones atómicas
-- Rate limiting: `ThrottlingMiddleware` con `aiolimiter`, admin bypass
+- Rate limiting + idempotencia centralizados en middlewares/ (gsd-mw-hardening):
+  - `ThrottlingMiddleware` (middlewares/rate_limiter.py, canonical; usa aiolimiter, real ADMIN_BYPASS + Custodios list, cleanup, Lucien voice, soporta CB)
+  - `IdempotencyMiddleware` (middlewares/idempotency.py) para dedup de CallbackQuery (previene re-ejecuciones por retries de TG)
+  - Registro: Error (outer) → Idempotency (cb) → Throttling (cb + messages)
+  - Legacy manual guards en handlers removidos (phase 5); legacy rate file es shim DEPRECATED
+  - Tests unit en tests/unit/test_*_middleware.py + actualizaciones en handler tests
 - FSM storage: `RedisStorage` si `REDIS_URL` está seteado, si no `MemoryStorage`
 
 ---

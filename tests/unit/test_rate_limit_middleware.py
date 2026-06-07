@@ -227,6 +227,31 @@ class TestThrottlingMiddleware:
         limiter.max_rate = orig_max
 
     @pytest.mark.asyncio
+    async def test_on_limit_exceeded_logs_info_event(self, caplog):
+        """Covers the primary INFO log on rate limit exceeded (module | action | user_id | resultado convention).
+        Added post gsd-mw-hardening to protect the logging requirement flagged by arch-enforcer.
+        """
+        import logging
+
+        mw = ThrottlingMiddleware()
+        user_id = 8888
+        limiter = mw._get_limiter(user_id)
+        orig_max = limiter.max_rate
+        limiter.max_rate = 0
+
+        event = MockEvent()
+        data = {"event_from_user": MockUser(user_id)}
+
+        with caplog.at_level(logging.INFO):
+            await mw(lambda e, d: None, event, data)
+
+        assert "rate_limiter - limit_exceeded" in caplog.text
+        assert str(user_id) in caplog.text
+        assert "throttled" in caplog.text
+
+        limiter.max_rate = orig_max
+
+    @pytest.mark.asyncio
     async def test_admin_bypass_with_live_config_mutation(self):
         """Realistic bypass test mutating the live singleton config objects directly (not module patch)."""
         from config.settings import rate_limit_config, bot_config
