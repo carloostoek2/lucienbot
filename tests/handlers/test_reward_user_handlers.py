@@ -12,32 +12,17 @@ pytestmark = [pytest.mark.unit]
 
 
 class TestShowAvailableRewards:
-    """Tests para show_available_rewards."""
+    """Tests para show_available_rewards.
+    (skip-dupe tests and their idempotency_cache patches removed in gsd-mw-hardening phase 5;
+     dedup is now the responsibility of the global IdempotencyMiddleware.)
+    """
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
-    @patch("handlers.reward_user_handlers.MissionService")
-    @patch("handlers.reward_user_handlers.RewardService")
-    async def test_skips_when_duplicate(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
-    ):
-        """Si idempotency_cache dice duplicado, retorna sin procesar."""
-        mock_idempotency.is_duplicate.return_value = True
-        cb = make_callback(data="rewards_list")
-
-        from handlers.reward_user_handlers import show_available_rewards
-        await show_available_rewards(cb)
-
-        cb.answer.assert_called_once()
-        cb.message.edit_text.assert_not_called()
-
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_empty_rewards_shows_empty_message(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Cuando no hay recompensas, muestra mensaje vacío."""
-        mock_idempotency.is_duplicate.return_value = False
         mock_mission_svc.return_value.get_available_rewards_for_user.return_value = []
         cb = make_callback(data="rewards_list")
 
@@ -48,14 +33,12 @@ class TestShowAvailableRewards:
         text = cb.message.edit_text.call_args[0][0]
         assert "No hay recompensas" in text
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_displays_rewards_list(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Muestra lista de recompensas disponibles con botones."""
-        mock_idempotency.is_duplicate.return_value = False
         mock_mission = MagicMock()
         mock_mission.id = 1
         mock_mission.name = "Test Mission"
@@ -74,14 +57,12 @@ class TestShowAvailableRewards:
         text = cb.message.edit_text.call_args[0][0]
         assert "Recompensas Disponibles" in text
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_calls_service_with_user_id(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Llama a get_available_rewards_for_user con el user_id correcto."""
-        mock_idempotency.is_duplicate.return_value = False
         mock_mission_svc.return_value.get_available_rewards_for_user.return_value = []
         cb = make_callback(data="rewards_list")
 
@@ -90,14 +71,12 @@ class TestShowAvailableRewards:
 
         mock_mission_svc.return_value.get_available_rewards_for_user.assert_called_once_with(123456789)
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_closes_both_services(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Ambos servicios se cierran en finally."""
-        mock_idempotency.is_duplicate.return_value = False
         mock_mission_svc.return_value.get_available_rewards_for_user.return_value = []
         cb = make_callback(data="rewards_list")
 
@@ -109,33 +88,17 @@ class TestShowAvailableRewards:
 
 
 class TestRewardDetail:
-    """Tests para reward_detail - detalle de recompensa."""
+    """Tests para reward_detail - detalle de recompensa.
+    (skip-dupe tests and their idempotency_cache patches removed in gsd-mw-hardening phase 5;
+     the guard logic is now in the global IdempotencyMiddleware; handlers are pure routers calling 1 service.)
+    """
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
-    @patch("handlers.reward_user_handlers.MissionService")
-    @patch("handlers.reward_user_handlers.RewardService")
-    async def test_skips_when_duplicate(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
-    ):
-        """Si idempotency_cache dice duplicado, retorna sin procesar."""
-        mock_idempotency.is_duplicate.return_value = True
-        cb = make_callback(data="reward_user_detail:1")
-
-        from keyboards.callback_data import RewardUserDetailCallback
-        from handlers.reward_user_handlers import reward_detail
-        await reward_detail(cb, RewardUserDetailCallback(mission_id=1))
-
-        cb.answer.assert_called_once()
-        cb.message.edit_text.assert_not_called()
-
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_mission_not_found_shows_alert(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Cuando no se encuentra la misión, muestra alerta."""
-        mock_idempotency.is_duplicate.return_value = False
         mock_mission_svc.return_value.get_mission.return_value = None
         cb = make_callback(data="reward_user_detail:999")
 
@@ -145,14 +108,12 @@ class TestRewardDetail:
 
         cb.answer.assert_called_once_with("Recompensa no encontrada", show_alert=True)
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_mission_without_reward_shows_alert(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Cuando la misión no tiene reward_id, muestra alerta."""
-        mock_idempotency.is_duplicate.return_value = False
         mock_mission = MagicMock()
         mock_mission.reward_id = None
         mock_mission_svc.return_value.get_mission.return_value = mock_mission
@@ -164,15 +125,12 @@ class TestRewardDetail:
 
         cb.answer.assert_called_once_with("Recompensa no encontrada", show_alert=True)
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_displays_reward_detail(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Muestra detalles completos de la recompensa con su misión."""
-        mock_idempotency.is_duplicate.return_value = False
-
         mock_mission = MagicMock()
         mock_mission.id = 1
         mock_mission.name = "Mission One"
@@ -205,15 +163,12 @@ class TestRewardDetail:
         assert "Mission One" in text
         assert "Complete the task" in text
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_shows_completed_status(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Muestra estado completado cuando progress.is_completed es True."""
-        mock_idempotency.is_duplicate.return_value = False
-
         mock_mission = MagicMock()
         mock_mission.id = 1
         mock_mission.name = "Mission"
@@ -243,15 +198,12 @@ class TestRewardDetail:
         text = cb.message.edit_text.call_args[0][0]
         assert "completada" in text.lower()
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_shows_progress_bar_when_incomplete(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Muestra barra de progreso cuando la misión no está completada."""
-        mock_idempotency.is_duplicate.return_value = False
-
         mock_mission = MagicMock()
         mock_mission.id = 1
         mock_mission.name = "Mission"
@@ -282,15 +234,12 @@ class TestRewardDetail:
         assert "Progreso" in text
         assert "3 / 10" in text
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_calls_service_with_correct_params(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Llama a los servicios con los parámetros correctos."""
-        mock_idempotency.is_duplicate.return_value = False
-
         mock_mission = MagicMock()
         mock_mission.id = 1
         mock_mission.name = "Mission"
@@ -321,15 +270,12 @@ class TestRewardDetail:
         mock_reward_svc.return_value.get_reward.assert_called_once_with(5)
         mock_mission_svc.return_value.get_or_create_progress.assert_called_once_with(123456789, 1)
 
-    @patch("handlers.reward_user_handlers.idempotency_cache")
     @patch("handlers.reward_user_handlers.MissionService")
     @patch("handlers.reward_user_handlers.RewardService")
     async def test_closes_both_services(
-        self, mock_reward_svc, mock_mission_svc, mock_idempotency, make_callback
+        self, mock_reward_svc, mock_mission_svc, make_callback
     ):
         """Ambos servicios se cierran en finally."""
-        mock_idempotency.is_duplicate.return_value = False
-
         mock_mission = MagicMock()
         mock_mission.id = 1
         mock_mission.name = "Mission"

@@ -14,7 +14,6 @@ from keyboards.inline_keyboards import (
     back_keyboard,
     reactions_keyboard_with_counts,
 )
-from middlewares.idempotency import idempotency_cache
 from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
@@ -198,11 +197,7 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
     broadcast_id = callback_data.broadcast_id
     emoji_id = callback_data.emoji_id
 
-    # Verificar si este callback ya fue procesado (previene duplicados por reintentos de Telegram)
-    if idempotency_cache.is_duplicate(callback.id):
-        await callback.answer()
-        return
-
+    # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
     broadcast_service = BroadcastService()
     try:
         reaction = await broadcast_service.check_and_register_reaction(

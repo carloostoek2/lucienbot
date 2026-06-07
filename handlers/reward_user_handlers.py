@@ -11,7 +11,6 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from keyboards.callback_data import MissionDetailCallback, RewardUserDetailCallback
 from keyboards.inline_keyboards import back_keyboard
-from middlewares.idempotency import idempotency_cache
 from services.mission_service import MissionService
 from services.reward_service import RewardService
 
@@ -72,10 +71,7 @@ def _build_progress_bar(current: int, target: int) -> tuple[str, int]:
 @router.callback_query(F.data == "rewards_list")
 async def show_available_rewards(callback: CallbackQuery):
     """Muestra las recompensas disponibles con sus misiones asociadas"""
-    if idempotency_cache.is_duplicate(callback.id):
-        await callback.answer()
-        return
-
+    # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
     user_id = callback.from_user.id
     mission_service = MissionService()
     reward_service = RewardService()
@@ -106,10 +102,7 @@ async def show_available_rewards(callback: CallbackQuery):
 @router.callback_query(RewardUserDetailCallback.filter())
 async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetailCallback):
     """Muestra detalles de una recompensa y su mision asociada"""
-    if idempotency_cache.is_duplicate(callback.id):
-        await callback.answer()
-        return
-
+    # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
     mission_id = callback_data.mission_id
     user_id = callback.from_user.id
     mission_service = MissionService()

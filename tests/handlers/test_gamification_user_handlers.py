@@ -241,28 +241,15 @@ class TestHandleReaction:
         from keyboards.callback_data import ReactionCallback
         return ReactionCallback(broadcast_id=broadcast_id, emoji_id=emoji_id)
 
-    @patch("handlers.gamification_user_handlers.idempotency_cache")
-    @patch("handlers.gamification_user_handlers.BroadcastService")
-    async def test_skips_when_duplicate_callback(
-        self, mock_broadcast, mock_idempotency, make_callback
-    ):
-        """Si idempotency_cache dice que es duplicado, retorna sin procesar."""
-        mock_idempotency.is_duplicate.return_value = True
-        cb = make_callback(data="react:1:2")
+    # test_skips_when_duplicate_callback removed in gsd-mw-hardening phase 5
+    # (idempotency now centralized in IdempotencyMiddleware; handler no longer has the guard)
 
-        from handlers.gamification_user_handlers import handle_reaction
-        await handle_reaction(cb, self._make_callback_data())
-
-        mock_broadcast.return_value.check_and_register_reaction.assert_not_called()
-        cb.answer.assert_called_once()
-
-    @patch("handlers.gamification_user_handlers.idempotency_cache")
     @patch("handlers.gamification_user_handlers.BroadcastService")
     async def test_registers_reaction(
-        self, mock_broadcast, mock_idempotency, make_callback
+        self, mock_broadcast, make_callback
     ):
         """Llama a check_and_register_reaction con parámetros correctos."""
-        mock_idempotency.is_duplicate.return_value = False
+        # (idempotency_cache patch removed - phase 5 centralized in middleware)
         mock_instance = mock_broadcast.return_value
         mock_instance.check_and_register_reaction = AsyncMock(return_value={
             "besitos_awarded": 5
@@ -279,13 +266,12 @@ class TestHandleReaction:
         assert kwargs["emoji_id"] == 2
         assert kwargs["user_id"] == 123456789
 
-    @patch("handlers.gamification_user_handlers.idempotency_cache")
     @patch("handlers.gamification_user_handlers.BroadcastService")
     async def test_shows_besitos_awarded(
-        self, mock_broadcast, mock_idempotency, make_callback
+        self, mock_broadcast, make_callback
     ):
         """Responde con la cantidad de besitos ganados."""
-        mock_idempotency.is_duplicate.return_value = False
+        # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
         mock_instance.check_and_register_reaction = AsyncMock(return_value={
             "besitos_awarded": 5
@@ -298,13 +284,12 @@ class TestHandleReaction:
 
         cb.answer.assert_called_with("¡+5 besitos! 💋")
 
-    @patch("handlers.gamification_user_handlers.idempotency_cache")
     @patch("handlers.gamification_user_handlers.BroadcastService")
     async def test_shows_alert_when_already_reacted(
-        self, mock_broadcast, mock_idempotency, make_callback
+        self, mock_broadcast, make_callback
     ):
         """Si el usuario ya reaccionó, muestra alerta."""
-        mock_idempotency.is_duplicate.return_value = False
+        # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
         mock_instance.check_and_register_reaction = AsyncMock(return_value=None)
         cb = make_callback(data="react:1:2")
@@ -314,13 +299,12 @@ class TestHandleReaction:
 
         cb.answer.assert_called_with("Ya reaccionaste a este mensaje", show_alert=True)
 
-    @patch("handlers.gamification_user_handlers.idempotency_cache")
     @patch("handlers.gamification_user_handlers.BroadcastService")
     async def test_updates_reaction_counts(
-        self, mock_broadcast, mock_idempotency, make_callback
+        self, mock_broadcast, make_callback
     ):
         """Cuando has_reactions=True, actualiza los contadores."""
-        mock_idempotency.is_duplicate.return_value = False
+        # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
         mock_instance.check_and_register_reaction = AsyncMock(return_value={
             "besitos_awarded": 5
@@ -341,13 +325,12 @@ class TestHandleReaction:
 
         mock_instance.update_reaction_message.assert_called_once()
 
-    @patch("handlers.gamification_user_handlers.idempotency_cache")
     @patch("handlers.gamification_user_handlers.BroadcastService")
     async def test_closes_service(
-        self, mock_broadcast, mock_idempotency, make_callback
+        self, mock_broadcast, make_callback
     ):
         """El servicio se cierra después de usar."""
-        mock_idempotency.is_duplicate.return_value = False
+        # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
         mock_instance.check_and_register_reaction = AsyncMock(return_value=None)
         cb = make_callback(data="react:1:2")
