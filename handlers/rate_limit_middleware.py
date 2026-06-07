@@ -1,94 +1,38 @@
 """
-Rate Limiting Middleware - Lucien Bot
+DEPRECATED SHIM - DO NOT USE FOR NEW CODE.
 
-Throttles per-user requests using aiolimiter sliding window.
-Custodios (admins) bypass rate limiting entirely.
+This module previously contained the ThrottlingMiddleware implementation.
+The canonical, maintained implementation now lives in:
+
+    middlewares.rate_limiter.ThrottlingMiddleware
+
+This shim exists only for transitional backward-compatibility during
+gsd-mw-hardening (phase 2). It will be removed in a future cleanup phase.
+
+Any direct import from handlers.rate_limit_middleware will emit
+DeprecationWarning.
+
+gsd-mw-hardening: phase 2 - legacy rate_limit_middleware.py converted to shim.
+Refer to middlewares/rate_limiter.py for the authoritative source.
+
+Rate limiting config, Lucien voice message, aiolimiter, admin (Custodios) bypass,
+per-user limiters + idle cleanup, and CQ support are all in the new location.
 """
+import warnings
 
-import asyncio
-import logging
-import time
-from typing import Any
+# Re-export the canonical implementation (and the alias)
+from middlewares.rate_limiter import (
+    ThrottlingMiddleware,
+    RateLimiterMiddleware,
+    _LIMITER_TTL,
+)
 
-from aiogram.dispatcher.middlewares.base import BaseMiddleware
-from aiogram.types import TelegramObject
-from aiolimiter import AsyncLimiter
+warnings.warn(
+    "handlers.rate_limit_middleware is DEPRECATED. "
+    "Import 'ThrottlingMiddleware' (canonical) from 'middlewares.rate_limiter' instead. "
+    "This shim will be removed after gsd-mw-hardening cleanup.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-from config.settings import bot_config, rate_limit_config
-
-logger = logging.getLogger(__name__)
-
-# Seconds after which an idle per-user limiter entry is cleaned up
-_LIMITER_TTL = 300  # 5 minutes
-
-
-class ThrottlingMiddleware(BaseMiddleware):
-    """
-    Per-user rate limiting middleware using aiolimiter.
-
-    Each user gets their own AsyncLimiter instance. Admins (Custodios) bypass entirely.
-    Idle per-user limiter entries are cleaned up after _LIMITER_TTL seconds.
-    """
-
-    def __init__(self):
-        self._limiters: dict[int, tuple[AsyncLimiter, float]] = {}
-        self._lock = asyncio.Lock()
-
-    def _get_limiter(self, user_id: int) -> AsyncLimiter:
-        """Get or create a per-user AsyncLimiter. Returns (limiter, is_new)."""
-        now = time.monotonic()
-        if user_id in self._limiters:
-            limiter, _ = self._limiters[user_id]
-            self._limiters[user_id] = (limiter, now)
-            return limiter
-        limiter = AsyncLimiter(
-            max_rate=rate_limit_config.RATE_LIMIT_RATE,
-            time_period=rate_limit_config.RATE_LIMIT_PERIOD,
-        )
-        self._limiters[user_id] = (limiter, now)
-        logger.debug(f"[rate_limit] Created per-user limiter for user {user_id}")
-        return limiter
-
-    async def _cleanup_idle(self):
-        """Remove limiter entries that have been idle for more than _LIMITER_TTL seconds."""
-        now = time.monotonic()
-        expired = [
-            uid for uid, (_, last_seen) in self._limiters.items() if now - last_seen > _LIMITER_TTL
-        ]
-        for uid in expired:
-            del self._limiters[uid]
-            logger.debug(f"[rate_limit] Cleaned up idle limiter for user {uid}")
-
-    async def __call__(self, handler, event: TelegramObject, data: dict) -> Any:
-        user = data.get("event_from_user")
-        if user is None:
-            return await handler(event, data)
-
-        user_id = user.id
-
-        # Bypass for Custodios
-        if rate_limit_config.ADMIN_BYPASS and user_id in bot_config.ADMIN_IDS:
-            return await handler(event, data)
-
-        async with self._lock:
-            await self._cleanup_idle()
-            limiter = self._get_limiter(user_id)
-
-        try:
-            async with limiter:
-                return await handler(event, data)
-        except Exception:
-            await self._on_limit_exceeded(event, user_id)
-            return  # Do not call handler
-
-    async def _on_limit_exceeded(self, event: TelegramObject, user_id: int):
-        """Send throttling response to user."""
-        try:
-            await event.answer(
-                text="🎩 <i>Lucien:</i>\n\n"
-                "<i>Espera un momento... no tan rapido.</i>\n\n"
-                "<i>Los secretos de Diana requieren calma.</i>",
-                show_alert=True,
-            )
-        except Exception as e:
-            logger.warning(f"Could not send throttling reply to {user_id}: {e}")
+__all__ = ["ThrottlingMiddleware", "RateLimiterMiddleware", "_LIMITER_TTL"]
