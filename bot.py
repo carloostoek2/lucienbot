@@ -63,6 +63,8 @@ from handlers import (
     vip_user_router,
 )
 from middlewares.error_handler import ErrorHandlerMiddleware
+from middlewares.idempotency import IdempotencyMiddleware
+from middlewares.rate_limiter import ThrottlingMiddleware
 from models.database import init_db
 from services.scheduler_service import get_scheduler
 from services.vip_service import VIPService
@@ -246,9 +248,17 @@ async def main():
     storage = create_storage()
     dp = Dispatcher(storage=storage)
 
-    # Middleware global de error — capturar excepciones no manejadas
-    dp.message.middleware(ErrorHandlerMiddleware())
-    dp.callback_query.middleware(ErrorHandlerMiddleware())
+    # Middlewares registration order (gsd-mw-hardening plan, section 4 + 8):
+    # ErrorHandler as *outer* (catches exceptions from all inner mws + handlers)
+    # IdempotencyMiddleware for callback_query only (central dedup of TG CB retries)
+    # ThrottlingMiddleware for callback_query (after idemp so duplicate retries do not consume rate quota)
+    # ThrottlingMiddleware for messages
+    # This order: Error outer → Idempotency (cb) → Throttling (cb); Throttling (messages)
+    dp.message.outer_middleware(ErrorHandlerMiddleware())
+    dp.callback_query.outer_middleware(ErrorHandlerMiddleware())
+    dp.callback_query.middleware(IdempotencyMiddleware())
+    dp.callback_query.middleware(ThrottlingMiddleware())
+    dp.message.middleware(ThrottlingMiddleware())
 
     # Registrar routers
     dp.include_router(common_router)
