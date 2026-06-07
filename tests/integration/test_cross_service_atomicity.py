@@ -1,10 +1,13 @@
 """
 Integration tests: Cross-service atomicity for Reaction credit vs Mission reward delivery failures.
+(Extended with Fase4 Gamificación daily atomic pilot per fases_refactor_testing brecha #2 + recs.)
 
 Covers the critical partial failure scenarios per fases_refactor_testing.md row #8 (Alto):
 - Happy path baseline: reaction credits REACTION besitos → mission REACTION_COUNT completes → reward (BESITOS) delivered successfully.
 - Key failure (highlighted): reaction + REACTION besitos credited (main tx commits), then mission completes (progress saved) but deliver_reward fails (inactive reward or package stock=0/not available_for_reward early False in deliver_reward/_deliver_package). Reaction credit + progress survive; NO reward besitos added; no exception from check_and_register_reaction; no rollback.
 - Additional variants: already-completed (ONE_TIME skip before any deliver), simulated error inside increment after reaction commit (wrapped in broadcast's separate try/except). VIP/cooldown/notfound + success PACKAGE paths remain for directed follow-ups per s.8/EOF.
+
+NEW in Fase4 pilots: DailyGiftClaim + besito.credit (internal commit) atomicity/partial (brecha#2). See TestDailyGiftClaimAtomicity below.
 
 Patrón exacto replicado de tests/integration/test_reaction_full_chain.py + test_streak_protection_flow.py:
 - SQLite en archivo temporal (tmp_path) + TestSession independiente (maneja commits internos de credit_besitos + broadcast commit + mission increment commit + deliver credits)
@@ -37,6 +40,8 @@ from models.models import (
     BroadcastReaction,
     Channel,
     ChannelType,
+    DailyGiftClaim,
+    DailyGiftConfig,
     Mission,
     MissionFrequency,
     MissionType,
@@ -51,6 +56,7 @@ from models.models import (
 )
 from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
+from services.daily_gift_service import DailyGiftService
 
 
 @pytest.mark.integration
@@ -142,12 +148,13 @@ class TestCrossServiceAtomicity:
         db.add(mission)
         db.commit()
 
-        balance = BesitoBalance(user_id=user.id, balance=0, total_earned=0, total_spent=0)
+        # DESIRED CONTRACT (Fase4 gamif ID): besito keys (balance, tx, reaction user_id) use TG BigInt value (tg_id / user.telegram_id), matching models + handlers + sample_balance post-fix. PK .id is internal only.
+        balance = BesitoBalance(user_id=tg_id, balance=0, total_earned=0, total_spent=0)
         db.add(balance)
         db.commit()
 
         return {
-            "user_id": user.id,
+            "user_id": tg_id,  # besito domain key (TG); tg_id kept for clarity vs any PK
             "tg_id": tg_id,
             "channel_id": channel.channel_id,
             "emoji_id": emoji.id,
@@ -174,7 +181,7 @@ class TestCrossServiceAtomicity:
         besito_svc = None
         try:
             env = self._setup_basic_reaction_mission_env(db, 77708001, RewardType.BESITOS, 5)
-            # (tg_id in env for User.telegram_id only; besito keys use env["user_id"] PK)
+            # (tg_id in env for User.telegram_id; besito keys now use env["user_id"] = TG value per ID contract fix Fase4)
             db.close()
             db = TestSession()
 
@@ -367,7 +374,7 @@ class TestCrossServiceAtomicity:
         besito_svc = None
         try:
             env = self._setup_basic_reaction_mission_env(db, 77708003, RewardType.BESITOS, 5)
-            # (no tg= ; use env["user_id"] for besito keys per precedent)
+            # (besito keys via env["user_id"] = TG; tg_id only for User creation)
 
             # Create package with stock 0 (not available for reward)
             package = Package(
@@ -631,6 +638,144 @@ class TestCrossServiceAtomicity:
             # Raw db.close() + dispose only (TestSession injected and owned by test; BroadcastService/BesitoService.close() would double-close the shared session).
             # Matches reaction_full_chain.py raw-only pattern for cross-service atomicity tests using injected db (unlike streak which owns its sessions).
             # Resolves double-close hygiene (Issue #1 review); suppress retained only if needed for owned svcs in future variants.
+            db.close()
+            engine.dispose()
+
+
+@pytest.mark.integration
+class TestDailyGiftClaimAtomicity:
+    """
+    Fase4 pilot (brecha #2 Alta): atomicity for DailyGift claim record + besito.credit (which does *internal* bal+tx commit on success).
+
+    Covers risk: claim row added, credit succeeds (its commit happens), outer commit fails or credit returns False -> partial state (besitos without claim, or claim without credit).
+
+    DESIRED CONTRACT: On success both claim row (DAILY_GIFT source tx) and balance credit persist together. On credit fail, claim is rolled back (no orphan claim row, no credit). Partial tolerated only if explicitly designed (here credit commit is internal by design per daily_gift:173 and besito credit impl); tests document visibility post internal commit + outer consistency on happy/fail paths. No double credit, no lost claim on happy.
+
+    Patrón gold exacto (tmp file SQLite + TestSession, fresh TG as telegram_id=77709001, explicit User+Balance+Config, close/reopen pre svc, strict re-queries post, try/finally raw close+dispose, N806 tolerated, 0 prod).
+    """
+
+    def _create_engine_and_session(self, tmp_path):
+        """Crea engine + sessionmaker sobre archivo SQLite temporal. (Dupe small helper for standalone class; matches reaction_full_chain.)"""
+        db_path = tmp_path / "test_daily_atomic.db"
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(engine)
+        TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        return engine, TestSession
+
+    async def test_daily_claim_success_persists_claim_row_and_daily_tx_and_balance(self, tmp_path):
+        """Happy: claim_gift succeeds -> claim persisted, DAILY_GIFT tx present, bal increased by config amt. All visible post reopen."""
+        engine, TestSession = self._create_engine_and_session(tmp_path)  # noqa: N806 (precedent in gold atomicity/reaction_full patterns)
+        db = TestSession()
+        daily_svc = None
+        try:
+            tg = 77709001
+            user = User(
+                telegram_id=tg, username="dailyuser", first_name="Daily", role=UserRole.USER
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+            # Balance + active config (amount 5)
+            bal = BesitoBalance(user_id=tg, balance=0, total_earned=0, total_spent=0)
+            db.add(bal)
+            cfg = DailyGiftConfig(besito_amount=5, is_active=True)
+            db.add(cfg)
+            db.commit()
+
+            saved_tg = tg
+            db.close()
+            db = TestSession()
+
+            daily_svc = DailyGiftService(db)
+            success, amt, msg = daily_svc.claim_gift(saved_tg)
+
+            assert success is True
+            assert amt == 5
+
+            # Re-query post (simulates visibility after internal credit commit + outer)
+            claim_count = (
+                db.query(DailyGiftClaim).filter(DailyGiftClaim.user_id == saved_tg).count()
+            )
+            assert claim_count == 1
+
+            daily_tx = (
+                db.query(BesitoTransaction)
+                .filter(
+                    BesitoTransaction.user_id == saved_tg,
+                    BesitoTransaction.source == TransactionSource.DAILY_GIFT,
+                )
+                .count()
+            )
+            assert daily_tx == 1
+
+            final_bal = (
+                daily_svc.besito_service.get_balance(saved_tg)
+                if hasattr(daily_svc, "besito_service")
+                else BesitoService(db).get_balance(saved_tg)
+            )
+            assert final_bal == 5
+
+        finally:
+            if daily_svc:
+                daily_svc.close()
+            db.close()
+            engine.dispose()
+
+    async def test_daily_claim_credit_fail_rolls_back_claim_no_tx_no_credit(self, tmp_path):
+        """Credit fails after claim add -> rollback, no claim row, no DAILY tx, bal unchanged. (Tests the !success rollback path.)"""
+        engine, TestSession = self._create_engine_and_session(tmp_path)  # noqa: N806 (precedent)
+        db = TestSession()
+        daily_svc = None
+        try:
+            tg = 77709002
+            user = User(telegram_id=tg, username="dailyfail", first_name="Fail", role=UserRole.USER)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+            bal = BesitoBalance(user_id=tg, balance=10, total_earned=10, total_spent=0)
+            db.add(bal)
+            cfg = DailyGiftConfig(besito_amount=5, is_active=True)
+            db.add(cfg)
+            db.commit()
+
+            saved_tg = tg
+            db.close()
+            db = TestSession()
+
+            daily_svc = DailyGiftService(db)
+
+            with patch.object(daily_svc.besito_service, "credit_besitos", return_value=False):
+                success, amt, msg = daily_svc.claim_gift(saved_tg)
+
+            assert success is False
+            assert amt is None
+
+            claim_count = (
+                db.query(DailyGiftClaim).filter(DailyGiftClaim.user_id == saved_tg).count()
+            )
+            assert claim_count == 0  # rolled back
+
+            daily_tx = (
+                db.query(BesitoTransaction)
+                .filter(
+                    BesitoTransaction.user_id == saved_tg,
+                    BesitoTransaction.source == TransactionSource.DAILY_GIFT,
+                )
+                .count()
+            )
+            assert daily_tx == 0
+
+            bal_after = BesitoService(db).get_balance(saved_tg)
+            assert bal_after == 10  # unchanged
+
+        finally:
+            if daily_svc:
+                daily_svc.close()
             db.close()
             engine.dispose()
 

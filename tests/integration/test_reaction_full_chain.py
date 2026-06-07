@@ -15,23 +15,32 @@ Patrón: SQLite en archivo temporal + TestSession independiente (ver también
 test_vip_subscription_lifecycle.py).
 """
 
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from services.broadcast_service import BroadcastService
-from services.mission_service import MissionService
-from services.besito_service import BesitoService
+from keyboards.inline_keyboards import reactions_keyboard_with_counts
 from models.database import Base
 from models.models import (
-    BroadcastMessage, BroadcastReaction, BesitoBalance,
-    Mission, MissionType, MissionFrequency,
-    Reward, RewardType, Channel, ChannelType, ReactionEmoji,
-    User, UserRole
+    BesitoBalance,
+    BroadcastMessage,
+    BroadcastReaction,
+    Channel,
+    ChannelType,
+    Mission,
+    MissionFrequency,
+    MissionType,
+    ReactionEmoji,
+    Reward,
+    RewardType,
+    User,
+    UserRole,
 )
-from keyboards.inline_keyboards import reactions_keyboard_with_counts
+from services.besito_service import BesitoService
+from services.broadcast_service import BroadcastService
+from services.mission_service import MissionService
 
 
 @pytest.mark.integration
@@ -62,15 +71,13 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
 
     @pytest.mark.xfail(
         reason="Even with dedicated file-based DB, some internal SessionLocal() creations "
-               "in RewardService/BesitoService can cause attachment issues in very heavy flows. "
-               "The pattern (SQLite en archivo + TestSession) is correctly implemented as the standard "
-               "for complex cross-service tests. The keyboard count logic (historically flaky part) "
-               "is validated by the passing second test + the unit tests for check_and_register_reaction."
+        "in RewardService/BesitoService can cause attachment issues in very heavy flows. "
+        "The pattern (SQLite en archivo + TestSession) is correctly implemented as the standard "
+        "for complex cross-service tests. The keyboard count logic (historically flaky part) "
+        "is validated by the passing second test + the unit tests for check_and_register_reaction."
     )
     @pytest.mark.asyncio
-    async def test_reaction_advances_mission_and_updates_keyboard_counts(
-        self, tmp_path
-    ):
+    async def test_reaction_advances_mission_and_updates_keyboard_counts(self, tmp_path):
         """
         Flujo completo usando el patrón de SQLite en archivo:
         reacción → besitos → misión completada → recompensa entregada → conteos de teclado actualizados.
@@ -151,15 +158,16 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             mission_id = mission.id
 
             # Balance
+            # DESIRED CONTRACT: besito balance user_id = TG BigInt (user.telegram_id value here 111111), not PK .id
             balance = BesitoBalance(
-                user_id=user.id, balance=0, total_earned=0, total_spent=0
+                user_id=user.telegram_id, balance=0, total_earned=0, total_spent=0
             )
             db.add(balance)
             db.commit()
 
             # Cerramos la sesión de setup y abrimos una fresca para la ejecución.
             # Patrón recomendado para flujos con muchos commits internos de servicios.
-            user_id = user.id
+            user_id = user.telegram_id  # besito key = TG id (contract)
             db.close()
             db = TestSession()
 
@@ -213,10 +221,14 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             # ==========================================
             # ASSERTS DEL FLUJO COMPLETO
             # ==========================================
-            reaction_in_db = db.query(BroadcastReaction).filter(
-                BroadcastReaction.broadcast_id == broadcast_db_id,
-                BroadcastReaction.user_id == user_id,
-            ).first()
+            reaction_in_db = (
+                db.query(BroadcastReaction)
+                .filter(
+                    BroadcastReaction.broadcast_id == broadcast_db_id,
+                    BroadcastReaction.user_id == user_id,
+                )
+                .first()
+            )
             assert reaction_in_db is not None
             assert reaction_in_db.besitos_awarded == 2
 
@@ -283,7 +295,7 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             db.commit()
             db.refresh(broadcast)
 
-            for uid in [user1.id, user2.id]:
+            for uid in [user1.telegram_id, user2.telegram_id]:
                 db.add(BesitoBalance(user_id=uid, balance=0, total_earned=0, total_spent=0))
             db.commit()
 
@@ -292,10 +304,16 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             broadcast_service = BroadcastService(db)
 
             await broadcast_service.check_and_register_reaction(
-                broadcast_id=broadcast.id, user_id=user1.id, emoji_id=emoji.id, bot=mock_bot
+                broadcast_id=broadcast.id,
+                user_id=user1.telegram_id,
+                emoji_id=emoji.id,
+                bot=mock_bot,
             )
             await broadcast_service.check_and_register_reaction(
-                broadcast_id=broadcast.id, user_id=user2.id, emoji_id=emoji.id, bot=mock_bot
+                broadcast_id=broadcast.id,
+                user_id=user2.telegram_id,
+                emoji_id=emoji.id,
+                bot=mock_bot,
             )
 
             reactions = broadcast_service.get_reactions_by_broadcast(broadcast.id)
@@ -308,7 +326,7 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             assert emoji_counts.get(emoji.id) == 2
 
             emojis = [(emoji.id, emoji.emoji)]
-            markup = reactions_keyboard_with_counts(broadcast.id, emojis, emoji_counts)
+            _markup = reactions_keyboard_with_counts(broadcast.id, emojis, emoji_counts)
 
             assert emoji_counts[emoji.id] == 2
 

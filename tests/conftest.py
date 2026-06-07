@@ -233,9 +233,10 @@ def sample_expired_subscription(db_session: Session, sample_user, sample_vip_cha
 
 @pytest.fixture
 def sample_balance(db_session: Session, sample_user):
-    """Crea un balance de besitos de prueba con valores específicos."""
+    """Crea un balance de besitos de prueba con valores específicos.
+    DESIRED CONTRACT: user_id stores TG BigInt (telegram_id value) per models (BesitoBalance.user_id BigInteger, no FK to users.id/PK), real handler flows (from_user.id), besito_service credit/debit keys, and VIP/channel ID contract fixes. Matches sample_user.telegram_id; never the internal PK .id."""
     balance = BesitoBalance(
-        user_id=sample_user.id, balance=1000, total_earned=1500, total_spent=500
+        user_id=sample_user.telegram_id, balance=1000, total_earned=1500, total_spent=500
     )
     db_session.add(balance)
     db_session.commit()

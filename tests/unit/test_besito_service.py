@@ -1,12 +1,13 @@
 """
 Tests unitarios para BesitoService.
 """
-import pytest
-from datetime import datetime
-from unittest.mock import patch, MagicMock
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from models.models import BesitoBalance, TransactionSource
 from services.besito_service import BesitoService
-from models.models import TransactionSource, TransactionType, BesitoBalance
 
 
 @pytest.mark.unit
@@ -50,9 +51,9 @@ class TestBesitoService:
 
         stats = service.get_balance_with_stats(sample_balance.user_id)
 
-        assert stats['balance'] == sample_balance.balance
-        assert stats['total_earned'] == sample_balance.total_earned
-        assert stats['total_spent'] == sample_balance.total_spent
+        assert stats["balance"] == sample_balance.balance
+        assert stats["total_earned"] == sample_balance.total_earned
+        assert stats["total_spent"] == sample_balance.total_spent
 
 
 @pytest.mark.unit
@@ -65,27 +66,25 @@ class TestBesitoTransactions:
         amount = 100
 
         result = service.credit_besitos(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             amount=amount,
             source=TransactionSource.DAILY_GIFT,
-            description="Regalo diario"
+            description="Regalo diario",
         )
 
         assert result is True
 
         # Verificar balance actualizado
-        balance = service.get_balance_with_stats(sample_user.id)
-        assert balance['balance'] == amount
-        assert balance['total_earned'] == amount
+        balance = service.get_balance_with_stats(sample_user.telegram_id)
+        assert balance["balance"] == amount
+        assert balance["total_earned"] == amount
 
     def test_credit_besitos_invalid_amount(self, db_session, sample_user):
         """Test acreditar cantidad inválida"""
         service = BesitoService(db_session)
 
         result = service.credit_besitos(
-            user_id=sample_user.id,
-            amount=-10,
-            source=TransactionSource.DAILY_GIFT
+            user_id=sample_user.telegram_id, amount=-10, source=TransactionSource.DAILY_GIFT
         )
 
         assert result is False
@@ -95,9 +94,7 @@ class TestBesitoTransactions:
         service = BesitoService(db_session)
 
         result = service.credit_besitos(
-            user_id=sample_user.id,
-            amount=0,
-            source=TransactionSource.DAILY_GIFT
+            user_id=sample_user.telegram_id, amount=0, source=TransactionSource.DAILY_GIFT
         )
 
         assert result is False
@@ -112,29 +109,26 @@ class TestBesitoTransactions:
             user_id=sample_balance.user_id,
             amount=amount,
             source=TransactionSource.PURCHASE,
-            description="Compra en tienda"
+            description="Compra en tienda",
         )
 
         assert result is True
 
         # Verificar balance actualizado
         balance = service.get_balance_with_stats(sample_balance.user_id)
-        assert balance['balance'] == initial_balance - amount
-        assert balance['total_spent'] == 500 + amount
+        assert balance["balance"] == initial_balance - amount
+        assert balance["total_spent"] == 500 + amount
 
     def test_debit_besitos_insufficient_balance(self, db_session, sample_user):
         """Test debitar con saldo insuficiente"""
         service = BesitoService(db_session)
         # Crear balance inicial de 1000 besitos directamente
         balance = BesitoBalance(
-            user_id=sample_user.id,
-            balance=1000,
-            total_earned=1000,
-            total_spent=0
+            user_id=sample_user.telegram_id, balance=1000, total_earned=1000, total_spent=0
         )
         db_session.add(balance)
         db_session.commit()
-        user_id = sample_user.id
+        user_id = sample_user.telegram_id
         initial_balance = balance.balance
         amount = 2000  # Más de lo que tiene (1000)
 
@@ -142,9 +136,7 @@ class TestBesitoTransactions:
         assert initial_balance == 1000
 
         result = service.debit_besitos(
-            user_id=user_id,
-            amount=amount,
-            source=TransactionSource.PURCHASE
+            user_id=user_id, amount=amount, source=TransactionSource.PURCHASE
         )
 
         assert result is False
@@ -156,9 +148,7 @@ class TestBesitoTransactions:
         service = BesitoService(db_session)
 
         result = service.debit_besitos(
-            user_id=sample_balance.user_id,
-            amount=-10,
-            source=TransactionSource.PURCHASE
+            user_id=sample_balance.user_id, amount=-10, source=TransactionSource.PURCHASE
         )
 
         assert result is False
@@ -210,8 +200,7 @@ class TestBesitoHistory:
         service.credit_besitos(sample_balance.user_id, 20, TransactionSource.PURCHASE)
 
         daily_gifts = service.get_transactions_by_source(
-            sample_balance.user_id,
-            TransactionSource.DAILY_GIFT
+            sample_balance.user_id, TransactionSource.DAILY_GIFT
         )
 
         assert len(daily_gifts) == 1  # solo el creado por el test
@@ -254,18 +243,15 @@ class TestBesitoServiceRaceCondition:
         mock_query = MagicMock()
         mock_filtered = MagicMock()
         mock_with_lock = MagicMock()
-        mock_first = MagicMock(return_value=None)
 
         mock_query.filter.return_value = mock_filtered
         mock_filtered.with_for_update.return_value = mock_with_lock
         mock_with_lock.first.return_value = None
 
-        with patch.object(db_session, 'query', return_value=mock_query):
+        with patch.object(db_session, "query", return_value=mock_query):
             # Llamar al método
             service.credit_besitos(
-                user_id=sample_user.id,
-                amount=100,
-                source=TransactionSource.DAILY_GIFT
+                user_id=sample_user.telegram_id, amount=100, source=TransactionSource.DAILY_GIFT
             )
 
             # Verificar que se llamó with_for_update
@@ -279,18 +265,15 @@ class TestBesitoServiceRaceCondition:
         mock_query = MagicMock()
         mock_filtered = MagicMock()
         mock_with_lock = MagicMock()
-        mock_first = MagicMock(return_value=sample_balance)
 
         mock_query.filter.return_value = mock_filtered
         mock_filtered.with_for_update.return_value = mock_with_lock
         mock_with_lock.first.return_value = sample_balance
 
-        with patch.object(db_session, 'query', return_value=mock_query):
+        with patch.object(db_session, "query", return_value=mock_query):
             # Llamar al método
             service.debit_besitos(
-                user_id=sample_balance.user_id,
-                amount=50,
-                source=TransactionSource.PURCHASE
+                user_id=sample_balance.user_id, amount=50, source=TransactionSource.PURCHASE
             )
 
             # Verificar que se llamó with_for_update
@@ -311,7 +294,7 @@ class TestBesitoServiceCommitParam:
             user_id=sample_balance.user_id,
             amount=amount,
             source=TransactionSource.PURCHASE,
-            commit=True
+            commit=True,
         )
 
         assert result is True
@@ -330,7 +313,7 @@ class TestBesitoServiceCommitParam:
             user_id=sample_balance.user_id,
             amount=amount,
             source=TransactionSource.PURCHASE,
-            commit=False
+            commit=False,
         )
 
         assert result is True
@@ -343,9 +326,7 @@ class TestBesitoServiceCommitParam:
 
         # Llamar sin parametro commit (default True)
         result = service.debit_besitos(
-            user_id=sample_balance.user_id,
-            amount=amount,
-            source=TransactionSource.PURCHASE
+            user_id=sample_balance.user_id, amount=amount, source=TransactionSource.PURCHASE
         )
 
         assert result is True

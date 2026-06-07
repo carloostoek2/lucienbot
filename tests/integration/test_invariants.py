@@ -107,11 +107,15 @@ class TestBesitoBalanceInvariants:
             db.commit()
             db.refresh(user)
 
-            balance = BesitoBalance(user_id=user.id, balance=0, total_earned=0, total_spent=0)
+            balance = BesitoBalance(
+                user_id=user.telegram_id, balance=0, total_earned=0, total_spent=0
+            )
             db.add(balance)
             db.commit()
 
-            saved_uid = user.id  # detach before session close
+            saved_uid = (
+                user.telegram_id
+            )  # detach before session close; besito key = TG BigInt per contract (Fase4 ID fix)
             db.close()
 
             db = TestSession()
@@ -452,12 +456,14 @@ class TestReactionInvariants:
             db.commit()
             db.refresh(broadcast)
 
-            balance = BesitoBalance(user_id=user.id, balance=0, total_earned=0, total_spent=0)
+            balance = BesitoBalance(
+                user_id=user.telegram_id, balance=0, total_earned=0, total_spent=0
+            )
             db.add(balance)
             db.commit()
 
             # Save IDs before closing session to avoid DetachedInstanceError
-            saved_user_id = user.id
+            saved_user_id = user.telegram_id  # besito key = TG (ID contract)
             saved_broadcast_id = broadcast.id
             saved_emoji_id = emoji.id
 

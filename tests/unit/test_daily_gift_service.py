@@ -1,11 +1,13 @@
 """
 Tests unitarios para DailyGiftService.
 """
-import pytest
+
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
+from models.models import DailyGiftClaim
 from services.daily_gift_service import DailyGiftService
-from models.models import DailyGiftConfig, DailyGiftClaim
 
 
 @pytest.mark.unit
@@ -70,7 +72,7 @@ class TestDailyGiftClaims:
         """Test primer reclamo siempre permite"""
         service = DailyGiftService(db_session)
 
-        can_claim, remaining, msg = service.can_claim(sample_user.id)
+        can_claim, remaining, msg = service.can_claim(sample_user.telegram_id)
 
         assert can_claim is True
         assert remaining is None
@@ -80,14 +82,14 @@ class TestDailyGiftClaims:
         """Test cooldown de 24 horas impide reclamo"""
         service = DailyGiftService(db_session)
         claim = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=10,
-            claimed_at=datetime.now(UTC) - timedelta(hours=1)
+            claimed_at=datetime.now(UTC) - timedelta(hours=1),
         )
         db_session.add(claim)
         db_session.commit()
 
-        can_claim, remaining, msg = service.can_claim(sample_user.id)
+        can_claim, remaining, msg = service.can_claim(sample_user.telegram_id)
 
         assert can_claim is False
         assert remaining is not None
@@ -97,14 +99,14 @@ class TestDailyGiftClaims:
         """Test después de 24 horas se puede reclamar de nuevo"""
         service = DailyGiftService(db_session)
         claim = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=10,
-            claimed_at=datetime.now(UTC) - timedelta(hours=25)
+            claimed_at=datetime.now(UTC) - timedelta(hours=25),
         )
         db_session.add(claim)
         db_session.commit()
 
-        can_claim, remaining, msg = service.can_claim(sample_user.id)
+        can_claim, remaining, msg = service.can_claim(sample_user.telegram_id)
 
         assert can_claim is True
         assert remaining is None
@@ -116,7 +118,7 @@ class TestDailyGiftClaims:
         config.is_active = False
         db_session.commit()
 
-        can_claim, remaining, msg = service.can_claim(sample_user.id)
+        can_claim, remaining, msg = service.can_claim(sample_user.telegram_id)
 
         assert can_claim is False
         assert "no está disponible" in msg.lower()
@@ -125,14 +127,14 @@ class TestDailyGiftClaims:
         """Test reclamar regalo acredita besitos y crea registro"""
         service = DailyGiftService(db_session)
 
-        success, amount, msg = service.claim_gift(sample_user.id)
+        success, amount, msg = service.claim_gift(sample_user.telegram_id)
 
         assert success is True
         assert amount == 10
-        balance = service.besito_service.get_balance(sample_user.id)
+        balance = service.besito_service.get_balance(sample_user.telegram_id)
         assert balance == 10
 
-        history = service.get_claim_history(sample_user.id)
+        history = service.get_claim_history(sample_user.telegram_id)
         assert len(history) == 1
         assert history[0].besitos_received == 10
 
@@ -140,14 +142,14 @@ class TestDailyGiftClaims:
         """Test reclamar durante cooldown falla"""
         service = DailyGiftService(db_session)
         claim = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=10,
-            claimed_at=datetime.now(UTC) - timedelta(hours=1)
+            claimed_at=datetime.now(UTC) - timedelta(hours=1),
         )
         db_session.add(claim)
         db_session.commit()
 
-        success, amount, msg = service.claim_gift(sample_user.id)
+        success, amount, msg = service.claim_gift(sample_user.telegram_id)
 
         assert success is False
         assert amount is None
@@ -160,7 +162,7 @@ class TestDailyGiftClaims:
         config.is_active = False
         db_session.commit()
 
-        success, amount, msg = service.claim_gift(sample_user.id)
+        success, amount, msg = service.claim_gift(sample_user.telegram_id)
 
         assert success is False
         assert amount is None
@@ -175,13 +177,13 @@ class TestDailyGiftStats:
         """Test contar reclamos del día actual"""
         service = DailyGiftService(db_session)
         # Reclamo de hoy
-        claim1 = DailyGiftClaim(user_id=sample_user.id, besitos_received=10)
+        claim1 = DailyGiftClaim(user_id=sample_user.telegram_id, besitos_received=10)
         db_session.add(claim1)
         # Reclamo de ayer
         claim2 = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=10,
-            claimed_at=datetime.now(UTC) - timedelta(days=1)
+            claimed_at=datetime.now(UTC) - timedelta(days=1),
         )
         db_session.add(claim2)
         db_session.commit()
@@ -193,12 +195,12 @@ class TestDailyGiftStats:
     def test_get_total_besitos_given_today(self, db_session, sample_user):
         """Test sumar besitos entregados hoy"""
         service = DailyGiftService(db_session)
-        claim1 = DailyGiftClaim(user_id=sample_user.id, besitos_received=10)
+        claim1 = DailyGiftClaim(user_id=sample_user.telegram_id, besitos_received=10)
         claim2 = DailyGiftClaim(user_id=999999, besitos_received=5)
         claim3 = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=20,
-            claimed_at=datetime.now(UTC) - timedelta(days=1)
+            claimed_at=datetime.now(UTC) - timedelta(days=1),
         )
         db_session.add_all([claim1, claim2, claim3])
         db_session.commit()
@@ -211,24 +213,22 @@ class TestDailyGiftStats:
         """Test historial de reclamos ordenado descendente por fecha"""
         service = DailyGiftService(db_session)
         claim1 = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=10,
-            claimed_at=datetime.now(UTC) - timedelta(days=2)
+            claimed_at=datetime.now(UTC) - timedelta(days=2),
         )
         claim2 = DailyGiftClaim(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             besitos_received=10,
-            claimed_at=datetime.now(UTC) - timedelta(days=1)
+            claimed_at=datetime.now(UTC) - timedelta(days=1),
         )
         claim3 = DailyGiftClaim(
-            user_id=sample_user.id,
-            besitos_received=10,
-            claimed_at=datetime.now(UTC)
+            user_id=sample_user.telegram_id, besitos_received=10, claimed_at=datetime.now(UTC)
         )
         db_session.add_all([claim1, claim2, claim3])
         db_session.commit()
 
-        history = service.get_claim_history(sample_user.id)
+        history = service.get_claim_history(sample_user.telegram_id)
 
         assert len(history) == 3
         assert history[0].claimed_at >= history[1].claimed_at >= history[2].claimed_at
@@ -238,13 +238,13 @@ class TestDailyGiftStats:
         service = DailyGiftService(db_session)
         for i in range(5):
             claim = DailyGiftClaim(
-                user_id=sample_user.id,
+                user_id=sample_user.telegram_id,
                 besitos_received=10,
-                claimed_at=datetime.now(UTC) - timedelta(hours=i)
+                claimed_at=datetime.now(UTC) - timedelta(hours=i),
             )
             db_session.add(claim)
         db_session.commit()
 
-        history = service.get_claim_history(sample_user.id, limit=3)
+        history = service.get_claim_history(sample_user.telegram_id, limit=3)
 
         assert len(history) == 3
