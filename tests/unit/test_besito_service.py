@@ -61,18 +61,21 @@ class TestBesitoTransactions:
     """Tests para transacciones de besitos"""
 
     def test_credit_besitos_success(self, db_session, sample_user):
-        """Test acreditar besitos exitosamente"""
+        """Test acreditar besitos exitosamente (incluye best-effort event emit post-commit)."""
         service = BesitoService(db_session)
         amount = 100
 
-        result = service.credit_besitos(
-            user_id=sample_user.telegram_id,
-            amount=amount,
-            source=TransactionSource.DAILY_GIFT,
-            description="Regalo diario",
-        )
+        with patch("services.event_bus.schedule_emit") as mock_schedule:
+            result = service.credit_besitos(
+                user_id=sample_user.telegram_id,
+                amount=amount,
+                source=TransactionSource.DAILY_GIFT,
+                description="Regalo diario",
+            )
 
-        assert result is True
+            assert result is True
+            # Emit path exercised (best-effort scheduled; actual listener not registered in this unit)
+            assert mock_schedule.called
 
         # Verificar balance actualizado
         balance = service.get_balance_with_stats(sample_user.telegram_id)
@@ -90,14 +93,16 @@ class TestBesitoTransactions:
         assert result is False
 
     def test_credit_besitos_zero_amount(self, db_session, sample_user):
-        """Test acreditar cero besitos"""
+        """Test acreditar cero besitos (no debe emitir evento)."""
         service = BesitoService(db_session)
 
-        result = service.credit_besitos(
-            user_id=sample_user.telegram_id, amount=0, source=TransactionSource.DAILY_GIFT
-        )
+        with patch("services.event_bus.schedule_emit") as mock_schedule:
+            result = service.credit_besitos(
+                user_id=sample_user.telegram_id, amount=0, source=TransactionSource.DAILY_GIFT
+            )
 
-        assert result is False
+            assert result is False
+            mock_schedule.assert_not_called()
 
     def test_debit_besitos_success(self, db_session, sample_balance):
         """Test debitar besitos exitosamente"""

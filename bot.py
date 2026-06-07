@@ -66,7 +66,11 @@ from middlewares.error_handler import ErrorHandlerMiddleware
 from middlewares.idempotency import IdempotencyMiddleware
 from middlewares.rate_limiter import ThrottlingMiddleware
 from models.database import init_db
+
+# InternalEventBus (PoC Item 1) + first listener (narrative domain)
+from services.event_bus import EVENT_BESITOS_AWARDED, get_event_bus
 from services.scheduler_service import get_scheduler
+from services.story_service import on_besitos_awarded_from_gamification
 from services.vip_service import VIPService
 
 # Configurar logging
@@ -191,6 +195,11 @@ async def on_startup(bot: Bot):
     scheduler = get_scheduler(bot)
     await scheduler.start()
     logger.info("Scheduler iniciado")
+
+    # Cross-domain listeners (explicit, central, no import side-effects).
+    # Fase 3 of eventbus-poc: narrative subscribes to besitos_awarded.
+    get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)
+    logger.info("Event listeners registrados (besitos_awarded -> narrative)")
 
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:

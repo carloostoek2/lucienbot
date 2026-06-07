@@ -7,9 +7,11 @@ Verifica que los handlers:
 3. Manejan correctamente los errores del servicio
 4. Cierran el servicio (close) en todos los casos
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 pytestmark = [pytest.mark.unit]
 
@@ -21,11 +23,14 @@ class TestShowBalance:
     async def test_calls_service_with_user_id(self, mock_besito, make_callback):
         """Llama a get_balance_with_stats con el user_id correcto."""
         mock_besito.return_value.get_balance_with_stats.return_value = {
-            "balance": 500, "total_earned": 1000, "total_spent": 500
+            "balance": 500,
+            "total_earned": 1000,
+            "total_spent": 500,
         }
         cb = make_callback(data="my_balance")
 
         from handlers.gamification_user_handlers import show_balance
+
         await show_balance(cb)
 
         mock_besito.return_value.get_balance_with_stats.assert_called_once_with(123456789)
@@ -34,11 +39,14 @@ class TestShowBalance:
     async def test_displays_balance_correctly(self, mock_besito, make_callback):
         """El texto de respuesta incluye el saldo del usuario."""
         mock_besito.return_value.get_balance_with_stats.return_value = {
-            "balance": 500, "total_earned": 1000, "total_spent": 500
+            "balance": 500,
+            "total_earned": 1000,
+            "total_spent": 500,
         }
         cb = make_callback(data="my_balance")
 
         from handlers.gamification_user_handlers import show_balance
+
         await show_balance(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -50,11 +58,14 @@ class TestShowBalance:
     async def test_calls_answer(self, mock_besito, make_callback):
         """Siempre llama a callback.answer()."""
         mock_besito.return_value.get_balance_with_stats.return_value = {
-            "balance": 500, "total_earned": 1000, "total_spent": 500
+            "balance": 500,
+            "total_earned": 1000,
+            "total_spent": 500,
         }
         cb = make_callback(data="my_balance")
 
         from handlers.gamification_user_handlers import show_balance
+
         await show_balance(cb)
 
         cb.answer.assert_called_once()
@@ -63,11 +74,14 @@ class TestShowBalance:
     async def test_closes_service(self, mock_besito, make_callback):
         """El servicio se cierra después de usar."""
         mock_besito.return_value.get_balance_with_stats.return_value = {
-            "balance": 500, "total_earned": 1000, "total_spent": 500
+            "balance": 500,
+            "total_earned": 1000,
+            "total_spent": 500,
         }
         cb = make_callback(data="my_balance")
 
         from handlers.gamification_user_handlers import show_balance
+
         await show_balance(cb)
 
         mock_besito.return_value.close.assert_called_once()
@@ -83,6 +97,7 @@ class TestTransactionHistory:
         cb = make_callback(data="transaction_history")
 
         from handlers.gamification_user_handlers import show_transaction_history
+
         await show_transaction_history(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -96,6 +111,7 @@ class TestTransactionHistory:
         cb = make_callback(data="transaction_history")
 
         from handlers.gamification_user_handlers import show_transaction_history
+
         await show_transaction_history(cb)
 
         mock_besito.return_value.get_transaction_history.assert_called_once_with(
@@ -115,6 +131,7 @@ class TestTransactionHistory:
         cb = make_callback(data="transaction_history")
 
         from handlers.gamification_user_handlers import show_transaction_history
+
         await show_transaction_history(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -129,6 +146,7 @@ class TestTransactionHistory:
         cb = make_callback(data="transaction_history")
 
         from handlers.gamification_user_handlers import show_transaction_history
+
         await show_transaction_history(cb)
 
         mock_besito.return_value.close.assert_called_once()
@@ -145,6 +163,7 @@ class TestDailyGiftMenu:
         cb = make_callback(data="daily_gift")
 
         from handlers.gamification_user_handlers import daily_gift_menu
+
         await daily_gift_menu(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -154,12 +173,11 @@ class TestDailyGiftMenu:
     @patch("handlers.gamification_user_handlers.DailyGiftService")
     async def test_shows_wait_message_when_not_available(self, mock_gift, make_callback):
         """Cuando can_claim=False, muestra mensaje de espera."""
-        mock_gift.return_value.can_claim.return_value = (
-            False, 3600, "Vuelve en 1 hora"
-        )
+        mock_gift.return_value.can_claim.return_value = (False, 3600, "Vuelve en 1 hora")
         cb = make_callback(data="daily_gift")
 
         from handlers.gamification_user_handlers import daily_gift_menu
+
         await daily_gift_menu(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -173,6 +191,7 @@ class TestDailyGiftMenu:
         cb = make_callback(data="daily_gift")
 
         from handlers.gamification_user_handlers import daily_gift_menu
+
         await daily_gift_menu(cb)
 
         mock_gift.return_value.close.assert_called_once()
@@ -184,12 +203,11 @@ class TestClaimDailyGift:
     @patch("handlers.gamification_user_handlers.DailyGiftService")
     async def test_successful_claim_shows_success(self, mock_gift, make_callback):
         """Cuando claim_gift retorna éxito, muestra mensaje positivo."""
-        mock_gift.return_value.claim_gift.return_value = (
-            True, 10, "Has recibido 10 besitos"
-        )
+        mock_gift.return_value.claim_gift.return_value = (True, 10, "Has recibido 10 besitos")
         cb = make_callback(data="claim_gift")
 
         from handlers.gamification_user_handlers import claim_daily_gift
+
         await claim_daily_gift(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -199,12 +217,11 @@ class TestClaimDailyGift:
     @patch("handlers.gamification_user_handlers.DailyGiftService")
     async def test_failed_claim_shows_error(self, mock_gift, make_callback):
         """Cuando claim_gift retorna fallo, muestra mensaje de error."""
-        mock_gift.return_value.claim_gift.return_value = (
-            False, 0, "Ya reclamaste hoy"
-        )
+        mock_gift.return_value.claim_gift.return_value = (False, 0, "Ya reclamaste hoy")
         cb = make_callback(data="claim_gift")
 
         from handlers.gamification_user_handlers import claim_daily_gift
+
         await claim_daily_gift(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -218,6 +235,7 @@ class TestClaimDailyGift:
         cb = make_callback(data="claim_gift")
 
         from handlers.gamification_user_handlers import claim_daily_gift
+
         await claim_daily_gift(cb)
 
         mock_gift.return_value.claim_gift.assert_called_once_with(123456789)
@@ -229,6 +247,7 @@ class TestClaimDailyGift:
         cb = make_callback(data="claim_gift")
 
         from handlers.gamification_user_handlers import claim_daily_gift
+
         await claim_daily_gift(cb)
 
         mock_gift.return_value.close.assert_called_once()
@@ -239,25 +258,23 @@ class TestHandleReaction:
 
     def _make_callback_data(self, broadcast_id=1, emoji_id=2):
         from keyboards.callback_data import ReactionCallback
+
         return ReactionCallback(broadcast_id=broadcast_id, emoji_id=emoji_id)
 
     # test_skips_when_duplicate_callback removed in gsd-mw-hardening phase 5
     # (idempotency now centralized in IdempotencyMiddleware; handler no longer has the guard)
 
     @patch("handlers.gamification_user_handlers.BroadcastService")
-    async def test_registers_reaction(
-        self, mock_broadcast, make_callback
-    ):
+    async def test_registers_reaction(self, mock_broadcast, make_callback):
         """Llama a check_and_register_reaction con parámetros correctos."""
         # (idempotency_cache patch removed - phase 5 centralized in middleware)
         mock_instance = mock_broadcast.return_value
-        mock_instance.check_and_register_reaction = AsyncMock(return_value={
-            "besitos_awarded": 5
-        })
+        mock_instance.check_and_register_reaction = AsyncMock(return_value={"besitos_awarded": 5})
         mock_instance.get_broadcast.return_value = MagicMock(has_reactions=False)
         cb = make_callback(data="react:1:2")
 
         from handlers.gamification_user_handlers import handle_reaction
+
         await handle_reaction(cb, self._make_callback_data())
 
         mock_instance.check_and_register_reaction.assert_called_once()
@@ -267,27 +284,22 @@ class TestHandleReaction:
         assert kwargs["user_id"] == 123456789
 
     @patch("handlers.gamification_user_handlers.BroadcastService")
-    async def test_shows_besitos_awarded(
-        self, mock_broadcast, make_callback
-    ):
+    async def test_shows_besitos_awarded(self, mock_broadcast, make_callback):
         """Responde con la cantidad de besitos ganados."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
-        mock_instance.check_and_register_reaction = AsyncMock(return_value={
-            "besitos_awarded": 5
-        })
+        mock_instance.check_and_register_reaction = AsyncMock(return_value={"besitos_awarded": 5})
         mock_instance.get_broadcast.return_value = MagicMock(has_reactions=False)
         cb = make_callback(data="react:1:2")
 
         from handlers.gamification_user_handlers import handle_reaction
+
         await handle_reaction(cb, self._make_callback_data())
 
         cb.answer.assert_called_with("¡+5 besitos! 💋")
 
     @patch("handlers.gamification_user_handlers.BroadcastService")
-    async def test_shows_alert_when_already_reacted(
-        self, mock_broadcast, make_callback
-    ):
+    async def test_shows_alert_when_already_reacted(self, mock_broadcast, make_callback):
         """Si el usuario ya reaccionó, muestra alerta."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
@@ -295,40 +307,34 @@ class TestHandleReaction:
         cb = make_callback(data="react:1:2")
 
         from handlers.gamification_user_handlers import handle_reaction
+
         await handle_reaction(cb, self._make_callback_data())
 
         cb.answer.assert_called_with("Ya reaccionaste a este mensaje", show_alert=True)
 
     @patch("handlers.gamification_user_handlers.BroadcastService")
-    async def test_updates_reaction_counts(
-        self, mock_broadcast, make_callback
-    ):
+    async def test_updates_reaction_counts(self, mock_broadcast, make_callback):
         """Cuando has_reactions=True, actualiza los contadores."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
-        mock_instance.check_and_register_reaction = AsyncMock(return_value={
-            "besitos_awarded": 5
-        })
+        mock_instance.check_and_register_reaction = AsyncMock(return_value={"besitos_awarded": 5})
         mock_instance.update_reaction_message = AsyncMock()
         mock_instance.get_broadcast.return_value = MagicMock(
             has_reactions=True, channel_id=-100, message_id=42
         )
         mock_instance.get_selected_emoji_ids.return_value = [1, 2]
         mock_instance.get_reactions_by_broadcast.return_value = []
-        mock_instance.get_reaction_emoji.side_effect = [
-            MagicMock(emoji="💋"), MagicMock(emoji="❤️")
-        ]
+        mock_instance.get_reaction_emoji.side_effect = [MagicMock(emoji="💋"), MagicMock(emoji="❤️")]
         cb = make_callback(data="react:1:2")
 
         from handlers.gamification_user_handlers import handle_reaction
+
         await handle_reaction(cb, self._make_callback_data())
 
         mock_instance.update_reaction_message.assert_called_once()
 
     @patch("handlers.gamification_user_handlers.BroadcastService")
-    async def test_closes_service(
-        self, mock_broadcast, make_callback
-    ):
+    async def test_closes_service(self, mock_broadcast, make_callback):
         """El servicio se cierra después de usar."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = mock_broadcast.return_value
@@ -336,6 +342,45 @@ class TestHandleReaction:
         cb = make_callback(data="react:1:2")
 
         from handlers.gamification_user_handlers import handle_reaction
+
         await handle_reaction(cb, self._make_callback_data())
 
         mock_instance.close.assert_called_once()
+
+
+class TestCalculateEmojiCountsFromReactions:
+    """Tests para el helper puro extraído de handle_reaction (Item 2)."""
+
+    def test_returns_empty_dict_for_no_reactions(self):
+        from handlers.gamification_user_handlers import calculate_emoji_counts_from_reactions
+
+        assert calculate_emoji_counts_from_reactions([]) == {}
+
+    def test_counts_single_reaction(self):
+        from handlers.gamification_user_handlers import calculate_emoji_counts_from_reactions
+
+        r = MagicMock()
+        r.reaction_emoji = MagicMock(id=7)
+        assert calculate_emoji_counts_from_reactions([r]) == {7: 1}
+
+    def test_aggregates_multiple_reactions_same_emoji(self):
+        from handlers.gamification_user_handlers import calculate_emoji_counts_from_reactions
+
+        r1 = MagicMock(reaction_emoji=MagicMock(id=1))
+        r2 = MagicMock(reaction_emoji=MagicMock(id=1))
+        r3 = MagicMock(reaction_emoji=MagicMock(id=2))
+        assert calculate_emoji_counts_from_reactions([r1, r2, r3]) == {1: 2, 2: 1}
+
+    def test_ignores_reactions_without_reaction_emoji(self):
+        from handlers.gamification_user_handlers import calculate_emoji_counts_from_reactions
+
+        r = MagicMock(reaction_emoji=None)
+        assert calculate_emoji_counts_from_reactions([r]) == {}
+
+    def test_returns_dict_int_int(self):
+        from handlers.gamification_user_handlers import calculate_emoji_counts_from_reactions
+
+        r = MagicMock(reaction_emoji=MagicMock(id=3))
+        result = calculate_emoji_counts_from_reactions([r])
+        assert isinstance(result, dict)
+        assert all(isinstance(k, int) and isinstance(v, int) for k, v in result.items())

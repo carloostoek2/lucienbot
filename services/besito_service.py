@@ -5,6 +5,7 @@ Gestiona la moneda virtual (besitos) del sistema de gamificación.
 """
 
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -71,6 +72,38 @@ class BesitoService:
 
     # ==================== TRANSACCIONES ====================
 
+    def _schedule_besitos_awarded_event(
+        self,
+        user_id: int,
+        amount: int,
+        source: TransactionSource,
+        reference_id: int | None,
+        description: str | None,
+    ) -> None:
+        """
+        Best-effort emit of 'besitos_awarded' event after a successful credit commit.
+        Extracted to keep credit_besitos() under the 50-line project limit.
+        Never raises; any failure is logged at warning and swallowed (observational only).
+        """
+        try:
+            # Lazy to keep import surface minimal for this module.
+            from .event_bus import EVENT_BESITOS_AWARDED, get_event_bus, schedule_emit
+
+            bus = get_event_bus()
+            payload = {
+                "user_id": user_id,
+                "amount": amount,
+                "source": source.value if hasattr(source, "value") else str(source),
+                "reference_id": reference_id,
+                "description": description,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            schedule_emit(bus.emit(EVENT_BESITOS_AWARDED, payload))
+        except Exception as emit_err:
+            logger.warning(
+                f"event_bus | emit_failed_post_credit | user_id={user_id} | error={emit_err}"
+            )
+
     def credit_besitos(
         self,
         user_id: int,
@@ -79,19 +112,7 @@ class BesitoService:
         description: str = None,
         reference_id: int = None,
     ) -> bool:
-        """
-        Acredita besitos a un usuario. Usa SELECT FOR UPDATE para prevenir race conditions.
-
-        Args:
-            user_id: ID del usuario
-            amount: Cantidad a acreditar (debe ser positiva)
-            source: Fuente de la transacción
-            description: Descripción opcional
-            reference_id: ID de referencia (misión, compra, etc.)
-
-        Returns:
-            True si se acreditó correctamente
-        """
+        """Acredita besitos (post-commit emite besitos_awarded best-effort via bus)."""
         if amount <= 0:
             logger.error(f"Cantidad inválida para crédito: {amount}")
             return False
@@ -116,6 +137,9 @@ class BesitoService:
             )
             db.add(transaction)
             db.commit()
+
+            # Post-commit best-effort event (observational; never affects return/rollback).
+            self._schedule_besitos_awarded_event(user_id, amount, source, reference_id, description)
 
             logger.info(f"Acreditados {amount} besitos a usuario {user_id} - {source.value}")
             return True

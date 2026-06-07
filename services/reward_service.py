@@ -19,6 +19,17 @@ from utils.lucien_voice import LucienVoice
 logger = logging.getLogger(__name__)
 
 
+def get_reward_emoji(reward: Reward) -> tuple[str, str]:
+    """Retorna (emoji, description) según tipo de recompensa. Función pura (sin estado ni side-effects)."""
+    if reward.reward_type == RewardType.BESITOS:
+        return "💋", f"{reward.besito_amount} besitos"
+    elif reward.reward_type == RewardType.PACKAGE:
+        return "📦", f"Paquete exclusivo: {reward.name}"
+    elif reward.reward_type == RewardType.VIP_ACCESS:
+        return "👑", f"Acceso VIP: {reward.name}"
+    return "🎁", ""
+
+
 class RewardService:
     """Servicio para gestion de recompensas"""
 
@@ -105,15 +116,10 @@ class RewardService:
 
     # ==================== UI HELPERS ====================
 
+    # Backward-compatible delegate added for Item 2 (arch-enforcer 1-service rule for reward handlers).
     def get_reward_emoji(self, reward: Reward) -> tuple[str, str]:
-        """Retorna (emoji, description) según tipo de recompensa"""
-        if reward.reward_type == RewardType.BESITOS:
-            return "💋", f"{reward.besito_amount} besitos"
-        elif reward.reward_type == RewardType.PACKAGE:
-            return "📦", f"Paquete exclusivo: {reward.name}"
-        elif reward.reward_type == RewardType.VIP_ACCESS:
-            return "👑", f"Acceso VIP: {reward.name}"
-        return "🎁", ""
+        """Retorna (emoji, description) según tipo de recompensa. Delegate a la función pura top-level para mantener compatibilidad."""
+        return get_reward_emoji(reward)
 
     # ==================== ACTUALIZACION Y ELIMINACION ====================
 

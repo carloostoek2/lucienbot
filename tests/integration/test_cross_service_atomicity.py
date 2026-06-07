@@ -23,6 +23,8 @@ Patrón exacto replicado de tests/integration/test_reaction_full_chain.py + test
 Ejecuta con: pytest -k "cross_service_atomicity or TestCrossServiceAtomicity" -q --tb=line
 
 Handoff al EOF.
+
+Post-credit (after besito commit): misiones (best effort, separate tx via increment_and_deliver) + InternalEventBus listeners (best effort, fire-and-forget schedule_emit after commit, errors swallowed by bus gather+return_exceptions). The "besitos_awarded" field in reaction_result dicts and BroadcastReaction remains the local per-emoji value (unchanged by the cross-domain event).
 """
 
 from datetime import UTC, datetime
@@ -189,17 +191,25 @@ class TestCrossServiceAtomicity:
             besito_svc = BesitoService(db)
             mock_bot = AsyncMock()
 
-            reaction_result = await broadcast_svc.check_and_register_reaction(
-                broadcast_id=env["broadcast_id"],
-                user_id=env["user_id"],
-                emoji_id=env["emoji_id"],
-                username="atomicuser",
-                bot=mock_bot,
-            )
+            # F4: verify that post-credit the InternalEventBus emit path was scheduled (best effort).
+            # The local "besitos_awarded" in reaction_result is the per-emoji value (unchanged contract).
+            with patch("services.event_bus.schedule_emit") as mock_sched:
+                reaction_result = await broadcast_svc.check_and_register_reaction(
+                    broadcast_id=env["broadcast_id"],
+                    user_id=env["user_id"],
+                    emoji_id=env["emoji_id"],
+                    username="atomicuser",
+                    bot=mock_bot,
+                )
 
-            assert reaction_result is not None
-            assert reaction_result["besitos_awarded"] == 3
-            assert reaction_result["user_id"] == env["user_id"]
+                assert reaction_result is not None
+                assert reaction_result["besitos_awarded"] == 3
+                assert reaction_result["user_id"] == env["user_id"]
+                assert mock_sched.called, (
+                    "besitos_awarded event should have been scheduled post credit (best effort)"
+                )
+
+            # (misiones best effort + event listeners best effort are both post the credit commit)
 
             # Ensure visibility post internal commits
             db.commit()

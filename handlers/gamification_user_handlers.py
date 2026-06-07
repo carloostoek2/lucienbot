@@ -190,6 +190,16 @@ async def claim_daily_gift(callback: CallbackQuery):
 # ==================== REACCIONES A BROADCAST ====================
 
 
+def calculate_emoji_counts_from_reactions(reactions: list) -> dict[int, int]:
+    """Calcula el mapa de conteos de emojis a partir de reacciones registradas. Función pura."""
+    emoji_counts: dict[int, int] = {}
+    for r in reactions:
+        if r.reaction_emoji:
+            emoji_id_val = r.reaction_emoji.id
+            emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
+    return emoji_counts
+
+
 @router.callback_query(ReactionCallback.filter())
 async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallback):
     """Maneja las reacciones a mensajes de broadcast y actualiza conteos"""
@@ -216,11 +226,7 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
             if broadcast and broadcast.has_reactions:
                 selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
                 reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
-                emoji_counts = {}
-                for r in reactions:
-                    if r.reaction_emoji:
-                        emoji_id_val = r.reaction_emoji.id
-                        emoji_counts[emoji_id_val] = emoji_counts.get(emoji_id_val, 0) + 1
+                emoji_counts = calculate_emoji_counts_from_reactions(reactions)
                 emojis = []
                 for emoji_id in selected_emoji_ids:
                     emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
@@ -236,7 +242,7 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
                     )
 
             logger.info(
-                f"Reaction processed: user={user.id}, broadcast={broadcast_id}, emoji={emoji_id}, besitos={besitos}"
+                f"gamification_user_handlers | handle_reaction | user_id={user.id} | broadcast_id={broadcast_id} | emoji={emoji_id} | besitos={besitos}"
             )
             await callback.answer(f"¡+{besitos} besitos! 💋")
         else:

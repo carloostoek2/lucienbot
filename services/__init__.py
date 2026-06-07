@@ -6,6 +6,9 @@ from .besito_service import BesitoService
 from .broadcast_service import BroadcastService
 from .channel_service import ChannelService
 from .daily_gift_service import DailyGiftService
+
+# Internal EventBus (PoC Item 1)
+from .event_bus import EVENT_BESITOS_AWARDED, InternalEventBus, get_event_bus
 from .game_service import GameService
 
 # Fase 3 - Misiones y Recompensas
@@ -56,6 +59,10 @@ __all__ = [
     # Configuracion de Trivias
     "TriviaConfigService",
     "get_service",
+    # Internal EventBus (PoC Item 1 - besitos_awarded first use case)
+    "InternalEventBus",
+    "get_event_bus",
+    "EVENT_BESITOS_AWARDED",
 ]
 
 

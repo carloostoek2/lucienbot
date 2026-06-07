@@ -49,3 +49,11 @@ Usuario → Nodo actual → Ver opciones → Elegir
 2. Lee [@rules.md](../../rules.md)
 3. Verifica métodos existentes en story_service.py
 4. Verificar VIP antes de entregar contenido restringido
+
+## Cross-domain notifications (EventBus PoC Item 1)
+- Narrative es el **primer subscriptor** del evento "besitos_awarded" emitido por gamificación (BesitoService).
+- El listener `on_besitos_awarded_from_gamification(payload)` vive en `story_service.py` (ownership del dominio narrative).
+- Es puramente best-effort: loguea "narrative | besitos_awarded_received | user_id=... | amount=... | source=... | ref=..." ; puede crecer a lógica de progreso/hints por besitos acumulados (usando get_service(StoryService) si necesita sesión), **pero nunca debe llamar credit/debit besitos** (evita loops con el crédito inverso que `_grant_achievement` ya hace para rewards de logros).
+- El registro es explícito y central en `bot.py` (on_startup, después de scheduler): `get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)`.
+- Errores del listener son tragados por el bus (no afectan al emisor ni a otros listeners).
+- Ver `services/event_bus.py`, `bot.py` (registro), y `services/gamification/CLAUDE.md` (emisor).

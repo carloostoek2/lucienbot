@@ -41,3 +41,11 @@ Los services NO acceden a DB directamente. Usan models:
 user = await session.get(User, user_id)
 # Incorrecto
 await session.execute(text("SELECT * FROM users"))`
+
+## Cross-cutting: Internal EventBus (PoC Item 1)
+- `services/event_bus.py` provee `InternalEventBus` + `get_event_bus()` + `EVENT_BESITOS_AWARDED` + `schedule_emit` (para emitir desde paths sync como credit_besitos).
+- Patrón: async gather con return_exceptions=True (errores de listeners se loguean por listener y no propagan).
+- Primer caso de uso: `credit_besitos` (post commit) emite "besitos_awarded"; narrative es primer listener (ver sus CLAUDEs).
+- Registro explícito en bot.py (no side effects en imports de dominios).
+- Exportado en este __init__ para conveniencia de listeners y tests.
+- Conservador y removable: el bus es infraestructura liviana; no inyección en esta iteración.

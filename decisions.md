@@ -80,3 +80,39 @@ Resultado:
 - Traceabilidad vía commits por fase con refs "gsd-mw-hardening: phase X".
 
 (Ver PLAN y SUMMARY en .planning/phases/08-testing-and-technical-debt/ para ejecución detallada.)
+
+## Internal EventBus (PoC Item 1 - "besitos_awarded" primer caso de uso) - gsd eventbus-poc
+
+Motivo:
+- Necesidad de notificaciones cross-domain loose-coupled (gamif → narrative, potencialmente otros) sin violar "handlers llaman exactly 1 service", sin duplicar lógica de side-effects, y sin acoplar servicios directamente (import de story desde besito o viceversa).
+- El analyzer identificó credit_besitos como el punto natural único de emisión para "awarded" (reacciones, daily, misiones, game, logros de story, admin todos pasan por ahí). Los tres sistemas críticos (gamif reactions con besitos, narrative achievements que acreditan besitos inverso, channel/VIP) dependen de la atomicidad y contratos de crédito.
+- Patrón maduro ya existía en el código: `asyncio.gather(..., return_exceptions=True)` en test_broadcast_service_reaction_flow para concurrencia segura de reacciones (un "fallo" no mata las demás).
+- PoC conservadora: solo un evento, un listener, emit post-commit best-effort, sin inyección (usa get/schedule para mínimo diff), sin persistencia/retry.
+
+Riesgos (críticos):
+- Romper atomicidad del crédito o los retornos de broadcast reactions (el dict con "besitos_awarded" local por emoji).
+- Loops de crédito si el listener narrative volvía a acreditar.
+- "besitos_awarded" confusion (nombre del event vs campo local en BroadcastReaction/reaction_result).
+- Tests flaky por singleton listeners o falta de loop en schedule desde tests sync.
+- Import side-effects o registro mágico.
+
+Decisión:
+- Implementar `services/event_bus.py` (InternalEventBus con register/emit async + schedule_emit helper para sync callers + get_event_bus singleton + EVENT_* const).
+- Emit solo en la ruta de éxito de `credit_besitos`, inmediatamente después de `db.commit()` y **dentro** del try del crédito, wrapped en su propio try/except que solo warning + nunca rollback/return False.
+- Payload estándar (user_id, amount, source str, reference_id, description, timestamp ISO).
+- Helper privado en besito (`_schedule_besitos_awarded_event`) para mantener credit_besitos <=50 LOC.
+- Primer listener real en narrative (`on_besitos_awarded_from_gamification` en story_service.py): solo log + prueba de wiring; ownership narrative; explícitamente prohíbe re-entrar a besitos.
+- Registro explícito y central en `bot.py` on_startup (después de scheduler, antes de notificar admins). Sin auto-registro en imports de story.
+- Tests: unit puro del bus (fresh instances, return_exceptions, logs, noop), patch del schedule/get en unit besito + integ atómicas, smoke de "listener narrative recibió".
+- Actualizaciones mínimas de docs (gamif/narrative/services CLAUDEs + decisions) + grep de distinción "besitos_awarded" local vs event.
+- No se removieron instanciaciones directas de BesitoService (scope explícito).
+
+Resultado:
+- Un crédito (cualquier source) actualiza DB atómicamente (balance + tx), procesa misiones best-effort en tx separada, y entrega el evento best-effort al listener narrative (logueado), sin que el caller del crédito se entere de fallos en listeners.
+- 0 cambios en contratos de broadcast reactions (local "besitos_awarded" sigue igual).
+- Handlers siguen llamando exactly 1 service (sin imports de bus).
+- Bus removable (borrar event_bus.py + su test + la línea de register en bot + la def del listener + los exports = zero impacto residual).
+- Gates: event_bus unit 7/7, besito 46+, reaction/atomicity/story 200+, ruff limpio, smokes de import bot y register+emit manual.
+- Preparado para Item 2+ (más listeners/eventos, quizás inyección posterior) y para arch-enforcer/test-guardian (tests críticos listados en GSD log final).
+
+(Ver .planning/phases/19-eventbus-poc/PLAN.md y gsd-eventbus-poc-item1.log para ejecución fase por fase y handoff.)

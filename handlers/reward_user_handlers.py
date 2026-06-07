@@ -11,8 +11,9 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from keyboards.callback_data import MissionDetailCallback, RewardUserDetailCallback
 from keyboards.inline_keyboards import back_keyboard
+from services import get_service
 from services.mission_service import MissionService
-from services.reward_service import RewardService
+from services.reward_service import get_reward_emoji
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -73,11 +74,12 @@ async def show_available_rewards(callback: CallbackQuery):
     """Muestra las recompensas disponibles con sus misiones asociadas"""
     # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
     user_id = callback.from_user.id
-    mission_service = MissionService()
-    reward_service = RewardService()
 
-    try:
+    with get_service(MissionService) as mission_service:
         rewards_data = mission_service.get_available_rewards_for_user(user_id)
+        logger.info(
+            f"reward_user_handlers | show_available_rewards | user_id={user_id} | count={len(rewards_data)}"
+        )
 
         if not rewards_data:
             await callback.message.edit_text(
@@ -94,10 +96,6 @@ async def show_available_rewards(callback: CallbackQuery):
         await callback.message.edit_text(text, reply_markup=keyboard)
         _safe_answer(callback, user_id)
 
-    finally:
-        mission_service.close()
-        reward_service.close()
-
 
 @router.callback_query(RewardUserDetailCallback.filter())
 async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetailCallback):
@@ -105,23 +103,16 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
     # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
     mission_id = callback_data.mission_id
     user_id = callback.from_user.id
-    mission_service = MissionService()
-    reward_service = RewardService()
 
-    try:
+    with get_service(MissionService) as mission_service:
         mission = mission_service.get_mission(mission_id)
-        if not mission or not mission.reward_id:
-            _safe_answer_alert(callback, mission_id, user_id, "Recompensa no encontrada")
-            return
-
-        reward = reward_service.get_reward(mission.reward_id)
-        if not reward:
+        if not mission or not mission.reward:
             _safe_answer_alert(callback, mission_id, user_id, "Recompensa no encontrada")
             return
 
         progress = mission_service.get_or_create_progress(user_id, mission_id)
         bar, percentage = _build_progress_bar(progress.current_value, mission.target_value)
-        reward_emoji, reward_gives = reward_service.get_reward_emoji(reward)
+        reward_emoji, reward_gives = get_reward_emoji(mission.reward)
 
         status_text = (
             "\n✅ ¡Mision completada! La recompensa ha sido entregada."
@@ -131,8 +122,8 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
 
         text = _build_reward_detail_text(
             reward_emoji,
-            reward.name,
-            reward.description,
+            mission.reward.name,
+            mission.reward.description,
             reward_gives,
             mission.name,
             mission.description,
@@ -153,9 +144,9 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
         await callback.message.edit_text(text, reply_markup=keyboard)
         _safe_answer(callback, user_id, mission_id)
 
-    finally:
-        mission_service.close()
-        reward_service.close()
+        logger.info(
+            f"reward_user_handlers | reward_detail | user_id={user_id} | mission_id={mission_id} | completed={progress.is_completed}"
+        )
 
 
 def _build_rewards_buttons(rewards_data: list) -> list:
@@ -163,7 +154,7 @@ def _build_rewards_buttons(rewards_data: list) -> list:
     for item in rewards_data:
         mission = item["mission"]
         reward = item["reward"]
-        reward_emoji, _ = RewardService().get_reward_emoji(reward)
+        reward_emoji, _ = get_reward_emoji(reward)
         status_emoji = "🔒" if item["progress"] and item["progress"].is_completed else "✨"
         buttons.append(
             [

@@ -1,0 +1,178 @@
+"""
+Unit tests for InternalEventBus (PoC Item 1).
+
+Isolation rule (per PLAN): all tests instantiate `bus = InternalEventBus()` directly.
+They do NOT use or pollute the get_event_bus() singleton.
+
+Covers DoD:
+- register multiple listeners for same event
+- emit calls all registered for that event (others untouched)
+- one listener raises: others still execute, emit await does not propagate, error logged
+- payload forwarded intact
+- unknown event is no-op
+- zero listeners is no-op
+
+Uses the exact gather+return_exceptions contract demonstrated in
+tests/unit/test_broadcast_service_reaction_flow.py (concurrent safety).
+"""
+
+import logging
+from unittest.mock import AsyncMock
+
+import pytest
+
+from services.event_bus import (
+    EVENT_BESITOS_AWARDED,
+    InternalEventBus,
+    _reset_event_bus_for_tests,
+    get_event_bus,
+)
+
+
+@pytest.mark.asyncio
+async def test_register_multiple_and_emit_calls_all():
+    """Register two listeners for the event; both are called with payload; unrelated event listener is not."""
+    bus = InternalEventBus()
+    listener1 = AsyncMock()
+    listener2 = AsyncMock()
+    unrelated = AsyncMock()
+
+    bus.register(EVENT_BESITOS_AWARDED, listener1)
+    bus.register(EVENT_BESITOS_AWARDED, listener2)
+    bus.register("some_other_event", unrelated)
+
+    payload = {"user_id": 777, "amount": 5, "source": "reaction"}
+    await bus.emit(EVENT_BESITOS_AWARDED, payload)
+
+    listener1.assert_awaited_once_with(payload)
+    listener2.assert_awaited_once_with(payload)
+    unrelated.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_one_listener_fails_others_execute_no_exception_propagated(caplog):
+    """
+    One listener raises. The emit must:
+    - still await the others to completion
+    - NOT raise to the caller of emit
+    - log the error for the failing listener (project wants per-listener logging)
+    """
+    bus = InternalEventBus()
+    good = AsyncMock()
+    bad = AsyncMock(side_effect=RuntimeError("listener boom"))
+
+    bus.register(EVENT_BESITOS_AWARDED, good)
+    bus.register(EVENT_BESITOS_AWARDED, bad)
+
+    payload = {"user_id": 42, "amount": 10}
+
+    # Must not raise
+    await bus.emit(EVENT_BESITOS_AWARDED, payload)
+
+    good.assert_awaited_once_with(payload)
+    bad.assert_awaited_once_with(payload)
+
+    # Error should have been logged (warning level per impl)
+    assert any(
+        "listener_error" in rec.message and "listener boom" in rec.message for rec in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_payload_is_forwarded_intact():
+    """Payload dict must arrive exactly as emitted (no mutation, no wrapping)."""
+    bus = InternalEventBus()
+    received = {}
+
+    async def spy(p):
+        received.update(p)
+
+    bus.register(EVENT_BESITOS_AWARDED, spy)
+
+    payload = {
+        "user_id": 1234567890123,
+        "amount": 42,
+        "source": "daily_gift",
+        "reference_id": 99,
+        "description": "test",
+        "timestamp": "2026-06-07T20:15:35+00:00",
+    }
+    await bus.emit(EVENT_BESITOS_AWARDED, payload)
+
+    assert received == payload
+
+
+@pytest.mark.asyncio
+async def test_unknown_event_is_noop():
+    """Emitting an event with no registrations must be a silent no-op (no listeners called)."""
+    bus = InternalEventBus()
+    listener = AsyncMock()
+    bus.register(EVENT_BESITOS_AWARDED, listener)
+
+    await bus.emit("definitely_not_registered", {"user_id": 1})
+
+    listener.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_emit_with_zero_listeners_is_noop():
+    """Fresh bus with nothing registered: emit does not explode."""
+    bus = InternalEventBus()
+    # Should just debug-log and return
+    await bus.emit(EVENT_BESITOS_AWARDED, {"user_id": 999})
+
+
+@pytest.mark.asyncio
+async def test_get_event_bus_singleton_is_separate_from_fresh_instances():
+    """
+    Sanity: the getter returns the module singleton.
+    Unit tests for bus behavior use fresh instances; this just documents the boundary.
+    We reset to keep test hermetic.
+    """
+    _reset_event_bus_for_tests()
+    b1 = get_event_bus()
+    b2 = get_event_bus()
+    assert b1 is b2
+
+    # A fresh one is a different object
+    fresh = InternalEventBus()
+    assert fresh is not b1
+
+    _reset_event_bus_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_narrative_listener_is_invoked_and_logs(caplog):
+    """
+    F3 verification: the real listener defined in the narrative domain
+    (story_service.on_besitos_awarded_from_gamification) can be registered
+    and is called when the event is emitted. We assert the expected log line
+    (the contract for "narrative | besitos_awarded_received").
+    This proves the wiring shape works (the same registration bot.py does).
+    """
+    from services.story_service import on_besitos_awarded_from_gamification
+
+    bus = InternalEventBus()
+    bus.register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)
+
+    payload = {
+        "user_id": 424242,
+        "amount": 7,
+        "source": "daily_gift",
+        "reference_id": 123,
+        "description": "test award",
+        "timestamp": "2026-06-07T20:30:00+00:00",
+    }
+
+    with caplog.at_level(logging.INFO):
+        await bus.emit(EVENT_BESITOS_AWARDED, payload)
+
+    # The listener must have logged the exact project-format line
+    found = any(
+        "narrative | besitos_awarded_received" in rec.message
+        and "user_id=424242" in rec.message
+        and "amount=7" in rec.message
+        and "source=daily_gift" in rec.message
+        for rec in caplog.records
+    )
+    assert found, "narrative listener was not invoked or did not log as specified"

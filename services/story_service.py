@@ -665,3 +665,29 @@ class StoryService:
     def __del__(self):
         """Cierra la sesion de base de datos (fallback)"""
         self.close()
+
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (narrative domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# to avoid re-entrancy with _grant_achievement (which already does a credit for rewards).
+# =============================================================================
+
+
+async def on_besitos_awarded_from_gamification(payload: dict) -> None:
+    """
+    Listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos post-commit).
+
+    DESIRED: log reception with full context; PoC is observational + wiring proof.
+    Future extensions (progress by besitos, hints, etc.) belong in this module and
+    should use get_service(StoryService) if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"narrative | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative).

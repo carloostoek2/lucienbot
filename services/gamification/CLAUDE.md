@@ -33,3 +33,12 @@ Sistema de puntos (besitos), niveles y recompensas.
 2. Lee [@rules.md](../../rules.md)
 3. Verifica métodos existentes en besito_service.py
 4. No duplicar lógica entre services
+
+## Cross-domain notifications (EventBus PoC Item 1)
+- `BesitoService.credit_besitos` emite el evento `"besitos_awarded"` (const `EVENT_BESITOS_AWARDED`) **después** del `db.commit()` exitoso (best effort, via `schedule_emit` + `InternalEventBus.emit` con `gather(..., return_exceptions=True)`).
+- El emit **nunca** afecta el retorno bool, ni causa rollback, ni altera la transacción de crédito.
+- Payload: `{"user_id", "amount", "source" (str .value), "reference_id", "description", "timestamp" (ISO UTC)}`.
+- Otros dominios pueden subscribirse explícitamente (ver `bot.py` on_startup + `get_event_bus().register`).
+- Logging: el bus loguea por listener (incluyendo errores) + "event_bus | emit | user_id=... | event=besitos_awarded | listeners=N | errors=E".
+- Primer subscriptor: narrative (ver services/narrative/CLAUDE.md).
+- Ver `services/event_bus.py` y tests/unit/test_event_bus.py para el contrato.
