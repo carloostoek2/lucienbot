@@ -14,6 +14,7 @@ class UserService:
     """Servicio para gestión de usuarios"""
 
     def __init__(self, db: Session = None):
+        self._owns_session = db is None
         self.db = db or SessionLocal()
 
     def create_user(
@@ -108,11 +109,7 @@ class UserService:
         return False
 
     def close(self):
-        """Cierra la sesión de base de datos"""
-        if hasattr(self, "db") and self.db:
+        """Cierra la sesión de base de datos si fue creada por este servicio."""
+        if self._owns_session and self.db:
             self.db.close()
             self.db = None
-
-    def __del__(self):
-        """Cierra la sesión de base de datos"""
-        self.close()

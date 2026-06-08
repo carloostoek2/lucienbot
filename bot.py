@@ -66,9 +66,11 @@ from middlewares.error_handler import ErrorHandlerMiddleware
 from middlewares.idempotency import IdempotencyMiddleware
 from middlewares.rate_limiter import ThrottlingMiddleware
 from models.database import init_db
+from services.broadcast_service import on_besitos_awarded_broadcast_reaction_observer
 
 # InternalEventBus (PoC Item 1) + first listener (narrative domain)
 from services.event_bus import EVENT_BESITOS_AWARDED, get_event_bus
+from services.game_service import on_besitos_awarded_game_award_observer
 from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
 from services.story_service import on_besitos_awarded_from_gamification
@@ -198,10 +200,14 @@ async def on_startup(bot: Bot):
     logger.info("Scheduler iniciado")
 
     # Cross-domain listeners (explicit, central, no import side-effects).
-    # Fase 3 of eventbus-poc + Item 5: narrative + rewards domains.
+    # Fase 3 of eventbus-poc + Item 5 + Item 6: narrative + rewards + broadcast + game domains.
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_rewards_observer)
-    logger.info("Event listeners registrados (besitos_awarded -> narrative, rewards)")
+    get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_broadcast_reaction_observer)
+    get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_game_award_observer)
+    logger.info(
+        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game)"
+    )
 
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:

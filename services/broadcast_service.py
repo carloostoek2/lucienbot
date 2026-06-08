@@ -29,8 +29,15 @@ class BroadcastService:
     """Servicio para gestión de broadcasting con reacciones"""
 
     def __init__(self, db: Session = None):
+        self._owns_session = db is None
         self.db = db or SessionLocal()
-        self.besito_service = BesitoService(self.db)
+        # Held direct BesitoService composition removed (Item 6 / remaining composers unification).
+        # REACTION credits now use local on-demand BesitoService(db=self.db) *only*
+        # inside register_reaction / check_and_register_reaction (preserves atomicity:
+        # credit's internal commit + REACTION tx + mission best-effort + return dict all unchanged;
+        # best-effort schedule_emit still fires post-credit commit).
+        # Other composers (game/daily) handled in their phases; scope tight per Item 6.
+        # (No other held subs in this service's __init__.)
 
     # ==================== CONFIGURACIÓN DE EMOJIS ====================
 
@@ -216,7 +223,10 @@ class BroadcastService:
 
             # Acreditar besitos al usuario
             description = f"Reacción con {emoji.emoji}"
-            self.besito_service.credit_besitos(
+            besito_service = BesitoService(
+                db=self.db
+            )  # local, on-demand; owns=False (db shared); credit commits internally as before + schedule_emit best-effort
+            besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besito_value,
                 source=TransactionSource.REACTION,
@@ -279,7 +289,10 @@ class BroadcastService:
 
             # Acreditar besitos al usuario (dentro de la misma transacción)
             description = f"Reacción con {emoji.emoji}"
-            self.besito_service.credit_besitos(
+            besito_service = BesitoService(
+                db=self.db
+            )  # local, on-demand; owns=False (db shared); credit commits internally as before + schedule_emit best-effort
+            besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besito_value,
                 source=TransactionSource.REACTION,
@@ -393,10 +406,14 @@ class BroadcastService:
         }
 
     def close(self):
-        """Cierra la sesión de base de datos"""
-        if hasattr(self, "db") and self.db:
+        """Cierra la sesión de base de datos si fue creada por este servicio."""
+        if self._owns_session and self.db:
             self.db.close()
             self.db = None
+        # Cerrar subs (inofensivo: ellos tienen owns=False cuando db compartido)
+        for sub in (getattr(self, "besito_service", None),):
+            if sub and hasattr(sub, "close"):
+                sub.close()
 
     async def update_reaction_message(
         self, bot, channel_id: int, message_id: int, new_markup: InlineKeyboardMarkup
@@ -417,6 +434,34 @@ class BroadcastService:
             logger.warning(f"No se pudo actualizar conteo en mensaje: {e}")
             raise
 
-    def __del__(self):
-        """Cierra la sesión de base de datos"""
-        self.close()
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (broadcast domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# (to avoid any re-entrancy with reaction credit paths or future extensions; reaction
+# credit contracts and partial-failure behavior are authoritative in the credit + mission
+# best-effort flow inside check_and_register_reaction).
+# This is observational only (best effort; errors swallowed by bus).
+# =============================================================================
+
+
+async def on_besitos_awarded_broadcast_reaction_observer(payload: dict) -> None:
+    """
+    Broadcast-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
+    post-commit, including from REACTION credits in check_and_register_reaction).
+
+    DESIRED CONTRACT (copy of narrative precedent + Reward Item5): log reception with full context
+    (user_id/amount/source/ref); purely observational + wiring proof for this domain.
+    MUST NOT credit, debit, or mutate besitos state here.
+    Future extensions (e.g. streak/promo hooks on reaction awards) belong in this module and should use
+    get_service(BroadcastService) or direct models if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"broadcast | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on reaction credit contracts / atomicity gold).

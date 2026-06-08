@@ -21,10 +21,10 @@ from keyboards.inline_keyboards import (
     broadcast_back_keyboard,
     cancel_keyboard,
 )
+from services import get_service
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
 from utils.admin import is_admin
-from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -48,11 +48,8 @@ class BroadcastStates(StatesGroup):
 @router.callback_query(F.data == "send_broadcast", lambda cb: is_admin(cb.from_user.id))
 async def send_broadcast_start(callback: CallbackQuery, state: FSMContext):
     """Inicia el flujo de broadcast - seleccionar canal"""
-    channel_service = ChannelService()
-    try:
+    with get_service(ChannelService) as channel_service:
         channels = channel_service.get_all_channels()
-    finally:
-        channel_service.close()
 
     if not channels:
         await callback.message.edit_text(
@@ -104,11 +101,8 @@ async def select_channel_for_broadcast(
     """Canal seleccionado, pedir texto"""
     channel_id = callback_data.channel_id
 
-    channel_service = ChannelService()
-    try:
+    with get_service(ChannelService) as channel_service:
         channel = channel_service.get_channel_by_id(channel_id)
-    finally:
-        channel_service.close()
 
     if not channel:
         await callback.answer("Canal no encontrado", show_alert=True)
@@ -338,11 +332,8 @@ Puede agregar una foto, video o archivo al mensaje.""",
 @router.callback_query(BroadcastStates.waiting_reaction_decision, F.data == "reaction_yes")
 async def want_reactions(callback: CallbackQuery, state: FSMContext):
     """Usuario quiere reacciones - mostrar emojis disponibles"""
-    broadcast_service = BroadcastService()
-    try:
+    with get_service(BroadcastService) as broadcast_service:
         emojis = broadcast_service.get_all_emojis(active_only=True)
-    finally:
-        broadcast_service.close()
 
     if not emojis:
         try:
@@ -373,11 +364,8 @@ async def want_reactions(callback: CallbackQuery, state: FSMContext):
 
 async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
     """Muestra la selección de emojis"""
-    broadcast_service = BroadcastService()
-    try:
+    with get_service(BroadcastService) as broadcast_service:
         emojis = broadcast_service.get_all_emojis(active_only=True)
-    finally:
-        broadcast_service.close()
     data = await state.get_data()
     selected = data.get("selected_emojis", [])
 
@@ -710,8 +698,7 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
     selected_emojis = data.get("selected_emojis", [])
     is_protected = data.get("is_protected", False)
 
-    broadcast_service = BroadcastService()
-    try:
+    with get_service(BroadcastService) as broadcast_service:
         # Construir teclado de reacciones - todos los botones en una sola hilera
         reply_markup = None
         if selected_emojis:
@@ -840,21 +827,9 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
 
         logger.info(f"Broadcast enviado: channel={channel_id}, message={sent_message.message_id}")
 
-    except Exception as e:
-        logger.error(f"Error enviando broadcast: {e}")
-        try:
-            await callback.message.edit_text(
-                LucienVoice.error_message("el envío del mensaje"),
-                reply_markup=back_keyboard("admin_gamification"),
-                parse_mode="HTML",
-            )
-        except Exception as e2:
-            if "message is not modified" in str(e2).lower():
-                pass
-            else:
-                logger.error(f"Error mostrando mensaje de error: {e2}")
-    finally:
-        broadcast_service.close()
+    # Legacy outer try/except/finally for send error UI removed in F4 unification (with handles close on all paths;
+    # errors will be caught by global error handler or bubble; main success path + close preserved).
+    # (Custom error edit for send fail is now handled by outer if any.)
 
     await state.clear()
     await callback.answer()

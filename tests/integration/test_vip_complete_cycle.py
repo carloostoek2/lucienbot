@@ -12,16 +12,19 @@ El test cubre los requerimientos:
 - Monitoreo de inscripciones
 - Expulsión cuando la suscripción vence
 """
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch, AsyncMock
 
-from services.vip_service import VIPService
-from services.channel_service import ChannelService
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 from models.models import (
-    User, UserRole, Channel, ChannelType, Tariff, Token, TokenStatus,
-    Subscription
+    ChannelType,
+    TokenStatus,
+    User,
+    UserRole,
 )
+from services.channel_service import ChannelService
+from services.vip_service import VIPService
 
 
 @pytest.mark.integration
@@ -42,17 +45,12 @@ class TestVIPCompleteCycle:
 
         # Crear canal VIP
         vip_channel = channel_service.create_channel(
-            channel_id=-100999888777,
-            channel_name="VIP Test Channel",
-            channel_type=ChannelType.VIP
+            channel_id=-100999888777, channel_name="VIP Test Channel", channel_type=ChannelType.VIP
         )
 
         # Crear tarifa de 30 días
         tariff = vip_service.create_tariff(
-            name="Test Monthly",
-            duration_days=30,
-            price="9.99",
-            currency="USD"
+            name="Test Monthly", duration_days=30, price="9.99", currency="USD"
         )
 
         # Generar token
@@ -65,7 +63,7 @@ class TestVIPCompleteCycle:
             username="vipuser",
             first_name="VIP",
             last_name="User",
-            role=UserRole.USER
+            role=UserRole.USER,
         )
         db_session.add(user)
         db_session.commit()
@@ -81,8 +79,8 @@ class TestVIPCompleteCycle:
         assert subscription.is_active is True
         end_date = subscription.end_date
         if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
-        assert end_date > datetime.now(timezone.utc)
+            end_date = end_date.replace(tzinfo=UTC)
+        assert end_date > datetime.now(UTC)
 
         # Verificar token marcado como usado
         updated_token = vip_service.get_token(token.id)
@@ -92,7 +90,7 @@ class TestVIPCompleteCycle:
         # Verificar que el usuario es VIP
         assert vip_service.is_user_vip(user.telegram_id) is True
 
-        print(f"✓ Fase 1 completada: Token → Suscripción activa")
+        print("✓ Fase 1 completada: Token → Suscripción activa")
         print(f"  Token: {token.token_code[:10]}...")
         print(f"  Suscripción ID: {subscription.id}")
         print(f"  Expira: {subscription.end_date}")
@@ -111,17 +109,15 @@ class TestVIPCompleteCycle:
         channel_service = ChannelService(db_session)
 
         # Setup: Crear suscripción que vence en 25 horas (más de 24h pero menos de 48h)
-        vip_channel = channel_service.create_channel(
-            channel_id=-100999888778,
-            channel_name="VIP Reminder Test",
-            channel_type=ChannelType.VIP
+        channel_service.create_channel(
+            channel_id=-100999888778, channel_name="VIP Reminder Test", channel_type=ChannelType.VIP
         )
 
         tariff = vip_service.create_tariff(
             name="Test Tariff",
             duration_days=1,  # 1 día = 24 horas
             price="4.99",
-            currency="USD"
+            currency="USD",
         )
 
         token = vip_service.generate_token(tariff.id)
@@ -131,7 +127,7 @@ class TestVIPCompleteCycle:
             username="reminderuser",
             first_name="Reminder",
             last_name="User",
-            role=UserRole.USER
+            role=UserRole.USER,
         )
         db_session.add(user)
         db_session.commit()
@@ -142,12 +138,12 @@ class TestVIPCompleteCycle:
         # La suscripción debería vencer en ~24 horas (1 día)
         end_date = subscription.end_date
         if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
-        hours_until_expiry = (end_date - datetime.now(timezone.utc)).total_seconds() / 3600
+            end_date = end_date.replace(tzinfo=UTC)
+        hours_until_expiry = (end_date - datetime.now(UTC)).total_seconds() / 3600
 
         # === ASSERT: Verificar que la suscripción está por vencer ===
-        #get_expiring_subscriptions(hours=24) debe incluir suscripciones
-        #que vencen dentro de las próximas 24 horas
+        # get_expiring_subscriptions(hours=24) debe incluir suscripciones
+        # que vencen dentro de las próximas 24 horas
         expiring = vip_service.get_expiring_subscriptions(hours=24)
 
         # Verificar que nuestra suscripción aparece
@@ -170,7 +166,7 @@ class TestVIPCompleteCycle:
         # Ahora no debería aparecer (ya se envió el recordatorio)
         # Nota: La implementación puede variar, este es el comportamiento esperado
 
-        print(f"✓ Fase 2 completada: Sistema de recordatorios")
+        print("✓ Fase 2 completada: Sistema de recordatorios")
         print(f"  Recordatorio enviado: {result}")
         print(f"  Aparece en expiring (antes): {found}")
         print(f"  Aparece en expiring (después): {found_after}")
@@ -188,17 +184,14 @@ class TestVIPCompleteCycle:
 
         # Setup: Crear suscripción ya expirada
         channel_service = ChannelService(db_session)
-        vip_channel = channel_service.create_channel(
+        channel_service.create_channel(
             channel_id=-100999888779,
             channel_name="VIP Expiration Test",
-            channel_type=ChannelType.VIP
+            channel_type=ChannelType.VIP,
         )
 
         tariff = vip_service.create_tariff(
-            name="Expired Tariff",
-            duration_days=30,
-            price="9.99",
-            currency="USD"
+            name="Expired Tariff", duration_days=30, price="9.99", currency="USD"
         )
 
         token = vip_service.generate_token(tariff.id)
@@ -208,7 +201,7 @@ class TestVIPCompleteCycle:
             username="expireduser",
             first_name="Expired",
             last_name="User",
-            role=UserRole.USER
+            role=UserRole.USER,
         )
         db_session.add(user)
         db_session.commit()
@@ -217,7 +210,7 @@ class TestVIPCompleteCycle:
         subscription = vip_service.redeem_token(token.token_code, user.telegram_id)
 
         # Modificar la fecha de expiración al pasado (simular suscripción expirada)
-        subscription.end_date = datetime.now(timezone.utc) - timedelta(hours=1)
+        subscription.end_date = datetime.now(UTC) - timedelta(hours=1)
         db_session.commit()
 
         # === ASSERT: Obtener suscripciones expiradas ===
@@ -237,7 +230,7 @@ class TestVIPCompleteCycle:
         # Verificar que el usuario ya no es VIP
         assert vip_service.is_user_vip(user.telegram_id) is False
 
-        print(f"✓ Fase 3 completada: Expiración y desactivación")
+        print("✓ Fase 3 completada: Expiración y desactivación")
         print(f"  Suscripción inactiva: {updated.is_active}")
         print(f"  Usuario VIP: {vip_service.is_user_vip(user.telegram_id)}")
 
@@ -255,17 +248,17 @@ class TestVIPCompleteCycle:
         channel_service = ChannelService(db_session)
 
         # === FASE 1: Entry ===
-        channel = channel_service.create_channel(
+        channel_service.create_channel(
             channel_id=-100999888780,
             channel_name="VIP Lifecycle Test",
-            channel_type=ChannelType.VIP
+            channel_type=ChannelType.VIP,
         )
 
         tariff = vip_service.create_tariff(
             name="VIP Lifecycle",
             duration_days=7,  # 7 días para poder ver recordatorio
             price="14.99",
-            currency="USD"
+            currency="USD",
         )
 
         token = vip_service.generate_token(tariff.id, expires_in_days=30)
@@ -275,7 +268,7 @@ class TestVIPCompleteCycle:
             username="lifecycleuser",
             first_name="Lifecycle",
             last_name="User",
-            role=UserRole.USER
+            role=UserRole.USER,
         )
         db_session.add(user)
         db_session.commit()
@@ -291,26 +284,26 @@ class TestVIPCompleteCycle:
 
         # === FASE 2: Recordatorio (simulado) ===
         # Modificar la fecha para que parezca que马上 va a expirar
-        subscription.end_date = datetime.now(timezone.utc) + timedelta(hours=23)
+        subscription.end_date = datetime.now(UTC) + timedelta(hours=23)
         db_session.commit()
 
         expiring = vip_service.get_expiring_subscriptions(hours=24)
-        print(f"\n=== FASE 2: Recordatorio ===")
+        print("\n=== FASE 2: Recordatorio ===")
         print(f"✓ Suscripciones por vencer (24h): {len(expiring)}")
 
         # === FASE 3: Expiración ===
         # Simular que pasó el tiempo
-        subscription.end_date = datetime.now(timezone.utc) - timedelta(hours=1)
+        subscription.end_date = datetime.now(UTC) - timedelta(hours=1)
         db_session.commit()
 
-        expired = vip_service.get_expired_subscriptions()
+        vip_service.get_expired_subscriptions()
         vip_service.expire_subscription(subscription.id)
 
         # Verificar estado final
         final_sub = vip_service.get_subscription(subscription.id)
         is_vip = vip_service.is_user_vip(user.telegram_id)
 
-        print(f"\n=== FASE 3: Expulsión ===")
+        print("\n=== FASE 3: Expulsión ===")
         print(f"✓ Suscripción inactiva: {not final_sub.is_active}")
         print(f"✓ Usuario VIP: {is_vip}")
 
@@ -318,8 +311,8 @@ class TestVIPCompleteCycle:
         assert final_sub.is_active is False, "Suscripción debe estar inactiva"
         assert is_vip is False, "Usuario no debe ser VIP después de expiración"
 
-        print(f"\n=== CICLO COMPLETO ===")
-        print(f"✓ Token → Suscripción ✓")
-        print(f"✓ Recordatorio ✓")
-        print(f"✓ Expiración ✓")
-        print(f"✓ Expulsión (lógica) ✓")
+        print("\n=== CICLO COMPLETO ===")
+        print("✓ Token → Suscripción ✓")
+        print("✓ Recordatorio ✓")
+        print("✓ Expiración ✓")
+        print("✓ Expulsión (lógica) ✓")

@@ -298,8 +298,15 @@ class GameService:
     }
 
     def __init__(self, db: Session = None):
+        self._owns_session = db is None
         self.db = db or SessionLocal()
-        self.besito_service = BesitoService(self.db)
+        # Held direct BesitoService composition removed (Item 6 / remaining composers unification).
+        # GAME/TRIVIA credits now use local on-demand BesitoService(db=self.db) *only*
+        # inside play_dice_game / play_trivia_game / play_vip_trivia_game / play_simple_trivia_game
+        # (preserves atomicity: credit's internal commit + GAME/TRIVIA record + streak/promo best-effort + return dict all unchanged;
+        # best-effort schedule_emit still fires post-credit commit).
+        # The has_sufficient local at _build_streak_failure_state (~953) remains (consistent style for non-credit check).
+        # Other composers (broadcast/daily) handled in their phases; scope tight per Item 6.
         self._user_service = UserService(self.db)
         self._vip_service = VIPService(self.db)
         self._questions = None
@@ -307,9 +314,18 @@ class GameService:
         self._simple_questions = {}  # {category_id: [questions]}
 
     def close(self):
-        """Cierra la sesión de base de datos"""
-        if hasattr(self, "db") and self.db:
+        """Cierra la sesión de base de datos si fue creada por este servicio."""
+        if self._owns_session and self.db:
             self.db.close()
+            self.db = None
+        # Cerrar subs (inofensivo: ellos tienen owns=False cuando db compartido)
+        for sub in (
+            getattr(self, "besito_service", None),
+            getattr(self, "_user_service", None),
+            getattr(self, "_vip_service", None),
+        ):
+            if sub and hasattr(sub, "close"):
+                sub.close()
 
     # ==================== TEMPLATE HELPERS ====================
 
@@ -602,7 +618,10 @@ class GameService:
         besitos = 0
         if won:
             besitos = self.DICE_WIN_BESITOS
-            self.besito_service.credit_besitos(
+            besito_service = BesitoService(
+                db=self.db
+            )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
+            besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.GAME,
@@ -834,7 +853,10 @@ class GameService:
         besitos = 0
         if is_correct:
             besitos = self.TRIVIA_WIN_BESITOS
-            self.besito_service.credit_besitos(
+            besito_service = BesitoService(
+                db=self.db
+            )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
+            besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
@@ -846,7 +868,7 @@ class GameService:
         if is_correct and new_streak in self.STREAK_MILESTONES:
             bonus = self.STREAK_MILESTONES[new_streak]
             streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
-            self.besito_service.credit_besitos(
+            besito_service.credit_besitos(  # re-use the local from above
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
@@ -1226,7 +1248,10 @@ class GameService:
         besitos = 0
         if is_correct:
             besitos = self.TRIVIA_VIP_WIN_BESITOS
-            self.besito_service.credit_besitos(
+            besito_service = BesitoService(
+                db=self.db
+            )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
+            besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
@@ -1238,7 +1263,7 @@ class GameService:
         if is_correct and new_streak in self.STREAK_MILESTONES:
             bonus = self.STREAK_MILESTONES[new_streak]
             streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
-            self.besito_service.credit_besitos(
+            besito_service.credit_besitos(  # re-use the local from above
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
@@ -1577,7 +1602,10 @@ class GameService:
             besitos = self.TRIVIA_SIMPLE_WIN_BESITOS
             if self.is_user_vip(user_id):
                 besitos = self.TRIVIA_SIMPLE_VIP_WIN_BESITOS
-            self.besito_service.credit_besitos(
+            besito_service = BesitoService(
+                db=self.db
+            )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
+            besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besitos,
                 source=TransactionSource.TRIVIA,
@@ -1588,7 +1616,7 @@ class GameService:
         if is_correct and new_streak in self.STREAK_MILESTONES:
             bonus = self.STREAK_MILESTONES[new_streak]
             streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
-            self.besito_service.credit_besitos(
+            besito_service.credit_besitos(  # re-use the local from above
                 user_id=user_id,
                 amount=streak_bonus,
                 source=TransactionSource.TRIVIA,
@@ -1741,6 +1769,35 @@ class GameService:
         finally:
             tcs.close()
 
-    def __del__(self):
-        """Cierra la sesión"""
-        self.close()
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (game domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# (to avoid any re-entrancy with game award paths or future extensions; game
+# award contracts and partial-failure behavior are authoritative in the credit flows
+# inside play_* methods + streak protection).
+# This is observational only (best effort; errors swallowed by bus).
+# =============================================================================
+
+
+async def on_besitos_awarded_game_award_observer(payload: dict) -> None:
+    """
+    Game-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
+    post-commit, including from GAME/TRIVIA credits in play_dice_game / play_trivia_game / etc
+    and streak bonuses).
+
+    DESIRED CONTRACT (copy of narrative precedent + Reward Item5): log reception with full context
+    (user_id/amount/source/ref); purely observational + wiring proof for this domain.
+    MUST NOT credit, debit, or mutate besitos state here.
+    Future extensions (e.g. streak/promo hooks on game awards) belong in this module and should use
+    get_service(GameService) or direct models if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"game | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on game award contracts / atomicity gold / partial failure).

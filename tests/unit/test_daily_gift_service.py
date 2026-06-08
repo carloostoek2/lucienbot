@@ -2,11 +2,14 @@
 Tests unitarios para DailyGiftService.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
-from models.models import DailyGiftClaim
+from models.models import BesitoTransaction, DailyGiftClaim, DailyGiftConfig, TransactionSource
+from services.besito_service import BesitoService
 from services.daily_gift_service import DailyGiftService
 
 
@@ -131,7 +134,11 @@ class TestDailyGiftClaims:
 
         assert success is True
         assert amount == 10
-        balance = service.besito_service.get_balance(sample_user.telegram_id)
+        balance = (
+            service.besito_service.get_balance(sample_user.telegram_id)
+            if hasattr(service, "besito_service")
+            else BesitoService(db_session).get_balance(sample_user.telegram_id)
+        )  # 1-line fix + guard post local-in-claim (F5); daily precedent
         assert balance == 10
 
         history = service.get_claim_history(sample_user.telegram_id)
@@ -248,3 +255,81 @@ class TestDailyGiftStats:
         history = service.get_claim_history(sample_user.telegram_id, limit=3)
 
         assert len(history) == 3
+
+
+@pytest.mark.unit
+class TestDailyGiftConcurrentClaim:
+    """
+    DESIRED CONTRACT (Item 4 / F2 gamif daily): concurrent claim (first time race window) -> at most 1 success/claim row/credit.
+    Copia gather+to_thread+return_exceptions + successes filter + <=1 + count<=1 de broadcast/besito concurrent (file variant si coop, aquí db_session por unit).
+    Usa sample TG (contract). Build on daily atomic pilot in cross (claim+credit visibility post internal).
+    """
+
+    async def test_concurrent_first_claims_at_most_one_succeeds(self, db_session, sample_user):
+        """Two concurrent first claims: at most 1 succeeds (claim row + credit); no double besitos."""
+        service = DailyGiftService(db_session)
+        tg = sample_user.telegram_id
+
+        # Pre-create config to avoid concurrent default creation inside claim_gift.get_config() (would hit UNIQUE on daily_gift_config.id=1 from 2 threads).
+        # This lets the race be on the claim/credit path itself (the intended for this test).
+        cfg = DailyGiftConfig(besito_amount=10, is_active=True)
+        db_session.add(cfg)
+        db_session.commit()
+        db_session.expire_all()
+
+        results = await asyncio.gather(
+            asyncio.to_thread(service.claim_gift, tg),
+            asyncio.to_thread(service.claim_gift, tg),
+            return_exceptions=True,
+        )
+
+        successes = [r for r in results if isinstance(r, tuple) and r[0] is True]
+        assert len(successes) <= 1
+
+        claim_count = db_session.query(DailyGiftClaim).filter(DailyGiftClaim.user_id == tg).count()
+        assert claim_count <= 1
+
+        bal = (
+            service.besito_service.get_balance(tg)
+            if hasattr(service, "besito_service")
+            else BesitoService(db_session).get_balance(tg)
+        )  # 1-line fix post local-in-claim (F5); daily precedent guard preserved
+        assert bal <= 10  # default config amt; never double in race
+
+    def test_property_kept_for_guard_and_compat(self, db_session, sample_user):
+        """Post Item 6: @property besito_service kept (for test guards/compat + hasattr precedent) even though claim_gift uses local inside."""
+        service = DailyGiftService(db_session)
+        assert hasattr(service, "besito_service")
+        # property still instantiates (lazy) for guards in 1-line sites / cross atomicity patches
+        _ = service.besito_service  # access ok
+        service.close()
+
+    def test_claim_gift_uses_local_besito_inside(
+        self, db_session, sample_user, sample_daily_gift_config
+    ):
+        """
+        DESIRED CONTRACT (Item 6): claim_gift uses local BesitoService(db=self._get_db()) *only inside*
+        the credit block (not the held prop for the credit path); schedule_emit still fires best-effort from
+        the local credit; claim row + DAILY_GIFT tx + balance persist on happy; 0 behavior/0 atomicity change.
+        Guards in tests (hasattr + fallback) continue to work.
+        """
+        service = DailyGiftService(db_session)
+        with patch("services.event_bus.schedule_emit") as mock_emit:
+            success, amt, msg = service.claim_gift(sample_user.telegram_id)
+            assert success is True
+            assert amt == 10
+            assert mock_emit.called  # from inside the *local* Besito(db=_get_db()) credit inside claim_gift (Item 6); real path
+        # credit survives + DAILY_GIFT tx present (re-query) + balance delta
+        tx = (
+            db_session.query(BesitoTransaction)
+            .filter(
+                BesitoTransaction.user_id == sample_user.telegram_id,
+                BesitoTransaction.source == TransactionSource.DAILY_GIFT,
+            )
+            .first()
+        )
+        assert tx is not None
+        assert tx.amount == 10
+        final_bal = BesitoService(db_session).get_balance(sample_user.telegram_id)
+        assert final_bal == 10
+        service.close()

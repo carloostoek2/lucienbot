@@ -13,22 +13,30 @@ Más bugs corregidos verificados:
   BUG 5: Stage 3 verifica membresía real al canal antes de completar
   BUG 7: Startup expiration limpia vip_entry_status
 """
+
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
-from services.vip_service import VIPService
 from models.models import (
-    User, UserRole, Channel, ChannelType, Tariff, Token, TokenStatus,
-    Subscription
+    Channel,
+    ChannelType,
+    Subscription,
+    Tariff,
+    Token,
+    TokenStatus,
+    User,
+    UserRole,
 )
-
+from services.vip_service import VIPService
 
 # ==================== HELPERS ====================
 
+
 def _now():
     """Shorthand para datetime.now(timezone.utc) consistente con prod."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _ensure_aware(dt):
@@ -41,7 +49,7 @@ def _ensure_aware(dt):
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -53,8 +61,14 @@ def _past(days=1):
     return _now() - timedelta(days=days)
 
 
-def _create_user(db: Session, telegram_id: int, username: str = "testuser",
-                 role=UserRole.USER, vip_entry_status=None, vip_entry_stage=None):
+def _create_user(
+    db: Session,
+    telegram_id: int,
+    username: str = "testuser",
+    role=UserRole.USER,
+    vip_entry_status=None,
+    vip_entry_stage=None,
+):
     user = User(
         telegram_id=telegram_id,
         username=username,
@@ -109,9 +123,15 @@ def _create_token(db: Session, tariff: Tariff, code="FLOWTEST", status=TokenStat
     return token
 
 
-def _create_subscription(db: Session, user: User, channel: Channel,
-                         token: Token, end_date=None, is_active=True,
-                         start_date=None) -> Subscription:
+def _create_subscription(
+    db: Session,
+    user: User,
+    channel: Channel,
+    token: Token,
+    end_date=None,
+    is_active=True,
+    start_date=None,
+) -> Subscription:
     sub = Subscription(
         user_id=user.telegram_id,
         channel_id=channel.id,
@@ -128,6 +148,7 @@ def _create_subscription(db: Session, user: User, channel: Channel,
 
 # ==================== FLUJO 1: ACTIVACIÓN CON TOKEN ====================
 
+
 @pytest.mark.integration
 class TestFlow1TokenActivation:
     """
@@ -135,9 +156,7 @@ class TestFlow1TokenActivation:
     Verifica: redeem_token → Subscription creada → pending_entry stage 1
     """
 
-    def test_new_user_redeems_token_gets_subscription_and_pending_entry(
-        self, db_session
-    ):
+    def test_new_user_redeems_token_gets_subscription_and_pending_entry(self, db_session):
         """Usuario nuevo canjea token → suscripción activa + pending_entry stage 1."""
         user = _create_user(db_session, 1001)
         channel = _create_vip_channel(db_session)
@@ -165,9 +184,7 @@ class TestFlow1TokenActivation:
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
 
-    def test_redeem_token_fails_for_used_token(
-        self, db_session
-    ):
+    def test_redeem_token_fails_for_used_token(self, db_session):
         """Un token USED no puede ser canjeado de nuevo."""
         user1 = _create_user(db_session, 2001, "user_one")
         user2 = _create_user(db_session, 2002, "user_two")
@@ -185,9 +202,7 @@ class TestFlow1TokenActivation:
         sub2 = vip.redeem_token(token.token_code, user2.telegram_id)
         assert sub2 is None
 
-    def test_redeem_token_fails_for_expired_token(
-        self, db_session
-    ):
+    def test_redeem_token_fails_for_expired_token(self, db_session):
         """Un token EXPIRED no puede ser canjeado."""
         user = _create_user(db_session, 3001)
         _create_vip_channel(db_session)
@@ -198,9 +213,7 @@ class TestFlow1TokenActivation:
         sub = vip.redeem_token(token.token_code, user.telegram_id)
         assert sub is None
 
-    def test_redeem_token_fails_when_no_vip_channel_exists(
-        self, db_session
-    ):
+    def test_redeem_token_fails_when_no_vip_channel_exists(self, db_session):
         """Sin canal VIP configurado, redeem_token retorna None."""
         user = _create_user(db_session, 4001)
         tariff = _create_tariff(db_session)
@@ -218,6 +231,7 @@ class TestFlow1TokenActivation:
 
 # ==================== FLUJO 2: VERIFICACIÓN DE ESTADO ACTIVO ====================
 
+
 @pytest.mark.integration
 class TestFlow2ActiveStatusVerification:
     """
@@ -225,9 +239,7 @@ class TestFlow2ActiveStatusVerification:
     Incluye verificación del BUG 1 fix: end_date > now en get_user_subscription.
     """
 
-    def test_active_non_expired_subscription_is_vip(
-        self, db_session
-    ):
+    def test_active_non_expired_subscription_is_vip(self, db_session):
         """Suscripción activa con end_date futuro → is_user_vip True."""
         user = _create_user(db_session, 5001)
         channel = _create_vip_channel(db_session)
@@ -238,9 +250,7 @@ class TestFlow2ActiveStatusVerification:
         vip = VIPService(db_session)
         assert vip.is_user_vip(user.telegram_id) is True
 
-    def test_expired_subscription_is_not_vip_bug1_fix(
-        self, db_session
-    ):
+    def test_expired_subscription_is_not_vip_bug1_fix(self, db_session):
         """
         BUG 1 FIX: Suscripción con end_date pasado NO es VIP,
         aunque is_active=True. get_user_subscription() ahora filtra por fecha.
@@ -260,17 +270,13 @@ class TestFlow2ActiveStatusVerification:
         sub = vip.get_user_subscription(user.telegram_id)
         assert sub is None
 
-    def test_no_subscription_is_not_vip(
-        self, db_session
-    ):
+    def test_no_subscription_is_not_vip(self, db_session):
         """Usuario sin suscripción → is_user_vip False."""
         user = _create_user(db_session, 5003)
         vip = VIPService(db_session)
         assert vip.is_user_vip(user.telegram_id) is False
 
-    def test_multiple_subscriptions_most_recent_active_wins(
-        self, db_session
-    ):
+    def test_multiple_subscriptions_most_recent_active_wins(self, db_session):
         """Con múltiples suscripciones, get_user_subscription retorna la activa no expirada."""
         user = _create_user(db_session, 5004)
         channel = _create_vip_channel(db_session)
@@ -293,6 +299,7 @@ class TestFlow2ActiveStatusVerification:
 
 # ==================== FLUJO 3: EXPIRACIÓN ====================
 
+
 @pytest.mark.integration
 class TestFlow3Expiration:
     """
@@ -300,9 +307,7 @@ class TestFlow3Expiration:
     las marca is_active=False, y limpia vip_entry_status.
     """
 
-    def test_get_expired_subscriptions_detects_past_end_date(
-        self, db_session
-    ):
+    def test_get_expired_subscriptions_detects_past_end_date(self, db_session):
         """get_expired_subscriptions detecta end_date < now con is_active=True."""
         user = _create_user(db_session, 6001)
         channel = _create_vip_channel(db_session)
@@ -315,9 +320,7 @@ class TestFlow3Expiration:
         expired_ids = [s.id for s in expired]
         assert expired_sub.id in expired_ids
 
-    def test_expire_subscription_sets_is_active_false(
-        self, db_session
-    ):
+    def test_expire_subscription_sets_is_active_false(self, db_session):
         """expire_subscription marca is_active=False."""
         user = _create_user(db_session, 6002)
         channel = _create_vip_channel(db_session)
@@ -332,9 +335,7 @@ class TestFlow3Expiration:
         db_session.refresh(sub)
         assert sub.is_active is False
 
-    def test_get_expired_subscriptions_excludes_already_inactive(
-        self, db_session
-    ):
+    def test_get_expired_subscriptions_excludes_already_inactive(self, db_session):
         """Suscripciones con is_active=False cuyos end_date aún no expiró no aparecen.
         Nota: get_expired_subscriptions solo filtra por end_date < now, no por is_active."""
         user = _create_user(db_session, 6003)
@@ -342,22 +343,20 @@ class TestFlow3Expiration:
         tariff = _create_tariff(db_session)
         token = _create_token(db_session, tariff)
         # Crear suscripción con is_active=False pero con fecha futura
-        _create_subscription(db_session, user, channel, token,
-                            end_date=_future(30), is_active=False)
+        _create_subscription(
+            db_session, user, channel, token, end_date=_future(30), is_active=False
+        )
 
         vip = VIPService(db_session)
         expired = vip.get_expired_subscriptions()
         assert len(expired) == 0
 
-    def test_clear_vip_entry_state_on_expiration_bug7_fix(
-        self, db_session
-    ):
+    def test_clear_vip_entry_state_on_expiration_bug7_fix(self, db_session):
         """
         BUG 7 FIX: clear_vip_entry_state limpia vip_entry_status y stage,
         igual que el scheduler _process_expired_subscriptions.
         """
-        user = _create_user(db_session, 6004,
-                           vip_entry_status="pending_entry", vip_entry_stage=2)
+        user = _create_user(db_session, 6004, vip_entry_status="pending_entry", vip_entry_stage=2)
         channel = _create_vip_channel(db_session)
         tariff = _create_tariff(db_session)
         token = _create_token(db_session, tariff)
@@ -372,9 +371,7 @@ class TestFlow3Expiration:
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
 
-    def test_get_expired_subscriptions_excludes_non_expired(
-        self, db_session
-    ):
+    def test_get_expired_subscriptions_excludes_non_expired(self, db_session):
         """Suscripciones con end_date futuro NO aparecen como expiradas."""
         user = _create_user(db_session, 6005)
         channel = _create_vip_channel(db_session)
@@ -389,6 +386,7 @@ class TestFlow3Expiration:
 
 # ==================== FLUJO 4: RENOVACIÓN CON NUEVO TOKEN ====================
 
+
 @pytest.mark.integration
 class TestFlow4RenewalWithNewToken:
     """
@@ -396,9 +394,7 @@ class TestFlow4RenewalWithNewToken:
     Verifica: extensión de end_date + limpieza de duplicados.
     """
 
-    def test_active_user_redeems_new_token_extends_end_date(
-        self, db_session
-    ):
+    def test_active_user_redeems_new_token_extends_end_date(self, db_session):
         """Usuario activo canjea nuevo token → se extiende end_date."""
         user = _create_user(db_session, 7001)
         channel = _create_vip_channel(db_session)
@@ -425,9 +421,7 @@ class TestFlow4RenewalWithNewToken:
         delta = abs((sub1.end_date - expected_end).total_seconds())
         assert delta < 5, f"Expected {expected_end}, got {sub1.end_date}"
 
-    def test_renewal_deactivates_duplicate_active_subscriptions(
-        self, db_session
-    ):
+    def test_renewal_deactivates_duplicate_active_subscriptions(self, db_session):
         """Renovación desactiva suscripciones duplicadas is_active=True del mismo usuario."""
         user = _create_user(db_session, 7002)
         channel = _create_vip_channel(db_session)
@@ -455,12 +449,9 @@ class TestFlow4RenewalWithNewToken:
         db_session.refresh(sub_dup)
         assert sub_dup.is_active is False
 
-    def test_renewal_clears_vip_entry_status(
-        self, db_session
-    ):
+    def test_renewal_clears_vip_entry_status(self, db_session):
         """Renovación limpia vip_entry_status (aunque el usuario no completó el ritual)."""
-        user = _create_user(db_session, 7003,
-                           vip_entry_status="pending_entry", vip_entry_stage=2)
+        user = _create_user(db_session, 7003, vip_entry_status="pending_entry", vip_entry_stage=2)
         channel = _create_vip_channel(db_session)
         tariff = _create_tariff(db_session, duration_days=30)
 
@@ -479,6 +470,7 @@ class TestFlow4RenewalWithNewToken:
 
 # ==================== FLUJO 5: USUARIO EXPELIDO REGRESA ====================
 
+
 @pytest.mark.integration
 class TestFlow5ReturnAfterExpulsion:
     """
@@ -486,9 +478,7 @@ class TestFlow5ReturnAfterExpulsion:
     Verifica: nueva suscripción creada + pending_entry stage 1 reiniciado.
     """
 
-    def test_expired_user_redeems_new_token_creates_new_subscription(
-        self, db_session
-    ):
+    def test_expired_user_redeems_new_token_creates_new_subscription(self, db_session):
         """Usuario con sub expirada canjea token → nueva suscripción."""
         user = _create_user(db_session, 8001)
         channel = _create_vip_channel(db_session)
@@ -496,8 +486,9 @@ class TestFlow5ReturnAfterExpulsion:
 
         # Suscripción expirada (ya inactiva)
         old_token = _create_token(db_session, tariff, code="OLDEXP01")
-        old_sub = _create_subscription(db_session, user, channel, old_token,
-                                       end_date=_past(5), is_active=False)
+        old_sub = _create_subscription(
+            db_session, user, channel, old_token, end_date=_past(5), is_active=False
+        )
 
         # Nuevo token
         new_token = _create_token(db_session, tariff, code="NEWSTART")
@@ -511,19 +502,17 @@ class TestFlow5ReturnAfterExpulsion:
         assert new_sub.is_active is True
         assert _ensure_aware(new_sub.end_date) > _now() - timedelta(minutes=5)
 
-    def test_expired_user_gets_pending_entry_stage_1(
-        self, db_session
-    ):
+    def test_expired_user_gets_pending_entry_stage_1(self, db_session):
         """Usuario que regresa tiene pending_entry stage 1 limpio."""
-        user = _create_user(db_session, 8002,
-                           vip_entry_status="active", vip_entry_stage=None)
+        user = _create_user(db_session, 8002, vip_entry_status="active", vip_entry_stage=None)
         channel = _create_vip_channel(db_session)
         tariff = _create_tariff(db_session, duration_days=30)
 
         # Suscripción expirada inactiva
         old_token = _create_token(db_session, tariff, code="OLDACT01")
-        _create_subscription(db_session, user, channel, old_token,
-                            end_date=_past(5), is_active=False)
+        _create_subscription(
+            db_session, user, channel, old_token, end_date=_past(5), is_active=False
+        )
 
         # Nuevo token
         new_token = _create_token(db_session, tariff, code="FRESH01")
@@ -536,12 +525,10 @@ class TestFlow5ReturnAfterExpulsion:
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
 
-    def test_user_without_any_subscription_gets_fresh_start(
-        self, db_session
-    ):
+    def test_user_without_any_subscription_gets_fresh_start(self, db_session):
         """Usuario sin ninguna suscripción previa → nueva sub + pending_entry stage 1."""
         user = _create_user(db_session, 8003)
-        channel = _create_vip_channel(db_session)
+        _create_vip_channel(db_session)
         tariff = _create_tariff(db_session)
         token = _create_token(db_session, tariff)
 
@@ -559,25 +546,21 @@ class TestFlow5ReturnAfterExpulsion:
 
 # ==================== VIP ENTRY STATE (LEGACY UTILS) ====================
 
+
 @pytest.mark.integration
 class TestVIPEntryState:
     """Tests para los metodos legacy de estado VIP (get/clear)."""
 
-    def test_get_vip_entry_state_returns_correct_values(
-        self, db_session
-    ):
+    def test_get_vip_entry_state_returns_correct_values(self, db_session):
         """get_vip_entry_state retorna (status, stage) correctos."""
-        user = _create_user(db_session, 9008,
-                           vip_entry_status="pending_entry", vip_entry_stage=2)
+        user = _create_user(db_session, 9008, vip_entry_status="pending_entry", vip_entry_stage=2)
 
         vip = VIPService(db_session)
         status, stage = vip.get_vip_entry_state(user.telegram_id)
         assert status == "pending_entry"
         assert stage == 2
 
-    def test_get_vip_entry_state_returns_none_for_new_user(
-        self, db_session
-    ):
+    def test_get_vip_entry_state_returns_none_for_new_user(self, db_session):
         """Usuario sin estado VIP retorna (None, None)."""
         user = _create_user(db_session, 9009)
 
@@ -586,12 +569,9 @@ class TestVIPEntryState:
         assert status is None
         assert stage is None
 
-    def test_clear_vip_entry_state_resets_both_fields(
-        self, db_session
-    ):
+    def test_clear_vip_entry_state_resets_both_fields(self, db_session):
         """clear_vip_entry_state pone ambos campos en None."""
-        user = _create_user(db_session, 9010,
-                           vip_entry_status="active", vip_entry_stage=3)
+        user = _create_user(db_session, 9010, vip_entry_status="active", vip_entry_stage=3)
 
         vip = VIPService(db_session)
         result = vip.clear_vip_entry_state(user.telegram_id)
@@ -601,12 +581,10 @@ class TestVIPEntryState:
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
 
-    def test_full_entry_flow_token_to_active(
-        self, db_session
-    ):
+    def test_full_entry_flow_token_to_active(self, db_session):
         """Flujo simplificado: redeem_token → acceso directo VIP."""
         user = _create_user(db_session, 9012)
-        channel = _create_vip_channel(db_session)
+        _create_vip_channel(db_session)
         tariff = _create_tariff(db_session)
         token = _create_token(db_session, tariff)
 
@@ -623,18 +601,17 @@ class TestVIPEntryState:
 
 # ==================== FLUJO COMPLETO END-TO-END ====================
 
+
 @pytest.mark.integration
 class TestVIPCompleteLifecycle:
     """
     Ciclo completo de vida VIP: activación → verificación → extensión → expiración → retorno.
     """
 
-    def test_full_lifecycle_activate_extend_expire_return(
-        self, db_session
-    ):
+    def test_full_lifecycle_activate_extend_expire_return(self, db_session):
         """E2E: activar → extender → expirar → regresar con nuevo token."""
         user = _create_user(db_session, 9201)
-        channel = _create_vip_channel(db_session)
+        _create_vip_channel(db_session)
         tariff30 = _create_tariff(db_session, "30-day", duration_days=30)
         tariff7 = _create_tariff(db_session, "7-day", duration_days=7)
 
@@ -687,9 +664,7 @@ class TestVIPCompleteLifecycle:
         assert user.vip_entry_status is None
         assert user.vip_entry_stage is None
 
-    def test_bug1_scenario_expired_but_active_flag_true(
-        self, db_session
-    ):
+    def test_bug1_scenario_expired_but_active_flag_true(self, db_session):
         """
         BUG 1 SCENARIO: Suscripción con is_active=True pero end_date pasado.
         Después del fix, is_user_vip() retorna False.
@@ -703,9 +678,7 @@ class TestVIPCompleteLifecycle:
 
         # Escenario: suscripción expiró hace 6 horas, is_active sigue True
         expired_sub = _create_subscription(
-            db_session, user, channel, token,
-            end_date=_now() - timedelta(hours=6),
-            is_active=True
+            db_session, user, channel, token, end_date=_now() - timedelta(hours=6), is_active=True
         )
 
         vip = VIPService(db_session)

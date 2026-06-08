@@ -1,0 +1,1 @@
+- [item6-arch-audit.md](item6-arch-audit.md) — Arch audit of Item 6 (tirón final: unify remaining BesitoService composers in broadcast/game/daily): PASS WITH NOTES (0 critical violations; atomicity/EventBus/"MUST NOT"/3-systems contracts upheld; 3 medium notes are planned/pre-existing; tight scope + golds protected).

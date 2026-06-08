@@ -14,6 +14,7 @@ from keyboards.inline_keyboards import (
     back_keyboard,
     reactions_keyboard_with_counts,
 )
+from services import get_service
 from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
@@ -30,11 +31,8 @@ async def show_balance(callback: CallbackQuery):
     """Muestra el saldo de besitos del usuario"""
     user_id = callback.from_user.id
 
-    besito_service = BesitoService()
-    try:
+    with get_service(BesitoService) as besito_service:
         stats = besito_service.get_balance_with_stats(user_id)
-    finally:
-        besito_service.close()
 
     text = f"""🎩 <b>Lucien:</b>
 
@@ -59,11 +57,8 @@ async def show_transaction_history(callback: CallbackQuery):
     """Muestra el historial de transacciones"""
     user_id = callback.from_user.id
 
-    besito_service = BesitoService()
-    try:
+    with get_service(BesitoService) as besito_service:
         transactions = besito_service.get_transaction_history(user_id, limit=10)
-    finally:
-        besito_service.close()
 
     if not transactions:
         text = """🎩 <b>Lucien:</b>
@@ -112,15 +107,12 @@ async def daily_gift_menu(callback: CallbackQuery):
     """Menú del regalo diario"""
     user_id = callback.from_user.id
 
-    gift_service = DailyGiftService()
-    try:
+    with get_service(DailyGiftService) as gift_service:
         can_claim, time_remaining, message = gift_service.can_claim(user_id)
-    finally:
-        gift_service.close()
 
-    if can_claim:
-        amount = gift_service.get_gift_amount()
-        text = f"""🎩 <b>Lucien:</b>
+        if can_claim:
+            amount = gift_service.get_gift_amount()
+            text = f"""🎩 <b>Lucien:</b>
 
 <i>Diana tiene un obsequio especial para usted hoy...</i>
 
@@ -130,14 +122,14 @@ async def daily_gift_menu(callback: CallbackQuery):
 
 <i>¿Desea reclamar su regalo?</i>"""
 
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🎁 Reclamar regalo", callback_data="claim_gift")],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")],
-            ]
-        )
-    else:
-        text = f"""🎩 <b>Lucien:</b>
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🎁 Reclamar regalo", callback_data="claim_gift")],
+                    [InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")],
+                ]
+            )
+        else:
+            text = f"""🎩 <b>Lucien:</b>
 
 <i>La generosidad de Diana tiene sus tiempos...</i>
 
@@ -147,7 +139,7 @@ async def daily_gift_menu(callback: CallbackQuery):
 
 <i>Vuelva más tarde para recibir su próximo obsequio.</i>"""
 
-        keyboard = back_keyboard("back_to_main")
+            keyboard = back_keyboard("back_to_main")
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -158,11 +150,8 @@ async def claim_daily_gift(callback: CallbackQuery):
     """Procesa el reclamo del regalo diario"""
     user_id = callback.from_user.id
 
-    gift_service = DailyGiftService()
-    try:
+    with get_service(DailyGiftService) as gift_service:
         success, amount, message = gift_service.claim_gift(user_id)
-    finally:
-        gift_service.close()
 
     if success:
         text = f"""🎩 <b>Lucien:</b>
@@ -208,8 +197,7 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
     emoji_id = callback_data.emoji_id
 
     # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
-    broadcast_service = BroadcastService()
-    try:
+    with get_service(BroadcastService) as broadcast_service:
         reaction = await broadcast_service.check_and_register_reaction(
             broadcast_id=broadcast_id,
             user_id=user.id,
@@ -247,5 +235,3 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
             await callback.answer(f"¡+{besitos} besitos! 💋")
         else:
             await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
-    finally:
-        broadcast_service.close()

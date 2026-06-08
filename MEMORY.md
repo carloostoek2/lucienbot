@@ -1,0 +1,6 @@
+# Agent Memory Index (impact-analyzer)
+
+- [item4-tests-gamification-narrative-vip](.claude/agent-memory/impact-analyzer/item4-tests-gamification-narrative-vip.md) — Impact map + recs for tests on Gamif/Narrative/Channel-VIP systems (Item 4, post-get_service)
+- [item5-reward-besito-eventbus-decoupling-impact.md](.claude/agent-memory/impact-analyzer/item5-reward-besito-eventbus-decoupling-impact.md) — Structured impact for Item 5 (RewardService Besito reduce via EventBus + local credit + listener).
+- [item6-remaining-besito-compositions.md](.claude/agent-memory/impact-analyzer/item6-remaining-besito-compositions.md) — Structured impact for Item 6 (final): unify remaining direct BesitoService compositions (broadcast/game/daily_gift tight scope; local on-demand + obs listeners; atomicity preserved).
+- [Item 6 test-guardian audit (broadcast/game/daily besito locals + 2 listeners + 1-lines + golds)](.claude/agent-memory/test-guardian/item6-test-guardian-report.md) — coverage extended ~4-6/svc + re-runs green; veredict sí w/ notes.

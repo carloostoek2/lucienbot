@@ -20,6 +20,7 @@ from keyboards.callback_data import (
     StoreCategoryCallback,
 )
 from keyboards.inline_keyboards import back_keyboard
+from services import get_service
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.store_service import StoreService
@@ -43,13 +44,9 @@ class SearchStates(StatesGroup):
 @router.callback_query(F.data == "shop")
 async def shop_menu(callback: CallbackQuery):
     """Menu principal de la tienda"""
-    besito_service = BesitoService()
-
     user_id = callback.from_user.id
-    try:
+    with get_service(BesitoService) as besito_service:
         balance = besito_service.get_balance(user_id)
-    finally:
-        besito_service.close()
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -81,11 +78,8 @@ async def shop_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "store_catalog")
 async def store_catalog(callback: CallbackQuery):
     """Muestra el catalogo de productos con botones minimalistas"""
-    store_service = StoreService()
-    try:
+    with get_service(StoreService) as store_service:
         products = store_service.get_all_products(active_only=True)
-    finally:
-        store_service.close()
 
     if not products:
         await callback.message.edit_text(
@@ -130,11 +124,8 @@ async def store_catalog(callback: CallbackQuery):
 @router.callback_query(F.data == "store_categories")
 async def store_categories(callback: CallbackQuery):
     """Muestra categorias disponibles"""
-    package_service = PackageService()
-    try:
+    with get_service(PackageService) as package_service:
         categories = package_service.get_all_categories(active_only=True)
-    finally:
-        package_service.close()
 
     if not categories:
         await callback.message.edit_text(
@@ -185,16 +176,15 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
     """Muestra productos de una categoria con botones minimalistas"""
     category_id = callback_data.category_id
 
-    package_service = PackageService()
-    store_service = StoreService()
+    with get_service(PackageService) as package_service:
+        category = package_service.get_category(category_id)
+        if not category:
+            await callback.answer("Categoria no encontrada", show_alert=True)
+            return
 
-    category = package_service.get_category(category_id)
-    if not category:
-        await callback.answer("Categoria no encontrada", show_alert=True)
-        return
-
-    # Get products in this category via service filter
-    products = store_service.filter_products(category_id=category_id, active_only=True)
+    with get_service(StoreService) as store_service:
+        # Get products in this category via service filter
+        products = store_service.filter_products(category_id=category_id, active_only=True)
 
     if not products:
         await callback.message.edit_text(
@@ -255,21 +245,20 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
     """Muestra detalle de un producto sin preview automatico"""
     product_id = callback_data.product_id
 
-    store_service = StoreService()
-    package_service = PackageService()
-    besito_service = BesitoService()
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product(product_id)
+        if not product:
+            await callback.answer("Producto no encontrado", show_alert=True)
+            return
 
-    product = store_service.get_product(product_id)
-    if not product:
-        await callback.answer("Producto no encontrado", show_alert=True)
-        return
+    with get_service(BesitoService) as besito_service:
+        user_id = callback.from_user.id
+        balance = besito_service.get_balance(user_id)
 
-    user_id = callback.from_user.id
-    balance = besito_service.get_balance(user_id)
-
-    # Get package files count for display
-    package = product.package
-    files = package_service.get_package_files(package.id) if package else []
+    with get_service(PackageService) as package_service:
+        # Get package files count for display
+        package = product.package
+        files = package_service.get_package_files(package.id) if package else []
 
     stock_text = "∞" if product.stock == -1 else str(product.stock)
     is_available = product.is_available
@@ -344,21 +333,20 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
     """Envía el preview del producto bajo demanda y vuelve a mostrar la tarjeta"""
     product_id = callback_data.product_id
 
-    store_service = StoreService()
-    package_service = PackageService()
-    besito_service = BesitoService()
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product(product_id)
+        if not product:
+            await callback.answer("Producto no encontrado", show_alert=True)
+            return
 
-    product = store_service.get_product(product_id)
-    if not product:
-        await callback.answer("Producto no encontrado", show_alert=True)
-        return
+    with get_service(PackageService) as package_service:
+        package = product.package
+        files = package_service.get_package_files(package.id) if package else []
+        preview_files = files[:3]
 
-    package = product.package
-    files = package_service.get_package_files(package.id) if package else []
-    preview_files = files[:3]
-
-    user_id = callback.from_user.id
-    balance = besito_service.get_balance(user_id)
+    with get_service(BesitoService) as besito_service:
+        user_id = callback.from_user.id
+        balance = besito_service.get_balance(user_id)
     stock_text = "∞" if product.stock == -1 else str(product.stock)
     is_available = product.is_available
 
@@ -447,16 +435,15 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
     """Muestra confirmacion de compra directa"""
     product_id = callback_data.product_id
 
-    store_service = StoreService()
-    besito_service = BesitoService()
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product(product_id)
+        if not product:
+            await callback.answer("Producto no encontrado", show_alert=True)
+            return
 
-    product = store_service.get_product(product_id)
-    if not product:
-        await callback.answer("Producto no encontrado", show_alert=True)
-        return
-
-    user_id = callback.from_user.id
-    balance = besito_service.get_balance(user_id)
+    with get_service(BesitoService) as besito_service:
+        user_id = callback.from_user.id
+        balance = besito_service.get_balance(user_id)
 
     if balance < product.price:
         await callback.answer("Saldo insuficiente", show_alert=True)
@@ -499,11 +486,11 @@ async def confirm_direct_buy(
     """Procesa la compra directa"""
     product_id = callback_data.product_id
 
-    store_service = StoreService()
-    user_id = callback.from_user.id
+    with get_service(StoreService) as store_service:
+        user_id = callback.from_user.id
 
-    # Crear orden directa
-    order, error = store_service.direct_purchase(user_id, product_id)
+        # Crear orden directa
+        order, error = store_service.direct_purchase(user_id, product_id)
 
     if error:
         await callback.answer(error, show_alert=True)
@@ -545,10 +532,10 @@ async def confirm_direct_buy(
 @router.callback_query(F.data == "purchase_history")
 async def purchase_history(callback: CallbackQuery):
     """Muestra el historial de compras del usuario"""
-    store_service = StoreService()
-    user_id = callback.from_user.id
+    with get_service(StoreService) as store_service:
+        user_id = callback.from_user.id
 
-    orders = store_service.get_user_orders(user_id, limit=10)
+        orders = store_service.get_user_orders(user_id, limit=10)
 
     if not orders:
         await callback.message.edit_text(
@@ -620,8 +607,8 @@ async def process_search_query(message: Message, state: FSMContext):
         )
         return
 
-    store_service = StoreService()
-    products = store_service.search_products(query, active_only=True)
+    with get_service(StoreService) as store_service:
+        products = store_service.search_products(query, active_only=True)
 
     if not products:
         await message.answer(
@@ -701,40 +688,40 @@ async def store_filters(callback: CallbackQuery):
 @router.callback_query(F.data == "filter_price_asc")
 async def filter_price_asc(callback: CallbackQuery):
     """Muestra productos ordenados por precio ascendente"""
-    store_service = StoreService()
-    products = store_service.get_all_products(active_only=True)
-    products.sort(key=lambda p: p.price)
+    with get_service(StoreService) as store_service:
+        products = store_service.get_all_products(active_only=True)
+        products.sort(key=lambda p: p.price)
 
-    await show_filtered_products(callback, products, "Precio: menor a mayor")
+        await show_filtered_products(callback, products, "Precio: menor a mayor")
 
 
 @router.callback_query(F.data == "filter_price_desc")
 async def filter_price_desc(callback: CallbackQuery):
     """Muestra productos ordenados por precio descendente"""
-    store_service = StoreService()
-    products = store_service.get_all_products(active_only=True)
-    products.sort(key=lambda p: p.price, reverse=True)
+    with get_service(StoreService) as store_service:
+        products = store_service.get_all_products(active_only=True)
+        products.sort(key=lambda p: p.price, reverse=True)
 
-    await show_filtered_products(callback, products, "Precio: mayor a menor")
+        await show_filtered_products(callback, products, "Precio: mayor a menor")
 
 
 @router.callback_query(F.data == "filter_in_stock")
 async def filter_in_stock(callback: CallbackQuery):
     """Muestra solo productos disponibles"""
-    store_service = StoreService()
-    products = store_service.get_available_products()
+    with get_service(StoreService) as store_service:
+        products = store_service.get_available_products()
 
-    await show_filtered_products(callback, products, "Solo disponibles")
+        await show_filtered_products(callback, products, "Solo disponibles")
 
 
 @router.callback_query(F.data == "filter_recent")
 async def filter_recent(callback: CallbackQuery):
     """Muestra productos mas recientes"""
-    store_service = StoreService()
-    products = store_service.get_all_products(active_only=True)
-    # Already sorted by created_at desc from service
+    with get_service(StoreService) as store_service:
+        products = store_service.get_all_products(active_only=True)
+        # Already sorted by created_at desc from service
 
-    await show_filtered_products(callback, products, "Mas recientes")
+        await show_filtered_products(callback, products, "Mas recientes")
 
 
 async def show_filtered_products(callback: CallbackQuery, products: list, filter_name: str):

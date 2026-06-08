@@ -176,3 +176,45 @@ async def test_narrative_listener_is_invoked_and_logs(caplog):
         for rec in caplog.records
     )
     assert found, "narrative listener was not invoked or did not log as specified"
+
+
+@pytest.mark.asyncio
+async def test_broadcast_and_game_listeners_are_invoked_and_log_per_item6(caplog):
+    """
+    Item 6: explicit coverage for the new observational listeners (broadcast reaction award + game award)
+    registered in bot.py (now 4 total). Mirrors narrative test exactly (fresh InternalEventBus + register +
+    emit + caplog for domain log lines). Proves wiring shape + "MUST NOT credit" contract observability
+    (no mutation asserted in credit-path golds + story precedent). Best effort, errors swallowed.
+    """
+    from services.broadcast_service import on_besitos_awarded_broadcast_reaction_observer
+    from services.game_service import on_besitos_awarded_game_award_observer
+
+    bus = InternalEventBus()
+    bus.register(EVENT_BESITOS_AWARDED, on_besitos_awarded_broadcast_reaction_observer)
+    bus.register(EVENT_BESITOS_AWARDED, on_besitos_awarded_game_award_observer)
+
+    payload = {
+        "user_id": 424243,
+        "amount": 2,
+        "source": "reaction",
+        "reference_id": 99,
+        "description": "test broadcast/game award",
+        "timestamp": "2026-06-07T20:31:00+00:00",
+    }
+
+    with caplog.at_level(logging.INFO):
+        await bus.emit(EVENT_BESITOS_AWARDED, payload)
+
+    found_broadcast = any(
+        "broadcast | besitos_awarded_received" in rec.message
+        and "user_id=424243" in rec.message
+        for rec in caplog.records
+    )
+    found_game = any(
+        "game | besitos_awarded_received" in rec.message
+        and "user_id=424243" in rec.message
+        for rec in caplog.records
+    )
+    assert found_broadcast, "broadcast reaction observer (Item 6) not invoked or did not log"
+    assert found_game, "game award observer (Item 6) not invoked or did not log"
+    # contract: these are best-effort obs only (credit paths + atomicity golds assert no impact)

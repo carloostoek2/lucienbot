@@ -162,7 +162,9 @@ class DailyGiftService:
         config = self.get_config()
         amount = config.besito_amount
         db = self._get_db()
-        besito_service = self.besito_service
+        besito_service = BesitoService(
+            db=self._get_db()
+        )  # local on-demand inside credit method only (Item 6); property kept for test guards/compat (hasattr daily precedent)
 
         try:
             # Registrar el reclamo
