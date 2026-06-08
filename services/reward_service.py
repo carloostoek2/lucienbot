@@ -349,3 +349,33 @@ Haz clic para activar tu membresia VIP.""",
         ):
             if sub and hasattr(sub, "close"):
                 sub.close()
+
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (rewards domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# (to avoid any re-entrancy with deliver paths or future extensions; delivery contracts
+# and partial-failure behavior are authoritative in the credit + log_reward_delivery flow).
+# This is observational only (best effort; errors swallowed by bus).
+# =============================================================================
+
+
+async def on_besitos_awarded_rewards_observer(payload: dict) -> None:
+    """
+    Rewards-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
+    post-commit, including from MISSION reward deliveries in _deliver_besitos).
+
+    DESIRED CONTRACT (copy of narrative precedent): log reception with full context (user_id/amount/source/ref);
+    purely observational + wiring proof for this domain. MUST NOT credit, debit, or mutate besitos state here.
+    Future extensions (e.g. stats, hints tied to awards) belong in this module and should use
+    get_service(RewardService) or direct models if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"rewards | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on deliver_reward contracts).

@@ -69,6 +69,7 @@ from models.database import init_db
 
 # InternalEventBus (PoC Item 1) + first listener (narrative domain)
 from services.event_bus import EVENT_BESITOS_AWARDED, get_event_bus
+from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
 from services.story_service import on_besitos_awarded_from_gamification
 from services.vip_service import VIPService
@@ -197,9 +198,10 @@ async def on_startup(bot: Bot):
     logger.info("Scheduler iniciado")
 
     # Cross-domain listeners (explicit, central, no import side-effects).
-    # Fase 3 of eventbus-poc: narrative subscribes to besitos_awarded.
+    # Fase 3 of eventbus-poc + Item 5: narrative + rewards domains.
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)
-    logger.info("Event listeners registrados (besitos_awarded -> narrative)")
+    get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_rewards_observer)
+    logger.info("Event listeners registrados (besitos_awarded -> narrative, rewards)")
 
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:
