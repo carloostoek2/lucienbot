@@ -321,3 +321,50 @@ class TestRewardDetail:
         await reward_detail(cb, RewardUserDetailCallback(mission_id=1))
 
         mock_get_service.return_value.__exit__.assert_called_once()
+
+
+class TestRewardUserPureHelpers:
+    """Tests para los helpers puros extraídos de reward_user_handlers (Item 7 / arch-enforcer LOC)."""
+
+    def test_compute_reward_status_text_completed(self):
+        from handlers.reward_user_handlers import compute_reward_status_text
+
+        progress = MagicMock(is_completed=True)
+        mission = MagicMock()
+        assert "completada" in compute_reward_status_text(progress, mission).lower()
+
+    def test_compute_reward_status_text_in_progress(self):
+        from handlers.reward_user_handlers import compute_reward_status_text
+
+        progress = MagicMock(is_completed=False, current_value=3)
+        mission = MagicMock(target_value=10)
+        status = compute_reward_status_text(progress, mission)
+        assert "Progreso" in status
+        assert "3 / 10" in status
+
+    def test_build_reward_detail_keyboard(self):
+        from handlers.reward_user_handlers import build_reward_detail_keyboard
+
+        kb = build_reward_detail_keyboard(42)
+        assert len(kb.inline_keyboard) == 2
+        assert "Ver mision" in kb.inline_keyboard[0][0].text
+        assert "Volver a recompensas" in kb.inline_keyboard[1][0].text
+        # cb data packed contains mission_id
+        assert "42" in kb.inline_keyboard[0][0].callback_data
+
+    def test_build_progress_bar_edges(self):
+        from handlers.reward_user_handlers import _build_progress_bar
+
+        assert _build_progress_bar(0, 10)[1] == 0
+        assert _build_progress_bar(5, 10)[1] == 50
+        assert _build_progress_bar(10, 10)[1] == 100
+
+    def test_compute_reward_status_text_with_none_descs_progress_path(self):
+        """Cubre path de progreso con descs None (helper puro no debe crashear; usa defaults en caller)."""
+        from handlers.reward_user_handlers import compute_reward_status_text
+
+        progress = MagicMock(is_completed=False, current_value=1)
+        mission = MagicMock(target_value=5)
+        status = compute_reward_status_text(progress, mission)
+        assert "Progreso" in status
+        assert "1 / 5" in status

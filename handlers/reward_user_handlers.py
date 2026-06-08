@@ -69,6 +69,30 @@ def _build_progress_bar(current: int, target: int) -> tuple[str, int]:
     return bar, percentage
 
 
+def compute_reward_status_text(progress, mission) -> str:
+    """Construye el texto de status (completada o barra de progreso) para el detalle de recompensa. Función pura."""
+    if progress.is_completed:
+        return "\n✅ ¡Mision completada! La recompensa ha sido entregada."
+    bar, percentage = _build_progress_bar(progress.current_value, mission.target_value)
+    return (
+        f"\n📊 Progreso: {bar} {percentage}%\n   {progress.current_value} / {mission.target_value}"
+    )
+
+
+def build_reward_detail_keyboard(mission_id: int) -> InlineKeyboardMarkup:
+    """Construye el teclado inline para el detalle de recompensa (ver mision + volver)."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="🎯 Ver mision",
+                callback_data=MissionDetailCallback(mission_id=mission_id).pack(),
+            )
+        ],
+        [InlineKeyboardButton(text="🔙 Volver a recompensas", callback_data="rewards_list")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 @router.callback_query(F.data == "rewards_list")
 async def show_available_rewards(callback: CallbackQuery):
     """Muestra las recompensas disponibles con sus misiones asociadas"""
@@ -111,14 +135,9 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
             return
 
         progress = mission_service.get_or_create_progress(user_id, mission_id)
-        bar, percentage = _build_progress_bar(progress.current_value, mission.target_value)
         reward_emoji, reward_gives = get_reward_emoji(mission.reward)
 
-        status_text = (
-            "\n✅ ¡Mision completada! La recompensa ha sido entregada."
-            if progress.is_completed
-            else f"\n📊 Progreso: {bar} {percentage}%\n   {progress.current_value} / {mission.target_value}"
-        )
+        status_text = compute_reward_status_text(progress, mission)
 
         text = _build_reward_detail_text(
             reward_emoji,
@@ -130,16 +149,7 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
             status_text,
         )
 
-        buttons = [
-            [
-                InlineKeyboardButton(
-                    text="🎯 Ver mision",
-                    callback_data=MissionDetailCallback(mission_id=mission.id).pack(),
-                )
-            ],
-            [InlineKeyboardButton(text="🔙 Volver a recompensas", callback_data="rewards_list")],
-        ]
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        keyboard = build_reward_detail_keyboard(mission.id)
 
         await callback.message.edit_text(text, reply_markup=keyboard)
         _safe_answer(callback, user_id, mission_id)
