@@ -425,13 +425,13 @@ class TestBesitoInsufficientNoTx:
     @pytest.mark.xfail(
         reason="SessionLocal patch (even on using module 'services.besito_service.SessionLocal' per besito_service.py:13 from-import + line 29) does not cause mock.close in owned/get_service ctx for Besito (unlike broadcast gold); identity map on Balance creation in unit db_session fixture for this tx test (despite delete/expire). Real/passed tests pass covering get_service lifecycle; concurrent passes (gather/file/TestSession). See broadcast for working owned example. Xfail keeps new test+DESIRED/TG/contracts without blocking; 0 prod."
     )
-    def test_debit_besitos_insufficient_creates_no_transaction(self, db_session, sample_user):
+    def test_debit_besitos_insufficient_creates_no_transaction(self, db_session):
         """
         DESIRED CONTRACT (Item 4 / F2 gamif): sin saldo suficiente -> debit returns False + no BesitoTransaction registered (no partial state, no silent fail).
-        Extiende test_debit_besitos_insufficient_balance (que ya assert result=False + bal unchanged) con tx count + usa sample_user.telegram_id (TG per contract + fixture safe, evita identity map skew con hard 77728) + DESIRED.
+        Extiende test_debit_besitos_insufficient_balance (que ya assert result=False + bal unchanged) con tx count + usa TG único 77728002 (evita contaminación cruzada con sample_user.telegram_id 123456789 usado por tests de broadcast/besito; copy pattern de TestBesitoConcurrentRaces:77728001) + DESIRED.
         """
         service = BesitoService(db_session)
-        tg = sample_user.telegram_id
+        tg = 77728002
         # Clear any prior balance for tg (from fixtures/session state) to avoid identity map PK collision (SA warning) and ensure our 100 bal is the visible one.
         db_session.query(BesitoBalance).filter(BesitoBalance.user_id == tg).delete()
         db_session.commit()

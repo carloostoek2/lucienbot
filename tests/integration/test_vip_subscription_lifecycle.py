@@ -194,12 +194,14 @@ class TestVIPSubscriptionLifecycle:
         # Token 1 (original, ya usado)
         token1 = Token(
             token_code="RENEWAL_A1",
+            tariff_id=tariff.id,
             status=TokenStatus.USED,
             redeemed_by_id=user.telegram_id,
         )
         # Token 2 (renovación, ya usado)
         token2 = Token(
             token_code="RENEWAL_A2",
+            tariff_id=tariff.id,
             status=TokenStatus.USED,
             redeemed_by_id=user.telegram_id,
         )
@@ -370,6 +372,7 @@ class TestVIPSubscriptionLifecycle:
 
         token = Token(
             token_code="EXPIRED_B1",
+            tariff_id=tariff.id,
             status=TokenStatus.USED,
             redeemed_by_id=user.telegram_id,
         )
@@ -534,11 +537,13 @@ class TestVIPSubscriptionLifecycle:
 
         token_active = Token(
             token_code="ACTIVE_C1",
+            tariff_id=tariff.id,
             status=TokenStatus.USED,
             redeemed_by_id=user_active.telegram_id,
         )
         token_expired = Token(
             token_code="EXPIRED_C1",
+            tariff_id=tariff.id,
             status=TokenStatus.USED,
             redeemed_by_id=user_expired.telegram_id,
         )
@@ -723,6 +728,7 @@ class TestVIPSubscriptionLifecycle:
             # Suscripción activa que vence en 5 días
             token1 = Token(
                 token_code="EXTEND1",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=user.telegram_id,
             )
@@ -748,6 +754,7 @@ class TestVIPSubscriptionLifecycle:
             # ── Renovación correcta: canjea nuevo token → debe EXTENDER la misma sub ──
             token2 = Token(
                 token_code="EXTEND2",
+                tariff_id=tariff.id,
                 status=TokenStatus.ACTIVE,
             )
             db.add(token2)
@@ -855,6 +862,7 @@ class TestVIPSubscriptionLifecycle:
 
             token = Token(
                 token_code="EXPIRING1",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=user.telegram_id,
             )
@@ -874,6 +882,7 @@ class TestVIPSubscriptionLifecycle:
             # Otra sub no-expiring (lejos)
             token2 = Token(
                 token_code="FAR1",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=user.telegram_id,
             )
@@ -973,6 +982,7 @@ class TestVIPSubscriptionLifecycle:
             for i, code in enumerate(["ERR1", "ERR2"]):
                 t = Token(
                     token_code=code,
+                    tariff_id=tariff.id,
                     status=TokenStatus.USED,
                     redeemed_by_id=user.telegram_id,
                 )
@@ -1077,6 +1087,7 @@ class TestVIPSubscriptionLifecycle:
 
             token = Token(
                 token_code="RITUAL1",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=user.telegram_id,
             )
@@ -1177,11 +1188,13 @@ class TestVIPSubscriptionLifecycle:
             db.refresh(tariff)
             t1 = Token(
                 token_code="MT1",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=user.telegram_id,
             )
             t2 = Token(
                 token_code="MT2",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=user.telegram_id,
             )
@@ -1259,11 +1272,13 @@ class TestVIPSubscriptionLifecycle:
             db.refresh(tariff)
             t1 = Token(
                 token_code="ET1",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=u1.telegram_id,
             )
             t2 = Token(
                 token_code="ET2",
+                tariff_id=tariff.id,
                 status=TokenStatus.USED,
                 redeemed_by_id=u2.telegram_id,
             )

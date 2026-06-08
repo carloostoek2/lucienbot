@@ -47,11 +47,17 @@ class TestLucienVoiceConsistency:
         # Skip scheduler_service.py (English job names + LucienVoice calls)
         if "scheduler_service" in line:
             return True
+        # Skip EventBus internal event names (besitos_awarded) in comments/docstrings
+        if "besitos_awarded" in line:
+            return True
         # Skip __init__.py exports and re-exports
         if "__init__.py" in line:
             return True
         # Skip logger/log lines
         if "logger" in line or "logging" in line:
+            return True
+        # Skip event bus event references in comments/docstrings (code identifiers, not user-facing)
+        if "besitos_awarded" in line:
             return True
         # Extract the code portion after the file:line: prefix
         if ":" in line:

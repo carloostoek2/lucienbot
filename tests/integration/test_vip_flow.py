@@ -81,7 +81,13 @@ class TestVIPFlow:
 
         # 9. Verificar fecha de expiración (30 días desde ahora)
         expected_end = datetime.now(UTC) + timedelta(days=30)
-        assert abs((subscription.end_date - expected_end).total_seconds()) < 60
+        # Normalizar por comportamiento de SQLite (puede devolver naive)
+        sub_end = subscription.end_date
+        if sub_end.tzinfo is None:
+            sub_end = sub_end.replace(tzinfo=UTC)
+        if expected_end.tzinfo is None:
+            expected_end = expected_end.replace(tzinfo=UTC)
+        assert abs((sub_end - expected_end).total_seconds()) < 60
 
     def test_token_expiration_flow(self, db_session, sample_tariff, sample_user):
         """Test flujo de expiración de token"""

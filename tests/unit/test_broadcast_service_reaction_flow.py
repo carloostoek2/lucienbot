@@ -44,7 +44,10 @@ class TestCheckAndRegisterReaction:
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
         """Happy path: reaction is recorded, besitos are credited, dict is returned."""
-        # Ensure clean balance
+        # Ensure clean balance (delete any residual from prior tests in the same run)
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
         balance = BesitoBalance(
             user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
@@ -108,6 +111,9 @@ class TestCheckAndRegisterReaction:
         is validated here. Stronger row-count assertions can be added later
         or moved to a dedicated integration test.
         """
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
         balance = BesitoBalance(
             user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
@@ -144,6 +150,9 @@ class TestCheckAndRegisterReaction:
         self, db_session, sample_user, sample_broadcast_message
     ):
         """Invalid emoji_id must short-circuit before any DB writes."""
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
         balance = BesitoBalance(
             user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
@@ -183,6 +192,9 @@ class TestCheckAndRegisterReaction:
         failure, etc.), the reaction + besitos credit MUST still succeed.
         This is explicit defensive design in check_and_register_reaction.
         """
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
         balance = BesitoBalance(
             user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
@@ -273,6 +285,7 @@ class TestCheckAndRegisterReaction:
         val = sample_reaction_emoji.besito_value
 
         # Pre-create zero balance (matches pattern in success/duplicate tests of this class)
+        db_session.query(BesitoBalance).filter(BesitoBalance.user_id == uid).delete()
         bal0 = BesitoBalance(user_id=uid, balance=0, total_earned=0, total_spent=0)
         db_session.add(bal0)
         db_session.commit()
@@ -433,6 +446,9 @@ class TestServiceLifecycleOrGetServiceContext:
         "credit survives" partials (e.g. later mission) protected as before. 0 behavior change.
         """
         # ensure balance
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
         bal = BesitoBalance(
             user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
