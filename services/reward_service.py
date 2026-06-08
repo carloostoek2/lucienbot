@@ -34,8 +34,13 @@ class RewardService:
     """Servicio para gestion de recompensas"""
 
     def __init__(self, db: Session = None):
+        self._owns_session = db is None
         self.db = db or SessionLocal()
-        self.besito_service = BesitoService(self.db)
+        # Held direct BesitoService composition removed (Item 5 / reduce via EventBus pattern).
+        # BESITOS reward delivery now uses local on-demand BesitoService(db=self.db) *only*
+        # inside _deliver_besitos (preserves atomicity: credit's internal commit + MISSION tx source
+        # + log_reward_delivery + return msg all unchanged; best-effort schedule_emit still fires).
+        # Package + VIP remain held (scope: other composers untouched for now).
         self.package_service = PackageService(self.db)
         self.vip_service = VIPService(self.db)
 
@@ -209,8 +214,11 @@ class RewardService:
             return False, f"Error al entregar recompensa: {str(e)}"
 
     async def _deliver_besitos(self, user_id: int, reward: Reward) -> tuple[bool, str]:
-        """Entrega recompensa de besitos"""
-        success = self.besito_service.credit_besitos(
+        """Entrega recompensa de besitos (local BesitoService on-demand with shared db for atomicity)."""
+        besito_service = BesitoService(
+            db=self.db
+        )  # local, on-demand; owns=False (db shared); credit commits internally as before
+        success = besito_service.credit_besitos(
             user_id=user_id,
             amount=reward.besito_amount,
             source=TransactionSource.MISSION,
@@ -219,7 +227,7 @@ class RewardService:
         )
 
         if success:
-            balance = self.besito_service.get_balance(user_id)
+            balance = besito_service.get_balance(user_id)
             return True, f"Has recibido {reward.besito_amount} besitos! Tu saldo es: {balance}"
         else:
             return False, "Error al acreditar besitos"
@@ -329,15 +337,15 @@ Haz clic para activar tu membresia VIP.""",
         }
 
     def close(self):
-        """Cierra la sesion de base de datos y servicios asociados"""
-        if hasattr(self, "db"):
+        """Cierra la sesión de base de datos si fue creada por este servicio."""
+        if self._owns_session and self.db:
             self.db.close()
-        if hasattr(self, "besito_service"):
-            self.besito_service.close()
-        if hasattr(self, "vip_service"):
-            self.vip_service.close()
-
-    def __del__(self):
-        """Cierra la sesion de base de datos"""
-        if hasattr(self, "db"):
-            self.db.close()
+            self.db = None
+        # Cerrar subs (inofensivo: ellos tienen owns=False cuando db compartido)
+        for sub in (
+            getattr(self, "besito_service", None),
+            getattr(self, "package_service", None),
+            getattr(self, "vip_service", None),
+        ):
+            if sub and hasattr(sub, "close"):
+                sub.close()
