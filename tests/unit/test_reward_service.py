@@ -141,7 +141,9 @@ class TestRewardServiceDelivery:
 
         assert success is True
         assert "50" in msg
-        balance = BesitoService(db=db_session).get_balance(sample_user.id)  # 1-line fix post held removal (F4); was service.besito_service
+        balance = BesitoService(db=db_session).get_balance(
+            sample_user.id
+        )  # 1-line fix post held removal (F4); was service.besito_service
         assert balance == 50
 
     @pytest.mark.asyncio
