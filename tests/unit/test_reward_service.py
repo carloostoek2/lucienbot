@@ -1,13 +1,14 @@
 """
 Tests unitarios para RewardService.
 """
-import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from services.reward_service import RewardService
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from models.models import RewardType, UserRewardHistory
 from services.package_service import PackageService
-from models.models import Reward, RewardType, UserRewardHistory
+from services.reward_service import RewardService
 
 
 @pytest.mark.unit
@@ -146,6 +147,7 @@ class TestRewardServiceDelivery:
     async def test_deliver_reward_package(self, db_session, sample_user, sample_package, mock_bot):
         """Test entregar recompensa de paquete decrementa stock y envía media_group"""
         from aiogram.types import InputMediaPhoto
+
         pkg_service = PackageService(db_session)
         pkg_service.add_file_to_package(sample_package.id, "file1", "photo")
         sample_package.reward_stock = 1
@@ -170,7 +172,9 @@ class TestRewardServiceDelivery:
         assert refreshed_pkg.reward_stock == 0
 
     @pytest.mark.asyncio
-    async def test_deliver_reward_package_out_of_stock(self, db_session, sample_user, sample_package, mock_bot):
+    async def test_deliver_reward_package_out_of_stock(
+        self, db_session, sample_user, sample_package, mock_bot
+    ):
         """Test entregar paquete sin stock retorna False"""
         sample_package.reward_stock = 0
         db_session.commit()
@@ -184,7 +188,9 @@ class TestRewardServiceDelivery:
         assert "agotado" in msg.lower() or "no disponible" in msg.lower()
 
     @pytest.mark.asyncio
-    async def test_deliver_reward_vip_access(self, db_session, sample_user, sample_tariff, mock_bot):
+    async def test_deliver_reward_vip_access(
+        self, db_session, sample_user, sample_tariff, mock_bot
+    ):
         """Test entregar recompensa VIP genera token y envía mensaje con URL"""
         service = RewardService(db_session)
         reward = service.create_reward_vip("VIP Reward", "Desc", sample_tariff.id)
@@ -227,9 +233,9 @@ class TestRewardServiceHistory:
 
         stats = service.get_reward_stats(reward.id)
 
-        assert stats['reward_name'] == "Test"
-        assert stats['type'] == "besitos"
-        assert stats['total_deliveries'] == 2
+        assert stats["reward_name"] == "Test"
+        assert stats["type"] == "besitos"
+        assert stats["total_deliveries"] == 2
 
     def test_get_reward_stats_not_found(self, db_session):
         """Test estadísticas de recompensa inexistente retorna dict vacío"""
