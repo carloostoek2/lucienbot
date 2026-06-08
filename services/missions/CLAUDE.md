@@ -86,3 +86,13 @@ Admin o sistema detecta progreso del visitante
 2. Lee [@rules.md](../../rules.md)
 3. Usar `increment_progress()` con `mission_type` para auto-incrementar todas las missions del mismo tipo
 4. Para entregar recompensa: siempre usar `RewardService.deliver_reward()`, no llamar servicios internos directamente
+
+## Cross-domain notifications (EventBus) (Item 5 / reduce via EventBus)
+
+- RewardService held direct BesitoService composition for BESITOS rewards reduced (only this delivery composer touched per tight scope; Package + VIP remain held; other composers like broadcast/game/daily untouched).
+- BESITOS delivery now uses local on-demand `BesitoService(db=self.db)` *only* inside `_deliver_besitos` (preserves 100% atomicity of the MISSION credit tx + log_reward_delivery + return msg; credit does its internal commit as before; best-effort schedule_emit still fires post-commit).
+- Added rewards-domain observational listener `on_besitos_awarded_rewards_observer` at module bottom (copy of story_service.py:670-694 "Cross-domain event listeners" block + structure + "MUST NOT call back into credit/debit besitos" + "best effort, non-authoritative" + "DESIRED CONTRACT" + log "rewards | besitos_awarded_received | user_id=..."; purely observational, 0 mutation, 0 re-entrancy risk with deliver paths; 0 impact on deliver_reward contracts or partial failure behavior protected by gold test_cross_service_atomicity).
+- Central explicit registration in bot.py on_startup (after scheduler, after the narrative listener; import + register call + extended logger.info "... (besitos_awarded -> narrative, rewards)"; comment updated "Fase 3 of eventbus-poc + Item 5: narrative + rewards domains").
+- 0 behavior change (deliver_reward BESITOS returns identical success/msg/balance, TransactionSource.MISSION + reference_id=reward.id, UserRewardHistory, Lucien strings); 0 atomicity impact (re-runs of cross_service_atomicity happy + "credit survives deliver False" variants + patch schedule_emit all green in F2/F4); 0 other composers touched.
+- Refs: services/event_bus.py (DESIRED CONTRACT + schedule_emit + gather return_exceptions), decisions.md (new entry post Item 1), .planning/phases/23-reward-besito-eventbus-decoupling/PLAN.md + gsd-reward-besito-eventbus.log (GSD pre every, phases F1-F5, self-check PASSED), test_cross_service_atomicity.py (gold for atomicity/partial/best-effort).
+- See also services/gamification/CLAUDE.md and services/narrative/CLAUDE.md for sibling cross-domain notes from Item 1.
