@@ -256,9 +256,8 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
         balance = besito_service.get_balance(user_id)
 
     with get_service(PackageService) as package_service:
-        # Get package files count for display
-        package = product.package
-        files = package_service.get_package_files(package.id) if package else []
+        pkg_id = product.package_id
+        files = package_service.get_package_files(pkg_id) if pkg_id else []
 
     stock_text = "∞" if product.stock == -1 else str(product.stock)
     is_available = product.is_available
@@ -340,8 +339,8 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
             return
 
     with get_service(PackageService) as package_service:
-        package = product.package
-        files = package_service.get_package_files(package.id) if package else []
+        pkg_id = product.package_id
+        files = package_service.get_package_files(pkg_id) if pkg_id else []
         preview_files = files[:3]
 
     with get_service(BesitoService) as besito_service:
