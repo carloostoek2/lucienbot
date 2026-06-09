@@ -20,8 +20,7 @@ from keyboards.callback_data import (
     ToggleProductCallback,
 )
 from services import get_service
-from services.package_service import PackageService
-from services.store_service import StoreService
+from services.store_service import StoreService, compute_stock_emoji_and_text
 from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
@@ -41,6 +40,151 @@ class ProductWizardStates(StatesGroup):
 class ProductRestockStates(StatesGroup):
     waiting_amount = State()
     waiting_threshold = State()
+
+
+# ==================== PURE HELPERS (extracted for <=50 LOC rule - Item 8 / arch-enforcer) ====================
+
+
+def compute_restock_new_stock(current_stock: int, amount: int) -> int:
+    """Calcula el nuevo stock tras reabastecimiento (maneja ilimitado como base 0). Función pura."""
+    base = 0 if current_stock == -1 else current_stock
+    return base + amount
+
+
+def build_product_detail_keyboard(product_id: int, is_active: bool) -> InlineKeyboardMarkup:
+    """Construye el teclado para detalle de producto admin (toggle/restock/config/delete/back). Función pura."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{'Desactivar' if is_active else 'Activar'}",
+                callback_data=ToggleProductCallback(product_id=product_id).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📝 Reabastecer",
+                callback_data=RestockProductCallback(product_id=product_id).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⚙️ Configurar alerta",
+                callback_data=ConfigStockAlertCallback(product_id=product_id).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🗑️ Eliminar",
+                callback_data=DeleteProductCallback(product_id=product_id).pack(),
+            )
+        ],
+        [InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_stock_alerts_text_and_buttons(
+    low_stock: list, out_of_stock: list
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
+    """Construye texto y botones para alertas de stock (out/low + Reabastecer cbs + back). Función pura."""
+    text = "🎩 <b>Lucien:</b>\n\n<i>Alertas de inventario...</i>\n\n"
+    buttons: list[list[InlineKeyboardButton]] = []
+
+    if out_of_stock:
+        text += "🚨 <b>Productos agotados:</b>\n"
+        for product in out_of_stock:
+            text += f"   ❌ {product.name}\n"
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"📝 Reabastecer: {product.name[:25]}",
+                        callback_data=RestockProductCallback(product_id=product.id).pack(),
+                    )
+                ]
+            )
+        text += "\n"
+
+    if low_stock:
+        text += "⚠️ <b>Stock bajo:</b>\n"
+        for product in low_stock:
+            stock_status = f"{product.stock}/{product.low_stock_threshold}"
+            text += f"   ⚠️ {product.name} ({stock_status})\n"
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"📝 Reabastecer: {product.name[:25]}",
+                        callback_data=RestockProductCallback(product_id=product.id).pack(),
+                    )
+                ]
+            )
+
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
+    return text, buttons
+
+
+def build_product_list_entry_and_button(product) -> tuple[str, list[InlineKeyboardButton]]:
+    """Construye entrada de texto y botón para un producto en lista admin (status + stock emoji via pure + price + detail cb + trunc). Función pura."""
+    status = "✅" if product.is_active else "❌"
+    emoji, stock_text = compute_stock_emoji_and_text(product.stock, product.is_low_stock)
+    entry = (
+        f"{status} {product.name}\n   {emoji} Stock: {stock_text} | 💰 {product.price} besitos\n\n"
+    )
+    button = [
+        InlineKeyboardButton(
+            text=f"{status} {product.name[:30]}",
+            callback_data=ProductAdminDetailCallback(product_id=product.id).pack(),
+        )
+    ]
+    return entry, button
+
+
+def build_product_confirmation_text_and_keyboard(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """Construye texto de resumen y teclado de confirm/cancel para wizard crear producto (desc None->'Sin descripcion'). Función pura."""
+    name = data.get("name", "")
+    description = data.get("description") or "Sin descripcion"
+    price = data.get("price", 0)
+    stock = data.get("stock", -1)
+    stock_text = "Ilimitado" if stock == -1 else str(stock)
+
+    text = (
+        f"🎩 Lucien:\n\n"
+        f"Resumen del producto:\n\n"
+        f"📦 {name}\n"
+        f"📝 {description}\n"
+        f"💰 Precio: {price} besitos\n"
+        f"📊 Stock: {stock_text}\n\n"
+        f"Crear este producto?"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Crear", callback_data="confirm_create_product")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")],
+        ]
+    )
+    return text, keyboard
+
+
+def build_delete_confirm_keyboard(product_id: int) -> InlineKeyboardMarkup:
+    """Construye el teclado de confirmación para eliminar producto (si con confirmed + cancel a detail). Función pura."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Si, eliminar",
+                    callback_data=DeleteProductCallback(
+                        product_id=product_id, confirmed=True
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Cancelar",
+                    callback_data=ProductAdminDetailCallback(product_id=product_id).pack(),
+                )
+            ],
+        ]
+    )
 
 
 # ==================== MENU PRINCIPAL ====================
@@ -113,38 +257,7 @@ async def stock_alerts(callback: CallbackQuery):
             await callback.answer()
             return
 
-        text = "🎩 <b>Lucien:</b>\n\n<i>Alertas de inventario...</i>\n\n"
-        buttons = []
-
-        if out_of_stock:
-            text += "🚨 <b>Productos agotados:</b>\n"
-            for product in out_of_stock:
-                text += f"   ❌ {product.name}\n"
-                buttons.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"📝 Reabastecer: {product.name[:25]}",
-                            callback_data=RestockProductCallback(product_id=product.id).pack(),
-                        )
-                    ]
-                )
-            text += "\n"
-
-        if low_stock:
-            text += "⚠️ <b>Stock bajo:</b>\n"
-            for product in low_stock:
-                stock_status = f"{product.stock}/{product.low_stock_threshold}"
-                text += f"   ⚠️ {product.name} ({stock_status})\n"
-                buttons.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"📝 Reabastecer: {product.name[:25]}",
-                            callback_data=RestockProductCallback(product_id=product.id).pack(),
-                        )
-                    ]
-                )
-
-        buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
+        text, buttons = build_stock_alerts_text_and_buttons(low_stock, out_of_stock)
 
         await callback.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -231,9 +344,9 @@ async def process_restock_amount(message: Message, state: FSMContext):
             await state.clear()
             return
 
-        # Calcular nuevo stock
+        # Calcular nuevo stock (via pure helper extracted for <=50 LOC)
         current_stock = 0 if product.stock == -1 else product.stock
-        new_stock = current_stock + amount
+        new_stock = compute_restock_new_stock(product.stock, amount)
 
         store_service.update_product(product_id, stock=new_stock)
 
@@ -303,9 +416,9 @@ async def process_product_description(message: Message, state: FSMContext):
     description = None if message.text == "/skip" else message.text.strip()
     await state.update_data(description=description)
 
-    # Mostrar paquetes disponibles
-    package_service = PackageService()
-    packages = package_service.get_available_packages_for_store()
+    # Mostrar paquetes disponibles (via StoreService delegate for exactly 1 service per entrypoint)
+    with get_service(StoreService) as store_service:
+        packages = store_service.get_available_packages_for_store()
 
     if not packages:
         await message.answer(
@@ -432,28 +545,7 @@ async def show_product_confirmation(target, state: FSMContext):
     """Muestra confirmacion del producto"""
     data = await state.get_data()
 
-    name = data.get("name", "")
-    description = data.get("description", "Sin descripcion")
-    price = data.get("price", 0)
-    stock = data.get("stock", -1)
-    stock_text = "Ilimitado" if stock == -1 else str(stock)
-
-    text = (
-        f"🎩 Lucien:\n\n"
-        f"Resumen del producto:\n\n"
-        f"📦 {name}\n"
-        f"📝 {description}\n"
-        f"💰 Precio: {price} besitos\n"
-        f"📊 Stock: {stock_text}\n\n"
-        f"Crear este producto?"
-    )
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Crear", callback_data="confirm_create_product")],
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")],
-        ]
-    )
+    text, keyboard = build_product_confirmation_text_and_keyboard(data)
 
     if isinstance(target, CallbackQuery):
         await target.message.edit_text(text, reply_markup=keyboard)
@@ -477,6 +569,9 @@ async def confirm_create_product(callback: CallbackQuery, state: FSMContext):
                 stock=data.get("stock", -1),
                 created_by=callback.from_user.id,
             )
+            logger.info(
+                f"store_admin_handlers | confirm_create_product | user_id={callback.from_user.id} | product_id={product.id} | name={product.name}"
+            )
 
             await callback.message.edit_text(
                 f"🎩 Lucien:\n\n"
@@ -490,7 +585,6 @@ async def confirm_create_product(callback: CallbackQuery, state: FSMContext):
                     ]
                 ),
             )
-            logger.info(f"Producto creado: {product.name} por admin {callback.from_user.id}")
 
         except Exception as e:
             logger.error(f"Error creando producto: {e}")
@@ -514,6 +608,9 @@ async def list_products(callback: CallbackQuery):
     """Lista todos los productos"""
     with get_service(StoreService) as store_service:
         products = store_service.get_all_products(active_only=False)
+        logger.info(
+            f"store_admin_handlers | list_products | user_id={callback.from_user.id} | count={len(products)}"
+        )
 
         if not products:
             await callback.message.edit_text(
@@ -531,33 +628,9 @@ async def list_products(callback: CallbackQuery):
         buttons = []
 
         for product in products:
-            status = "✅" if product.is_active else "❌"
-
-            # Stock indicator
-            if product.stock == -1:
-                stock_emoji = "♾️"
-                stock_text = "∞"
-            elif product.stock == 0:
-                stock_emoji = "🚨"
-                stock_text = "AGOTADO"
-            elif product.is_low_stock:
-                stock_emoji = "⚠️"
-                stock_text = f"{product.stock}"
-            else:
-                stock_emoji = "📦"
-                stock_text = str(product.stock)
-
-            text += f"{status} {product.name}\n"
-            text += f"   {stock_emoji} Stock: {stock_text} | 💰 {product.price} besitos\n\n"
-
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{status} {product.name[:30]}",
-                        callback_data=ProductAdminDetailCallback(product_id=product.id).pack(),
-                    )
-                ]
-            )
+            entry, button = build_product_list_entry_and_button(product)
+            text += entry
+            buttons.append(button)
 
         buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
 
@@ -582,35 +655,7 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
         status = "✅ Activo" if product.is_active else "❌ Inactivo"
         stock_text = "Ilimitado" if product.stock == -1 else str(product.stock)
 
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=f"{'Desactivar' if product.is_active else 'Activar'}",
-                        callback_data=ToggleProductCallback(product_id=product_id).pack(),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="📝 Reabastecer",
-                        callback_data=RestockProductCallback(product_id=product_id).pack(),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="⚙️ Configurar alerta",
-                        callback_data=ConfigStockAlertCallback(product_id=product_id).pack(),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🗑️ Eliminar",
-                        callback_data=DeleteProductCallback(product_id=product_id).pack(),
-                    )
-                ],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")],
-            ]
-        )
+        keyboard = build_product_detail_keyboard(product_id, product.is_active)
 
         await callback.message.edit_text(
             f"🎩 Lucien:\n\n"
@@ -731,25 +776,8 @@ async def handle_delete_product(callback: CallbackQuery, callback_data: DeletePr
     product_id = callback_data.product_id
 
     if not callback_data.confirmed:
-        # Show confirmation
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="✅ Si, eliminar",
-                        callback_data=DeleteProductCallback(
-                            product_id=product_id, confirmed=True
-                        ).pack(),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="❌ Cancelar",
-                        callback_data=ProductAdminDetailCallback(product_id=product_id).pack(),
-                    )
-                ],
-            ]
-        )
+        # Show confirmation (via pure helper extracted for <=50 LOC)
+        keyboard = build_delete_confirm_keyboard(product_id)
 
         await callback.message.edit_text(
             "🎩 Lucien:\n\n"

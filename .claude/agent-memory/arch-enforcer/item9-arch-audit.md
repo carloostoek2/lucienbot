@@ -1,0 +1,138 @@
+# Arch-Enforcer Audit Report: Item 9 (Refactor of handlers/mission_admin_handlers.py + min support in services/mission_service.py + test ports + pure helpers (Item 9/27, first of new pool of 4))
+
+**Date:** 2026-06-08 (PT)  
+**Auditor:** arch-enforcer (Grok Build subagent)  
+**Task:** Audit the just-executed Item 9 refactor (first of new pool of 4) for architectural violations per CLAUDE.md + AGENTS.md + rules.md + architecture.md + decisions.md + HARDENING_ROADMAP (pool context) + precedents item25/26 (and item7/8/2/5/6).  
+**Changes under audit (from executor summary + artifacts + 27-*-SUMMARY/PLAN + gsd-mission-admin-long-funcs.log self-check + item9 impact):**  
+- Refactor handlers/mission_admin_handlers.py + min support in services/mission_service.py + test ports + pure helpers (Item 9/27).  
+- 9+ `with get_service(MissionService) as ...` (exactly 1 service per entrypoint, including all wizard steps).  
+- 0 bare `RewardService` import or `RewardService()` left (the 2 sites in select_frequency/select_reward_for_mission removed, replaced by delegates inside the MissionService with).  
+- 10+ pure helpers extracted (compute_mission_wizard_step_text, build_mission_confirm_text_and_keyboard, build_reward_select_buttons, compute_reward_summary_for_confirm, build_mission_list_entry_and_button, build_*_detail/delete/stats etc.; verb+context+result; "Función pura..." docstrings; 1:1 logic move).  
+- All funcs <=50 LOC (inspect verified, max ~50/49/...).  
+- Standard logging "mission_admin_handlers | <action> | user_id=... | resultado=..." inside successful withs (list_missions, confirm_create_mission).  
+- Thin delegates in mission_service (get_all_rewards_for_mission_wizard, get_reward_for_mission_wizard) with exact "Thin delegate... Added for item9: enables ... exactly 1 service (MissionService)..." + "Backward-compatible..." + arch/"item9 / arch-enforcer long-funcs note addressed. Precedent item7/8" comments.  
+- 0 core changes to mission/reward CRUD, deliver_reward, increment, claim, atomicity, held services.  
+- UI 1:1 (Lucien 3rd, exact "Paso X de 6", buttons "➕ Crear mision"/"🎁 Crear recompensa", "Resumen de la mision:", "No hay recompensas...", "Sin descripcion", cb packing, backs, truncation, freq, empty cases preserved in puros).  
+- Tests ported (get_service patch + __enter__/__exit__ + delegate asserts on mission_svc; docstrings "ported to 1-service... Arch-enforcer note addressed"; + TestMissionAdminPureHelpers 11 import-inside tests).  
+- GSD total + self-check PASSED + pool phrase.  
+
+**Reference rules audited (sourced from CLAUDE.md root+handlers+services+models, rules.md, architecture.md, decisions.md, AGENTS.md, HARDENING_ROADMAP, services/missions/CLAUDE.md, handlers/CLAUDE.md, 25/26 precedents + their arch notes if any, gsd logs key self-check/rules verif sections, item9 impact):**  
+- Layers: handlers → services → models (handlers: routing + exactly 1 service call via get_service context, NO business logic, NO DB access, ≤50 LOC, logging "módulo | acción | user_id | resultado" on important actions inside withs).  
+- Services: domain owners (MissionService as boundary for this admin flow), centralize logic, PROHIBIDO duplication, use models for DB (no direct), thin delegates only for cross-reward wizard to enable 1-svc at handler boundary (precedent item8 store delegate + item7).  
+- Functions: verbo + contexto + resultado (new helpers). Max 50 LOC.  
+- Anti-patterns: logic in handlers, DB outside models, duplication between services, direct other svc in handlers, >50 funcs, missing logs on important.  
+- GSD: changes via PLAN + GSD logs (no direct edits outside flow; pre every).  
+- 3 critical systems: gamif (admin create orthogonal to credit/increment/delivery/atomicity golds; re-runs protected), narrative 0, channel/VIP 0. No new listeners or EventBus impact.  
+- get_service lifecycle (with + owns session), no dumb closers introduced, callbacks use pre-existing CallbackData (Mission*Callback etc; no new bare strings).  
+- Scope tight: only 3 files (handler + svc min + test), UI/Lucien voice preserved 1:1, 0 prod change, 0 behavior/contract change.  
+
+## Methodology
+- **Exploration (parallel reads + greps + terminal inspect + GSD pre every):**  
+  - Changed sources: handlers/mission_admin_handlers.py (full + targeted chunks for wizard selects, list, detail, stats, puros block, logging, withs), services/mission_service.py (delegates section + context), tests/handlers/test_mission_admin_handlers.py (ports in TestSelect*, class docstrings, TestMissionAdminPureHelpers 11 tests + import-inside + pins).  
+  - Planning/artifacts: .planning/phases/27-mission-admin-long-funcs/27-mission-admin-long-funcs-SUMMARY.md (full), PLAN.md (key sections), .planning/quick/gsd-mission-admin-long-funcs.log (key self-check + rules verif sections + 79+ GSD entries + pool + critical tests list), .claude/agent-memory/impact-analyzer/item9-mission-admin-long-funcs.md (full impact + design + pool), gsd-impact-analyzer-item9 log.  
+  - Precedents: .planning/phases/25-reward-handlers-1service-loc/ (PLAN + SUMMARY), 26-store-admin-long-funcs/ (26-*-SUMMARY + PLAN), their gsd logs (style, BATCH/POOL, ports, pure tests, delegate/pure comments, self-check); item7/8/2/5/6 impacts + gsd-arch-enforcer-item7-audit.log + prior arch audits item6/item7 (format + "PASS WITH NOTES" + 3sys + veredict style + pool note).  
+  - Docs: CLAUDE.md (root + full GSD section), rules.md, architecture.md, decisions.md (middleware/eventbus + recent precedents), AGENTS.md, .planning/HARDENING_ROADMAP.md (pool context + clusters), handlers/CLAUDE.md, services/CLAUDE.md, models/CLAUDE.md, services/missions/CLAUDE.md, .claude/agent-memory/arch-enforcer/item6-arch-audit.md + item7 + MEMORY.md, .claude/agents/arch-enforcer.md.  
+  - Patterns (grep project-wide + scoped + post-edit): "RewardService|from services\.reward_service import" (in handler ==0), "with get_service\(MissionService\)" (==9), "mission_admin_handlers \| ", "Función pura", "Thin delegate|Added for item9", "Arch-enforcer note addressed|ported to 1-service", def compute_/build_ (11), CallbackData usage, get_all_rewards_for_mission_wizard etc.  
+  - LOC verification: run_terminal + ./venv/bin/python -c "import inspect; from handlers... import *; ... inspect.getsourcelines" on 16 entrypoints + 11 puros (post F3/F5 per executor; max 50/49).  
+  - GSD discipline: run_terminal appends pre (init + pre every read/write/gate in this audit) to dedicated .planning/quick/gsd-arch-enforcer-item9-mission-admin.log (wc tracked; pool refs, scope, self-check intent); matches executor + prior audits.  
+  - No code mods performed (audit only; writes used solely for report persistence + MEMORY pointer per explicit task + GSD pre every).  
+
+## Findings (Classified)
+### Critical (Architecture-breaking, 0 found)
+None. All changes follow precedents exactly (item8/26 long-funcs + delegate/pure + ports + Test*PureHelpers + LOC inspect + self-check; item7/25 1svc Mission via get_service + rel + pure + delegate for cross + ports + "ported... Arch-enforcer" docstrings; item2 pure/delegate). No layer violations: handlers route to exactly 1 service (MissionService) for all entrypoints incl wizard selects, no biz logic (puros are pure UI/text/calc: no side-effects, no DB, no tx, no FSM, no await, no logger in puros; CRUD in svc; wizard FSM/routing only in thin handlers), no DB access (confirmed grep + read; get_service owns the session lifecycle; delegates thin passthrough). No duplication introduced (thin delegates only for wizard cross-reward per PLAN/impact "enables ... exactly 1 service"; 0 unnecessary coupling). Functions <=50 (inspected via terminal: entries max 50 select_frequency /49 confirm_create /47 process_target; puros max 49 build_type /42 build_detail; all others smaller). Logging present in standard format inside withs on important actions (list_missions count, confirm_create mission_id+name; per rules "cada acción importante" + summary min sufficient). Naming verb+context+result for 11 new helpers exact. Services owners respected (MissionService boundary; thin delegates for cross only, precedent item8; 0 core chg). Callbacks use pre-existing CallbackData (no new bare strings). 3 crit systems safe (gamif admin create orthogonal to credit/increment/delivery/atomicity golds; re-runs of cross/reaction_mission etc protect; narrative 0 touch; channel/VIP 0). get_service with + owns (no dumb closers); scope tight (only 3 files per impact/PLAN); UI/Lucien voice 1:1 preserved (exact pins from impact/PLAN: "Paso X de 6", "➕ Crear mision"/"🎁 Crear recompensa", "Resumen de la mision:", "No hay recompensas configuradas...", "Sin descripcion"/"Ninguna"/"Sin recompensa", "Una vez"/"Recurrente", backs, truncation [:30], cb packing, empty cases, Lucien headers all in puros + handlers). 0 prod change. GSD followed (pre every; 26+ in this log + executor 79+).  
+
+### Medium (Fragility / Maintenance / Pre-existing amplified, 4 findings — all pre-exist or out-of-scope per tight item; none critical or introduced)
+1. **Logging coverage (only 2 standard "mission_admin_handlers | ..." inside withs: list_missions line ~620, confirm_create ~596; other withs like detail/stats/selects have no explicit module|action log):**  
+   - Desc: Rules require "Cada acción importante debe loguear: módulo, acción, user_id, resultado" (inside with, post data per design). Min 2 added in F5 per executor (to pass verif); others rely on svc logs or pre-existing.  
+   - Why "medium" (not critical): Matches "add/ensure" precedent in item7/25/26 (some paths already had; min for main); not introduced by Item9 (pre had some in create). Tight scope + summary "presente in main with paths" satisfied. No behavior impact.  
+   - Recommendation (for test-guardian/quick if desired): No action for *this Item*. Future touch can ensure more (e.g. stats, detail) for observability. Out of scope here.  
+
+2. **Pre-existing long functions / debt in related admin (reward_admin_handlers.py still has legacy direct patterns per roadmap clusters; other wizards like store/mission_user may have >50 in gold paths; daily flake / N806 pre in cross golds):**  
+   - Desc: Item9 tight to mission_admin only (0 other handlers per PLAN "0 other handlers touched (reward_admin_handlers.py untouched even with admin_missions backs)"; pre-exist long in gold mission_user show_my_missions ~61L noted in item7 audit; reward_admin legacy noted out-of-scope).  
+   - Why "medium": Explicitly out of scope per user prompt + impact/PLAN ("0 broad 'fix all mission wizards' or 'touch reward_admin for parity'"; "pre-exist unrelated fails ... do not count as regression" + precedents 26/25/24). Item9 did not introduce/amplify them (improved the mission_admin slice).  
+   - Recommendation: Flag for future pool items (~2-4 clusters per roadmap/HARDENING + pool note). Test-guardian to run only planned criticals (not treat pre as reg from Item9).  
+
+3. **Ruff hygiene pre-exist in test (E402 bottom import for states per 26 precedent file conv; 1 remain after F1 hygiene):**  
+   - Desc: Documented non-reg per PLAN/26/25 ("do not count as regression"; --fix no auto for unsafe; bottom import conv to avoid NameError in inline class ref).  
+   - Why "medium": Pre-exist (not caused by Item9); hygiene only (0 logic/semantic); verified post-ruff in gates. Matches exact precedent handling.  
+   - Recommendation: Leave (per PLAN explicit); test-guardian tolerate in re-runs.  
+
+4. **handlers/CLAUDE.md + root docs (legacy examples of direct Service() or get_session still present, pre get_service unification):**  
+   - Desc: Similar to item7 audit note; does not affect the refactored code (correctly uses from services import get_service + with get_service(MissionService)).  
+   - Why "medium": Pre-existing doc debt (not introduced); tight scope "0 docs edits" per impact/PLAN.  
+   - Recommendation: Out of scope for Item9; quick or next arch can update examples to current "with get_service(FooService) as svc:" + "exactly 1 service" emphasis.  
+
+### Observations (Good / Minor / Adherence, many — selected key)
+- **Exactly 1 service + get_service + delegates fidelity (handlers: 9 withs confirmed grep; selects 502/551 use mission_service.get_all_rewards_for_mission_wizard() / get_reward_for_mission_wizard(reward_id) inside with; 0 RewardService anywhere in handler per grep; svc delegates 224-239 exact per impact/PLAN):** Exact match to user prompt + impact + precedents (item8 process_product_description uses store delegate; item7 Mission + rel). Grep confirmed 0 bare Reward + dual import removed. Delegates thin passthrough (use _get_db(), spawn internal matching existing get_available_rewards_for_user pattern in same svc).  
+  - Why OK + strong: Directly upholds "PROHIBIDO lógica en handlers — llamar exactamente 1 service", "handlers → services → models", "no DB outside models". Rel in detail pure (mission.reward) safe (models FK/relationship; session from get_service ctx).  
+  - Good: All 9+ entrypoints (incl 6 wizard steps + list/detail/stats/delete etc) covered; RewardWizardStates dead but untouched (scope).  
+
+- **LOC compliance + extraction + naming + pure docs (inspect via terminal: all 16 entry <=50 (select_frequency:50, confirm:49, process_target:47, delete:41, missions_stats:37, ... show:8); 11 puros (build_type:49, build_detail:42, build_confirm:28, ... compute_freq:5); "Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard/list/detail). 1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8." exact on all):** 1:1 mechanical move (no invention); verb+context+result (compute_mission_wizard_step_text, build_mission_confirm_text_and_keyboard, build_reward_select_buttons, compute_reward_summary_for_confirm, build_mission_list_entry_and_button, build_mission_detail_text_and_keyboard (dedupe), build_mission_delete_confirm_keyboard, build_mission_stats_text_and_buttons, compute_freq_text, compute_reward_text, build_mission_type_select_keyboard).  
+  - Why OK: Strict non-negotiable upheld for changed code. Better or equal vs gold in slice. Extraction enables easy pure unit tests.  
+  - Good: Dedupe of show+detail via pure; truncation/emoji/status/freq/reward_text/confirm "Resumen"/"Sin descripcion" etc all in puros.  
+
+- **Logging + voice + UI 1:1 + callbacks (logs exact format inside withs post-success on main paths; all Lucien "🎩 Lucien:", 3rd person; UI strings/emojis/cbs/backs/empty/"Paso X de 6"/"➕ Crear mision"/"Resumen de la mision:"/"No hay recompensas configuradas..."/"Sin descripcion"/"Ninguna"/"Una vez"/"Recurrente"/trunc [:30]/cb packing (Mission*Callback, SelectRewardMissionCallback) 1:1 preserved in puros + handlers per code match to impact pins; preexist CallbackData only):** Standard per rules + gold. No user-facing change.  
+  - Why OK: Matches "Cada acción importante debe loguear", "Voz de Lucien", "UI 1:1" claims.  
+
+- **Tests ports + coverage + no regression (TestSelectFrequency/TestSelectRewardForMission docstrings exact "Tests ported to 1-service pattern (get_service(MissionService) only + delegate for reward wizard steps). Arch-enforcer note addressed. Precedent from item7/8."; all @patch get_service + __enter__/__exit__ + mock_mission_svc.get_*_for_mission_wizard.return + assert on mission_svc (not bare) + __exit__ closes; setups post-assign MagicMock for .name/.reward_type so real puros execute; keep exact UI/data/state/"No hay..."/"Resumen"/"Paso 6"/advances/clears/cb targets; NEW TestMissionAdminPureHelpers at 1119 (11 import-inside tests, no @patch on helpers; cover wizard steps exact + Lucien + example, confirm full/wo desc/reward "Resumen..."/"Sin descripcion"/"Ninguna"/"Una vez"/"Recurrente", reward buttons len=3/rows/texts/cb ids/back "admin_missions", list entry status+trunc30+cb, detail rel/None "Sin recompensa" + 3row kb "Desactivar"/"🗑️ Eliminar"/"🔙 Volver", delete kb, stats, freq, edges/empty; all assert text/kb/params); full 55p + pure subset green per executor; ruff (pre hygiene only)):** Ports faithful to item8/26/25/7 precedent + impact "port ~12 wizard tests" + "TestMissionAdminPureHelpers 11". Covers contract + pure behavior + UI shape. Warnings pre-exist (not new).  
+  - Good: 100% pass + real puros exercised (no service mocks for helpers themselves).  
+
+- **Tight scope + 0 creep + 0 behavior/0 atomicity/0 3sys impact + GSD/traceability (per user + executor gsd 79+ + SUMMARY + impact):** Only 3 files for impl + logs + SUMMARY (opt); 0 other handlers (explicit even reward_admin backs); 0 reward_service.py; 0 core mission/reward CRUD/delivery/increment/claim/held/atomic; 0 behavior (UI identical, tests pin exact strings/emojis/cbs/math + cross re-runs); 0 docs creep (except memory/report); 0 new listeners/EventBus; GSD pre every (executor + this audit log 34 lines with pool/BATCH/self-check); pool phrase verbatim in SUMMARY/self-check/handoff; handoff explicit "Ready for test-guardian (re-run criticals from PLAN/impact) + gsd-executor of next pool item (e.g. observability or next long admin or remaining besito decoupling per roadmap ~2-4 clusters)"; "Item 9/27 closed. First of new pool of 4".  
+  - Why OK: Matches "scope tight" + "GSD workflow enforcement" + "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters...". Self-check PASSED in executor.  
+  - Good: Traceability via code comments (delegates/puros), test docstrings, gsd logs (detailed pre + DoD + patterns copied al pie), SUMMARY full, impact. 3 crit protected (read+admin-mutate config only; orthogonal to gamif credit paths; golds re-runnable).  
+
+- **Other positives:** No new long funcs; pure helpers enable easy unit testing (import inside per conv); delegates preserve compat + 0 behavior (passthrough; reward gold exercises real get_all/get_reward); rel + pure avoids "2 svc" perception at handler layer; arch comments precedent exact; ruff/LOC hygiene handled per precedent (pre-exist non-reg); bot smoke + reward gold + cross re-runs green.  
+
+## Impact on 3 Critical Systems
+- **Gamification (besitos source — reactions/daily/game + missions that award via deliver/increment):** Protected + 0 impact. This flow is admin mission/reward config only (create/list/detail/stats/delete; read+admin-mutate). 0 calls to credit/debit, 0 deliver_reward, 0 log_reward_delivery, 0 increment_and_deliver, 0 backpack. Besitos via missions still authoritative in RewardService (Item5 local + listener untouched). Re-runs of cross_service_atomicity + reaction_mission_flow + reward gold protect indirectly ("admin create orthogonal to user progress/claim" per prompt + summary). No tx/credit paths touched.  
+- **Missions/Rewards (dueños — create/get/update/delete/get_stats + reward cross in wizard + deliver via deliver_reward):** Protected + improved compliance at handler layer. Handler now strictly 1 service (MissionService) + delegates for reward wizard data (no direct RewardService); pure formatting delegated; rel mission.reward in detail. Core CRUD/delivery/increment/claim/atomicity contracts ("credit survives", post-credit best-effort, tx sources MISSION) untouched (explicit out of scope per PLAN/impact; delegates transparent). Mission service's internal RewardService use for enrichment/delivery remains (per PLAN).  
+- **Narrative (listeners + arquetipos + achievements):** 0 impact (untouched; no story paths in mission admin config). Reward's own observer (Item5) + EventBus wiring unaffected.  
+
+All 3 systems' contracts (atomicity golds, best-effort sides, "credit survives", no re-entrancy) remain intact. "0 behavior/0 atomicity/0 UI change" + "3 critical systems protected" + "admin create is orthogonal" per PLAN/executor self-check + re-runs.  
+
+## Compliance Checklist (vs audited rules)
+- Handlers: Now compliant (exactly 1 service MissionService via get_service with for 9+ entrypoints incl all wizard; 0 RewardService/bare; no biz logic beyond pure UI renders + rel data access per gold precedent; all funcs <=50 per inspect; logging standard inside withs on important; naming verb+ctx+res for 11 extracts; callbacks preexist CallbackData).  
+- Services: MissionService owner for admin mission flow; thin delegates only for wizard cross-reward (exact comments + precedent item8); 0 dupe/core chg; no DB direct (models via internal).  
+- Layers/Cross: get_service lifecycle used; rels from models; 0 EventBus change needed (none for this admin config flow).  
+- Functions/LOC/Naming: All touched <=50 (max 50/49 inspected); 11 puros follow naming + pure docstrings.  
+- Anti-patterns/GSD: No prohibited added; GSD pre-every (26+ this log + executor 79+) + PLAN-driven + tight scope + self-check PASSED.  
+- 3-systems/Atomicity: 0 impact (admin config only; orthogonal); golds protected.  
+- Logging/voice: Present in key withs + Lucien 3rd preserved 1:1.  
+- Scope/0-creep/0-change: Matches exactly (3 files + logs + SUMMARY; UI idéntica; tests pass; 0 delivery/gamif credit/CRUD/atomic; pool note repeated).  
+- Precedents: Followed al pie (item8/26 long+delegate+puro+port+Test*PureHelpers+LOC+self-check; item7/25 1svc Mission+delegate+pure+ports+docstrings; item2 pure/delegate; impact exact blocks + port instr + "first of new pool").  
+
+## Veredict
+**PASS WITH NOTES**
+
+**Reasons:**  
+- Zero critical violations of architecture (layers, exactly-1-service via get_service context, no biz/DB in handlers, no dupe, thin delegates only, GSD, naming, logging, 3 critical systems, atomicity contracts, callbacks, scope). The changes are a faithful, tight, conservative application of proven precedents (item8/26 for long-funcs + delegate/pure extract + ports + Test*PureHelpers + LOC inspect + self-check + BATCH/POOL; item7/25 for 1svc Mission via get_service + delegate for cross-reward wizard + rel + pure + "ported... Arch-enforcer note addressed" docstrings + pure helper tests; item2 for pure/delegate).  
+- 9 with get_service(MissionService) (grep); 0 RewardService in handler (grep); 11 puros (verb+context+result + exact "Función pura..." docs); all funcs <=50 (terminal inspect: max 50 entry/49 puro); logs standard inside withs on important (list/confirm); delegates exact "Thin delegate... Added for item9..." + arch comments; test ports + docstrings + 11 import-inside pure tests exact; UI/behavior 1:1 (pins preserved); 0 prod/0 atomicity/0 delivery/0 other/0 creep.  
+- All "medium" items are either (a) pre-existing (other wizards long/legacy, reward_admin still has, daily flake/xfails/N806/ruff E402 hygiene in test per 26/25 precedent "do not count as regression", handler CLAUDE example outdated, min logs) and *not caused by* Item9 (in fact Item9 improves the mission_admin slice to full compliance), or (b) minor (logging coverage min but rules-satisfying for "important").  
+- Strong traceability via GSD logs (executor 79+ with pool/BATCH/self-check PASSED + "Item 9/27 closed. First of new pool of 4"; this audit log 34+ lines with pre every + pool), impact report, 27-SUMMARY/PLAN, code comments (delegates/puros), test docstrings ("Arch-enforcer note addressed"), prior item6/7 audits. 3 systems protected (read+admin-mutate config only; orthogonal; golds re-runnable).  
+- Minor notes (the 4 medium) are maintenance/fragility only or out-of-scope per tight item; do not affect correctness, security, or the 3 systems. Scope respected (0 creep, 0 docs outside memory report per PLAN).  
+
+**Overall:** Item 9 successfully addresses the arch-enforcer / initial hardener notes for mission_admin (long funcs, direct RewardService in wizard steps, 2-svc perception, >50L) without breaking rules. Mission admin handlers now strictly follow "exactly 1 service" + <=50 via puros + delegates (tight + better compliance). Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool. Ready for test-guardian (re-run criticals from PLAN/impact) + gsd-executor of next pool item (e.g. observability or next long admin or remaining besito decoupling per roadmap ~2-4 clusters).  
+
+## Suggested (Non-Blocking) for Test-Guardian / Quick (if run)
+- Re-execute: `pytest tests/handlers/test_mission_admin_handlers.py -q --tb=line -p no:cov --override-ini="addopts="` (55/55 + pure -k subset); broader `pytest -k "mission_admin or admin_missions or TestMissionAdmin or mission or reward or TestCross or atomicity" -q --tb=line -p no:cov --override-ini="addopts="` (document pre xfail/warns non-attrib per precedents); reward gold `-k "get_all_rewards or get_reward or active_only"`; bot smoke `./venv/bin/python -c "from handlers.mission_admin_handlers import *; from services.mission_service import MissionService; print('imports + routers + delegates ok')"`.  
+- Spot-check: grep "RewardService" in handlers/mission_admin_handlers.py ==0; grep "with get_service(MissionService)" ==9; grep "mission_admin_handlers \| " (at least list/confirm); inspect confirms all <=50; delegates present with "Added for item9" + arch comments; UI pins in pure tests match (Paso, Resumen, No hay, etc); no change to deliver/increment/CRUD.  
+- If quick allowed: ensure more logs on other with paths (detail/stats) for full observability; update legacy handler CLAUDE example (and root) to current get_service pattern; consider parity on reward_admin long (out of scope). Otherwise leave (pre-existing / tight scope).  
+- No code changes required for PASS.  
+
+**References (for future auditors):**  
+- .planning/quick/gsd-mission-admin-long-funcs.log (79+ entries, self-check PASSED, critical tests list, "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters...", "Item 9/27 closed. First of new pool of 4", UI idéntica, 3sys protected, 0/0/0/0).  
+- .planning/phases/27-mission-admin-long-funcs/27-mission-admin-long-funcs-SUMMARY.md + PLAN.md (full exec + DoD + verifs + pool).  
+- .claude/agent-memory/impact-analyzer/item9-mission-admin-long-funcs.md (PLAN scope, risks, "first of new pool of 4", exact touched files, delegate/pure blocks, port ~12 + Test* 11, "Pool anterior...").  
+- .planning/phases/25-reward-handlers-1service-loc/ + 26-store-admin-long-funcs/ (PLAN/SUMMARY + gsd for BATCH/POOL/ports/pure/LOC precedent).  
+- .claude/agent-memory/arch-enforcer/item6-arch-audit.md + item7-arch-audit.md (structure + "PASS WITH NOTES" + 3sys + veredict + pool style) + MEMORY.md.  
+- This audit's GSD log: .planning/quick/gsd-arch-enforcer-item9-mission-admin.log (34+ pre entries + pool + pre-write).  
+- decisions.md (precedents for get_service + ports), root CLAUDE.md + architecture.md + rules.md + handlers/CLAUDE.md + services/CLAUDE.md + models/CLAUDE.md + services/missions/CLAUDE.md + AGENTS.md + HARDENING_ROADMAP.md (pool + clusters).  
+- Golds: test_mission_admin_handlers.py (55p + 11 pure), test_reward_service (delegates exercised), cross atomicity/reaction_mission etc.  
+
+**End of audit.** No fixes implemented (per instructions; only audit + persist report + MEMORY).  
+
+Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool.
+
+Item 9/27 arch audit. Ready for test-guardian (re-run criticals from PLAN/impact) + gsd-executor of next pool item (e.g. observability or next long admin or remaining besito decoupling per roadmap ~2-4 clusters). 
+
+**Hecho con 💋 para Diana (Señorita Kinky).**

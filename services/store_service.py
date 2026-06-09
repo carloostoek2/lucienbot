@@ -27,6 +27,24 @@ from utils.lucien_voice import LucienVoice
 logger = logging.getLogger(__name__)
 
 
+# Support added for store_admin_handlers 1-service + pure extract (item8).
+# Arch-enforcer note (long funcs + direct PackageService in wizard + inline biz/UI calc) addressed.
+# Precedent item7.
+
+
+def compute_stock_emoji_and_text(stock: int, is_low_stock: bool = False) -> tuple[str, str]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin store (list/alerts).
+    1:1 de lógica previamente inline en store_admin_handlers (item8, arch-enforcer long-funcs note addressed).
+    """
+    if stock == -1:
+        return "♾️", "∞"
+    if stock == 0:
+        return "🚨", "AGOTADO"
+    if is_low_stock:
+        return "⚠️", str(stock)
+    return "📦", str(stock)
+
+
 class StoreService:
     """Servicio para gestion de tienda"""
 
@@ -52,6 +70,12 @@ class StoreService:
         if self._owns_session and self.db:
             self.db.close()
             self.db = None
+
+    def compute_stock_emoji_and_text(
+        self, stock: int, is_low_stock: bool = False
+    ) -> tuple[str, str]:
+        # Backward-compatible delegate added for Item 8 (arch-enforcer 1-service rule for store_admin handlers).
+        return compute_stock_emoji_and_text(stock, is_low_stock)
 
     # ==================== PRODUCTOS ====================
 
@@ -210,6 +234,13 @@ class StoreService:
         db.commit()
         logger.info(f"Producto {product_id} desactivado (soft delete)")
         return True
+
+    def get_available_packages_for_store(self) -> list[Package]:
+        """Thin delegate to internal package_service.get_available_packages_for_store().
+        Added for item8: enables store_admin_handlers product creation wizard to call exactly 1 service (StoreService) per handlers/CLAUDE + arch rules.
+        Not core CRUD. 0 behavior change.
+        """
+        return self.package_service.get_available_packages_for_store()
 
     # ==================== CARRITO ====================
 

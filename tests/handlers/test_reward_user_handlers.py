@@ -368,3 +368,59 @@ class TestRewardUserPureHelpers:
         status = compute_reward_status_text(progress, mission)
         assert "Progreso" in status
         assert "1 / 5" in status
+
+    def test_build_rewards_buttons_pure_status_emoji_truncation_cb_and_real_emoji_various_types(
+        self,
+    ):
+        """Pure unit for supporting list button builder (covers status_emoji 🔒/✨, name[:30] trunc, packed cb, real get_reward_emoji via RewardType attrs for BESITOS/PACKAGE/VIP). Item7 pure helpers coverage per recs."""
+        from handlers.reward_user_handlers import _build_rewards_buttons
+        from models.models import RewardType
+
+        # BESITOS in-progress -> ✨ + real emoji (post-assign to avoid MagicMock 'name' kwarg gotcha per gold patterns in file)
+        m1 = MagicMock()
+        m1.id = 10
+        m1.name = "A very long mission reward name that will truncate at thirty chars"
+        r1 = MagicMock()
+        r1.reward_type = RewardType.BESITOS
+        r1.besito_amount = 42
+        r1.name = m1.name
+        p1 = MagicMock(is_completed=False)
+        # PACKAGE completed -> 🔒 + real emoji
+        m2 = MagicMock()
+        m2.id = 20
+        m2.name = "ShortPkg"
+        r2 = MagicMock()
+        r2.reward_type = RewardType.PACKAGE
+        r2.besito_amount = None
+        r2.name = "ShortPkg"
+        p2 = MagicMock(is_completed=True)
+        # VIP no progress -> ✨
+        m3 = MagicMock()
+        m3.id = 30
+        m3.name = "VIPAccess"
+        r3 = MagicMock()
+        r3.reward_type = RewardType.VIP_ACCESS
+        r3.besito_amount = None
+        r3.name = "VIPAccess"
+        data = [
+            {"mission": m1, "reward": r1, "progress": p1},
+            {"mission": m2, "reward": r2, "progress": p2},
+            {"mission": m3, "reward": r3, "progress": None},
+        ]
+        buttons = _build_rewards_buttons(data)
+        assert len(buttons) == 3
+        # first: ✨ (not completed) + 💋 from real pure + truncated name
+        t0 = buttons[0][0].text
+        assert "✨" in t0 and "💋" in t0
+        assert (
+            "A very long mission reward nam" in t0
+        )  # name[:30] truncation visible (30 char prefix)
+        assert "reward_user_detail:10" in buttons[0][0].callback_data
+        # second: 🔒 (completed) + 📦
+        t1 = buttons[1][0].text
+        assert "🔒" in t1 and "📦" in t1 and "ShortPkg" in t1
+        assert "reward_user_detail:20" in buttons[1][0].callback_data
+        # third: ✨ + 👑
+        t2 = buttons[2][0].text
+        assert "✨" in t2 and "👑" in t2 and "VIPAccess" in t2
+        assert "reward_user_detail:30" in buttons[2][0].callback_data

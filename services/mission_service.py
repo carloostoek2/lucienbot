@@ -11,7 +11,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from models.database import SessionLocal
-from models.models import Mission, MissionFrequency, MissionType, UserMissionProgress
+from models.models import Mission, MissionFrequency, MissionType, Reward, UserMissionProgress
 from services.reward_service import RewardService
 
 logger = logging.getLogger(__name__)
@@ -217,6 +217,26 @@ class MissionService:
                 result.append({"mission": mission, "reward": reward, "progress": progress})
 
         return result
+
+    # Support added for mission_admin_handlers 1-service + pure extract (item9).
+    # Arch-enforcer long-funcs note addressed. Precedent item7 (reward) + item8 (store-admin).
+
+    def get_all_rewards_for_mission_wizard(self) -> list["Reward"]:
+        """Thin delegate to RewardService.get_all_rewards(active_only=True).
+        Added for item9: enables mission_admin_handlers reward select steps (select_frequency, select_reward_for_mission) to call exactly 1 service (MissionService) per handlers/CLAUDE + arch rules.
+        Not core CRUD. 0 behavior change. Precedent item8 get_available_packages_for_store.
+        """
+        # Spawn internal (mission_service already does RewardService(db) in get_available_rewards_for_user + deliver paths; keep pattern, no new held).
+        reward_service = RewardService(db=self._get_db())
+        return reward_service.get_all_rewards(active_only=True)
+
+    def get_reward_for_mission_wizard(self, reward_id: int) -> "Reward | None":
+        """Thin delegate to RewardService.get_reward(reward_id).
+        Added for item9: enables mission_admin_handlers select_reward_for_mission summary to call exactly 1 service (MissionService) per handlers/CLAUDE + arch rules.
+        Not core CRUD. 0 behavior change. Precedent item8 get_available_packages_for_store.
+        """
+        reward_service = RewardService(db=self._get_db())
+        return reward_service.get_reward(reward_id)
 
     # ==================== ACTUALIZACION DE PROGRESO ====================
 

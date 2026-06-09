@@ -23,7 +23,6 @@ from keyboards.callback_data import (
 from models.models import MissionFrequency, MissionType
 from services import get_service
 from services.mission_service import MissionService
-from services.reward_service import RewardService
 from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
@@ -53,6 +52,252 @@ class RewardWizardStates(StatesGroup):
     # VIP
     selecting_tariff = State()
     confirming = State()
+
+
+# ==================== PURE UI HELPERS (item9 / arch-enforcer <=50 LOC + 1 service) ====================
+# Funciones puras (sin estado ni side-effects). Soporte para UI de admin missions (wizard/list/detail).
+# 1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+
+
+def compute_mission_wizard_step_text(step: int, title: str, prompt: str, example: str | None = None) -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    text = f"""🎩 Lucien:
+
+Vamos a crear un nuevo desafio...
+
+Paso {step} de 6: {title}
+
+{prompt}"""
+    if example:
+        text += f"\nEjemplo: {example}"
+    return text
+
+
+def build_mission_confirm_text_and_keyboard(data: dict, reward=None) -> tuple[str, InlineKeyboardMarkup]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard confirm).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    freq_text = "Una vez" if data.get("frequency") == MissionFrequency.ONE_TIME else "Recurrente"
+    desc = data.get("description") or "Sin descripcion"
+    rew_name = reward.name if reward else "Ninguna"
+    rew_type = reward.reward_type.value if reward else ""
+    rew_text = f"{rew_name} ({rew_type})" if reward else "Ninguna"
+    text = f"""🎩 Lucien:
+
+Resumen de la mision:
+
+📋 Nombre: {data.get("name")}
+📝 Descripcion: {desc}
+🎯 Tipo: {data.get("mission_type").value if data.get("mission_type") else ""}
+📊 Meta: {data.get("target_value")}
+🔄 Frecuencia: {freq_text}
+🎁 Recompensa: {rew_text}
+
+Deseas crear esta mision?"""
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Crear", callback_data="confirm_create_mission")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
+        ]
+    )
+    return text, kb
+
+
+def build_reward_select_buttons(rewards: list) -> list[list[InlineKeyboardButton]]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard reward select).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    buttons = []
+    for reward in rewards:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{reward.name} ({reward.reward_type.value})",
+                    callback_data=SelectRewardMissionCallback(reward_id=reward.id).pack(),
+                )
+            ]
+        )
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
+    return buttons
+
+
+def compute_reward_summary_for_confirm(reward) -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (confirm).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    if not reward:
+        return "Ninguna"
+    return f"{reward.name} ({reward.reward_type.value})"
+
+
+def build_mission_type_select_keyboard() -> InlineKeyboardMarkup:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard type select).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💋 Reaccionar N veces",
+                    callback_data=MissionTypeSelectCallback(
+                        mission_type=MissionType.REACTION_COUNT.value
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎁 Reclamar regalo N dias (consecutivos)",
+                    callback_data=MissionTypeSelectCallback(
+                        mission_type=MissionType.DAILY_GIFT_STREAK.value
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎁 Reclamar regalo N dias (total)",
+                    callback_data=MissionTypeSelectCallback(
+                        mission_type=MissionType.DAILY_GIFT_TOTAL.value
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🛒 Comprar en tienda",
+                    callback_data=MissionTypeSelectCallback(
+                        mission_type=MissionType.STORE_PURCHASE.value
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👑 Tener VIP activo",
+                    callback_data=MissionTypeSelectCallback(
+                        mission_type=MissionType.VIP_ACTIVE.value
+                    ).pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
+        ]
+    )
+
+
+def build_mission_list_entry_and_button(mission) -> tuple[str, InlineKeyboardButton]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (list).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    status = "✅" if mission.is_active else "❌"
+    entry_text = f"{status} {mission.name} ({mission.mission_type.value})\n"
+    button = InlineKeyboardButton(
+        text=f"{status} {mission.name[:30]}",
+        callback_data=MissionDetailCallback(mission_id=mission.id).pack(),
+    )
+    return entry_text, button
+
+
+def build_mission_detail_text_and_keyboard(mission) -> tuple[str, InlineKeyboardMarkup]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (detail + dedupe show).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    status = "✅ Activo" if mission.is_active else "❌ Inactivo"
+    freq_text = "Una vez" if mission.frequency.value == "one_time" else "Recurrente"
+    reward_text = "Sin recompensa"
+    if mission.reward:
+        reward_text = f"{mission.reward.name} ({mission.reward.reward_type.value})"
+    text = f"""🎩 Lucien:
+
+📋 {mission.name}
+
+📝 {mission.description or "Sin descripcion"}
+
+📊 Informacion:
+   • Tipo: {mission.mission_type.value}
+   • Meta: {mission.target_value}
+   • Frecuencia: {freq_text}
+   • Estado: {status}
+
+🎁 Recompensa: {reward_text}
+
+Que deseas hacer?"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{'Desactivar' if mission.is_active else 'Activar'}",
+                    callback_data=MissionToggleCallback(mission_id=mission.id).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑️ Eliminar",
+                    callback_data=MissionDeleteCallback(mission_id=mission.id).pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="list_missions")],
+        ]
+    )
+    return text, keyboard
+
+
+def build_mission_delete_confirm_keyboard(mission_id: int) -> InlineKeyboardMarkup:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (delete confirm).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Si, eliminar",
+                    callback_data=MissionDeleteCallback(mission_id=mission_id, confirmed=True).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Cancelar",
+                    callback_data=MissionDetailCallback(mission_id=mission_id).pack(),
+                )
+            ],
+        ]
+    )
+
+
+def build_mission_stats_text_and_buttons(missions: list) -> tuple[str, list[list[InlineKeyboardButton]]]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (stats).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    text = "🎩 Lucien:\n\n📊 Estadisticas de Misiones:\n\n📋 Misiones:\n"
+    active = sum(1 for m in missions if m.is_active)
+    text += f"   • Activas: {active}\n   • Total: {len(missions)}\n\nSelecciona una mision para ver estadisticas detalladas:"
+    buttons = []
+    for mission in missions:
+        if mission.is_active:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"📊 {mission.name[:30]}",
+                        callback_data=MissionStatsCallback(mission_id=mission.id).pack(),
+                    )
+                ]
+            )
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")])
+    return text, buttons
+
+
+def compute_freq_text(frequency) -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (freq label).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    return "Una vez" if frequency == MissionFrequency.ONE_TIME else "Recurrente"
+
+
+def compute_reward_text(reward) -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (reward label).
+    1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
+    """
+    if not reward:
+        return "Sin recompensa"
+    return f"{reward.name} ({reward.reward_type.value})"
 
 
 # ==================== MENU PRINCIPAL ====================
@@ -141,51 +386,7 @@ async def process_mission_description(message: Message, state: FSMContext):
     description = None if message.text == "/skip" else message.text.strip()
     await state.update_data(description=description)
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="💋 Reaccionar N veces",
-                    callback_data=MissionTypeSelectCallback(
-                        mission_type=MissionType.REACTION_COUNT.value
-                    ).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🎁 Reclamar regalo N dias (consecutivos)",
-                    callback_data=MissionTypeSelectCallback(
-                        mission_type=MissionType.DAILY_GIFT_STREAK.value
-                    ).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🎁 Reclamar regalo N dias (total)",
-                    callback_data=MissionTypeSelectCallback(
-                        mission_type=MissionType.DAILY_GIFT_TOTAL.value
-                    ).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🛒 Comprar en tienda",
-                    callback_data=MissionTypeSelectCallback(
-                        mission_type=MissionType.STORE_PURCHASE.value
-                    ).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👑 Tener VIP activo",
-                    callback_data=MissionTypeSelectCallback(
-                        mission_type=MissionType.VIP_ACTIVE.value
-                    ).pack(),
-                )
-            ],
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
-        ]
-    )
+    keyboard = build_mission_type_select_keyboard()
 
     await message.answer(
         """🎩 Lucien:
@@ -298,55 +499,43 @@ async def select_frequency(
 
     await state.update_data(frequency=frequency)
 
-    # Mostrar recompensas disponibles
-    reward_service = RewardService()
-    rewards = reward_service.get_all_rewards(active_only=True)
+    with get_service(MissionService) as mission_service:
+        rewards = mission_service.get_all_rewards_for_mission_wizard()
 
-    if not rewards:
-        await callback.message.edit_text(
-            """🎩 Lucien:
+        if not rewards:
+            await callback.message.edit_text(
+                """🎩 Lucien:
 
 No hay recompensas configuradas...
 
 Crea una recompensa primero.""",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="➕ Crear recompensa", callback_data="create_reward"
-                        )
-                    ],
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")],
-                ]
-            ),
-        )
-        await state.clear()
-        await callback.answer()
-        return
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="➕ Crear recompensa", callback_data="create_reward"
+                            )
+                        ],
+                        [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")],
+                    ]
+                ),
+            )
+            await state.clear()
+            await callback.answer()
+            return
 
-    buttons = []
-    for reward in rewards:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{reward.name} ({reward.reward_type.value})",
-                    callback_data=SelectRewardMissionCallback(reward_id=reward.id).pack(),
-                )
-            ]
-        )
+        buttons = build_reward_select_buttons(rewards)
 
-    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
-
-    await callback.message.edit_text(
-        """🎩 Lucien:
+        await callback.message.edit_text(
+            """🎩 Lucien:
 
 Paso 6 de 6: Recompensa
 
 Selecciona la recompensa para esta mision:""",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
-    await state.set_state(MissionWizardStates.selecting_reward)
-    await callback.answer()
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+        await state.set_state(MissionWizardStates.selecting_reward)
+        await callback.answer()
 
 
 @router.callback_query(MissionWizardStates.selecting_reward, SelectRewardMissionCallback.filter())
@@ -359,35 +548,17 @@ async def select_reward_for_mission(
     await state.update_data(reward_id=reward_id)
     data = await state.get_data()
 
-    reward_service = RewardService()
-    reward = reward_service.get_reward(reward_id)
+    with get_service(MissionService) as mission_service:
+        reward = mission_service.get_reward_for_mission_wizard(reward_id)
 
-    freq_text = "Una vez" if data.get("frequency") == MissionFrequency.ONE_TIME else "Recurrente"
+        text, kb = build_mission_confirm_text_and_keyboard(data, reward)
 
-    text = f"""🎩 Lucien:
-
-Resumen de la mision:
-
-📋 Nombre: {data.get("name")}
-📝 Descripcion: {data.get("description") or "Sin descripcion"}
-🎯 Tipo: {data.get("mission_type").value}
-📊 Meta: {data.get("target_value")}
-🔄 Frecuencia: {freq_text}
-🎁 Recompensa: {reward.name if reward else "Ninguna"}
-
-Deseas crear esta mision?"""
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Crear", callback_data="confirm_create_mission")],
-                [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
-            ]
-        ),
-    )
-    await state.set_state(MissionWizardStates.confirming)
-    await callback.answer()
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb,
+        )
+        await state.set_state(MissionWizardStates.confirming)
+        await callback.answer()
 
 
 @router.callback_query(MissionWizardStates.confirming, F.data == "confirm_create_mission")
@@ -422,7 +593,7 @@ async def confirm_create_mission(callback: CallbackQuery, state: FSMContext):
                     ]
                 ),
             )
-            logger.info(f"Mision creada: {mission.name} por admin {callback.from_user.id}")
+            logger.info(f"mission_admin_handlers | confirm_create_mission | user_id={callback.from_user.id} | mission_id={mission.id} | name={mission.name}")
 
         except Exception as e:
             logger.error(f"Error creando mision: {e}")
@@ -446,6 +617,7 @@ async def list_missions(callback: CallbackQuery):
     """Lista todas las misiones"""
     with get_service(MissionService) as mission_service:
         missions = mission_service.get_all_missions(active_only=False)
+        logger.info(f"mission_admin_handlers | list_missions | user_id={callback.from_user.id} | count={len(missions)}")
 
         if not missions:
             await callback.message.edit_text(
@@ -461,18 +633,10 @@ async def list_missions(callback: CallbackQuery):
 
         text = "🎩 Lucien:\n\nMisiones registradas:\n\n"
         buttons = []
-
         for mission in missions:
-            status = "✅" if mission.is_active else "❌"
-            text += f"{status} {mission.name} ({mission.mission_type.value})\n"
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{status} {mission.name[:30]}",
-                        callback_data=MissionDetailCallback(mission_id=mission.id).pack(),
-                    )
-                ]
-            )
+            entry_text, btn = build_mission_list_entry_and_button(mission)
+            text += entry_text
+            buttons.append([btn])
 
         buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")])
 
@@ -496,47 +660,10 @@ async def mission_admin_detail(callback: CallbackQuery, callback_data: MissionDe
             await callback.answer("Mision no encontrada", show_alert=True)
             return
 
-        status = "✅ Activo" if mission.is_active else "❌ Inactivo"
-        freq_text = "Una vez" if mission.frequency.value == "one_time" else "Recurrente"
-
-        reward_text = "Sin recompensa"
-        if mission.reward:
-            reward_text = f"{mission.reward.name} ({mission.reward.reward_type.value})"
-
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=f"{'Desactivar' if mission.is_active else 'Activar'}",
-                        callback_data=MissionToggleCallback(mission_id=mission.id).pack(),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🗑️ Eliminar",
-                        callback_data=MissionDeleteCallback(mission_id=mission.id).pack(),
-                    )
-                ],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="list_missions")],
-            ]
-        )
+        text, keyboard = build_mission_detail_text_and_keyboard(mission)
 
         await callback.message.edit_text(
-            f"""🎩 Lucien:
-
-        📋 {mission.name}
-
-        📝 {mission.description or "Sin descripcion"}
-
-        📊 Informacion:
-           • Tipo: {mission.mission_type.value}
-           • Meta: {mission.target_value}
-           • Frecuencia: {freq_text}
-           • Estado: {status}
-
-        🎁 Recompensa: {reward_text}
-
-        Que deseas hacer?""",
+            text,
             reply_markup=keyboard,
         )
         await callback.answer()
@@ -568,47 +695,10 @@ async def toggle_mission(callback: CallbackQuery, callback_data: MissionToggleCa
 
 async def show_mission_detail(callback: CallbackQuery, mission):
     """Muestra detalles de una mision (helper)"""
-    status = "✅ Activo" if mission.is_active else "❌ Inactivo"
-    freq_text = "Una vez" if mission.frequency.value == "one_time" else "Recurrente"
-
-    reward_text = "Sin recompensa"
-    if mission.reward:
-        reward_text = f"{mission.reward.name} ({mission.reward.reward_type.value})"
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=f"{'Desactivar' if mission.is_active else 'Activar'}",
-                    callback_data=MissionToggleCallback(mission_id=mission.id).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🗑️ Eliminar",
-                    callback_data=MissionDeleteCallback(mission_id=mission.id).pack(),
-                )
-            ],
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="list_missions")],
-        ]
-    )
+    text, keyboard = build_mission_detail_text_and_keyboard(mission)
 
     await callback.message.edit_text(
-        f"""🎩 Lucien:
-
-        📋 {mission.name}
-
-        📝 {mission.description or "Sin descripcion"}
-
-        📊 Informacion:
-           • Tipo: {mission.mission_type.value}
-           • Meta: {mission.target_value}
-           • Frecuencia: {freq_text}
-           • Estado: {status}
-
-        🎁 Recompensa: {reward_text}
-
-        Que deseas hacer?""",
+        text,
         reply_markup=keyboard,
     )
 
@@ -645,24 +735,7 @@ async def delete_mission_confirm(callback: CallbackQuery, callback_data: Mission
             return
 
     # Show confirmation keyboard
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Si, eliminar",
-                    callback_data=MissionDeleteCallback(
-                        mission_id=mission_id, confirmed=True
-                    ).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="❌ Cancelar",
-                    callback_data=MissionDetailCallback(mission_id=mission_id).pack(),
-                )
-            ],
-        ]
-    )
+    keyboard = build_mission_delete_confirm_keyboard(mission_id)
 
     await callback.message.edit_text(
         "🎩 Lucien:\n\nEstas seguro de eliminar esta mision?\n\nEsta accion no se puede deshacer.",

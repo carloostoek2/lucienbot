@@ -18,8 +18,9 @@ Cubre:
 - missions_stats: estadisticas generales
 - mission_detail_stats: estadisticas detalladas por mision
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from keyboards.callback_data import (
     MissionDeleteCallback,
@@ -68,7 +69,7 @@ class TestCreateMissionStart:
         cb = make_callback(data="create_mission")
         fsm = await make_fsm_context()
 
-        from handlers.mission_admin_handlers import create_mission_start, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, create_mission_start
         await create_mission_start(cb, fsm)
 
         state = await fsm.get_state()
@@ -94,7 +95,7 @@ class TestProcessMissionName:
 
     async def test_rejects_short_name(self, make_message, make_fsm_context):
         """Nombre menor a 3 caracteres muestra error y no avanza."""
-        from handlers.mission_admin_handlers import process_mission_name, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, process_mission_name
         msg = make_message(text="AB")
         fsm = await make_fsm_context()
         await fsm.set_state(MissionWizardStates.waiting_name)
@@ -108,7 +109,7 @@ class TestProcessMissionName:
 
     async def test_accepts_valid_name_and_advances(self, make_message, make_fsm_context):
         """Nombre valido guarda en state y avanza a waiting_description."""
-        from handlers.mission_admin_handlers import process_mission_name, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, process_mission_name
         msg = make_message(text="Reacciona 10 veces")
         fsm = await make_fsm_context()
         await fsm.set_state(MissionWizardStates.waiting_name)
@@ -129,7 +130,8 @@ class TestProcessMissionDescription:
     async def test_skip_sets_none_and_advances(self, make_message, make_fsm_context):
         """/skip establece description=None y avanza a selecting_type."""
         from handlers.mission_admin_handlers import (
-            process_mission_description, MissionWizardStates,
+            MissionWizardStates,
+            process_mission_description,
         )
         msg = make_message(text="/skip")
         fsm = await make_fsm_context()
@@ -144,7 +146,8 @@ class TestProcessMissionDescription:
     async def test_with_description_saves_and_advances(self, make_message, make_fsm_context):
         """Descripcion textual se guarda correctamente."""
         from handlers.mission_admin_handlers import (
-            process_mission_description, MissionWizardStates,
+            MissionWizardStates,
+            process_mission_description,
         )
         msg = make_message(text="Reacciona a 10 mensajes de Diana")
         fsm = await make_fsm_context()
@@ -175,7 +178,7 @@ class TestSelectMissionType:
 
     async def test_valid_type_saves_and_advances(self, make_callback, make_fsm_context):
         """Tipo valido se guarda en state y avanza a waiting_target."""
-        from handlers.mission_admin_handlers import select_mission_type, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, select_mission_type
         cb_data = MissionTypeSelectCallback(mission_type=MissionType.REACTION_COUNT.value)
         cb = make_callback(data=cb_data.pack())
         fsm = await make_fsm_context()
@@ -190,7 +193,7 @@ class TestSelectMissionType:
 
     async def test_invalid_type_shows_alert(self, make_callback, make_fsm_context):
         """Tipo invalido muestra alerta y no avanza."""
-        from handlers.mission_admin_handlers import select_mission_type, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, select_mission_type
         cb_data = MissionTypeSelectCallback(mission_type="invalid_type")
         cb = make_callback(data=cb_data.pack())
         fsm = await make_fsm_context()
@@ -221,7 +224,7 @@ class TestProcessMissionTarget:
 
     async def test_rejects_non_numeric(self, make_message, make_fsm_context):
         """Entrada no numerica muestra error."""
-        from handlers.mission_admin_handlers import process_mission_target, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, process_mission_target
         msg = make_message(text="diez")
         fsm = await make_fsm_context()
         await fsm.set_state(MissionWizardStates.waiting_target)
@@ -235,7 +238,7 @@ class TestProcessMissionTarget:
 
     async def test_rejects_zero_or_negative(self, make_message, make_fsm_context):
         """Valor 0 o negativo muestra error."""
-        from handlers.mission_admin_handlers import process_mission_target, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, process_mission_target
         msg = make_message(text="0")
         fsm = await make_fsm_context()
         await fsm.set_state(MissionWizardStates.waiting_target)
@@ -247,7 +250,7 @@ class TestProcessMissionTarget:
 
     async def test_accepts_valid_target_and_advances(self, make_message, make_fsm_context):
         """Valor numerico valido guarda en state y avanza a selecting_frequency."""
-        from handlers.mission_admin_handlers import process_mission_target, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, process_mission_target
         msg = make_message(text="10")
         fsm = await make_fsm_context()
         await fsm.set_state(MissionWizardStates.waiting_target)
@@ -263,14 +266,14 @@ class TestProcessMissionTarget:
 
 
 class TestSelectFrequency:
-    """Tests para select_frequency — paso 5: frecuencia."""
+    """Tests para select_frequency — paso 5: frecuencia. Tests ported to 1-service pattern (get_service(MissionService) only + delegate for reward wizard steps). Arch-enforcer note addressed. Precedent from item7/8."""
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_invalid_frequency_shows_alert(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Frecuencia invalida muestra alerta."""
-        from handlers.mission_admin_handlers import select_frequency, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, select_frequency
         cb_data = MissionFreqSelectCallback(frequency="invalid_freq")
         cb = make_callback(data=cb_data.pack())
         fsm = await make_fsm_context()
@@ -281,12 +284,16 @@ class TestSelectFrequency:
         state = await fsm.get_state()
         assert state == MissionWizardStates.selecting_frequency
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_no_rewards_shows_empty_message(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Sin recompensas configurables, muestra mensaje y limpia estado."""
-        mock_reward_svc.return_value.get_all_rewards.return_value = []
+        mock_mission_svc = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_mission_svc
+        mock_get_service.return_value = mock_context
+        mock_mission_svc.get_all_rewards_for_mission_wizard.return_value = []
         cb_data = MissionFreqSelectCallback(frequency=MissionFrequency.ONE_TIME.value)
         cb = make_callback(data=cb_data.pack())
         fsm = await make_fsm_context()
@@ -301,18 +308,23 @@ class TestSelectFrequency:
         state = await fsm.get_state()
         assert state is None
         cb.answer.assert_called_once()
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_with_rewards_advances_to_selecting_reward(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Con recompensas disponibles, avanza a selecting_reward."""
-        from handlers.mission_admin_handlers import select_frequency, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, select_frequency
         mock_reward = MagicMock()
         mock_reward.id = 1
         mock_reward.name = "Test Reward"
         mock_reward.reward_type = MagicMock(value="besitos")
-        mock_reward_svc.return_value.get_all_rewards.return_value = [mock_reward]
+        mock_mission_svc = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_mission_svc
+        mock_get_service.return_value = mock_context
+        mock_mission_svc.get_all_rewards_for_mission_wizard.return_value = [mock_reward]
 
         cb_data = MissionFreqSelectCallback(frequency=MissionFrequency.RECURRING.value)
         cb = make_callback(data=cb_data.pack())
@@ -324,23 +336,28 @@ class TestSelectFrequency:
         assert data["frequency"] == MissionFrequency.RECURRING
         state = await fsm.get_state()
         assert state == MissionWizardStates.selecting_reward
-        mock_reward_svc.return_value.get_all_rewards.assert_called_once_with(active_only=True)
+        mock_mission_svc.get_all_rewards_for_mission_wizard.assert_called_once_with()
         cb.answer.assert_called_once()
+        mock_get_service.return_value.__exit__.assert_called_once()
 
 
 class TestSelectRewardForMission:
-    """Tests para select_reward_for_mission — paso 6: seleccion de recompensa."""
+    """Tests para select_reward_for_mission — paso 6: seleccion de recompensa. Tests ported to 1-service pattern (get_service(MissionService) only + delegate for reward wizard steps). Arch-enforcer note addressed. Precedent from item7/8."""
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_shows_summary_and_advances(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra resumen de la mision y avanza a confirming."""
-        from handlers.mission_admin_handlers import select_reward_for_mission, MissionWizardStates
+        from handlers.mission_admin_handlers import MissionWizardStates, select_reward_for_mission
         mock_reward = MagicMock()
         mock_reward.name = "Test Reward"
         mock_reward.reward_type = MagicMock(value="besitos")
-        mock_reward_svc.return_value.get_reward.return_value = mock_reward
+        mock_mission_svc = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_mission_svc
+        mock_get_service.return_value = mock_context
+        mock_mission_svc.get_reward_for_mission_wizard.return_value = mock_reward
 
         cb_data = SelectRewardMissionCallback(reward_id=1)
         cb = make_callback(data=cb_data.pack())
@@ -367,13 +384,18 @@ class TestSelectRewardForMission:
         assert "10" in text
         assert "Test Reward" in text
         cb.answer.assert_called_once()
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_shows_frequency_as_una_vez(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra 'Una vez' cuando frequency es ONE_TIME y recompensa es nula."""
-        mock_reward_svc.return_value.get_reward.return_value = None
+        mock_mission_svc = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_mission_svc
+        mock_get_service.return_value = mock_context
+        mock_mission_svc.get_reward_for_mission_wizard.return_value = None
 
         cb_data = SelectRewardMissionCallback(reward_id=1)
         cb = make_callback(data=cb_data.pack())
@@ -393,16 +415,21 @@ class TestSelectRewardForMission:
         text = cb.message.edit_text.call_args[0][0]
         assert "Una vez" in text
         assert "Ninguna" in text
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_shows_frequency_as_recurrente(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra 'Recurrente' cuando frequency es RECURRING."""
         mock_reward = MagicMock()
         mock_reward.name = "Bonus"
         mock_reward.reward_type = MagicMock(value="besitos")
-        mock_reward_svc.return_value.get_reward.return_value = mock_reward
+        mock_mission_svc = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_mission_svc
+        mock_get_service.return_value = mock_context
+        mock_mission_svc.get_reward_for_mission_wizard.return_value = mock_reward
 
         cb_data = SelectRewardMissionCallback(reward_id=2)
         cb = make_callback(data=cb_data.pack())
@@ -421,13 +448,18 @@ class TestSelectRewardForMission:
 
         text = cb.message.edit_text.call_args[0][0]
         assert "Recurrente" in text
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.mission_admin_handlers.RewardService")
+    @patch("handlers.mission_admin_handlers.get_service")
     async def test_handles_missing_description(
-        self, mock_reward_svc, make_callback, make_fsm_context
+        self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra 'Sin descripcion' cuando description es None."""
-        mock_reward_svc.return_value.get_reward.return_value = None
+        mock_mission_svc = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_mission_svc
+        mock_get_service.return_value = mock_context
+        mock_mission_svc.get_reward_for_mission_wizard.return_value = None
 
         cb_data = SelectRewardMissionCallback(reward_id=1)
         cb = make_callback(data=cb_data.pack())
@@ -446,6 +478,7 @@ class TestSelectRewardForMission:
 
         text = cb.message.edit_text.call_args[0][0]
         assert "Sin descripcion" in text
+        mock_get_service.return_value.__exit__.assert_called_once()
 
 
 class TestConfirmCreateMission:
@@ -1081,3 +1114,162 @@ class TestMissionDetailStats:
 
 
 from handlers.mission_admin_handlers import MissionWizardStates
+
+
+class TestMissionAdminPureHelpers:
+    """Tests para los helpers puros extraídos de mission_admin_handlers (Item 9 / arch-enforcer LOC)."""
+
+    def test_compute_mission_wizard_step_text_paso1(self):
+        from handlers.mission_admin_handlers import compute_mission_wizard_step_text
+        text = compute_mission_wizard_step_text(1, "Nombre de la mision", "Indica un nombre descriptivo:")
+        assert "Paso 1 de 6: Nombre de la mision" in text
+        assert "Indica un nombre descriptivo" in text
+        assert "🎩 Lucien" in text
+
+    def test_compute_mission_wizard_step_text_with_example(self):
+        from handlers.mission_admin_handlers import compute_mission_wizard_step_text
+        text = compute_mission_wizard_step_text(4, "Valor objetivo", "Indica un numero:", "Ejemplo: 10")
+        assert "Paso 4 de 6" in text
+        assert "Ejemplo: 10" in text
+        assert "🎩 Lucien" in text
+
+    def test_build_mission_confirm_text_and_keyboard_full(self):
+        from handlers.mission_admin_handlers import build_mission_confirm_text_and_keyboard
+        from models.models import MissionFrequency
+        data = {"name": "Test Mision", "description": "Desc", "mission_type": MagicMock(value="reaccion"), "target_value": 10, "frequency": MissionFrequency.ONE_TIME}
+        reward = MagicMock()
+        reward.name = "Recompensa X"
+        reward.reward_type = MagicMock()
+        reward.reward_type.value = "besitos"
+        text, kb = build_mission_confirm_text_and_keyboard(data, reward)
+        assert "Resumen de la mision:" in text
+        assert "📋 Nombre: Test Mision" in text
+        assert "📝 Descripcion: Desc" in text
+        assert "🎁 Recompensa: Recompensa X (besitos)" in text
+        assert "✅ Crear" in kb.inline_keyboard[0][0].text
+        assert "admin_missions" in kb.inline_keyboard[1][0].callback_data
+
+    def test_build_mission_confirm_text_and_keyboard_no_desc_no_reward(self):
+        from handlers.mission_admin_handlers import build_mission_confirm_text_and_keyboard
+        data = {"name": "Test", "description": None, "mission_type": MagicMock(value="reaccion"), "target_value": 5, "frequency": MissionFrequency.RECURRING}
+        text, kb = build_mission_confirm_text_and_keyboard(data, None)
+        assert "Sin descripcion" in text
+        assert "Ninguna" in text
+        assert "Recurrente" in text
+        assert "✅ Crear" in kb.inline_keyboard[0][0].text
+
+    def test_build_reward_select_buttons(self):
+        from handlers.mission_admin_handlers import build_reward_select_buttons
+        r1 = MagicMock()
+        r1.id = 1
+        r1.name = "R1"
+        r1.reward_type = MagicMock()
+        r1.reward_type.value = "besitos"
+        r2 = MagicMock()
+        r2.id = 2
+        r2.name = "R2"
+        r2.reward_type = MagicMock()
+        r2.reward_type.value = "paquete"
+        kbs = build_reward_select_buttons([r1, r2])
+        assert len(kbs) == 3  # 2 rewards + cancel
+        assert "R1 (besitos)" in kbs[0][0].text
+        assert "1" in kbs[0][0].callback_data
+        assert "❌ Cancelar" in kbs[-1][0].text
+        assert "admin_missions" in kbs[-1][0].callback_data
+
+    def test_build_mission_list_entry_and_button(self):
+        from handlers.mission_admin_handlers import build_mission_list_entry_and_button
+        m = MagicMock()
+        m.is_active = True
+        m.name = "Mi Mision Larga Nombre Aqui Para Trunc"
+        m.mission_type = MagicMock()
+        m.mission_type.value = "reaccion"
+        entry, btn = build_mission_list_entry_and_button(m)
+        assert "✅" in entry and "Mi Mision Larga Nombre Aqui Para Trunc" in entry
+        assert "reaccion" in entry
+        assert "✅ Mi Mision Larga Nombre Aqui Pa" in btn.text  # 30-char trunc of the name
+        assert "mission_detail" in btn.callback_data
+
+    def test_build_mission_detail_text_and_keyboard(self):
+        from handlers.mission_admin_handlers import build_mission_detail_text_and_keyboard
+        m = MagicMock()
+        m.is_active = True
+        m.name = "D"
+        m.description = "dd"
+        m.mission_type = MagicMock()
+        m.mission_type.value = "t"
+        m.target_value = 5
+        m.frequency = MagicMock()
+        m.frequency.value = "one_time"
+        m.reward = MagicMock()
+        m.reward.name = "RR"
+        m.reward.reward_type = MagicMock()
+        m.reward.reward_type.value = "b"
+        text, kb = build_mission_detail_text_and_keyboard(m)
+        assert "🎩 Lucien" in text
+        assert "📋 D" in text
+        assert "dd" in text
+        assert "t" in text
+        assert "Una vez" in text
+        assert "✅ Activo" in text
+        assert "🎁 Recompensa: RR (b)" in text
+        assert len(kb.inline_keyboard) == 3
+        assert "Desactivar" in kb.inline_keyboard[0][0].text
+        assert "🗑️ Eliminar" in kb.inline_keyboard[1][0].text
+        assert "🔙 Volver" in kb.inline_keyboard[2][0].text
+        assert "list_missions" in kb.inline_keyboard[2][0].callback_data
+
+    def test_build_mission_detail_text_and_keyboard_no_reward(self):
+        from handlers.mission_admin_handlers import build_mission_detail_text_and_keyboard
+        m = MagicMock()
+        m.is_active = False
+        m.name = "X"
+        m.description = None
+        m.mission_type = MagicMock()
+        m.mission_type.value = "t"
+        m.target_value = 1
+        m.frequency = MagicMock()
+        m.frequency.value = "one_time"
+        m.reward = None
+        text, kb = build_mission_detail_text_and_keyboard(m)
+        assert "Sin descripcion" in text
+        assert "Sin recompensa" in text
+        assert "❌ Inactivo" in text
+
+    def test_build_mission_delete_confirm_keyboard(self):
+        from handlers.mission_admin_handlers import build_mission_delete_confirm_keyboard
+        kb = build_mission_delete_confirm_keyboard(99)
+        assert len(kb.inline_keyboard) == 2
+        assert "✅ Si, eliminar" in kb.inline_keyboard[0][0].text
+        assert "❌ Cancelar" in kb.inline_keyboard[1][0].text
+        assert "99" in kb.inline_keyboard[0][0].callback_data
+        assert "mission_detail" in kb.inline_keyboard[1][0].callback_data
+
+    def test_build_mission_stats_text_and_buttons(self):
+        from handlers.mission_admin_handlers import build_mission_stats_text_and_buttons
+        m1 = MagicMock()
+        m1.is_active = True
+        m1.name = "Activa Larga"
+        m2 = MagicMock()
+        m2.is_active = False
+        m2.name = "Inact"
+        text, buttons = build_mission_stats_text_and_buttons([m1, m2])
+        assert "📊 Estadisticas de Misiones" in text
+        assert "Activas: 1" in text
+        assert "Total: 2" in text
+        assert len(buttons) == 2  # 1 active + back
+        assert "Activa" in buttons[0][0].text
+        assert "🔙 Volver" in buttons[-1][0].text
+        assert "admin_missions" in buttons[-1][0].callback_data
+
+    def test_compute_freq_text_and_reward_text(self):
+        from handlers.mission_admin_handlers import compute_freq_text, compute_reward_text
+        from models.models import MissionFrequency
+        assert compute_freq_text(MissionFrequency.ONE_TIME) == "Una vez"
+        assert compute_freq_text(MissionFrequency.RECURRING) == "Recurrente"
+        r = MagicMock()
+        r.name = "R"
+        r.reward_type = MagicMock()
+        r.reward_type.value = "b"
+        assert "R (b)" in compute_reward_text(r)
+        assert "Sin recompensa" in compute_reward_text(None)

@@ -9,9 +9,10 @@ Cubre handlers del panel de administración de tienda:
 - HandleDeleteProduct: confirmación y eliminación
 - StoreStats: estadísticas de tienda
 """
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
-import logging
 
 pytestmark = [pytest.mark.unit]
 
@@ -38,6 +39,7 @@ class TestAdminStoreMenu:
         cb = make_callback(data="admin_store")
 
         from handlers.store_admin_handlers import admin_store_menu
+
         await admin_store_menu(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -69,6 +71,7 @@ class TestAdminStoreMenu:
         cb = make_callback(data="admin_store")
 
         from handlers.store_admin_handlers import admin_store_menu
+
         await admin_store_menu(cb)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -96,6 +99,7 @@ class TestAdminStoreMenu:
         cb = make_callback(data="admin_store")
 
         from handlers.store_admin_handlers import admin_store_menu
+
         await admin_store_menu(cb)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -121,6 +125,7 @@ class TestAdminStoreMenu:
         cb = make_callback(data="admin_store")
 
         from handlers.store_admin_handlers import admin_store_menu
+
         await admin_store_menu(cb)
 
         cb.answer.assert_called_once()
@@ -134,7 +139,8 @@ class TestCreateProductStart:
         cb = make_callback(data="create_product")
         fsm = await make_fsm_context()
 
-        from handlers.store_admin_handlers import create_product_start, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, create_product_start
+
         await create_product_start(cb, fsm)
 
         state = await fsm.get_state()
@@ -148,6 +154,7 @@ class TestCreateProductStart:
         fsm = await make_fsm_context()
 
         from handlers.store_admin_handlers import create_product_start
+
         await create_product_start(cb, fsm)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -160,7 +167,8 @@ class TestProcessProductName:
 
     async def test_rejects_short_name(self, make_message, make_fsm_context):
         """Nombre menor a 3 caracteres muestra error y no avanza."""
-        from handlers.store_admin_handlers import process_product_name, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_name
+
         msg = make_message(text="AB")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_name)
@@ -174,7 +182,8 @@ class TestProcessProductName:
 
     async def test_accepts_valid_name_and_advances(self, make_message, make_fsm_context):
         """Nombre válido guarda en state y avanza a waiting_description."""
-        from handlers.store_admin_handlers import process_product_name, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_name
+
         msg = make_message(text="Pack Fotos Marzo")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_name)
@@ -190,18 +199,25 @@ class TestProcessProductName:
 
 
 class TestProcessProductDescription:
-    """Tests para process_product_description — paso 2: descripción."""
+    """Tests para process_product_description — paso 2: descripción.
+    Tests ported to 1-service pattern (get_service(StoreService) only + delegate for packages in wizard) + pure UI helpers (compute_stock_emoji_and_text etc). Arch-enforcer note (long funcs >50L, business logic/UI bloat in handlers, direct other svc in wizard) addressed. Precedent from item7 (reward) + item2/5/6.
+    """
 
-    @patch("handlers.store_admin_handlers.PackageService")
-    async def test_with_skip_sets_none(self, mock_pkg_svc, make_message, make_fsm_context):
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_with_skip_sets_none(self, mock_get_service, make_message, make_fsm_context):
         """/skip establece description=None y muestra paquetes."""
-        from handlers.store_admin_handlers import process_product_description, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_description
+
+        mock_store = MagicMock()
         mock_pkg = MagicMock()
         mock_pkg.id = 1
         mock_pkg.name = "Test Pkg"
         mock_pkg.file_count = 5
         mock_pkg.store_stock = -1
-        mock_pkg_svc.return_value.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_store.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
 
         msg = make_message(text="/skip")
         fsm = await make_fsm_context()
@@ -210,17 +226,26 @@ class TestProcessProductDescription:
 
         data = await fsm.get_data()
         assert data["description"] is None
+        mock_store.get_available_packages_for_store.assert_called_once()
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.store_admin_handlers.PackageService")
-    async def test_with_description_saves_it(self, mock_pkg_svc, make_message, make_fsm_context):
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_with_description_saves_it(
+        self, mock_get_service, make_message, make_fsm_context
+    ):
         """Descripción textual se guarda y se muestran paquetes."""
-        from handlers.store_admin_handlers import process_product_description, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_description
+
+        mock_store = MagicMock()
         mock_pkg = MagicMock()
         mock_pkg.id = 1
         mock_pkg.name = "Test Pkg"
         mock_pkg.file_count = 5
         mock_pkg.store_stock = -1
-        mock_pkg_svc.return_value.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_store.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Un pack de fotos exclusivas")
         fsm = await make_fsm_context()
@@ -229,17 +254,24 @@ class TestProcessProductDescription:
 
         data = await fsm.get_data()
         assert data["description"] == "Un pack de fotos exclusivas"
+        mock_store.get_available_packages_for_store.assert_called_once()
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.store_admin_handlers.PackageService")
-    async def test_no_packages_shows_error(self, mock_pkg_svc, make_message, make_fsm_context):
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_no_packages_shows_error(self, mock_get_service, make_message, make_fsm_context):
         """Sin paquetes disponibles, muestra error y limpia estado."""
-        mock_pkg_svc.return_value.get_available_packages_for_store.return_value = []
+        mock_store = MagicMock()
+        mock_store.get_available_packages_for_store.return_value = []
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Descripción test")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_description)
 
         from handlers.store_admin_handlers import process_product_description
+
         await process_product_description(msg, fsm)
 
         msg.answer.assert_called_once()
@@ -247,17 +279,25 @@ class TestProcessProductDescription:
         assert "No hay paquetes" in text
         state = await fsm.get_state()
         assert state is None
+        mock_get_service.return_value.__exit__.assert_called_once()
 
-    @patch("handlers.store_admin_handlers.PackageService")
-    async def test_advances_to_selecting_package(self, mock_pkg_svc, make_message, make_fsm_context):
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_advances_to_selecting_package(
+        self, mock_get_service, make_message, make_fsm_context
+    ):
         """Con paquetes disponibles, avanza a selecting_package."""
-        from handlers.store_admin_handlers import process_product_description, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_description
+
+        mock_store = MagicMock()
         mock_pkg = MagicMock()
         mock_pkg.id = 1
         mock_pkg.name = "Test Pkg"
         mock_pkg.file_count = 5
         mock_pkg.store_stock = -1
-        mock_pkg_svc.return_value.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_store.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Descripción")
         fsm = await make_fsm_context()
@@ -266,7 +306,8 @@ class TestProcessProductDescription:
 
         state = await fsm.get_state()
         assert state == ProductWizardStates.selecting_package
-        mock_pkg_svc.return_value.get_available_packages_for_store.assert_called_once()
+        mock_store.get_available_packages_for_store.assert_called_once()
+        mock_get_service.return_value.__exit__.assert_called_once()
 
 
 class TestProcessProductPrice:
@@ -274,7 +315,8 @@ class TestProcessProductPrice:
 
     async def test_rejects_invalid_price(self, make_message, make_fsm_context):
         """Precio no numérico muestra error."""
-        from handlers.store_admin_handlers import process_product_price, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_price
+
         msg = make_message(text="caro")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_price)
@@ -288,7 +330,8 @@ class TestProcessProductPrice:
 
     async def test_rejects_zero_price(self, make_message, make_fsm_context):
         """Precio 0 muestra error."""
-        from handlers.store_admin_handlers import process_product_price, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_price
+
         msg = make_message(text="0")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_price)
@@ -300,7 +343,8 @@ class TestProcessProductPrice:
 
     async def test_accepts_valid_price_and_advances(self, make_message, make_fsm_context):
         """Precio válido guarda en state y avanza a waiting_stock."""
-        from handlers.store_admin_handlers import process_product_price, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_price
+
         msg = make_message(text="150")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_price)
@@ -316,7 +360,9 @@ class TestProcessProductPrice:
 class TestProductStockUnlimited:
     """Tests para product_stock_unlimited — stock ilimitado en wizard."""
 
-    async def test_sets_stock_unlimited_and_shows_confirmation(self, make_callback, make_fsm_context):
+    async def test_sets_stock_unlimited_and_shows_confirmation(
+        self, make_callback, make_fsm_context
+    ):
         """Establece stock=-1 y llama a confirmación."""
         cb = make_callback(data="product_stock_unlimited")
         fsm = await make_fsm_context()
@@ -324,6 +370,7 @@ class TestProductStockUnlimited:
         await fsm.update_data(name="Test", description="Desc", price=100)
 
         from handlers.store_admin_handlers import product_stock_unlimited
+
         await product_stock_unlimited(cb, fsm)
 
         data = await fsm.get_data()
@@ -345,6 +392,7 @@ class TestProductStockLimited:
         await fsm.set_state(ProductWizardStates.waiting_stock)
 
         from handlers.store_admin_handlers import product_stock_limited
+
         await product_stock_limited(cb, fsm)
 
         cb.message.edit_text.assert_called_once()
@@ -358,7 +406,8 @@ class TestProcessProductStock:
 
     async def test_rejects_invalid_stock(self, make_message, make_fsm_context):
         """Stock no numérico muestra error."""
-        from handlers.store_admin_handlers import process_product_stock, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_stock
+
         msg = make_message(text="mucho")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_stock)
@@ -372,7 +421,8 @@ class TestProcessProductStock:
 
     async def test_rejects_negative_stock(self, make_message, make_fsm_context):
         """Stock negativo muestra error."""
-        from handlers.store_admin_handlers import process_product_stock, ProductWizardStates
+        from handlers.store_admin_handlers import ProductWizardStates, process_product_stock
+
         msg = make_message(text="-5")
         fsm = await make_fsm_context()
         await fsm.set_state(ProductWizardStates.waiting_stock)
@@ -390,6 +440,7 @@ class TestProcessProductStock:
         await fsm.update_data(name="Test", description="Desc", price=100)
 
         from handlers.store_admin_handlers import process_product_stock
+
         await process_product_stock(msg, fsm)
 
         data = await fsm.get_data()
@@ -403,7 +454,9 @@ class TestConfirmCreateProduct:
     """Tests para confirm_create_product — creación final del producto."""
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_creates_product_successfully(self, mock_get_service, make_callback, make_fsm_context):
+    async def test_creates_product_successfully(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
         """Crea el producto y muestra mensaje de éxito."""
         mock_product = MagicMock()
         mock_product.name = "Pack Fotos"
@@ -426,6 +479,7 @@ class TestConfirmCreateProduct:
         )
 
         from handlers.store_admin_handlers import confirm_create_product
+
         await confirm_create_product(cb, fsm)
 
         mock_store.create_product.assert_called_once_with(
@@ -445,7 +499,9 @@ class TestConfirmCreateProduct:
         cb.answer.assert_called_once()
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_handles_creation_exception(self, mock_get_service, make_callback, make_fsm_context):
+    async def test_handles_creation_exception(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
         """Cuando create_product lanza excepción, muestra error."""
         mock_store = MagicMock()
         mock_store.create_product.side_effect = Exception("DB error")
@@ -465,6 +521,7 @@ class TestConfirmCreateProduct:
         )
 
         from handlers.store_admin_handlers import confirm_create_product
+
         await confirm_create_product(cb, fsm)
 
         cb.message.edit_text.assert_called_once()
@@ -492,13 +549,16 @@ class TestConfirmCreateProduct:
         await fsm.update_data(name="Test", package_id=1, price=100, stock=5)
 
         from handlers.store_admin_handlers import confirm_create_product
+
         await confirm_create_product(cb, fsm)
 
         state = await fsm.get_state()
         assert state is None
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_creates_with_default_stock(self, mock_get_service, make_callback, make_fsm_context):
+    async def test_creates_with_default_stock(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
         """Usa stock por defecto -1 si no está en data."""
         mock_product = MagicMock()
         mock_product.name = "Test"
@@ -515,6 +575,7 @@ class TestConfirmCreateProduct:
         await fsm.update_data(name="Test", package_id=1, price=100)
 
         from handlers.store_admin_handlers import confirm_create_product
+
         await confirm_create_product(cb, fsm)
 
         mock_store.create_product.assert_called_once()
@@ -537,6 +598,7 @@ class TestListProducts:
         cb = make_callback(data="list_products")
 
         from handlers.store_admin_handlers import list_products
+
         await list_products(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -570,6 +632,7 @@ class TestListProducts:
         cb = make_callback(data="list_products")
 
         from handlers.store_admin_handlers import list_products
+
         await list_products(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -580,7 +643,9 @@ class TestListProducts:
         cb.answer.assert_called_once()
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_calls_get_all_products_with_active_only_false(self, mock_get_service, make_callback):
+    async def test_calls_get_all_products_with_active_only_false(
+        self, mock_get_service, make_callback
+    ):
         """Llama a get_all_products(active_only=False)."""
         mock_store = MagicMock()
         mock_store.get_all_products.return_value = []
@@ -591,6 +656,7 @@ class TestListProducts:
         cb = make_callback(data="list_products")
 
         from handlers.store_admin_handlers import list_products
+
         await list_products(cb)
 
         mock_store.get_all_products.assert_called_once_with(active_only=False)
@@ -612,10 +678,12 @@ class TestToggleProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
+
         cb_data = ToggleProductCallback(product_id=1)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import toggle_product
+
         await toggle_product(cb, cb_data)
 
         mock_store.update_product.assert_called_once_with(1, is_active=False)
@@ -634,10 +702,12 @@ class TestToggleProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
+
         cb_data = ToggleProductCallback(product_id=1)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import toggle_product
+
         await toggle_product(cb, cb_data)
 
         mock_store.update_product.assert_called_once_with(1, is_active=True)
@@ -653,10 +723,12 @@ class TestToggleProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
+
         cb_data = ToggleProductCallback(product_id=999)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import toggle_product
+
         await toggle_product(cb, cb_data)
 
         cb.answer.assert_called_once_with("Producto no encontrado", show_alert=True)
@@ -675,14 +747,17 @@ class TestToggleProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
+
         cb_data = ToggleProductCallback(product_id=1)
         cb = make_callback(data=cb_data.pack())
 
-        from handlers.store_admin_handlers import toggle_product, product_admin_detail
+        from handlers.store_admin_handlers import product_admin_detail, toggle_product
+
         original_detail = product_admin_detail
 
         patched_detail = AsyncMock()
         import handlers.store_admin_handlers as mod
+
         original = mod.product_admin_detail
         mod.product_admin_detail = patched_detail
         try:
@@ -704,10 +779,12 @@ class TestHandleDeleteProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
+
         cb_data = DeleteProductCallback(product_id=1, confirmed=False)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import handle_delete_product
+
         await handle_delete_product(cb, cb_data)
 
         cb.message.edit_text.assert_called_once()
@@ -726,10 +803,12 @@ class TestHandleDeleteProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
+
         cb_data = DeleteProductCallback(product_id=1, confirmed=True)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import handle_delete_product
+
         await handle_delete_product(cb, cb_data)
 
         mock_store.delete_product.assert_called_once_with(1)
@@ -748,10 +827,12 @@ class TestHandleDeleteProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
+
         cb_data = DeleteProductCallback(product_id=1, confirmed=True)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import handle_delete_product
+
         await handle_delete_product(cb, cb_data)
 
         mock_store.delete_product.assert_called_once_with(1)
@@ -770,10 +851,12 @@ class TestHandleDeleteProduct:
         mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
+
         cb_data = DeleteProductCallback(product_id=42, confirmed=True)
         cb = make_callback(data=cb_data.pack())
 
         from handlers.store_admin_handlers import handle_delete_product
+
         await handle_delete_product(cb, cb_data)
 
         mock_store.delete_product.assert_called_once_with(42)
@@ -800,6 +883,7 @@ class TestStoreStats:
         cb = make_callback(data="store_stats")
 
         from handlers.store_admin_handlers import store_stats
+
         await store_stats(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -830,9 +914,90 @@ class TestStoreStats:
         cb = make_callback(data="store_stats")
 
         from handlers.store_admin_handlers import store_stats
+
         await store_stats(cb)
 
         cb.answer.assert_called_once()
+
+
+class TestStoreAdminPureHelpers:
+    """Tests para los helpers puros extraídos de store_admin_handlers (Item 8 / arch-enforcer long-funcs + 1svc)."""
+
+    def test_compute_stock_emoji_and_text_unlimited(self):
+        from handlers.store_admin_handlers import compute_stock_emoji_and_text
+
+        emoji, text = compute_stock_emoji_and_text(-1)
+        assert emoji == "♾️"
+        assert text == "∞"
+
+    def test_compute_stock_emoji_and_text_out_of_stock(self):
+        from handlers.store_admin_handlers import compute_stock_emoji_and_text
+
+        emoji, text = compute_stock_emoji_and_text(0)
+        assert emoji == "🚨"
+        assert text == "AGOTADO"
+
+    def test_compute_stock_emoji_and_text_low_stock(self):
+        from handlers.store_admin_handlers import compute_stock_emoji_and_text
+
+        emoji, text = compute_stock_emoji_and_text(3, is_low_stock=True)
+        assert emoji == "⚠️"
+        assert text == "3"
+
+    def test_compute_stock_emoji_and_text_normal(self):
+        from handlers.store_admin_handlers import compute_stock_emoji_and_text
+
+        emoji, text = compute_stock_emoji_and_text(10, is_low_stock=False)
+        assert emoji == "📦"
+        assert text == "10"
+
+    def test_compute_restock_new_stock_from_unlimited(self):
+        from handlers.store_admin_handlers import compute_restock_new_stock
+
+        assert compute_restock_new_stock(-1, 5) == 5
+
+    def test_compute_restock_new_stock_normal(self):
+        from handlers.store_admin_handlers import compute_restock_new_stock
+
+        assert compute_restock_new_stock(10, 3) == 13
+
+    def test_build_product_detail_keyboard(self):
+        from handlers.store_admin_handlers import build_product_detail_keyboard
+
+        kb = build_product_detail_keyboard(42, is_active=True)
+        assert len(kb.inline_keyboard) == 5
+        assert "Desactivar" in kb.inline_keyboard[0][0].text
+        assert "42" in kb.inline_keyboard[0][0].callback_data  # packed contains id
+        assert "Reabastecer" in kb.inline_keyboard[1][0].text
+        assert "list_products" in kb.inline_keyboard[4][0].callback_data
+
+    def test_build_product_confirmation_text_and_keyboard(self):
+        from handlers.store_admin_handlers import build_product_confirmation_text_and_keyboard
+
+        data = {"name": "Test", "description": None, "price": 100, "stock": -1}
+        text, kb = build_product_confirmation_text_and_keyboard(data)
+        assert "Resumen del producto" in text
+        assert "Sin descripcion" in text
+        assert "100" in text
+        assert "Ilimitado" in text
+        assert len(kb.inline_keyboard) == 2
+        assert "Crear" in kb.inline_keyboard[0][0].text
+
+    def test_build_product_list_entry_and_button(self):
+        from handlers.store_admin_handlers import build_product_list_entry_and_button
+
+        mock_product = MagicMock()
+        mock_product.is_active = True
+        mock_product.name = "Sample Product Name That Is Long"
+        mock_product.stock = 7
+        mock_product.is_low_stock = False
+        mock_product.price = 50
+        entry, button = build_product_list_entry_and_button(mock_product)
+        assert "✅ Sample Product Name That Is Long" in entry
+        assert "📦" in entry
+        assert "7" in entry
+        assert "50" in entry
+        assert "Sample Product Name That Is Long"[:30] in button[0].text
 
 
 # Necesario para evitar NameError en la referencia de clase inline de los handlers
