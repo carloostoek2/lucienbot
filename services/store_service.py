@@ -62,7 +62,13 @@ class StoreService:
     def _init_services(self):
         """Inicializa servicios dependientes con la misma sesión."""
         db = self._get_db()
-        self.besito_service = BesitoService(db)
+        # Held direct BesitoService composition removed (Item 10 / remaining store debits unification).
+        # PURCHASE debits/balance checks now use local on-demand BesitoService(db=self.db) *only*
+        # inside the balance/debit sites in direct_purchase / create_order / complete_order (preserves atomicity:
+        # debit's internal commit + PURCHASE tx + order/stock/deliver all unchanged;
+        # best-effort schedule_emit still fires post-credit commit if any credit path).
+        # PackageService remains held (scope: other composers untouched per Item 10 tight).
+        # self.besito_service = BesitoService(db)  # REMOVED (was here)
         self.package_service = PackageService(db)
 
     def close(self):
@@ -363,7 +369,10 @@ class StoreService:
             return None, LucienVoice.store_stock_insufficient(product.name, product.stock)
 
         # Verificar saldo
-        balance = self.besito_service.get_balance(user_id)
+        besito_service = BesitoService(
+            db=self.db
+        )  # local, on-demand; owns=False (db shared); balance check for atomic pre-purchase
+        balance = besito_service.get_balance(user_id)
         if balance < product.price:
             return None, LucienVoice.store_balance_insufficient(product.price, balance)
 
@@ -437,7 +446,10 @@ class StoreService:
             )
 
         # Verificar saldo del usuario
-        balance = self.besito_service.get_balance(user_id)
+        besito_service = BesitoService(
+            db=self.db
+        )  # local, on-demand; owns=False (db shared); balance check for atomic pre-purchase (carrito total)
+        balance = besito_service.get_balance(user_id)
         if balance < total_price:
             return None, LucienVoice.store_balance_insufficient(total_price, balance)
 
@@ -485,18 +497,22 @@ class StoreService:
         user_id = order.user_id
 
         # Verificar saldo nuevamente
-        balance = self.besito_service.get_balance(user_id)
+        besito_service = BesitoService(
+            db=self.db
+        )  # local, on-demand; owns=False (db shared); recheck for atomicity with debit
+        balance = besito_service.get_balance(user_id)
         if balance < order.total_price:
             return False, "Saldo insuficiente"
 
         # Cobrar besitos
-        success = self.besito_service.debit_besitos(
+        success = besito_service.debit_besitos(
             user_id=user_id,
             amount=order.total_price,
             source=TransactionSource.PURCHASE,
             description=f"Compra en tienda - Orden #{order.id}",
             reference_id=order.id,
         )
+        # (no schedule for debit; debit internal commit authoritative; outer stock/deliver/order COMPLETE + db.commit() unchanged)
 
         if not success:
             return False, "Error al procesar el pago"
@@ -648,6 +664,37 @@ class StoreService:
         db.commit()
         logger.info(f"Umbral de stock bajo actualizado para producto {product_id}: {threshold}")
         return True
+
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (store domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# (to avoid any re-entrancy with purchase debit paths or future extensions; purchase
+# debit contracts and partial-failure behavior are authoritative in the debit + deliver flow).
+# This is observational only (best effort; errors swallowed by bus).
+# =============================================================================
+# Item 10 / remaining store besito / arch-enforcer (high-value obs listener for wiring + future; 0 mutation)
+
+
+async def on_besitos_awarded_store_observer(payload: dict) -> None:
+    """
+    Store-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
+    post-commit; high-value obs for store even if current purchases are debits -- wiring + future).
+
+    DESIRED CONTRACT (copy of narrative precedent + Reward Item5 + broadcast Item6): log reception with full context (user_id/amount/source/ref);
+    purely observational + wiring proof for this domain. MUST NOT credit, debit, or mutate besitos state here.
+    Future extensions (e.g. purchase analytics, hooks) belong in this module and should use
+    get_service(StoreService) or direct models if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"store | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on purchase debit contracts / atomicity gold).
 
     def check_stock_alert(self, product_id: int) -> dict:
         """Verifica el estado de stock de un producto y retorna alerta si aplica"""

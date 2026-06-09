@@ -175,7 +175,9 @@ class TestCrossServiceAtomicity:
     async def test_happy_path_reaction_credits_besitos_completes_mission_delivers_reward(
         self, tmp_path
     ):
-        """Happy baseline: reaction + REACTION credit commits, mission completes, BESITOS reward delivered. Balance = 3+5, both tx sources present, progress complete."""
+        """Happy baseline: reaction + REACTION credit commits, mission completes, BESITOS reward delivered. Balance = 3+5, both tx sources present, progress complete.
+        1-line/guard port post Item 10 (local besito in store complete_order per Item5/6 precedent; arch-enforcer): class patch to services.besito_service.BesitoService added for local intercept (when store purchase paths exercised in atomicity); schedule_emit patch reused; exact asserts on deltas/tx/source=PURCHASE/"credit survives deliver False"/DESIRED/patch preserved; N806 tol w/doc; TestSession/file + try/finally + gather.
+        """
         engine, TestSession = self._create_engine_and_session(tmp_path)
         db = TestSession()
 
@@ -193,7 +195,8 @@ class TestCrossServiceAtomicity:
 
             # F4: verify that post-credit the InternalEventBus emit path was scheduled (best effort).
             # The local "besitos_awarded" in reaction_result is the per-emoji value (unchanged contract).
-            with patch("services.event_bus.schedule_emit") as mock_sched:
+            with patch("services.event_bus.schedule_emit") as mock_sched, \
+                 patch("services.besito_service.BesitoService") as _mock_besito_cls:  # class patch for local intercept in complete_order (post Item10 local besito); 1-line/guard port post Item 10 (local besito in store complete_order per Item5/6 precedent; arch-enforcer); schedule reuse; optional no-held/uses_local/observer contract if fits tight (e.g. store_svc init would have no .besito_service); _ prefix to silence F841 (side-effect intercept only, 0 assert needed here)
                 reaction_result = await broadcast_svc.check_and_register_reaction(
                     broadcast_id=env["broadcast_id"],
                     user_id=env["user_id"],

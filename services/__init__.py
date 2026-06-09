@@ -11,6 +11,9 @@ from .daily_gift_service import DailyGiftService
 from .event_bus import EVENT_BESITOS_AWARDED, InternalEventBus, get_event_bus
 from .game_service import GameService
 
+# Item 11 - Observability / Health (read-only best-effort; follows Analytics pattern)
+from .health_service import HealthService
+
 # Fase 3 - Misiones y Recompensas
 from .mission_service import MissionService
 
@@ -38,6 +41,8 @@ __all__ = [
     "VIPService",
     "UserService",
     "SchedulerService",
+    # Item 11 - Observability / Health (enables with get_service(HealthService) as h:)
+    "HealthService",
     # Fase 1 - Gamificacion
     "BesitoService",
     "BroadcastService",

@@ -4,8 +4,8 @@
 Este módulo contiene todos los mensajes y respuestas del bot,
 diseñados con la personalidad elegante y misteriosa de Lucien.
 """
-from datetime import datetime, timedelta
-from typing import Optional
+
+from datetime import datetime
 
 
 class LucienVoice:
@@ -14,7 +14,7 @@ class LucienVoice:
     # ==================== SALUDOS ====================
 
     @staticmethod
-    def greeting(user_name: Optional[str] = None) -> str:
+    def greeting(user_name: str | None = None) -> str:
         """Saludo principal para usuarios"""
         name_part = f", {user_name}," if user_name else ""
         return f"""🎩 <b>Lucien:</b>
@@ -28,7 +28,7 @@ lo cual, debo admitir, no me sorprende en absoluto.</i>
     @staticmethod
     def admin_greeting() -> str:
         """Saludo para administradores"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Ah, el custodio de los dominios de Diana.
 Bienvenido al sanctum donde se orquestan los secretos
@@ -37,7 +37,7 @@ y se tejen las experiencias de nuestros... visitantes.</i>
 ¿Qué aspecto del reino requiere su atención hoy?"""
 
     @staticmethod
-    def vip_greeting(user_name: Optional[str] = None) -> str:
+    def vip_greeting(user_name: str | None = None) -> str:
         """Saludo para usuarios VIP"""
         name_part = f", {user_name}," if user_name else ""
         return f"""🎩 <b>Lucien:</b>
@@ -99,7 +99,7 @@ Los vestíbulos requieren... cierta paciencia.</i>
 Mientras tanto, Diana observa su interés con... curiosidad.</i>"""
 
     @staticmethod
-    def free_access_approved(channel_name: Optional[str] = None) -> str:
+    def free_access_approved(channel_name: str | None = None) -> str:
         """Mensaje cuando se aprueba acceso al canal free"""
         channel_text = f" a <b>{channel_name}</b>" if channel_name else ""
         return f"""🎩 <b>Lucien:</b>
@@ -114,7 +114,7 @@ Diana lo recibe entre sus... observados.</i>
     @staticmethod
     def free_request_cancelled() -> str:
         """Mensaje cuando el usuario cancela su solicitud"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Interesante... ha retirado su solicitud.
 Diana comprende que no todos están listos para lo que
@@ -222,7 +222,7 @@ Diana se pregunta si desea extender esta... relación privilegiada.
     @staticmethod
     def vip_expired() -> str:
         """Mensaje cuando expira la suscripción VIP"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Su acceso exclusivo ha... pausado.
 Pero los recuerdos de lo vivido permanecen, ¿verdad?</i>
@@ -236,7 +236,7 @@ puede prepararle un nuevo enlace.</i>"""
     @staticmethod
     def vip_renewed() -> str:
         """Mensaje cuando se renueva VIP"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Diana se complace por su regreso al círculo íntimo.
 Lo esperaba.</i>
@@ -249,7 +249,7 @@ Que continúen los secretos compartidos..."""
     @staticmethod
     def token_invalid() -> str:
         """Token inválido o inexistente"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Hmm... el enlace que presenta no corresponde a ningún
 acceso registrado en los archivos de Diana.</i>
@@ -262,7 +262,7 @@ o consulte con el custodio del reino.</i>"""
     @staticmethod
     def token_used() -> str:
         """Token ya utilizado"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Ah... este enlace ya ha servido a su propósito.
 Diana diseñó estos accesos para ser únicos, como
@@ -276,7 +276,7 @@ puede preparar uno especialmente para usted.</i>"""
     @staticmethod
     def token_expired() -> str:
         """Token expirado"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>El tiempo, como sabe, tiene sus propias reglas.
 Este enlace ha trascendido su vigencia.</i>
@@ -289,7 +289,9 @@ de discreción. Solicite uno nuevo al custodio.</i>"""
     @staticmethod
     def token_generated(token_url: str, tariff_name: str, is_gift: bool = False) -> str:
         """Token generado exitosamente"""
-        gift_line = "\n🎁 <b>Regalo:</b> Sí — este token fue marcado como obsequio\n" if is_gift else ""
+        gift_line = (
+            "\n🎁 <b>Regalo:</b> Sí — este token fue marcado como obsequio\n" if is_gift else ""
+        )
         return f"""🎩 <b>Lucien:</b>
 
 <i>Un nuevo acceso ha sido forjado para El Diván.</i>
@@ -319,14 +321,14 @@ que establezca para este espacio.</i>"""
     def admin_channel_list(channels: list) -> str:
         """Lista de canales registrados"""
         if not channels:
-            return f"""🎩 <b>Lucien:</b>
+            return """🎩 <b>Lucien:</b>
 
 <i>No hay dominios registrados en los archivos de Diana.
 El reino aún no tiene vestíbulos ni círculos exclusivos...</i>
 
 👉 <i>Use "Agregar canal" para expandir los territorios.</i>"""
 
-        text = f"""🎩 <b>Lucien:</b>
+        text = """🎩 <b>Lucien:</b>
 
 <i>Los dominios bajo nuestra observación son los siguientes:</i>
 
@@ -372,14 +374,14 @@ de los archivos de Diana.</i>
     def admin_tariff_list(tariffs: list) -> str:
         """Lista de tarifas"""
         if not tariffs:
-            return f"""🎩 <b>Lucien:</b>
+            return """🎩 <b>Lucien:</b>
 
 <i>No hay tarifas configuradas para El Diván.
 Diana aún no ha establecido los términos de acceso privilegiado...</i>
 
 👉 <i>Use "Crear tarifa" para establecer las opciones VIP.</i>"""
 
-        text = f"""🎩 <b>Lucien:</b>
+        text = """🎩 <b>Lucien:</b>
 
 <i>Las tarifas de El Diván son las siguientes:</i>
 
@@ -397,7 +399,7 @@ Diana aún no ha establecido los términos de acceso privilegiado...</i>
     def admin_pending_requests(count: int, requests: list) -> str:
         """Lista de solicitudes pendientes"""
         if count == 0:
-            return f"""🎩 <b>Lucien:</b>
+            return """🎩 <b>Lucien:</b>
 
 <i>No hay almas en espera en los vestíbulos de Diana.
 Todos los visitantes han sido atendidos...</i>
@@ -454,11 +456,11 @@ antes de acceder a los dominios de Diana.</i>"""
 
 <i>Estos son los secretos que Diana guarda...</i>
 
-👥 <b>Visitantes totales:</b> {stats.get('total_users', 0)}
-💎 <b>VIP activos:</b> {stats.get('active_vip', 0)}
-💋 <b>Besitos en circulacion:</b> {stats.get('total_besitos', 0)}
-⏰ <b>VIP por expirar (48h):</b> {stats.get('expiring_soon', 0)}
-🆕 <b>Nuevos hoy:</b> {stats.get('new_today', 0)}
+👥 <b>Visitantes totales:</b> {stats.get("total_users", 0)}
+💎 <b>VIP activos:</b> {stats.get("active_vip", 0)}
+💋 <b>Besitos en circulacion:</b> {stats.get("total_besitos", 0)}
+⏰ <b>VIP por expirar (48h):</b> {stats.get("expiring_soon", 0)}
+🆕 <b>Nuevos hoy:</b> {stats.get("new_today", 0)}
 
 <i>El reino de Diana observa con atencion...</i>"""
 
@@ -476,7 +478,7 @@ antes de acceder a los dominios de Diana.</i>"""
     @staticmethod
     def export_no_data() -> str:
         """No hay datos para exportar."""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>No hay registros en el reino que exportar...</i>
 
@@ -485,7 +487,7 @@ antes de acceder a los dominios de Diana.</i>"""
     @staticmethod
     def analytics_access_denied() -> str:
         """Acceso denegado a estadisticas."""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Estos numeros son solo para los custodios del reino.</i>
 
@@ -509,7 +511,7 @@ Permítame consultar con Diana sobre este inconveniente.</i>
     @staticmethod
     def permission_error() -> str:
         """Error de permisos"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Parece que no tengo los privilegios necesarios para
 realizar esta acción en el dominio seleccionado.</i>
@@ -526,7 +528,7 @@ realizar esta acción en el dominio seleccionado.</i>
     @staticmethod
     def not_admin_error() -> str:
         """Usuario no es administrador"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Interesante... parece que busca acceder al sanctum
 de administración.</i>
@@ -543,7 +545,7 @@ manejar los hilos del reino.</i>
     @staticmethod
     def farewell() -> str:
         """Despedida"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Hasta que nuestros caminos se crucen nuevamente...
 Diana estará... atenta a sus próximos movimientos.</i>
@@ -553,7 +555,7 @@ Que la curiosidad lo guíe de vuelta pronto."""
     @staticmethod
     def coming_soon() -> str:
         """Función en desarrollo"""
-        return f"""🎩 <b>Lucien:</b>
+        return """🎩 <b>Lucien:</b>
 
 <i>Ah... algo que Diana aún está preparando con
 meticulosa atención.</i>
@@ -772,10 +774,10 @@ en su mochila a lo largo de su viaje...</i>
 
 <i>Seleccione una categoría para explorar:</i>
 
-🎁 <b>Mis Recompensas:</b> {summary['rewards_count']}
-🛒 <b>Mis Compras:</b> {summary['purchases_count']}
-👑 <b>Membresías VIP:</b> {summary['vip_count']}
-💋 <b>Besitos:</b> {summary['besitos_balance']}"""
+🎁 <b>Mis Recompensas:</b> {summary["rewards_count"]}
+🛒 <b>Mis Compras:</b> {summary["purchases_count"]}
+👑 <b>Membresías VIP:</b> {summary["vip_count"]}
+💋 <b>Besitos:</b> {summary["besitos_balance"]}"""
 
     @staticmethod
     def backpack_rewards_list(rewards: list) -> str:
@@ -798,18 +800,16 @@ pero el camino apenas comienza.</i>
 
 """
         for r in rewards:
-            reward_type_emoji = {
-                'BESITOS': '💋',
-                'PACKAGE': '📦',
-                'VIP_ACCESS': '👑'
-            }.get(r['reward_type'], '🎁')
+            reward_type_emoji = {"BESITOS": "💋", "PACKAGE": "📦", "VIP_ACCESS": "👑"}.get(
+                r["reward_type"], "🎁"
+            )
 
-            date_str = r['delivered_at'].strftime("%d/%m") if r.get('delivered_at') else "??/??"
-            name = r['reward_name'][:30] + "..." if len(r['reward_name']) > 30 else r['reward_name']
+            date_str = r["delivered_at"].strftime("%d/%m") if r.get("delivered_at") else "??/??"
+            name = r["reward_name"][:30] + "..." if len(r["reward_name"]) > 30 else r["reward_name"]
 
             text += f"{reward_type_emoji} <b>{name}</b>\n"
             text += f"   📅 {date_str}"
-            if r.get('besito_amount') and r['besito_amount'] > 0:
+            if r.get("besito_amount") and r["besito_amount"] > 0:
                 text += f" | +{r['besito_amount']} 💋"
             text += "\n\n"
 
@@ -818,23 +818,23 @@ pero el camino apenas comienza.</i>
     @staticmethod
     def backpack_reward_detail(reward: dict) -> str:
         """Mensaje para detalle de recompensa"""
-        reward_type = reward.get('reward_type', 'BESITOS')
+        reward_type = reward.get("reward_type", "BESITOS")
 
-        if reward_type == 'BESITOS':
+        if reward_type == "BESITOS":
             return f"""🎩 <b>Lucien:</b>
 
 <i>Diana ha errado en su dirección besitos...</i>
 
 💋 <b>Recompensa de Besitos</b>
 
-🏷️ Nombre: {reward.get('reward_name', 'Recompensa')}
-📅 Obtenida: {reward.get('delivered_at', 'N/A').strftime("%d/%m/%Y") if reward.get('delivered_at') else 'N/A'}
-💰 Besitos: +{reward.get('besito_amount', 0)}
+🏷️ Nombre: {reward.get("reward_name", "Recompensa")}
+📅 Obtenida: {reward.get("delivered_at", "N/A").strftime("%d/%m/%Y") if reward.get("delivered_at") else "N/A"}
+💰 Besitos: +{reward.get("besito_amount", 0)}
 
 <i>Los besitos han sido acreditados a su cuenta.</i>"""
 
-        elif reward_type == 'PACKAGE':
-            has_files = reward.get('package_id') is not None
+        elif reward_type == "PACKAGE":
+            has_files = reward.get("package_id") is not None
             btn_text = "📂 Ver Contenido" if has_files else ""
             return f"""🎩 <b>Lucien:</b>
 
@@ -842,9 +842,9 @@ pero el camino apenas comienza.</i>
 
 📦 <b>Recompensa de Paquete</b>
 
-🏷️ Nombre: {reward.get('reward_name', 'Paquete')}
-📅 Obtenida: {reward.get('delivered_at', 'N/A').strftime("%d/%m/%Y") if reward.get('delivered_at') else 'N/A'}
-💋 Besitos incluidos: {reward.get('besito_amount', 0)}
+🏷️ Nombre: {reward.get("reward_name", "Paquete")}
+📅 Obtenida: {reward.get("delivered_at", "N/A").strftime("%d/%m/%Y") if reward.get("delivered_at") else "N/A"}
+💋 Besitos incluidos: {reward.get("besito_amount", 0)}
 
 <i>¿Desea ver el contenido?</i>"""
 
@@ -855,10 +855,10 @@ pero el camino apenas comienza.</i>
 
 👑 <b>Recompensa VIP</b>
 
-🏷️ Nombre: {reward.get('reward_name', 'Acceso VIP')}
-📅 Obtenida: {reward.get('delivered_at', 'N/A').strftime("%d/%m/%Y") if reward.get('delivered_at') else 'N/A'}
-⏱️ Tarifa: {reward.get('tariff_name', 'VIP')}
-📅 Vence: {reward.get('end_date', 'N/A').strftime("%d/%m/%Y") if reward.get('end_date') else 'N/A'}
+🏷️ Nombre: {reward.get("reward_name", "Acceso VIP")}
+📅 Obtenida: {reward.get("delivered_at", "N/A").strftime("%d/%m/%Y") if reward.get("delivered_at") else "N/A"}
+⏱️ Tarifa: {reward.get("tariff_name", "VIP")}
+📅 Vence: {reward.get("end_date", "N/A").strftime("%d/%m/%Y") if reward.get("end_date") else "N/A"}
 
 <i>El círculo exclusivo lo espera.</i>"""
 
@@ -883,9 +883,11 @@ la tienda de Diana le espera.</i>
 
 """
         for p in purchases:
-            date_str = p['purchased_at'].strftime("%d/%m/%Y") if p.get('purchased_at') else "??/??"
-            price = p.get('total_price', 0)
-            name = p['product_name'][:25] + "..." if len(p['product_name']) > 25 else p['product_name']
+            date_str = p["purchased_at"].strftime("%d/%m/%Y") if p.get("purchased_at") else "??/??"
+            price = p.get("total_price", 0)
+            name = (
+                p["product_name"][:25] + "..." if len(p["product_name"]) > 25 else p["product_name"]
+            )
 
             text += f"📦 <b>{name}</b>\n"
             text += f"   💰 {price} 💋 | 📅 {date_str}\n\n"
@@ -913,7 +915,7 @@ pero las puertas siempre están abiertas para quienes buscan.</i>
 
 """
         for sub in subscriptions:
-            end_str = sub['end_date'].strftime("%d/%m/%Y") if sub.get('end_date') else "??/??"
+            end_str = sub["end_date"].strftime("%d/%m/%Y") if sub.get("end_date") else "??/??"
             text += f"👑 <b>{sub.get('tariff_name', 'VIP')}</b>\n"
             text += f"   📅 Vence: {end_str}\n\n"
 
@@ -934,7 +936,7 @@ pero las puertas siempre están abiertas para quienes buscan.</i>
     def backpack_empty(reward_type: str) -> str:
         """Mensaje cuando no hay elementos"""
         messages = {
-            'rewards': """🎩 <b>Lucien:</b>
+            "rewards": """🎩 <b>Lucien:</b>
 
 <i>Aún no hay tesoros en su colección...
 pero el camino apenas comienza.</i>
@@ -942,7 +944,7 @@ pero el camino apenas comienza.</i>
 🏆 <b>No hay recompensas</b>
 
 <i>Complete misiones para ganar tesoros del reino.</i>""",
-            'purchases': """🎩 <b>Lucien:</b>
+            "purchases": """🎩 <b>Lucien:</b>
 
 <i>No hay tesoros adquiridos en su inventario...
 la tienda de Diana le espera.</i>
@@ -950,16 +952,16 @@ la tienda de Diana le espera.</i>
 🛒 <b>No hay compras</b>
 
 <i>Explore la tienda para obtener tesoros exclusivos.</i>""",
-            'vip': """🎩 <b>Lucien:</b>
+            "vip": """🎩 <b>Lucien:</b>
 
 <i>El círculo exclusivo aún no lo ha recibido...
 pero las puertas siempre están abiertas para quienes buscan.</i>
 
 👑 <b>No hay membresías VIP</b>
 
-<i>Contacte a Diana para obtener acceso a El Diván.</i>"""
+<i>Contacte a Diana para obtener acceso a El Diván.</i>""",
         }
-        return messages.get(reward_type, messages['rewards'])
+        return messages.get(reward_type, messages["rewards"])
 
     @staticmethod
     def streak_protection_offer(cost: int, streak: int) -> str:
@@ -1008,9 +1010,9 @@ pero las puertas siempre están abiertas para quienes buscan.</i>
     def streak_continue_confirmed() -> str:
         """Usuario elige continuar en modo arriesgo."""
         return (
-            f"Ha elegido continuar. Lucien observa con interes.\n"
-            f"Recuerde: si falla ahora, perdera todos los codigos acumulados.\n\n"
-            f"Continuemos con la siguiente pregunta."
+            "Ha elegido continuar. Lucien observa con interes.\n"
+            "Recuerde: si falla ahora, perdera todos los codigos acumulados.\n\n"
+            "Continuemos con la siguiente pregunta."
         )
 
     @staticmethod
@@ -1029,6 +1031,68 @@ pero las puertas siempre están abiertas para quienes buscan.</i>
             f"Los {code_count} codigo(s) acumulados en esta sesion han sido cancelados.\n"
             f"Su racha ha vuelto a 0. Puede intentarlo de nuevo cuando guste."
         )
+
+    # ==================== OBSERVABILITY (Item 11) ====================
+
+    @staticmethod
+    def system_health(health: dict) -> str:
+        """Pulso del reino para Custodios (elegant 3rd person, emojis per status)."""
+        status = health.get("status", "unknown")
+        checks = health.get("checks", {})
+        lines = [
+            "🎩 <b>Pulso del Reino</b>",
+            "",
+            "<i>El guardián observa el latido del reino de Diana...</i>",
+            "",
+        ]
+        for name, data in checks.items():
+            st = data.get("status", "unknown") if isinstance(data, dict) else "unknown"
+            e = "✅" if st == "ok" else ("⚠️" if st in ("degraded", "unknown") else "❌")
+            if name == "db":
+                lines.append(
+                    f"{e} <b>DB:</b> latencia {data.get('latency_ms', '?')}ms ({data.get('pool', 'db')})"
+                )
+            elif name == "bot":
+                lines.append(f"{e} <b>Bot:</b> uptime {data.get('uptime_seconds', 0)}s")
+            elif name == "channels":
+                lines.append(
+                    f"{e} <b>Canales:</b> free={data.get('free_channels', 0)} vip={data.get('vip_channels', 0)} pending={data.get('pending_requests', 0)} ready={data.get('ready_to_approve', 0)}"
+                )
+            elif name == "scheduler":
+                lines.append(f"{e} <b>Scheduler:</b> {data.get('jobs_count', 0)} jobs")
+            elif name == "event_bus":
+                lines.append(
+                    f"{e} <b>EventBus:</b> {data.get('total_listeners', 0)} listeners (besitos_awarded={data.get('besitos_awarded_listeners', 0)})"
+                )
+            elif name == "critical_sanity":
+                b = data.get("besitos", {})
+                v = data.get("vip", {})
+                n = data.get("narrative", {})
+                lines.append(
+                    f"{e} <b>Sanity:</b> besitos_neg={b.get('neg_balances', 0)} vip_active={v.get('active_subscriptions', 0)} progress={n.get('progress_count', 0)}"
+                )
+            elif name == "backup":
+                lines.append(f"{e} <b>Backup:</b> age {data.get('age_hours', '?')}h")
+            else:
+                lines.append(f"{e} <b>{name}:</b> {st}")
+        lines.append("")
+        if status != "healthy":
+            lines.append("<i>Diana recomienda revisar los componentes marcados.</i>")
+            lines.append("")
+        lines.append(f"<i>Timestamp: {health.get('timestamp', '')}</i>")
+        lines.append("<i>Los custodios velan por el reino de Diana.</i>")
+        return "\n".join(lines)
+
+    @staticmethod
+    def health_access_denied() -> str:
+        """Acceso denegado a pulso del reino."""
+        return """🎩 <b>Lucien:</b>
+
+<i>Estos secretos del pulso son solo para los custodios del reino.</i>
+
+⚠️ <b>Acceso denegado</b>
+
+<i>Solicite acceso a Diana si cree que esto es un error.</i>"""
 
 
 # Import para evitar dependencia circular

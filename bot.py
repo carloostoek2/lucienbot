@@ -62,6 +62,9 @@ from handlers import (
     # Phase 12 - Mensajes Anónimos VIP
     vip_user_router,
 )
+
+# Health/observability (Item 11 spike) - optional endpoint starter (aiohttp + HEALTH_ENABLED)
+from health_server import start_health_http_server, stop_health_http_server
 from middlewares.error_handler import ErrorHandlerMiddleware
 from middlewares.idempotency import IdempotencyMiddleware
 from middlewares.rate_limiter import ThrottlingMiddleware
@@ -73,6 +76,7 @@ from services.event_bus import EVENT_BESITOS_AWARDED, get_event_bus
 from services.game_service import on_besitos_awarded_game_award_observer
 from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
+from services.store_service import on_besitos_awarded_store_observer
 from services.story_service import on_besitos_awarded_from_gamification
 from services.vip_service import VIPService
 
@@ -200,14 +204,30 @@ async def on_startup(bot: Bot):
     logger.info("Scheduler iniciado")
 
     # Cross-domain listeners (explicit, central, no import side-effects).
-    # Fase 3 of eventbus-poc + Item 5 + Item 6: narrative + rewards + broadcast + game domains.
+    # Fase 3 of eventbus-poc + Item 5 + Item 6 + Item 10 store: narrative + rewards + broadcast + game + store domains.
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_rewards_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_broadcast_reaction_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_game_award_observer)
+    get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_store_observer)
     logger.info(
-        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game)"
+        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store)"
     )
+
+    # Health/observability (Item 11 spike)
+    # Start optional /health JSON endpoint on separate port (non-blocking, fire-and-forget).
+    # Requires HEALTH_ENABLED=1 and aiohttp installed; otherwise logs and skips gracefully.
+    # 0 breakage to aiogram polling or critical listeners/scheduler.
+    try:
+        if os.getenv("HEALTH_ENABLED") == "1":
+            port = int(os.getenv("HEALTH_PORT", "8080"))
+            asyncio.create_task(start_health_http_server(port=port))
+            logger.info(
+                f"health_service | startup_endpoint | user_id=0 | result=starting port={port}"
+            )
+        logger.info("health_service | startup_checks_available | user_id=0 | result=ready")
+    except Exception as e:
+        logger.warning(f"health_service | startup_endpoint | user_id=0 | result=error {e}")
 
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:
@@ -233,6 +253,12 @@ async def on_shutdown(bot: Bot):
     scheduler = get_scheduler()
     if scheduler:
         await scheduler.stop()
+
+    # Health endpoint stop (Item 11, if was started)
+    try:
+        await stop_health_http_server()
+    except Exception as e:
+        logger.warning(f"health_service | shutdown_endpoint | user_id=0 | result=error {e}")
 
     # Notificar a administradores
     for admin_id in bot_config.ADMIN_IDS:

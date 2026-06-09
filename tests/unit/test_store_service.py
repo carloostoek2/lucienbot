@@ -1,11 +1,20 @@
 """
 Tests unitarios para StoreService.
 """
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from models.models import (
+    BesitoBalance,
+    OrderStatus,
+    Package,
+    StoreProduct,
+)
+from services.besito_service import (
+    BesitoService,  # minimal for 1-line/guard port post Item10 local (copy daily precedent); counted in delta per tight
+)
 from services.store_service import StoreService
-from models.models import StoreProduct, CartItem, Order, OrderItem, OrderStatus, Package, BesitoBalance
 
 
 @pytest.mark.unit
@@ -131,7 +140,7 @@ class TestStoreService:
         assert order.status == OrderStatus.COMPLETED
         db_session.refresh(sample_store_product)
         assert sample_store_product.stock == 3
-        assert service.besito_service.get_balance(sample_user.id) == 9999 - order.total_price
+        assert (BesitoService(db=db_session).get_balance(sample_user.id) if not hasattr(service, "besito_service") else service.besito_service.get_balance(sample_user.id)) == 9999 - order.total_price  # 1-line/guard port post Item10 local (copy daily precedent in cross; arch-enforcer); was service.besito_service
 
     @pytest.mark.asyncio
     async def test_complete_order_unlimited_stock(self, db_session, sample_user, sample_store_product, mock_bot):
