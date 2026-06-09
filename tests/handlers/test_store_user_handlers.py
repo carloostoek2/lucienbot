@@ -515,7 +515,7 @@ class TestProductDetail:
         product.price = 100
         product.stock = 10
         product.is_available = True
-        product.package = MagicMock(id=99)
+        product.package_id = 99
         mock_store.return_value.get_product.return_value = product
         mock_pkg.return_value.get_package_files.return_value = []
         mock_besito.return_value.get_balance.return_value = 200
