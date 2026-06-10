@@ -85,7 +85,7 @@ class HealthService:
     def check_bot_runtime(self) -> dict:
         """Check bot runtime/uptime (best-effort; wired in F3 on_startup)."""
         try:
-            # bot.py F3 will set module-level _BOT_START_TIME = datetime.now(UTC) early
+            # Wired in bot.py __main__ entrypoint (Item 11 observability-health).
             from bot import _BOT_START_TIME  # type: ignore[attr-defined]
 
             if _BOT_START_TIME is None:

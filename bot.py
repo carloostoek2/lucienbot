@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, UTC
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -79,6 +79,11 @@ from services.scheduler_service import get_scheduler
 from services.store_service import on_besitos_awarded_store_observer
 from services.story_service import on_besitos_awarded_from_gamification
 from services.vip_service import VIPService
+
+# Bot start time (Item 11 / observability-health). Captured as early as possible in the
+# process entrypoint so health checks can report real uptime instead of always "degraded".
+# Lazy-imported by health_service.check_bot_runtime (avoids circular import with health_server wiring).
+_BOT_START_TIME: datetime | None = None
 
 # Configurar logging
 logging.basicConfig(
@@ -362,6 +367,9 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        # Capture start time as early as possible (before asyncio.run / polling) for health/runtime checks.
+        # This makes check_bot_runtime return "ok" with real uptime (instead of the previous always-degraded path).
+        _BOT_START_TIME = datetime.now(UTC)
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot detenido por el usuario")

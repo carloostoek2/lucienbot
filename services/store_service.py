@@ -665,37 +665,6 @@ class StoreService:
         logger.info(f"Umbral de stock bajo actualizado para producto {product_id}: {threshold}")
         return True
 
-
-# =============================================================================
-# Cross-domain event listeners (registered explicitly from bot.py on startup).
-# The listener lives here (store domain ownership). It is a plain async callable
-# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
-# (to avoid any re-entrancy with purchase debit paths or future extensions; purchase
-# debit contracts and partial-failure behavior are authoritative in the debit + deliver flow).
-# This is observational only (best effort; errors swallowed by bus).
-# =============================================================================
-# Item 10 / remaining store besito / arch-enforcer (high-value obs listener for wiring + future; 0 mutation)
-
-
-async def on_besitos_awarded_store_observer(payload: dict) -> None:
-    """
-    Store-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
-    post-commit; high-value obs for store even if current purchases are debits -- wiring + future).
-
-    DESIRED CONTRACT (copy of narrative precedent + Reward Item5 + broadcast Item6): log reception with full context (user_id/amount/source/ref);
-    purely observational + wiring proof for this domain. MUST NOT credit, debit, or mutate besitos state here.
-    Future extensions (e.g. purchase analytics, hooks) belong in this module and should use
-    get_service(StoreService) or direct models if a fresh DB session is required.
-    """
-    uid = payload.get("user_id")
-    amt = payload.get("amount")
-    src = payload.get("source")
-    ref = payload.get("reference_id")
-    logger.info(
-        f"store | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
-    )
-    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on purchase debit contracts / atomicity gold).
-
     def check_stock_alert(self, product_id: int) -> dict:
         """Verifica el estado de stock de un producto y retorna alerta si aplica"""
         product = self.get_product(product_id)
@@ -726,9 +695,42 @@ async def on_besitos_awarded_store_observer(payload: dict) -> None:
 
     async def notify_stock_alert(self, bot, product_id: int):
         """Envia notificacion de alerta de stock a admins"""
-
         alert = self.check_stock_alert(product_id)
         if not alert.get("alert"):
             return
 
-        alert.get("product")
+        # alert.get("product") was dead code (remnant, no assignment/use).
+        # Notification to admins is a pre-existing stub (out of scope for Item 10 tight changes;
+        # low-stock detection + trigger lives in complete_order). Future: wire to ADMIN_IDS + LucienVoice.
+        return
+
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (store domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# (to avoid any re-entrancy with purchase debit paths or future extensions; purchase
+# debit contracts and partial-failure behavior are authoritative in the debit + deliver flow).
+# This is observational only (best effort; errors swallowed by bus).
+# =============================================================================
+# Item 10 / remaining store besito / arch-enforcer (high-value obs listener for wiring + future; 0 mutation)
+
+
+async def on_besitos_awarded_store_observer(payload: dict) -> None:
+    """
+    Store-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
+    post-commit; high-value obs for store even if current purchases are debits -- wiring + future).
+
+    DESIRED CONTRACT (copy of narrative precedent + Reward Item5 + broadcast Item6): log reception with full context (user_id/amount/source/ref);
+    purely observational + wiring proof for this domain. MUST NOT credit, debit, or mutate besitos state here.
+    Future extensions (e.g. purchase analytics, hooks) belong in this module and should use
+    get_service(StoreService) or direct models if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"store | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on purchase debit contracts / atomicity gold).
