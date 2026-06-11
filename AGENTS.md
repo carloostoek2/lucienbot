@@ -116,6 +116,7 @@ lucien_bot/
 │   │
 │   ├── story_user_handlers.py          # Fase 6: Narrativa (usuario)
 │   └── story_admin_handlers.py         # Fase 6: Narrativa (admin)
+│   └── analytics_handlers.py       # Phase 9+: Analytics + Health (Item 11)
 ├── services/                   # Lógica de negocio
 │   ├── __init__.py
 │   ├── besito_service.py       # Gestión de besitos (puntos)
@@ -130,7 +131,9 @@ lucien_bot/
 │   ├── story_service.py        # Gestión de narrativa
 │   ├── broadcast_service.py    # Difusión masiva
 │   ├── daily_gift_service.py   # Regalo diario
-│   └── scheduler_service.py    # Tareas programadas
+│   ├── scheduler_service.py    # Tareas programadas
+│   ├── health_service.py       # Observabilidad / Health (Item 11 / read-only best-effort, Analytics pattern)
+│   └── analytics_service.py    # Dashboard / stats (Custodios)
 ├── models/                     # Modelos de base de datos
 │   ├── __init__.py
 │   ├── models.py               # Todos los modelos SQLAlchemy
@@ -534,6 +537,11 @@ def test_credit_besitos():
 - Fase 4: Tienda virtual
 - Fase 5: Promociones y "Me Interesa"
 - Fase 6: Narrativa con arquetipos
+
+### 2026-06 (Hardener + observability)
+- HealthService (Item 11 / 29-observability-health): read-only best-effort checks (DB/bot/channels/scheduler/EventBus/critical sanity/backup), /health JSON (optional), admin "🛡️ Pulso del reino" + terminal script; follows Analytics al pie; 0 impact on 3 crit + atomicity/EventBus/get_service contracts. (tirón 29 / third of pool of 4)
+- Hardener agile standard codified (pools max 4, exact 6-agent seq per item + documentador at close for ROADMAP/learnings, GSD pre inside agents, self-check PASSED, arch "PASS WITH NOTES 0 critical", test-guardian "suite protege adecuadamente", pool phrase verbatim, 0/0/0 scope, 3 crit protected). See root CLAUDE.md "Hardener Workflow" section + decisions.md adoption entry + handlers/CLAUDE (1svc + puros pattern from Items 7-9/25-27) + services/CLAUDE (Health precedent) + .claude/agents/{documentador,claude-md-sync}.md + .planning/HARDENING_ROADMAP.md (updated by documentador) + tirón SUMMARYs/PLANs 27-29. claude-md-sync agent used for CLAUDE reality sync + seating the standard (reduce full GSD dep for this scope while preserving core rules).
+- Current details for hardening/workflow live in root CLAUDE.md, services/CLAUDE.md, handlers/CLAUDE.md, decisions.md, ROADMAP (not duplicated in this high-level AGENTS.md).
 
 ---
 

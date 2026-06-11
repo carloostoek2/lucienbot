@@ -50,10 +50,23 @@ handlers/
 
 ## Reglas de Handlers
 
-1. **UN service** por handler
+1. **UN service** por handler (exactly 1 call, usual via `with get_service(XXXService) as svc:`)
 2. **SIN lógica** de negocio
 3. **SIN acceso** directo a DB
-4. **Logging** de eventos recibidos
+4. **Logging** de eventos recibidos (estándar "módulo | acción | user_id | resultado")
+
+## Patrón Probado en Hardener (tirones 25-29 / Items 7-11)
+Para handlers largos (wizards admin multi-step, lists, details, etc. >50 LOC común): 
+- Consolidar a **exactly 1 service** por entrypoint (MissionService / StoreService / RewardService via get_service + thin delegates en service para cross-domain wizard steps si necesario, e.g. get_all_rewards_for_mission_wizard).
+- Extraer **funciones puras** (verb+context+result naming; "Función pura (sin estado ni side-effects)."; stateless, importable, unit-testable; colocadas antes de clases o top-level; 1:1 de lógica previa inline) para builders de texto/keyboard/calcs (compute_*, build_*_text_and_keyboard, etc.) y llevar **todas las funciones <=50 LOC** (verificado vía inspect.getsourcelines post-edit).
+- **Ports de tests**: @patch target "handlers.*.get_service" + mock.__enter__ / __exit__ asserts + setups en delegates del svc mock; mantener asserts exactos de UI/strings/cbs/estados/empty cases; docstrings "ported to 1-service pattern (XXXService only + delegate...) + pure UI helpers. Arch-enforcer note addressed. Precedent from item7/8/9".
+- Nueva clase `Test*PureHelpers` al final del test file (5-11+ tests import-inside per conv; no @patch en los puros; cubren 1:1 strings/emojis/cbs/rows/edges/empty; usan MagicMock post-assign .name/.value para ejecución real de puros; assert edit_text/answer/params).
+- UI render **1:1 idéntico** (textos, emojis, backs, truncation, cb packing, estados "Sin descripcion"/"Ninguna", Lucien, "Paso X de N", etc. pinned desde impact/PLAN).
+- Logging estándar dentro de los withs post-success.
+- 0 behavior / 0 delivery / 0 atomicity / 0 other handlers impact.
+- Verificación: arch-enforcer (PASS WITH NOTES 0 critical; grep 0 bare otros svcs, N with get_service, N puros, LOC<=50, delegates, UI1:1, logging, 3 crit protected orthogonal); test-guardian ("suite protege adecuadamente"; re-runs handler + pure subset + broader cross + golds; coverage puros direct + ports + delegates); self-check PASSED + GSD pre every + pool phrase.
+- Ejemplos: Item 9/27 mission_admin_handlers (10+ puros + delegates + 9 withs Mission + TestMissionAdminPureHelpers 11; 27-SUMMARY + impact9 + arch9 + test9 + gsd79+); Item 8/26 store_admin (6+ puros + 1svc Store + TestStoreAdminPureHelpers 9; 26-SUMMARY); Item 7/25 reward_user (2 puros + 1svc Mission; 25-SUMMARY). Precedentes en 25/26/27 SUMMARIES + HARDENING_ROADMAP + decisions Items 7/8/9 + documentador reports.
+- Patrón se copia al pie de la letra de tirón previo (item8/26 para item9/27 etc.). Ver root CLAUDE "Hardener Workflow" section + .claude/agents/ + ROADMAP.
 
 ## Ejemplo Correcto
 
