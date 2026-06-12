@@ -429,3 +429,96 @@ class TestStoryFSMEventBus:
             assert m.called  # scheduled; listener receives best effort (log per PoC)
         # no mutation contract
         assert BesitoService(db_session).get_balance(tg) == 5
+
+
+@pytest.mark.unit
+class TestArchetypeQuizPhase6:
+    """Tests para el cuestionario de arquetipos (hardcodeado en StoryService - Fase 6 narrativa)."""
+
+    def test_calculate_archetype_from_quiz_seductor_dominant(self):
+        """Respuestas seductor-heavy dan SEDUCTOR (UAT fase 6: historias con arquetipos)."""
+        # No db needed; quiz is pure
+        service = StoryService(db=None)
+        # All first options heavily weight seductor
+        answers = [0, 0, 0]
+        result = service.calculate_archetype_from_quiz(answers)
+        assert result == ArchetypeType.SEDUCTOR
+
+    def test_calculate_archetype_from_quiz_observer_dominant(self):
+        """Opciones observer dan OBSERVER."""
+        service = StoryService(db=None)
+        # Second option on Q1 (observer), Q2 observer, Q3 observer
+        answers = [1, 1, 1]
+        result = service.calculate_archetype_from_quiz(answers)
+        assert result == ArchetypeType.OBSERVER
+
+    def test_calculate_archetype_from_quiz_invalid_answers_fallback_to_max(self):
+        """Indices fuera de rango no rompen; usa max disponible."""
+        service = StoryService(db=None)
+        # Too many answers, bad indices
+        answers = [99, 99, 99, 0]
+        result = service.calculate_archetype_from_quiz(answers)
+        # Should still return a valid ArchetypeType (the one with highest from partial)
+        assert isinstance(result, ArchetypeType)
+
+
+@pytest.mark.unit
+class TestStoryAccessGatesPhase6:
+    """Tests de can_access_node gates (VIP, arquetipo, costo) - UAT fase 6 narrativa."""
+
+    def test_can_access_node_vip_required_denies_non_vip(self, db_session, sample_user):
+        node = StoryNode(
+            title="VIP Only",
+            content="...",
+            node_type=NodeType.NARRATIVE,
+            required_vip=True,
+            is_active=True,
+        )
+        db_session.add(node)
+        db_session.commit()
+
+        service = StoryService(db_session)
+        can, reason = service.can_access_node(sample_user.id, node.id, is_vip=False)
+        assert can is False
+        assert "diván" in (reason or "").lower() or "requiere acceso" in (reason or "").lower() or "el diván" in (reason or "").lower()
+
+    def test_can_access_node_archetype_required_denies_mismatch(self, db_session, sample_user):
+        node = StoryNode(
+            title="Devoto Only",
+            content="...",
+            node_type=NodeType.NARRATIVE,
+            required_archetype=ArchetypeType.DEVOTO,
+            is_active=True,
+        )
+        db_session.add(node)
+        db_session.commit()
+        # Progress without the archetype
+        progress = UserStoryProgress(user_id=sample_user.id, current_node_id=1)
+        db_session.add(progress)
+        db_session.commit()
+
+        service = StoryService(db_session)
+        can, reason = service.can_access_node(sample_user.id, node.id, is_vip=False)
+        assert can is False
+        assert "arquetipo" in (reason or "").lower() or "archetype" in (reason or "").lower()
+
+    def test_can_access_node_cost_besitos_insufficient_denies(self, db_session, sample_user):
+        node = StoryNode(
+            title="Paid Fragment",
+            content="...",
+            node_type=NodeType.NARRATIVE,
+            cost_besitos=50,
+            is_active=True,
+        )
+        db_session.add(node)
+        db_session.commit()
+        # Low balance
+        from models.models import BesitoBalance
+        bal = BesitoBalance(user_id=sample_user.id, balance=10, total_earned=10, total_spent=0)
+        db_session.add(bal)
+        db_session.commit()
+
+        service = StoryService(db_session)
+        can, reason = service.can_access_node(sample_user.id, node.id, is_vip=False)
+        assert can is False
+        assert "besito" in (reason or "").lower() or "costo" in (reason or "").lower() or "50" in (reason or "")
