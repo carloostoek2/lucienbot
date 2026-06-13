@@ -100,8 +100,15 @@ Cada dominio tiene su propio CLAUDE.md con contexto específico.
 - FSM storage: `RedisStorage` si `REDIS_URL` está seteado, si no `MemoryStorage`
 
 ---
+#Flow principal para cualquier implementación en este sistema
 
-## GSD Workflow Enforcement
+impact-analyzer  →  mapa completo dQué vas a tocar?    → impact-analyzer
+¿Está frágil?        → fragility-scanner
+[implementar]
+¿Cumple las reglas?  → arch-enforcer
+¿Tiene cobertura?    → test-guardian
+
+## GSD Workflow Enforcement (opcional)
 
 Antes de usar herramientas que modifiquen archivos, iniciar trabajo a través de GSD:
 
