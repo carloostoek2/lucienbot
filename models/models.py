@@ -496,6 +496,80 @@ class Category(Base):
 
 
 # ============================================================
+# NURTURE / USER CONTENT LIFECYCLE (post-VIP configurable sequences)
+# ============================================================
+
+
+class NurtureAudience(str, enum.Enum):
+    """Audiencia objetivo para secuencias de nurture (embudo de contenido esporádico)"""
+
+    FREE = "free"
+    VIP = "vip"
+    ALL = "all"
+
+
+class NurtureSequence(Base):
+    """Secuencia configurable de entregas de contenido timed (principalmente post-VIP)."""
+
+    __tablename__ = "nurture_sequences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    audience = Column(
+        Enum(NurtureAudience), default=NurtureAudience.VIP, nullable=False, index=True
+    )
+    is_active = Column(Boolean, default=True, index=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relaciones
+    steps = relationship(
+        "NurtureStep",
+        back_populates="sequence",
+        cascade="all, delete-orphan",
+        order_by="NurtureStep.step_order",
+    )
+
+
+class NurtureStep(Base):
+    """Paso individual de una secuencia nurture: delay relativo + Package o fallback text."""
+
+    __tablename__ = "nurture_steps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sequence_id = Column(Integer, ForeignKey("nurture_sequences.id"), nullable=False, index=True)
+    step_order = Column(Integer, nullable=False)
+    delay_hours = Column(Integer, nullable=False, default=24)
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=True, index=True)
+    fallback_text = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    # Relaciones
+    sequence = relationship("NurtureSequence", back_populates="steps")
+    package = relationship("Package")
+
+    __table_args__ = (UniqueConstraint("sequence_id", "step_order", name="uq_sequence_step_order"),)
+
+
+class UserNurtureProgress(Base):
+    """Progreso persistente por usuario+secuencia para scheduling one-shot y evitar re-entregas."""
+
+    __tablename__ = "user_nurture_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_telegram_id = Column(BigInteger, nullable=False, index=True)
+    sequence_id = Column(Integer, ForeignKey("nurture_sequences.id"), nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_step_order_delivered = Column(Integer, default=0)
+    status = Column(String(20), default="active")  # active, completed, paused, cancelled
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("user_telegram_id", "sequence_id", name="uq_user_sequence"),)
+
+
+# ============================================================
 # FASE 3: MISIONES Y RECOMPENSAS
 # ============================================================
 

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from models.database import SessionLocal
 from models.models import Channel, ChannelType, Subscription, Tariff, Token, TokenStatus, User
+from services.event_bus import EVENT_VIP_ACTIVATED, get_event_bus, schedule_emit
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +248,14 @@ class VIPService:
             logger.info(
                 f"VIP subscription extended: user_id={user_id}, new_end_date={existing_subscription.end_date}"
             )
+
+            # Emit post-commit for nurture lifecycle etc (best-effort, non blocking)
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATED,
+                    {"user_id": user_id, "subscription_id": existing_subscription.id},
+                )
+            )
             return existing_subscription
 
         # Crear nueva suscripción
@@ -282,6 +291,13 @@ class VIPService:
             user.vip_entry_status = None
             user.vip_entry_stage = None
             db.commit()
+
+        # Emit post-commit for nurture / content lifecycle (best effort via schedule_emit)
+        schedule_emit(
+            get_event_bus().emit(
+                EVENT_VIP_ACTIVATED, {"user_id": user_id, "subscription_id": subscription.id}
+            )
+        )
 
         return subscription
 

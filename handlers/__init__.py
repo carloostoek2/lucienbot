@@ -22,6 +22,9 @@ from .mission_admin_handlers import router as mission_admin_router
 # Fase 3 - Misiones y Recompensas
 from .mission_user_handlers import router as mission_user_router
 
+# Nurture / User Content Lifecycle admin config
+from .nurture_admin_handlers import router as nurture_admin_router
+
 # Fase 2 - Paquetes
 from .package_handlers import router as package_router
 from .promotion_admin_handlers import router as promotion_admin_router
@@ -93,4 +96,6 @@ __all__ = [
     "trivia_streak_admin_router",
     # Configuracion de Trivias
     "trivia_config_admin_router",
+    # Nurture admin
+    "nurture_admin_router",
 ]

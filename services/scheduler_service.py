@@ -23,9 +23,15 @@ from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
 from services.channel_service import ChannelService
+from services.package_service import PackageService
 from services.streak_scheduler_bridge import activate_streak_promotion, deactivate_streak_promotion
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
+
+# Nurture (loaded inside job to avoid import cycles at module load)
+# from models.models import NurtureSequence, NurtureStep, UserNurtureProgress
+# from services.nurture_service import NurtureService
+# from services.package_service import PackageService
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +259,130 @@ async def _process_expired_subscriptions():
         db.close()
 
 
+async def _perform_nurture_content_delivery(bot, user_id: int, step, db) -> tuple[bool, str]:
+    """Extracted delivery (pkg via delegate or fallback). Reduces _deliver LOC; no direct bot in main job body.
+    PII: user_id (telegram) in logs + any job context; same protection as other scheduler jobs (jobstore + logs ACL).
+    """
+    delivered = False
+    result_msg = ""
+    if step.package_id:
+        pkg_svc = PackageService(db)  # shares
+        try:
+            success, result_msg = await pkg_svc.deliver_package_to_user(
+                bot, user_id, step.package_id
+            )
+            delivered = success
+        finally:
+            if hasattr(pkg_svc, "close"):
+                pkg_svc.close()
+    elif step.fallback_text:
+        try:
+            # NOTE: per security review, fallback now sent as plain text (no HTML) to prevent injection
+            await bot.send_message(chat_id=user_id, text=step.fallback_text)
+            delivered = True
+            result_msg = "fallback sent"
+        except Exception as e:
+            logger.error(
+                f"nurture_delivery | fallback_error | user_id={user_id} | step_id={step.id} | err={e}"
+            )
+            delivered = False
+    return delivered, result_msg
+
+
+async def _deliver_nurture_step(user_id: int, step_id: int):
+    """
+    Entrega un paso de nurture (job one-shot).
+    Carga step/seq/progress. Idempotente (ya entregado o inactivo -> noop).
+    Delega delivery rico a PackageService.deliver_package_to_user.
+    Actualiza progreso post-entrega. Verifica VIP audience cuando corresponde.
+    PII/jobstore: user_id/telegram_id in job execution context + logs + progress; inherits full protection of APS SQLAlchemyJobStore (same DB as main app, same backup/ACL policy as free_welcome/streak). Per-step one-shots keep volume low.
+    """
+    db = SessionLocal()
+    try:
+        from models.models import NurtureSequence, NurtureStep, UserNurtureProgress
+        from services.nurture_service import NurtureService
+        from services.vip_service import VIPService
+
+        step = db.query(NurtureStep).filter(NurtureStep.id == step_id).first()
+        if not step or not step.is_active:
+            logger.info(
+                f"nurture_delivery | skip_inactive_step | user_id={user_id} | step_id={step_id}"
+            )
+            return
+
+        seq = db.query(NurtureSequence).filter(NurtureSequence.id == step.sequence_id).first()
+        if not seq or not seq.is_active:
+            logger.info(
+                f"nurture_delivery | skip_inactive_seq | user_id={user_id} | step_id={step_id}"
+            )
+            return
+
+        prog = (
+            db.query(UserNurtureProgress)
+            .filter(
+                UserNurtureProgress.user_telegram_id == user_id,
+                UserNurtureProgress.sequence_id == seq.id,
+            )
+            .first()
+        )
+        if (
+            not prog
+            or prog.status != "active"
+            or (prog.last_step_order_delivered or 0) >= step.step_order
+        ):
+            logger.info(
+                f"nurture_delivery | already_delivered_or_inactive | user_id={user_id} | step_id={step_id} | last={getattr(prog, 'last_step_order_delivered', 0)}"
+            )
+            return
+
+        # Dignity/granularity: si audience VIP y ya no es VIP, no entregar (pero mantener progreso)
+        vip_svc = VIPService(db)
+        aud_val = getattr(seq.audience, "value", str(seq.audience)).lower()
+        if aud_val == "vip" and not vip_svc.is_user_vip(user_id):
+            logger.info(
+                f"nurture_delivery | skip_non_vip | user_id={user_id} | seq_id={seq.id} | step_order={step.step_order}"
+            )
+            # Advance progress on skip so one-shot seq does not get stuck (M6)
+            nurture_svc = NurtureService(db)
+            nurture_svc.update_progress_last_delivered(user_id, seq.id, step.step_order)
+            if hasattr(nurture_svc, "close"):
+                nurture_svc.close()
+            return
+
+        bot = _get_bot()
+
+        # Gate: claim the step via conditional progress update *before* delivery side-effect (R4 / S2).
+        # Only deliver if this job "won" the claim (prevents dupe for co-delayed/ concurrent).
+        # Advance happens on claim (or on early skips below). Keeps per-step one-shot semantics.
+        nurture_svc = NurtureService(db)
+        if not nurture_svc.update_progress_last_delivered(user_id, seq.id, step.step_order):
+            logger.info(
+                f"nurture_delivery | already_claimed_or_advanced | user_id={user_id} | step_id={step_id}"
+            )
+            if hasattr(nurture_svc, "close"):
+                nurture_svc.close()
+            return
+
+        # We claimed it — safe to deliver (no second update needed; claim did the advance + possible completed status)
+        delivered, result_msg = await _perform_nurture_content_delivery(bot, user_id, step, db)
+
+        if delivered:
+            logger.info(
+                f"nurture_delivery | delivered | user_id={user_id} | seq_id={seq.id} | step_id={step_id} | order={step.step_order} | result={result_msg[:50] if result_msg else 'ok'}"
+            )
+        else:
+            logger.warning(
+                f"nurture_delivery | delivery_failed | user_id={user_id} | step_id={step_id} | msg={result_msg}"
+            )
+        if hasattr(nurture_svc, "close"):
+            nurture_svc.close()
+
+    except Exception as e:
+        logger.error(f"nurture_delivery | error | user_id={user_id} | step_id={step_id} | err={e}")
+    finally:
+        db.close()
+
+
 def _cleanup_expired_streak_sessions():
     """Cancela sesiones de racha expiradas que no fueron cerradas por interaccion."""
     import json
@@ -440,6 +570,49 @@ class SchedulerService:
                 )
         logger.info(
             f"scheduler_service - remove_streak_promotion_jobs - promo_id:{promo_id} - removed"
+        )
+
+    def schedule_nurture_step(self, user_telegram_id: int, step_id: int, run_date: datetime):
+        """Programa entrega one-shot de un NurtureStep usando DateTrigger (persistente via jobstore).
+        PII: user_telegram_id (tg id) stored in APS jobstore kwargs + logs; protected exactly as free_welcome/streak jobs (same SQLAlchemyJobStore DB, same backups/ACLs). Volume small (admin-configured steps per seq).
+        """
+        job_id = f"nurture_{user_telegram_id}_{step_id}"
+        self._scheduler.add_job(
+            _deliver_nurture_step,
+            trigger=DateTrigger(run_date=run_date),
+            id=job_id,
+            replace_existing=True,
+            kwargs={"user_id": user_telegram_id, "step_id": step_id},
+        )
+        logger.info(
+            f"scheduler_service | schedule_nurture_step | user_id={user_telegram_id} | step_id={step_id} | run_date={run_date} | result=scheduled"
+        )
+
+    def remove_nurture_jobs(self, user_telegram_id: int, step_ids: list[int] | None = None):
+        """Remueve jobs nurture programados para un usuario (soporta step_ids=None para todos del user via prefix scan en jobstore)."""
+        removed = 0
+        if step_ids:
+            for sid in step_ids:
+                jid = f"nurture_{user_telegram_id}_{sid}"
+                try:
+                    self._scheduler.remove_job(jid)
+                    removed += 1
+                except Exception as e:
+                    logger.debug(f"scheduler_service | remove_nurture_jobs | job={jid} | err={e}")
+        else:
+            # full for user: scan current jobs (works for in-memory + persistent ones loaded)
+            prefix = f"nurture_{user_telegram_id}_"
+            for job in list(self._scheduler.get_jobs()):
+                if job.id.startswith(prefix):
+                    try:
+                        self._scheduler.remove_job(job.id)
+                        removed += 1
+                    except Exception as e:
+                        logger.debug(
+                            f"scheduler_service | remove_nurture_jobs | job={job.id} | err={e}"
+                        )
+        logger.info(
+            f"scheduler_service | remove_nurture_jobs | user_id={user_telegram_id} | step_ids={step_ids} | removed={removed} | result=attempted"
         )
 
     async def stop(self):

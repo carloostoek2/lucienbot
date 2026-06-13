@@ -8,7 +8,7 @@ from .channel_service import ChannelService
 from .daily_gift_service import DailyGiftService
 
 # Internal EventBus (PoC Item 1)
-from .event_bus import EVENT_BESITOS_AWARDED, InternalEventBus, get_event_bus
+from .event_bus import EVENT_BESITOS_AWARDED, EVENT_VIP_ACTIVATED, InternalEventBus, get_event_bus
 from .game_service import GameService
 
 # Item 11 - Observability / Health (read-only best-effort; follows Analytics pattern)
@@ -16,6 +16,9 @@ from .health_service import HealthService
 
 # Fase 3 - Misiones y Recompensas
 from .mission_service import MissionService
+
+# Nurture / User Content Lifecycle (post-VIP configurable sequences)
+from .nurture_service import NurtureService
 
 # Fase 2 - Paquetes
 from .package_service import PackageService
@@ -61,6 +64,8 @@ __all__ = [
     "TriviaCategoryService",
     # Phase 17 - Promociones por Racha
     "StreakPromotionService",
+    # Nurture / User Content Lifecycle
+    "NurtureService",
     # Configuracion de Trivias
     "TriviaConfigService",
     "get_service",
@@ -68,6 +73,7 @@ __all__ = [
     "InternalEventBus",
     "get_event_bus",
     "EVENT_BESITOS_AWARDED",
+    "EVENT_VIP_ACTIVATED",
 ]
 
 

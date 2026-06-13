@@ -55,6 +55,12 @@ async def admin_gamification_menu(callback: CallbackQuery):
                 )
             ],
             [InlineKeyboardButton(text="📦 Gestionar paquetes", callback_data="manage_packages")],
+            [
+                InlineKeyboardButton(
+                    text="🌱 Configurar nurture (secuencias post-VIP)",
+                    callback_data="manage_nurture",
+                )
+            ],
             [InlineKeyboardButton(text="🎮 Gestionar misiones", callback_data="admin_missions")],
             [InlineKeyboardButton(text="🛒 Gestionar tienda", callback_data="admin_store")],
             [InlineKeyboardButton(text="📊 Estadisticas", callback_data="gamification_stats")],

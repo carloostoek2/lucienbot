@@ -29,6 +29,9 @@ from models.models import (
     MissionFrequency,
     MissionType,
     NodeType,
+    NurtureAudience,
+    NurtureSequence,
+    NurtureStep,
     Order,
     OrderStatus,
     Package,
@@ -47,6 +50,7 @@ from models.models import (
     TokenStatus,
     User,
     UserMissionProgress,
+    UserNurtureProgress,
     UserRole,
 )
 
@@ -559,6 +563,57 @@ def sample_streak_session(db_session, sample_streak_promotion):
     db_session.commit()
     db_session.refresh(session)
     return session
+
+
+# ==================== NURTURE FIXTURES (for R3 gold alignment + shared tests) ====================
+
+
+@pytest.fixture
+def sample_nurture_sequence(db_session: Session):
+    """Crea una secuencia nurture de prueba (VIP audience, like sample_package style)."""
+    seq = NurtureSequence(
+        name="Test Nurture Seq",
+        description="A test nurture sequence",
+        audience=NurtureAudience.VIP,
+        is_active=True,
+        created_by=None,
+    )
+    db_session.add(seq)
+    db_session.commit()
+    db_session.refresh(seq)
+    return seq
+
+
+@pytest.fixture
+def sample_nurture_step(db_session: Session, sample_nurture_sequence, sample_package=None):
+    """Crea un paso nurture de prueba (with pkg or fallback; telegram contract, aware ts, commit/refresh)."""
+    step = NurtureStep(
+        sequence_id=sample_nurture_sequence.id,
+        step_order=1,
+        delay_hours=0,
+        package_id=sample_package.id if sample_package else None,
+        fallback_text=None if sample_package else "Test fallback content for nurture",
+        is_active=True,
+    )
+    db_session.add(step)
+    db_session.commit()
+    db_session.refresh(step)
+    return step
+
+
+@pytest.fixture
+def sample_user_nurture_progress(db_session: Session, sample_user, sample_nurture_sequence):
+    """Crea progreso nurture de prueba (telegram_id contract, aware, commit/refresh)."""
+    prog = UserNurtureProgress(
+        user_telegram_id=sample_user.telegram_id,
+        sequence_id=sample_nurture_sequence.id,
+        last_step_order_delivered=0,
+        status="active",
+    )
+    db_session.add(prog)
+    db_session.commit()
+    db_session.refresh(prog)
+    return prog
 
 
 # ==================== TELEGRAM MOCK FACTORIES ====================

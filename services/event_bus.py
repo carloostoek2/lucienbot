@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 # Event name constant to avoid typos across emitter, registrars, and tests.
 EVENT_BESITOS_AWARDED: str = "besitos_awarded"
 
+# Nurture trigger: emitted post-commit after successful VIP redeem (in VIPService).
+EVENT_VIP_ACTIVATED: str = "vip_activated"
+
 # Type alias for listeners: async callables receiving a payload dict.
 Listener = Callable[[dict[str, Any]], Awaitable[None]]
 

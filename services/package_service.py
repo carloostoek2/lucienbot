@@ -4,6 +4,7 @@ Servicio de Paquetes - Lucien Bot
 Gestiona la creación, edición y entrega de paquetes de contenido.
 """
 
+import html
 import logging
 
 from aiogram.types import InputMediaPhoto, InputMediaVideo
@@ -348,9 +349,9 @@ class PackageService:
 
 <i>Diana ha preparado algo especial para usted...</i>
 
-📦 <b>{package.name}</b>
+📦 <b>{html.escape(package.name)}</b>
 
-<i>{package.description or "Un obsequio del reino..."}</i>
+<i>{html.escape(package.description or "Un obsequio del reino...")}</i>
 
 Enviando {len(files)} archivo(s)...""",
                 parse_mode="HTML",

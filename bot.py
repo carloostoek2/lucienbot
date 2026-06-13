@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -39,6 +39,8 @@ from handlers import (
     mission_admin_router,
     # Fase 3 - Misiones y Recompensas
     mission_user_router,
+    # Nurture admin config
+    nurture_admin_router,
     # Fase 2 - Paquetes
     package_router,
     promotion_admin_router,
@@ -72,8 +74,9 @@ from models.database import init_db
 from services.broadcast_service import on_besitos_awarded_broadcast_reaction_observer
 
 # InternalEventBus (PoC Item 1) + first listener (narrative domain)
-from services.event_bus import EVENT_BESITOS_AWARDED, get_event_bus
+from services.event_bus import EVENT_BESITOS_AWARDED, EVENT_VIP_ACTIVATED, get_event_bus
 from services.game_service import on_besitos_awarded_game_award_observer
+from services.nurture_service import on_vip_activated
 from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
 from services.store_service import on_besitos_awarded_store_observer
@@ -215,8 +218,10 @@ async def on_startup(bot: Bot):
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_broadcast_reaction_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_game_award_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_store_observer)
+    # Nurture / lifecycle: VIP activation triggers per-user sequence enrollment + scheduling (no batch)
+    get_event_bus().register(EVENT_VIP_ACTIVATED, on_vip_activated)
     logger.info(
-        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store)"
+        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store; vip_activated -> nurture)"
     )
 
     # Health/observability (Item 11 spike)
@@ -320,6 +325,8 @@ async def main():
     dp.include_router(broadcast_router)
     # Fase 2 - Paquetes
     dp.include_router(package_router)
+    # Nurture / Lifecycle (admin config only)
+    dp.include_router(nurture_admin_router)
     # Fase 3 - Misiones y Recompensas
     dp.include_router(mission_user_router)
     dp.include_router(mission_admin_router)

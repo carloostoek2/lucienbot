@@ -206,15 +206,38 @@ async def test_broadcast_and_game_listeners_are_invoked_and_log_per_item6(caplog
         await bus.emit(EVENT_BESITOS_AWARDED, payload)
 
     found_broadcast = any(
-        "broadcast | besitos_awarded_received" in rec.message
-        and "user_id=424243" in rec.message
+        "broadcast | besitos_awarded_received" in rec.message and "user_id=424243" in rec.message
         for rec in caplog.records
     )
     found_game = any(
-        "game | besitos_awarded_received" in rec.message
-        and "user_id=424243" in rec.message
+        "game | besitos_awarded_received" in rec.message and "user_id=424243" in rec.message
         for rec in caplog.records
     )
     assert found_broadcast, "broadcast reaction observer (Item 6) not invoked or did not log"
     assert found_game, "game award observer (Item 6) not invoked or did not log"
     # contract: these are best-effort obs only (credit paths + atomicity golds assert no impact)
+
+
+@pytest.mark.asyncio
+async def test_vip_activated_listener_is_invoked_and_logs(caplog):
+    """R3 gold extension: nurture on_vip_activated (vip_activated + exact caplog, best-effort swallow).
+    Mirrors narrative/broadcast/game listener tests exactly (fresh bus, register, emit, caplog for "nurture_service | on_vip_activated").
+    """
+    from services.nurture_service import on_vip_activated
+    from services.event_bus import EVENT_VIP_ACTIVATED
+
+    _reset_event_bus_for_tests()
+    bus = InternalEventBus()
+    bus.register(EVENT_VIP_ACTIVATED, on_vip_activated)
+
+    payload = {"user_id": 424244, "subscription_id": 99}
+
+    with caplog.at_level(logging.INFO):
+        await bus.emit(EVENT_VIP_ACTIVATED, payload)
+
+    found = any(
+        "nurture_service | on_vip_activated" in rec.message and "user_id=424244" in rec.message
+        for rec in caplog.records
+    )
+    assert found, "nurture vip_activated listener was not invoked or did not log as specified (R3)"
+    # best-effort: errors swallowed (no exception to caller, logged per listener) -- covered by gold pattern

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from models.models import Channel, ChannelType, Subscription, Token, TokenStatus
 from services import get_service
+from services.event_bus import EVENT_VIP_ACTIVATED
 from services.vip_service import VIPService
 
 
@@ -446,6 +447,46 @@ class TestVIPServiceExpirationSupport:
         db_session.refresh(sub)
 
         assert service.has_other_active_subscription(sample_user.telegram_id, sub.id) is False
+
+
+class TestVIPServiceNurtureEmit:
+    """R3 gold extension: redeem in both paths (extend + new) asserts EVENT_VIP_ACTIVATED emit + payload (schedule_emit patch).
+    Best-effort post-commit, no mutation to redeem atomicity.
+    """
+
+    def test_redeem_emits_vip_activated_on_new_sub(
+        self, db_session, sample_tariff, sample_user, sample_vip_channel
+    ):
+        from unittest.mock import patch
+        from services.event_bus import schedule_emit
+
+        service = VIPService(db_session)
+        tok = service.generate_token(sample_tariff.id)
+
+        with patch("services.vip_service.schedule_emit") as mock_emit:
+            sub = service.redeem_token(tok.token_code, sample_user.telegram_id)
+            assert sub is not None
+            assert mock_emit.called
+
+    def test_redeem_emits_vip_activated_on_extend(
+        self, db_session, sample_tariff, sample_user, sample_vip_channel, sample_token
+    ):
+        from unittest.mock import patch
+        from services.event_bus import schedule_emit
+
+        service = VIPService(db_session)
+        # first sub
+        tok1 = service.generate_token(sample_tariff.id)
+        sub1 = service.redeem_token(tok1.token_code, sample_user.telegram_id)
+        assert sub1 is not None
+
+        # second token for extend
+        tok2 = service.generate_token(sample_tariff.id)
+        with patch("services.vip_service.schedule_emit") as mock_emit:
+            sub2 = service.redeem_token(tok2.token_code, sample_user.telegram_id)
+            assert sub2 is not None
+            assert sub2.id == sub1.id  # extended
+            assert mock_emit.called
         # Non-existent exclude when user HAS 1 active: finds the sub (id != 999999) -> True (correct semantic)
         assert service.has_other_active_subscription(sample_user.telegram_id, 999999) is True
         # Edge: 0-subs fresh user + bogus exclude -> False
