@@ -58,44 +58,33 @@ def build_purchase_notification_text(
     date_str: str,
     order_id: int,
 ) -> str:
-    """Función pura (sin estado ni side-effects). Construye el cuerpo HTML de la notificación de compra para admins.
+    """Función pura (sin estado ni side-effects). Delega la construcción del texto a LucienVoice.
 
-    items: lista de tuplas (product_name, quantity, item_total_price) para mantener pureza y facilidad de test.
+    Mantiene la interfaz pura y los call sites. Los literales en español viven solo en utils/lucien_voice.py
+    para que el test e2e test_no_hardcoded_spanish_in_services los ignore (filtra líneas con 'LucienVoice.').
     """
-    if not items:
-        products_section = f"📦 <b>Items:</b> varios (total {total_price} besitos)"
-    elif len(items) == 1:
-        name, qty, item_total = items[0]
-        products_section = f"📦 <b>Producto:</b> {name} ×{qty} — {item_total} besitos"
-    else:
-        lines = [f"• {name} ×{qty} — {item_total} besitos" for (name, qty, item_total) in items]
-        products_section = "📦 <b>Productos:</b>\n" + "\n".join(lines)
-
-    return (
-        f"🎩 <b>Lucien - Notificación de la Tienda</b>\n\n"
-        f"🛍️ <b>Producto adquirido</b>\n\n"
-        f"👤 <b>Visitante:</b> {user_display}\n"
-        f"   ID: <code>{user_id}</code>\n"
-        f"   Username: {username}\n\n"
-        f"{products_section}\n\n"
-        f"💰 <b>Total:</b> {total_price} besitos\n"
-        f"📅 <b>Fecha:</b> {date_str}\n"
-        f"📋 <b>Orden #:</b> {order_id}\n\n"
-        f"<i>Una nueva adquisición ha sido registrada en los dominios de Diana.</i>"
+    return LucienVoice.store_admin_purchase_notification(
+        user_display, username, user_id, items, total_price, date_str, order_id
     )
 
 
 def build_purchase_admin_keyboard(user_link: str) -> InlineKeyboardMarkup:
     """Construye el teclado de notificación de compra para admins (contacto + navegación al menú principal).
 
-    Función auxiliar de UI (1:1 con el patrón de promo interests). Devuelve markup con back_to_admin.
+    Función auxiliar de UI. Los labels de botones se obtienen de LucienVoice para evitar
+    strings en español user-facing dentro de services/ (auditoría de voz).
     """
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Contactar al visitante", url=user_link)],
             [
                 InlineKeyboardButton(
-                    text="🔙 Volver al sanctum",
+                    text=LucienVoice.store_admin_purchase_contact_button(),
+                    url=user_link,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_admin_purchase_back_button(),
                     callback_data="back_to_admin",
                 )
             ],

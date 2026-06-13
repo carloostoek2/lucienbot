@@ -165,8 +165,8 @@ async def process_promotion_description(message: Message, state: FSMContext):
 @router.callback_query(PromotionWizardStates.selecting_source, F.data == "promo_select_package")
 async def select_package_source(callback: CallbackQuery, state: FSMContext):
     """Muestra lista de paquetes para seleccionar - Voz de Lucien"""
-    package_service = PackageService()
-    packages = package_service.get_all_packages()
+    with get_service(PackageService) as package_service:
+        packages = package_service.get_all_packages()
 
     if not packages:
         keyboard = InlineKeyboardMarkup(

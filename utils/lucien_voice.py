@@ -495,6 +495,55 @@ antes de acceder a los dominios de Diana.</i>"""
 
 <i>Solicite acceso a Diana si cree que esto es un error.</i>"""
 
+    # ==================== NOTIFICACIONES A CUSTODIOS (ADMIN) ====================
+
+    @staticmethod
+    def store_admin_purchase_notification(
+        user_display: str,
+        username: str,
+        user_id: int,
+        items: list[tuple[str, int, int]],
+        total_price: int,
+        date_str: str,
+        order_id: int,
+    ) -> str:
+        """Notificación completa para administradores cuando se completa una compra en la tienda.
+
+        Centraliza todo el texto en español aquí para cumplir con la auditoría de voz de Lucien
+        (test_no_hardcoded_spanish_in_services). Los helpers en services/ solo delegan.
+        """
+        if not items:
+            products_section = f"📦 <b>Items:</b> varios (total {total_price} besitos)"
+        elif len(items) == 1:
+            name, qty, item_total = items[0]
+            products_section = f"📦 <b>Producto:</b> {name} ×{qty} — {item_total} besitos"
+        else:
+            lines = [f"• {name} ×{qty} — {item_total} besitos" for (name, qty, item_total) in items]
+            products_section = "📦 <b>Productos:</b>\n" + "\n".join(lines)
+
+        return (
+            f"🎩 <b>Lucien - Notificación de la Tienda</b>\n\n"
+            f"🛍️ <b>Producto adquirido</b>\n\n"
+            f"👤 <b>Visitante:</b> {user_display}\n"
+            f"   ID: <code>{user_id}</code>\n"
+            f"   Username: {username}\n\n"
+            f"{products_section}\n\n"
+            f"💰 <b>Total:</b> {total_price} besitos\n"
+            f"📅 <b>Fecha:</b> {date_str}\n"
+            f"📋 <b>Orden #:</b> {order_id}\n\n"
+            f"<i>Una nueva adquisición ha sido registrada en los dominios de Diana.</i>"
+        )
+
+    @staticmethod
+    def store_admin_purchase_contact_button() -> str:
+        """Label del botón para contactar al comprador en notificaciones de compra admin."""
+        return "💬 Contactar al visitante"
+
+    @staticmethod
+    def store_admin_purchase_back_button() -> str:
+        """Label del botón para volver al menú principal admin."""
+        return "🔙 Volver al sanctum"
+
     # ==================== ERRORES ====================
 
     @staticmethod

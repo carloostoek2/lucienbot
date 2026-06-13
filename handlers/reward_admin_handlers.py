@@ -205,8 +205,8 @@ async def process_besito_amount(message: Message, state: FSMContext):
 
 async def show_package_selection(callback: CallbackQuery, state: FSMContext):
     """Muestra seleccion de paquetes"""
-    package_service = PackageService()
-    packages = package_service.get_available_packages_for_rewards()
+    with get_service(PackageService) as package_service:
+        packages = package_service.get_available_packages_for_rewards()
 
     buttons = []
 
@@ -500,28 +500,28 @@ Crear este paquete?"""
 async def confirm_create_pkg_from_reward(callback: CallbackQuery, state: FSMContext):
     """Crea el paquete y retorna a la recompensa"""
     data = await state.get_data()
-    package_service = PackageService()
 
     try:
-        # Crear paquete
-        package = package_service.create_package(
-            name=data.get("pkg_name"),
-            description=data.get("pkg_description"),
-            store_stock=-2,  # No disponible en tienda
-            reward_stock=data.get("pkg_reward_stock", -1),
-            created_by=callback.from_user.id,
-        )
-
-        # Agregar archivos
-        files = data.get("pkg_files", [])
-        for i, file_data in enumerate(files):
-            package_service.add_file_to_package(
-                package_id=package.id,
-                file_id=file_data["file_id"],
-                file_type=file_data["file_type"],
-                file_name=file_data.get("file_name"),
-                order_index=i,
+        with get_service(PackageService) as package_service:
+            # Crear paquete
+            package = package_service.create_package(
+                name=data.get("pkg_name"),
+                description=data.get("pkg_description"),
+                store_stock=-2,  # No disponible en tienda
+                reward_stock=data.get("pkg_reward_stock", -1),
+                created_by=callback.from_user.id,
             )
+
+            # Agregar archivos
+            files = data.get("pkg_files", [])
+            for i, file_data in enumerate(files):
+                package_service.add_file_to_package(
+                    package_id=package.id,
+                    file_id=file_data["file_id"],
+                    file_type=file_data["file_type"],
+                    file_name=file_data.get("file_name"),
+                    order_index=i,
+                )
 
         # Guardar package_id para la recompensa
         await state.update_data(package_id=package.id)
@@ -636,8 +636,8 @@ async def show_reward_confirmation(target, state: FSMContext):
     elif reward_type == RewardType.PACKAGE:
         package_id = data.get("package_id")
         if package_id:
-            package_service = PackageService()
-            pkg = package_service.get_package(package_id)
+            with get_service(PackageService) as package_service:
+                pkg = package_service.get_package(package_id)
             type_text = f"Paquete: {pkg.name if pkg else 'Desconocido'}"
     elif reward_type == RewardType.VIP_ACCESS:
         tariff_id = data.get("tariff_id")

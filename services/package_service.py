@@ -8,7 +8,7 @@ import logging
 
 from aiogram.types import InputMediaPhoto, InputMediaVideo
 from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from models.database import SessionLocal
 from models.models import Category, Package, PackageFile
@@ -100,29 +100,36 @@ class PackageService:
     # ==================== CONSULTAS ====================
 
     def get_package(self, package_id: int) -> Package | None:
-        """Obtiene un paquete por ID"""
-        return self.db.query(Package).filter(Package.id == package_id).first()
+        """Obtiene un paquete por ID (pre-carga files para que file_count sea seguro post-cierre de sesión)."""
+        return (
+            self.db.query(Package)
+            .options(selectinload(Package.files))
+            .filter(Package.id == package_id)
+            .first()
+        )
 
     def get_all_packages(self, active_only: bool = True) -> list[Package]:
-        """Obtiene todos los paquetes"""
-        query = self.db.query(Package)
+        """Obtiene todos los paquetes (pre-carga files para que file_count funcione tras cierre de sesión en handlers con get_service)."""
+        query = self.db.query(Package).options(selectinload(Package.files))
         if active_only:
             query = query.filter(Package.is_active)
         return query.order_by(desc(Package.created_at)).all()
 
     def get_available_packages_for_store(self) -> list[Package]:
-        """Obtiene paquetes disponibles en tienda"""
+        """Obtiene paquetes disponibles en tienda (pre-carga files para file_count post-detach en flujos de wizard admin con get_service + close)."""
         return (
             self.db.query(Package)
+            .options(selectinload(Package.files))
             .filter(Package.is_active, (Package.store_stock == -1) | (Package.store_stock > 0))
             .order_by(desc(Package.created_at))
             .all()
         )
 
     def get_available_packages_for_rewards(self) -> list[Package]:
-        """Obtiene paquetes disponibles para recompensas"""
+        """Obtiene paquetes disponibles para recompensas (pre-carga files para file_count post-detach)."""
         return (
             self.db.query(Package)
+            .options(selectinload(Package.files))
             .filter(Package.is_active, (Package.reward_stock == -1) | (Package.reward_stock > 0))
             .order_by(desc(Package.created_at))
             .all()
@@ -513,7 +520,11 @@ Enviando {len(files)} archivo(s)...""",
         Returns:
             Lista de paquetes
         """
-        query = self.db.query(Package).filter(Package.category_id == category_id)
+        query = (
+            self.db.query(Package)
+            .options(selectinload(Package.files))
+            .filter(Package.category_id == category_id)
+        )
         if active_only:
             query = query.filter(Package.is_active)
         return query.order_by(desc(Package.created_at)).all()

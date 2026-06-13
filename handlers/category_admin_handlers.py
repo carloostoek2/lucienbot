@@ -529,7 +529,7 @@ async def select_category_for_assign(
 
         buttons = []
         for package in uncategorized:
-            file_count = len(package.files) if package.files else 0
+            file_count = package.file_count
             buttons.append(
                 [
                     InlineKeyboardButton(

@@ -724,7 +724,7 @@ def packages_for_promotion_keyboard(packages: list) -> InlineKeyboardMarkup:
     buttons = []
     for pkg in packages:
         if pkg.is_active:
-            file_count = len(pkg.files) if pkg.files else 0
+            file_count = pkg.file_count
             buttons.append(
                 [
                     InlineKeyboardButton(
