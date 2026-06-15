@@ -131,6 +131,30 @@ class TestChannelService:
 
         assert result is False
 
+    def test_update_approval_message(self, db_session, sample_free_channel):
+        """Test actualizar mensaje ritual custom."""
+        service = ChannelService(db_session)
+        assert service.update_approval_message(sample_free_channel.id, "Ritual custom") is True
+        updated = service.get_channel_by_db_id(sample_free_channel.id)
+        assert updated.approval_message == "Ritual custom"
+
+    def test_update_welcome_message(self, db_session, sample_free_channel):
+        """Test actualizar mensaje bienvenida custom."""
+        service = ChannelService(db_session)
+        assert service.update_welcome_message(sample_free_channel.id, "Welcome custom") is True
+        updated = service.get_channel_by_db_id(sample_free_channel.id)
+        assert updated.welcome_message == "Welcome custom"
+
+    def test_clear_custom_messages(self, db_session, sample_free_channel):
+        """Test restaurar mensajes a default."""
+        service = ChannelService(db_session)
+        service.update_approval_message(sample_free_channel.id, "A")
+        service.update_welcome_message(sample_free_channel.id, "B")
+        assert service.clear_custom_messages(sample_free_channel.id, "all") is True
+        updated = service.get_channel_by_db_id(sample_free_channel.id)
+        assert updated.approval_message is None
+        assert updated.welcome_message is None
+
 
 @pytest.mark.unit
 class TestPendingRequests:
@@ -276,6 +300,100 @@ class TestPendingRequests:
         count = service.count_pending_requests(sample_pending_request.channel_id)
 
         assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_approve_request_now(self, db_session, sample_pending_request, mock_bot):
+        """Test aprobación individual con grant real."""
+        service = ChannelService(db_session)
+        result = await service.approve_request_now(
+            sample_pending_request.id, sample_pending_request.channel_id, mock_bot
+        )
+        assert result.success is True
+        mock_bot.approve_chat_join_request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_approve_request_now_rejects_channel_mismatch(
+        self, db_session, sample_pending_request, mock_bot
+    ):
+        """IDOR: request de otro canal no debe aprobarse."""
+        service = ChannelService(db_session)
+        result = await service.approve_request_now(sample_pending_request.id, 99999, mock_bot)
+        assert result.success is False
+        mock_bot.approve_chat_join_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reject_request_now(self, db_session, sample_pending_request, mock_bot):
+        """Test rechazo individual."""
+        service = ChannelService(db_session)
+        ok = await service.reject_request_now(
+            sample_pending_request.id, sample_pending_request.channel_id, mock_bot
+        )
+        assert ok is True
+        mock_bot.decline_chat_join_request.assert_called_once()
+        updated = service.get_request_by_id(sample_pending_request.id)
+        assert updated.status == "rejected"
+
+    @pytest.mark.asyncio
+    async def test_reject_request_now_rejects_channel_mismatch(
+        self, db_session, sample_pending_request, mock_bot
+    ):
+        """IDOR: request de otro canal no debe rechazarse."""
+        service = ChannelService(db_session)
+        ok = await service.reject_request_now(sample_pending_request.id, 99999, mock_bot)
+        assert ok is False
+        mock_bot.decline_chat_join_request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_approve_all_pending_now(self, db_session, sample_free_channel, mock_bot):
+        """Test aprobación masiva con grant real."""
+        from models.models import User
+
+        service = ChannelService(db_session)
+        user = User(telegram_id=9000001, username="bulkuser")
+        db_session.add(user)
+        db_session.flush()
+        service.create_pending_request(user_id=user.telegram_id, channel_id=sample_free_channel.id)
+
+        result = await service.approve_all_pending_now(sample_free_channel.id, mock_bot)
+        assert result.approved >= 1
+        mock_bot.approve_chat_join_request.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_approve_all_pending_now_partial_failure(
+        self, db_session, sample_free_channel, mock_bot
+    ):
+        """Partial batch: first fails, second succeeds."""
+        from unittest.mock import AsyncMock, patch
+
+        from models.models import User
+        from services.channel_grant import GrantResult
+
+        service = ChannelService(db_session)
+        for i in range(2):
+            user = User(telegram_id=9100000 + i, username=f"partial{i}")
+            db_session.add(user)
+            db_session.flush()
+            service.create_pending_request(
+                user_id=user.telegram_id, channel_id=sample_free_channel.id
+            )
+
+        assert service.count_pending_requests(sample_free_channel.id) == 2
+
+        with patch(
+            "services.channel_service.grant_pending_request",
+            new_callable=AsyncMock,
+            side_effect=[
+                GrantResult(success=False, request_id=1, error="boom"),
+                GrantResult(success=True, request_id=2),
+            ],
+        ) as mock_grant:
+            result = await service.approve_all_pending_now(sample_free_channel.id, mock_bot)
+
+        assert result.approved == 1
+        assert result.failed == 1
+        assert len(result.errors) == 1
+        assert "boom" in result.errors[0]
+        assert mock_grant.call_count == 2
 
     def test_get_pending_request_returns_none_after_approval(
         self, db_session, sample_user, sample_free_channel

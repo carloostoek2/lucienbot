@@ -323,3 +323,37 @@ Resultado:
 
 Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool.
 "Item 11/29 closed. Third of new pool of 4. ... Ready for arch-enforcer re-scan (enfocado en health checks + endpoint + admin views + no impact on 3 crit) + test-guardian (correr los tests críticos listados) + documentador (for final ROADMAP update) + gsd-executor del siguiente item del pool de 4."
+
+---
+
+## Channel admin hardening — security, real Telegram grant, custom messages, individual pending (Phase 30 / Item 12)
+
+**Motivo:**
+- Project Feature Advisor identificó fragilidades en administración de canales: solo `admin_channels` verificaba `is_admin`; wait time "custom" sin FSM; `approve_all_pending` solo mutaba BD sin `approve_chat_join_request`; botones de mensajes sin handler; lista de pendientes solo lectura.
+- Sistema crítico #3 (canales Free/VIP: pending → approve → welcome → scheduler) requiere grant real en Telegram y lógica centralizada compartida con el scheduler.
+- User aprobó scope ítems #1, #2, #4, #5, #6 del análisis.
+
+**Riesgos (mitigados):**
+- Regresión scheduler al extraer grant → delegación a `channel_grant.py` sin cambiar orden commit/rollback; gold tests scheduler verdes.
+- Flip contrato bulk approve → test integración actualizado en misma entrega.
+- ID duality (DB PK vs Telegram chat ID) → documentado en grant helper + CLAUDE + asserts en tests.
+- IDOR en approve/reject individual → `get_valid_pending_request` valida pertenencia al canal.
+- HTML en mensajes custom → escape en previews + fallback Lucien default en send.
+
+**Decisión:**
+- Nuevo `services/channel_grant.py` con `grant_pending_request`, `reject_pending_request`, puros `resolve_channel_message` / `build_welcome_payload`.
+- `ChannelService`: métodos async `approve_pending_now`, `reject_pending_now`, `approve_all_pending_now`; update mensajes; `get_valid_pending_request`.
+- `scheduler_service._process_pending_requests` delega al grant helper (0 duplicación).
+- `channel_handlers.py`: `is_admin` en todos los callbacks admin + guards FSM; FSM wait custom (1–1440); editor approval/welcome; lista pendientes paginada (8/página) con approve/reject individual; exactly 1 `get_service(ChannelService)` por entrypoint.
+- `free_channel_handlers.py`: resolver mensajes custom en welcome manual.
+- Callbacks tipados en `callback_data.py`; voz Lucien en `lucien_voice.py`.
+- Status `"rejected"` para rechazo admin (sin migración Alembic; cabe en `String(20)`).
+- Tests: `test_channel_grant.py`, `test_channel_admin_handlers.py`, extensiones `test_channel_service.py`, flip contrato en `test_free_entry_flow.py`.
+
+**Resultado:**
+- Custodios pueden operar canales con seguridad (guards), wait custom, mensajes ritual/welcome personalizados, aprobar/rechazar individual o en masa con efecto real en Telegram.
+- Grant centralizado; scheduler y admin comparten la misma orquestación.
+- 66+ tests canal green; smoke broader 114p (1 pre daily concurrent flake doc non-reg).
+- Docs: `services/channels/CLAUDE.md`, `30-channel-admin-hardening-SUMMARY.md`, HARDENING_ROADMAP Phase 30, `handlers/CLAUDE.md` patrón channel admin.
+- 0 impact gamificación/narrativa; sistema crítico #3 protegido y reforzado.
+- Handoff: "Phase 30 channel admin hardening closed (tests passing)."

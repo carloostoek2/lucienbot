@@ -15,13 +15,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
+from services.channel_grant import build_approval_payload, grant_pending_request
 from services.channel_service import ChannelService
 from services.package_service import PackageService
 from services.streak_scheduler_bridge import activate_streak_promotion, deactivate_streak_promotion
@@ -90,7 +90,7 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
 
         await bot.send_message(
             chat_id=user_id,
-            text=LucienVoice.free_entry_ritual(channel.channel_name or "Los Kinkys"),
+            text=build_approval_payload(channel),
             parse_mode="HTML",
             reply_markup=social_links_keyboard(),
         )
@@ -112,58 +112,10 @@ async def _process_pending_requests():
         bot = _get_bot()
 
         for request in ready_requests:
-            try:
-                channel = request.channel
-                if not channel or not channel.is_active:
-                    continue
-
-                await bot.approve_chat_join_request(
-                    chat_id=channel.channel_id, user_id=request.user_id
-                )
-
-                request.status = "approved"
-                request.approved_at = datetime.now(UTC)
-                db.commit()
-
-                # Enviar mensaje de bienvenida directamente.
-                # NOTA: El webhook handle_member_join NO se dispara cuando el bot
-                # aprueba via API (el evento tiene from_user=bot, no el usuario).
-                # Para aprobaciones manuales por custodio sí funciona el webhook.
-                try:
-                    message = LucienVoice.free_entry_welcome(channel.channel_name or "Los Kinkys")
-                    if channel.invite_link:
-                        message += f"\n{channel.invite_link}"
-                    await bot.send_message(
-                        chat_id=request.user_id,
-                        text=message,
-                        parse_mode="HTML",
-                        reply_markup=social_links_keyboard(),
-                    )
-                    logger.info(
-                        f"Mensaje bienvenida enviado a user={request.user_id} tras aprobacion automatica"
-                    )
-                except Exception as e:
-                    logger.error(f"Error enviando bienvenida a user={request.user_id}: {e}")
-
-                logger.info(
-                    f"Solicitud aprobada: user={request.user_id}, channel={channel.channel_id}"
-                )
-
-            except TelegramBadRequest as e:
-                if "USER_ALREADY_PARTICIPANT" in str(e):
-                    request.status = "approved"
-                    request.approved_at = datetime.now(UTC)
-                    db.commit()
-                    logger.info(
-                        f"Solicitud {request.id}: user={request.user_id} ya era participante, "
-                        f"marcada como aprobada"
-                    )
-                else:
-                    logger.error(f"Error aprobando solicitud {request.id}: {e}")
-                    db.rollback()
-            except Exception as e:
-                logger.error(f"Error aprobando solicitud {request.id}: {e}")
-                db.rollback()
+            channel = request.channel
+            if not channel or not channel.is_active:
+                continue
+            await grant_pending_request(db, request, bot)
 
     finally:
         db.close()

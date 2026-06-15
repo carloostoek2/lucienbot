@@ -5,11 +5,17 @@ Este módulo contiene todos los mensajes y respuestas del bot,
 diseñados con la personalidad elegante y misteriosa de Lucien.
 """
 
+import html
 from datetime import datetime
 
 
 class LucienVoice:
     """Clase para generar mensajes con la voz de Lucien"""
+
+    @staticmethod
+    def _safe_channel_name(channel_name: str | None, default: str = "Los Kinkys") -> str:
+        """Escapa channel_name para interpolación HTML."""
+        return html.escape(channel_name or default)
 
     # ==================== SALUDOS ====================
 
@@ -101,7 +107,9 @@ Mientras tanto, Diana observa su interés con... curiosidad.</i>"""
     @staticmethod
     def free_access_approved(channel_name: str | None = None) -> str:
         """Mensaje cuando se aprueba acceso al canal free"""
-        channel_text = f" a <b>{channel_name}</b>" if channel_name else ""
+        channel_text = (
+            f" a <b>{LucienVoice._safe_channel_name(channel_name)}</b>" if channel_name else ""
+        )
         return f"""🎩 <b>Lucien:</b>
 
 <i>Las puertas del vestíbulo se han abierto{channel_text}.
@@ -125,12 +133,13 @@ Si cambia de parecer, las puertas siempre están... casi abiertas."""
     @staticmethod
     def free_entry_impatient(channel_name: str) -> str:
         """Mensaje cuando un usuario ya tiene solicitud pendiente e intenta apresurarse"""
+        safe = LucienVoice._safe_channel_name(channel_name)
         return f"""🎩 <b>Lucien:</b>
 
 <i>Ah, la impaciencia... una cualidad que Diana encuentra
 particularmente... reveladora.</i>
 
-Su solicitud para <b>{channel_name}</b> ya está registrada.
+Su solicitud para <b>{safe}</b> ya está registrada.
 Las puertas se abren a su debido tiempo.
 
 <i>La anticipación es parte del ritual, ¿no lo cree?
@@ -139,21 +148,23 @@ Diana observa con interés su... entusiasmo.</i>"""
     @staticmethod
     def free_entry_ritual(channel_name: str) -> str:
         """Mensaje ritual enviado tras el periodo de espera del canal free"""
+        safe = LucienVoice._safe_channel_name(channel_name)
         return f"""🎩 <b>Lucien:</b>
 
 <i>El tiempo ha transcurrido y Diana ha observado su paciencia
 con... aprobación. Los velos del vestíbulo se descorren.</i>
 
-Las puertas de <b>{channel_name}</b> están ante usted.
+Las puertas de <b>{safe}</b> están ante usted.
 
 <i>Entre con intención. Diana espera al otro lado.</i>"""
 
     @staticmethod
     def free_entry_welcome(channel_name: str) -> str:
         """Mensaje de bienvenida cuando se aprueba el acceso al canal free"""
+        safe = LucienVoice._safe_channel_name(channel_name)
         return f"""🎩 <b>Lucien:</b>
 
-<i>Diana ha decidido abrirle las puertas de <b>{channel_name}</b>.
+<i>Diana ha decidido abrirle las puertas de <b>{safe}</b>.
 Su curiosidad no ha pasado... desapercibida.</i>
 
 Bienvenido al vestíbulo. Explore, observe, y recuerde:
@@ -307,9 +318,10 @@ Compártalo con quien Diana considere digno.</i>"""
     def admin_channel_registered(channel_name: str, channel_type: str) -> str:
         """Canal registrado exitosamente"""
         type_text = "vestíbulo" if channel_type == "free" else "El Diván"
+        safe = LucienVoice._safe_channel_name(channel_name, "Sin nombre")
         return f"""🎩 <b>Lucien:</b>
 
-<i>El {type_text} <b>{channel_name}</b> ha sido registrado
+<i>El {type_text} <b>{safe}</b> ha sido registrado
 en los dominios de Diana.</i>
 
 ✅ <b>Canal configurado correctamente.</b>
@@ -336,7 +348,8 @@ El reino aún no tiene vestíbulos ni círculos exclusivos...</i>
         for ch in channels:
             type_emoji = "🚪" if ch.channel_type == ChannelType.FREE else "👑"
             type_text = "Vestíbulo" if ch.channel_type == ChannelType.FREE else "Círculo VIP"
-            text += f"{type_emoji} <b>{ch.channel_name or 'Sin nombre'}</b>\n"
+            safe = LucienVoice._safe_channel_name(ch.channel_name, "Sin nombre")
+            text += f"{type_emoji} <b>{safe}</b>\n"
             text += f"   └ {type_text} | ID: <code>{ch.channel_id}</code>\n\n"
 
         return text
@@ -344,9 +357,10 @@ El reino aún no tiene vestíbulos ni círculos exclusivos...</i>
     @staticmethod
     def admin_channel_deleted(channel_name: str) -> str:
         """Canal eliminado"""
+        safe = LucienVoice._safe_channel_name(channel_name, "Sin nombre")
         return f"""🎩 <b>Lucien:</b>
 
-<i>El dominio <b>{channel_name}</b> ha sido removido
+<i>El dominio <b>{safe}</b> ha sido removido
 de los archivos de Diana.</i>
 
 ✅ <b>Canal eliminado correctamente.</b>
@@ -419,18 +433,6 @@ El reino descansa tranquilo por ahora."""
 
         return text
 
-    @staticmethod
-    def admin_requests_cleared(count: int) -> str:
-        """Solicitudes aprobadas en lote"""
-        return f"""🎩 <b>Lucien:</b>
-
-<i>He abierto las puertas para <b>{count}</b> visitantes
-que aguardaban en los vestíbulos.</i>
-
-✅ <b>Solicitudes aprobadas en lote.</b>
-
-<i>Diana aprecia la eficiencia del custodio del reino.</i>"""
-
     # ==================== PANEL ADMIN - CONFIGURACIÓN ====================
 
     @staticmethod
@@ -446,6 +448,244 @@ que aguardaban en los vestíbulos.</i>
 
 <i>Los nuevos visitantes experimentarán esta espera
 antes de acceder a los dominios de Diana.</i>"""
+
+    @staticmethod
+    def admin_channel_access_denied() -> str:
+        """Acceso denegado al panel de canales."""
+        return """🎩 <b>Lucien:</b>
+
+<i>Los dominios de Diana no responden a su llamada...</i>
+
+⚠️ <b>Acceso denegado</b>
+
+<i>Solo los Custodios del reino pueden gestionar los vestíbulos.</i>"""
+
+    @staticmethod
+    def admin_wait_time_invalid() -> str:
+        """Tiempo de espera custom inválido."""
+        return """🎩 <b>Lucien:</b>
+
+<i>Ese tiempo de espera no es aceptable para los vestíbulos.</i>
+
+⚠️ Indique un valor entre <b>1</b> y <b>1440</b> minutos (24 horas).
+
+<i>Ejemplo: <code>7</code> para siete minutos de paciencia.</i>"""
+
+    @staticmethod
+    def admin_messages_menu(channel_name: str) -> str:
+        """Menú de configuración de mensajes del canal."""
+        safe = LucienVoice._safe_channel_name(channel_name, "Sin nombre")
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Mensajes personalizados para <b>{safe}</b>...</i>
+
+📨 <b>Ritual</b> — enviado tras 30s de la solicitud
+👋 <b>Bienvenida</b> — enviado tras aprobación
+
+<i>Use HTML básico. Escriba <code>quitar</code> al editar para restaurar el default de Lucien.</i>"""
+
+    @staticmethod
+    def admin_message_edit_prompt(msg_type: str) -> str:
+        """Prompt para editar mensaje custom."""
+        label = "ritual de entrada" if msg_type == "approval" else "bienvenida"
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Envíe el nuevo mensaje de <b>{label}</b>...</i>
+
+<i>HTML básico permitido. Escriba <code>quitar</code> para usar el mensaje default de Lucien.</i>"""
+
+    @staticmethod
+    def admin_message_saved(msg_type: str) -> str:
+        """Mensaje guardado exitosamente."""
+        label = "Ritual" if msg_type == "approval" else "Bienvenida"
+        return f"""🎩 <b>Lucien:</b>
+
+✅ <b>{label}</b> actualizado correctamente.
+
+<i>Los nuevos visitantes recibirán este mensaje.</i>"""
+
+    @staticmethod
+    def admin_message_restored(msg_type: str) -> str:
+        """Mensajes restaurados a default."""
+        if msg_type == "all":
+            detail = "ritual y bienvenida"
+        elif msg_type == "approval":
+            detail = "ritual"
+        else:
+            detail = "bienvenida"
+        return f"""🎩 <b>Lucien:</b>
+
+✅ Mensaje de <b>{detail}</b> restaurado al estilo de Lucien.
+
+<i>Los defaults volverán a aplicarse en el próximo envío.</i>"""
+
+    @staticmethod
+    def admin_message_preview(approval_preview: str, welcome_preview: str) -> str:
+        """Vista previa de mensajes actuales (previews ya escapados)."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Mensajes configurados actualmente:</i>
+
+📨 <b>Ritual:</b>
+{approval_preview}
+
+👋 <b>Bienvenida:</b>
+{welcome_preview}"""
+
+    @staticmethod
+    def admin_pending_requests_empty() -> str:
+        """Sin solicitudes pendientes."""
+        return """🎩 <b>Lucien:</b>
+
+<i>No hay almas en espera en los vestíbulos de Diana.
+Todos los visitantes han sido atendidos...</i>
+
+El reino descansa tranquilo por ahora."""
+
+    @staticmethod
+    def admin_pending_requests_header(count: int, page: int, total_pages: int) -> str:
+        """Cabecera de lista paginada de solicitudes pendientes."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Hay <b>{count}</b> visitantes aguardando — página {page + 1}/{total_pages}</i>
+
+"""
+
+    @staticmethod
+    def admin_requests_cleared(
+        approved: int, failed: int = 0, errors: list[str] | None = None
+    ) -> str:
+        """Solicitudes aprobadas en lote (con errores parciales opcionales)."""
+        if approved == 0 and failed > 0:
+            text = f"""🎩 <b>Lucien:</b>
+
+⚠️ <b>Ninguna solicitud pudo aprobarse</b> ({failed} fallidas).
+
+<i>Revise permisos del bot o el estado de las solicitudes.</i>"""
+            if errors:
+                text += "\n\n" + LucienVoice._format_error_details(errors)
+            return text
+
+        if failed == 0:
+            return f"""🎩 <b>Lucien:</b>
+
+<i>He abierto las puertas para <b>{approved}</b> visitantes
+que aguardaban en los vestíbulos.</i>
+
+✅ <b>Solicitudes aprobadas en lote.</b>
+
+<i>Diana aprecia la eficiencia del custodio del reino.</i>"""
+
+        text = f"""🎩 <b>Lucien:</b>
+
+✅ <b>{approved}</b> aprobados | ⚠️ <b>{failed}</b> fallidos
+
+<i>Algunas puertas resistieron abrirse. Revise permisos del bot
+o el estado de las solicitudes.</i>"""
+        if errors:
+            text += "\n\n" + LucienVoice._format_error_details(errors)
+        return text
+
+    @staticmethod
+    def _format_error_details(errors: list[str], max_items: int = 3) -> str:
+        """Formatea errores truncados para UI admin."""
+        import html
+
+        lines = [f"• {html.escape(err)}" for err in errors[:max_items]]
+        if len(errors) > max_items:
+            lines.append(f"• ... y {len(errors) - max_items} más")
+        return "<i>Detalle:</i>\n" + "\n".join(lines)
+
+    @staticmethod
+    def admin_approve_all_empty() -> str:
+        """Aprobar todas sin solicitudes pendientes."""
+        return """🎩 <b>Lucien:</b>
+
+<i>No hay visitantes aguardando en este vestíbulo.</i>
+
+✅ <b>Nada que aprobar.</b>
+
+<i>El reino descansa tranquilo por ahora.</i>"""
+
+    @staticmethod
+    def toast_approve_one_success(name: str) -> str:
+        """Toast plain-text para callback.answer (sin HTML)."""
+        return f"✅ {name} admitido al vestíbulo."
+
+    @staticmethod
+    def toast_approve_one_failed() -> str:
+        """Toast plain-text: aprobación individual fallida."""
+        return "No pude abrir las puertas para ese visitante."
+
+    @staticmethod
+    def toast_reject_success(name: str) -> str:
+        """Toast plain-text: rechazo individual exitoso."""
+        return f"🚫 {name} rechazado."
+
+    @staticmethod
+    def toast_reject_failed() -> str:
+        """Toast plain-text: rechazo individual fallido."""
+        return "No pude rechazar esa solicitud."
+
+    @staticmethod
+    def toast_approve_all_empty() -> str:
+        """Toast plain-text: sin pendientes para aprobar."""
+        return "No hay solicitudes pendientes."
+
+    @staticmethod
+    def toast_approve_all_failed() -> str:
+        """Toast plain-text: aprobación masiva sin éxitos."""
+        return "Ninguna solicitud pudo aprobarse."
+
+    @staticmethod
+    def toast_approve_all_success(count: int) -> str:
+        """Toast plain-text: aprobación masiva exitosa."""
+        return f"{count} solicitudes aprobadas"
+
+    @staticmethod
+    def admin_approve_one_success(username: str) -> str:
+        """Aprobación individual exitosa (HTML — edit_text/answer con parse_mode)."""
+        return f"""🎩 <b>Lucien:</b>
+
+✅ <b>{username}</b> ha sido admitido al vestíbulo.
+
+<i>Las puertas se abrieron sin resistencia.</i>"""
+
+    @staticmethod
+    def admin_approve_one_failed() -> str:
+        """Aprobación individual fallida (HTML)."""
+        return """🎩 <b>Lucien:</b>
+
+⚠️ <i>No pude abrir las puertas para ese visitante.</i>
+
+Verifique permisos del bot o que la solicitud siga pendiente."""
+
+    @staticmethod
+    def admin_reject_confirm(username: str) -> str:
+        """Confirmación de rechazo individual."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>¿Confirma que desea rechazar a <b>{username}</b>?</i>
+
+⚠️ El visitante <b>no</b> recibirá acceso al vestíbulo."""
+
+    @staticmethod
+    def admin_reject_success(username: str) -> str:
+        """Rechazo individual exitoso (HTML)."""
+        return f"""🎩 <b>Lucien:</b>
+
+🚫 <b>{username}</b> ha sido rechazado.
+
+<i>Las puertas permanecen cerradas para este visitante.</i>"""
+
+    @staticmethod
+    def admin_reject_failed() -> str:
+        """Rechazo individual fallido (HTML)."""
+        return """🎩 <b>Lucien:</b>
+
+⚠️ <i>No pude rechazar esa solicitud.</i>
+
+Verifique permisos del bot o que la solicitud siga pendiente."""
 
     # ==================== ANALYTICS ====================
 

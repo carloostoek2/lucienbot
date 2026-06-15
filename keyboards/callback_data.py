@@ -289,6 +289,63 @@ class ApproveAllCallback(CallbackData, prefix="approve_all"):
     channel_id: int
 
 
+class ConfigMessagesCallback(CallbackData, prefix="config_msgs"):
+    """Menú configuración de mensajes del canal"""
+
+    channel_id: int  # DB PK
+
+
+class ConfigMessageTypeCallback(CallbackData, prefix="config_msg_type"):
+    """Selección de tipo de mensaje a editar"""
+
+    channel_id: int
+    msg_type: str  # "approval" | "welcome"
+
+
+class ViewMessagesCallback(CallbackData, prefix="view_msgs"):
+    """Ver mensajes actuales del canal"""
+
+    channel_id: int
+
+
+class RestoreMessagesCallback(CallbackData, prefix="restore_msgs"):
+    """Restaurar mensajes a default Lucien"""
+
+    channel_id: int
+    msg_type: str  # "approval" | "welcome" | "all"
+
+
+class ApproveOneCallback(CallbackData, prefix="approve_one"):
+    """Aprobar solicitud individual"""
+
+    request_id: int
+    channel_id: int  # DB PK (navegación)
+    page: int = 0
+
+
+class RejectOneCallback(CallbackData, prefix="reject_one"):
+    """Rechazar solicitud individual (muestra confirmación)"""
+
+    request_id: int
+    channel_id: int
+    page: int = 0
+
+
+class ConfirmRejectCallback(CallbackData, prefix="confirm_reject"):
+    """Confirmar rechazo de solicitud"""
+
+    request_id: int
+    channel_id: int
+    page: int = 0
+
+
+class PendingPageCallback(CallbackData, prefix="pending_page"):
+    """Paginación de solicitudes pendientes"""
+
+    channel_id: int
+    page: int
+
+
 class DeleteChannelCallback(CallbackData, prefix="delete_channel"):
     """Confirmar eliminación de canal"""
 

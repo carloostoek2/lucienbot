@@ -158,12 +158,22 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 
 (End of current pool section + meta sync note. For next tirón: follow now-documented hardener flow + launch documentador at close per .claude/agents/documentador.md.)
 
+**Phase 30 — Channel Admin Hardening (2026-06-15; feature-advisor scope #1/#2/#4/#5/#6; implement-review loop, 0 open issues post re-review):**
+
+- **Objetivo:** Fortalecer módulo admin de canales (sistema crítico #3): guards Custodio en todos los callbacks, wait time custom 1–1440 min, aprobación masiva con grant real en Telegram, editor mensajes approval/welcome, gestión individual pendientes con paginación 8/página y status `rejected`.
+- **Key files:** `services/channel_grant.py` (nuevo — orquestación TG+BD compartida scheduler/admin), `services/channel_service.py` (approve/reject individual+bulk, mensajes, `get_valid_pending_request` IDOR guard), `services/scheduler_service.py` (delega loop a grant helper), `handlers/channel_handlers.py` (seguridad + FSM + UI admin), `handlers/free_channel_handlers.py` (welcome custom), `keyboards/callback_data.py`, `utils/lucien_voice.py`, tests unit/integration/handlers nuevos o extendidos, `services/channels/CLAUDE.md`.
+- **Cambio de contrato explícito:** `approve_all_pending_now` **sí** llama `approve_chat_join_request` + welcome; test `test_free_entry_flow.py` invertido (antes esperaba solo BD).
+- **Outcomes:** `is_admin` en todos entrypoints admin canales; 1 service `ChannelService` via `get_service`; puros para ≤50 LOC; grant centralizado preserva comportamiento scheduler gold; mensajes custom wired en scheduler + free entry; IDOR guard en approve/reject individual; HTML escape en previews; errores parciales en bulk approve transparentes; 0 impact gamif/narrativa; 3 crit channel-VIP protegido (pending/approve/welcome/scheduler).
+- **Verification:** `pytest tests/unit/test_channel_service.py tests/unit/test_channel_grant.py` green; `pytest tests/integration/test_free_entry_flow.py -k "Scheduler or approve_all"` green; `pytest tests/handlers/test_channel_admin_handlers.py` green; smoke broader 114p (1 pre daily concurrent flake doc non-reg); implement re-review 0 open issues.
+- **Docs:** `30-channel-admin-hardening-SUMMARY.md`, `services/channels/CLAUDE.md`, `decisions.md` Item 12, `handlers/CLAUDE.md` patrón channel admin, este ROADMAP.
+- **Handoff:** "Phase 30 channel admin hardening closed (tests passing). Ready for next hardening cluster or feature work."
+
 ---
 
 ## 5. What Is Missing / Roadmap (Gaps + Proposed Next)
 
 **Remaining from Initial Analysis (not fully closed by this tirón; prioritized):**
-- **Long functions / admin bloat (deuda media-alta, flagged in initial + arch notes):** Store/mission/reward/promotion admin wizards (process_*/confirm_* >50 LOC common; some still multi-service orchestration or "lógica en handlers"). Reward handlers still noted for 2 services in some paths (pre-exist but visible post-cleanup). Game/broadcast some >50 preserved (tight scope).
+- **Long functions / admin bloat (deuda media-alta, flagged in initial + arch notes):** Store/mission/reward/promotion admin wizards (process_*/confirm_* >50 LOC common; some still multi-service orchestration or "lógica en handlers"). Reward handlers still noted for 2 services in some paths (pre-exist but visible post-cleanup). Game/broadcast some >50 preserved (tight scope). **Channel admin (Phase 30 closed):** guards, grant real, mensajes, pendientes individual — ver sec 4 Phase 30.
 - **Remaining direct Besito compositions:** Store (debits in complete_order — critical atomic but out-of-scope in Item6 tight); story (deliberately kept for debit commit=False + _grant credit); some handlers (direct for admin/anon queries — legacy/out-of-scope); backpack/streak (locals already good precedent).
 - **Test / coverage gaps (media, per skill + impact recs):** More explicit max limits/global caps in gamif; full FSM restart with real Redis sim; more invalid narrative + EventBus desbloqueo tests; deeper channel/VIP (multi-tariff edges, free pending after VIP expire); full handler E2E for "mensaje correcto" (Lucien voice on insufficient); property-based or more concurrent in other flows; health/observability (no /health yet); full Redis for rate/idemp (in-mem still).
 - **Other fragility/deuda (from initial + arch/test-guardian notes):** Pre-exist daily concurrent flake + some VIP flows (doc non-reg); N806 in golds (tolerated); deprecation utcnow (game/streak tests); inconsistent logging in some paths; no full rate/idemp Redis; health endpoint; broader docs drift (some CLAUDEs still reference old patterns); analyzer noise reduction; full handler modernization (legacy direct Service() in some admin).

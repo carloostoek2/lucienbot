@@ -10,6 +10,7 @@ from keyboards.callback_data import (
     AnonViewCallback,
     ApproveAllCallback,
     ConfigInviteCallback,
+    ConfigMessagesCallback,
     ConfigWaitCallback,
     CopyTokenCallback,
     DeleteChannelCallback,
@@ -187,7 +188,8 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
                 ],
                 [
                     InlineKeyboardButton(
-                        text="📨 Configurar mensajes", callback_data=f"config_messages_{channel_id}"
+                        text="📨 Configurar mensajes",
+                        callback_data=ConfigMessagesCallback(channel_id=channel_id).pack(),
                     )
                 ],
                 [

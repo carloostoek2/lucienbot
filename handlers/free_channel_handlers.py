@@ -11,6 +11,7 @@ from aiogram.filters import JOIN_TRANSITION, LEAVE_TRANSITION, ChatMemberUpdated
 from aiogram.types import ChatJoinRequest, ChatMemberUpdated
 
 from keyboards.inline_keyboards import social_links_keyboard
+from services.channel_grant import build_welcome_payload
 from services.channel_service import ChannelService
 from services.scheduler_service import get_scheduler
 from services.user_service import UserService
@@ -160,9 +161,7 @@ async def handle_member_join(event: ChatMemberUpdated):
 
             # Enviar mensaje de bienvenida ritual con enlace
             try:
-                message = LucienVoice.free_entry_welcome(channel.channel_name or "Los Kinkys")
-                if channel.invite_link:
-                    message += f"\n{channel.invite_link}"
+                message = build_welcome_payload(channel)
                 await event.bot.send_message(
                     chat_id=user.id,
                     text=message,
