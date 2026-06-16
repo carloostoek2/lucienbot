@@ -19,6 +19,14 @@ from services import get_service
 from services.nurture_service import NurtureService
 
 
+def test_nurture_audience_strenum_binds_lowercase_values():
+    """PostgreSQL nurtureaudience enum expects 'vip'/'all'/'free', not member names."""
+    assert NurtureAudience.VIP == "vip"
+    assert NurtureAudience.ALL == "all"
+    assert NurtureAudience.FREE == "free"
+    assert isinstance(NurtureAudience.VIP, str)
+
+
 # For unit service tests: simple direct fixture (gold pattern in test_vip etc). Handler/e2e use get_service.
 @pytest.fixture
 def nurture_svc(db_session):

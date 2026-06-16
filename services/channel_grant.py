@@ -90,6 +90,11 @@ def _commit_request_approved(db: Session, request: PendingRequest) -> None:
     db.commit()
 
 
+def _commit_request_rejected(db: Session, request: PendingRequest) -> None:
+    request.status = "rejected"
+    db.commit()
+
+
 async def _send_welcome_after_grant(bot, request: PendingRequest, channel: Channel) -> None:
     try:
         message = build_welcome_payload(channel)
@@ -104,6 +109,12 @@ async def _send_welcome_after_grant(bot, request: PendingRequest, channel: Chann
             f"channel_tg={channel.channel_id}"
         )
     except Exception as e:
+        if "bot was blocked by the user" in str(e):
+            logger.warning(
+                f"channel_grant | welcome_blocked | user_id={request.user_id} | "
+                f"channel_tg={channel.channel_id}"
+            )
+            return
         logger.error(f"Error enviando bienvenida a user={request.user_id}: {e}")
 
 
@@ -131,13 +142,30 @@ async def grant_pending_request(db: Session, request: PendingRequest, bot) -> Gr
         return GrantResult(success=True, request_id=request_id)
 
     except TelegramBadRequest as e:
-        if "USER_ALREADY_PARTICIPANT" in str(e):
+        err = str(e)
+        if "USER_ALREADY_PARTICIPANT" in err:
             _commit_request_approved(db, request)
             logger.info(
                 f"channel_grant | already_participant | request_id={request_id} | "
                 f"user_id={user_id}"
             )
             return GrantResult(success=True, request_id=request_id)
+        if "USER_CHANNELS_TOO_MUCH" in err:
+            try:
+                await bot.decline_chat_join_request(
+                    chat_id=channel.channel_id, user_id=user_id
+                )
+            except Exception as decl_err:
+                logger.warning(
+                    f"channel_grant | channels_limit_decline_failed | request_id={request_id} | "
+                    f"user_id={user_id} | error={decl_err}"
+                )
+            _commit_request_rejected(db, request)
+            logger.warning(
+                f"channel_grant | channels_limit | request_id={request_id} | "
+                f"user_id={user_id} | result=rejected_terminal"
+            )
+            return GrantResult(success=False, request_id=request_id, error=err)
         logger.error(f"Error aprobando solicitud {request_id}: {e}")
         db.rollback()
         return GrantResult(success=False, request_id=request_id, error=str(e))

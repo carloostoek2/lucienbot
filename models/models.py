@@ -500,7 +500,7 @@ class Category(Base):
 # ============================================================
 
 
-class NurtureAudience(str, enum.Enum):
+class NurtureAudience(enum.StrEnum):
     """Audiencia objetivo para secuencias de nurture (embudo de contenido esporádico)"""
 
     FREE = "free"

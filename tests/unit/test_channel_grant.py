@@ -134,6 +134,37 @@ class TestGrantPendingRequest:
         assert req.status == "approved"
         bot.send_message.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_user_channels_too_much_marks_rejected_terminal(
+        self, db_session, sample_user, sample_free_channel
+    ):
+        from models.models import PendingRequest
+
+        req = PendingRequest(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_free_channel.id,
+            status="pending",
+            scheduled_approval_at=datetime.now(UTC),
+        )
+        db_session.add(req)
+        db_session.commit()
+        db_session.refresh(req)
+
+        bot = AsyncMock()
+        bot.approve_chat_join_request.side_effect = TelegramBadRequest(
+            method="approve", message="USER_CHANNELS_TOO_MUCH"
+        )
+
+        result = await grant_pending_request(db_session, req, bot)
+
+        assert result.success is False
+        assert req.status == "rejected"
+        assert req.approved_at is None
+        bot.decline_chat_join_request.assert_called_once_with(
+            chat_id=sample_free_channel.channel_id, user_id=sample_user.telegram_id
+        )
+        bot.send_message.assert_not_called()
+
 
 class TestRejectPendingRequest:
     @pytest.mark.asyncio
