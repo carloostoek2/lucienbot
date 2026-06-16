@@ -4,19 +4,82 @@ Servicio de Recompensas - Lucien Bot
 Gestiona la creacion y entrega de recompensas.
 """
 
+import html
 import logging
+from datetime import UTC, datetime
 
-from sqlalchemy import desc
+from sqlalchemy import and_, desc, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.database import SessionLocal
-from models.models import Reward, RewardType, TransactionSource, UserRewardHistory
+from models.models import (
+    MissionFrequency,
+    Reward,
+    RewardType,
+    TokenStatus,
+    TransactionSource,
+    UserMissionProgress,
+    UserRewardHistory,
+)
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
+
+_DELIVERY_CLAIM_MARKER = "__delivery_claim__"
+_CLAIM_TOKEN_PREFIX = "token:"
+_CLAIM_SENT_PREFIX = "sent:"
+_DELIVERY_CLAIM_TTL_SECONDS = 60
+
+
+def _finalized_delivery_clause():
+    """Excluye claims pendientes del chequeo de idempotencia."""
+    return or_(
+        UserRewardHistory.details.is_(None),
+        and_(
+            UserRewardHistory.details != _DELIVERY_CLAIM_MARKER,
+            ~UserRewardHistory.details.like(f"{_CLAIM_TOKEN_PREFIX}%"),
+            ~UserRewardHistory.details.like(f"{_CLAIM_SENT_PREFIX}%"),
+        ),
+    )
+
+
+def _is_resumable_delivery_claim(details: str | None) -> bool:
+    """True si el claim pendiente puede reanudarse (stale o VIP en vuelo)."""
+    if not details:
+        return False
+    if details == _DELIVERY_CLAIM_MARKER:
+        return True
+    return details.startswith(_CLAIM_TOKEN_PREFIX) or details.startswith(_CLAIM_SENT_PREFIX)
+
+
+def _delivery_claim_age_seconds(delivered_at: datetime) -> float:
+    """Edad del claim en segundos (timezone-aware)."""
+    ref = delivered_at if delivered_at.tzinfo else delivered_at.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - ref).total_seconds()
+
+
+def _is_fresh_delivery_claim(details: str | None, delivered_at: datetime) -> bool:
+    """True si __delivery_claim__ aún en vuelo (< TTL); bloquea entregas concurrentes."""
+    if details != _DELIVERY_CLAIM_MARKER:
+        return False
+    return _delivery_claim_age_seconds(delivered_at) < _DELIVERY_CLAIM_TTL_SECONDS
+
+
+def _parse_vip_token_code(details: str) -> str | None:
+    """Extrae token_code de token:CODE o sent:token:CODE."""
+    if details.startswith(_CLAIM_SENT_PREFIX):
+        remainder = details[len(_CLAIM_SENT_PREFIX) :]
+    elif details.startswith(_CLAIM_TOKEN_PREFIX):
+        remainder = details[len(_CLAIM_TOKEN_PREFIX) :]
+    else:
+        return None
+    if remainder.startswith(_CLAIM_TOKEN_PREFIX):
+        remainder = remainder[len(_CLAIM_TOKEN_PREFIX) :]
+    return remainder or None
 
 
 def get_reward_emoji(reward: Reward) -> tuple[str, str]:
@@ -166,7 +229,15 @@ class RewardService:
     # ==================== ENTREGA DE RECOMPENSAS ====================
 
     async def deliver_reward(
-        self, bot, user_id: int, reward_id: int, mission_id: int = None
+        self,
+        bot,
+        user_id: int,
+        reward_id: int,
+        mission_id: int = None,
+        *,
+        history_claimed: bool = False,
+        since_completed_at: datetime | None = None,
+        frequency: MissionFrequency = MissionFrequency.ONE_TIME,
     ) -> tuple[bool, str]:
         """
         Entrega una recompensa a un usuario.
@@ -189,53 +260,116 @@ class RewardService:
 
         try:
             if reward.reward_type == RewardType.BESITOS:
-                success, message = await self._deliver_besitos(user_id, reward)
-                if success:
-                    self.log_reward_delivery(user_id, reward_id, mission_id)
-                return success, message
-
+                success, message = await self._deliver_besitos(
+                    user_id, reward, mission_id=mission_id
+                )
             elif reward.reward_type == RewardType.PACKAGE:
-                success, message = await self._deliver_package(bot, user_id, reward)
-                if success:
-                    self.log_reward_delivery(user_id, reward_id, mission_id)
-                return success, message
-
+                success, message = await self._deliver_package(
+                    bot,
+                    user_id,
+                    reward,
+                    mission_id=mission_id,
+                    since_completed_at=since_completed_at,
+                    frequency=frequency,
+                )
             elif reward.reward_type == RewardType.VIP_ACCESS:
-                success, message = await self._deliver_vip_access(bot, user_id, reward)
-                if success:
-                    self.log_reward_delivery(user_id, reward_id, mission_id)
-                return success, message
-
+                success, message = await self._deliver_vip_access(
+                    bot, user_id, reward, mission_id=mission_id
+                )
             else:
                 return False, LucienVoice.reward_type_unsupported()
 
+            if success and not history_claimed:
+                self.log_reward_delivery(user_id, reward_id, mission_id)
+            elif success and history_claimed:
+                self._finalize_delivery_claim(user_id, mission_id, reward_id)
+            return success, message
+
         except Exception as e:
             logger.error(f"Error entregando recompensa {reward_id}: {e}")
-            return False, LucienVoice.reward_delivery_error(str(e))
+            return False, LucienVoice.reward_delivery_error()
 
-    async def _deliver_besitos(self, user_id: int, reward: Reward) -> tuple[bool, str]:
+    def _besitos_credit_reference_id(
+        self, user_id: int, reward_id: int, mission_id: int | None
+    ) -> int:
+        """reference_id del crédito: claim.id por ciclo de misión, reward.id fuera de misión."""
+        if mission_id:
+            claim = self._get_mission_delivery_claim(user_id, mission_id, reward_id)
+            if claim:
+                return claim.id
+        return reward_id
+
+    def _has_mission_besitos_credit(
+        self,
+        user_id: int,
+        reward_id: int,
+        *,
+        mission_id: int | None = None,
+    ) -> bool:
+        """True si ya existe crédito MISSION para este ciclo/claim (evita doble acreditación)."""
+        from models.models import BesitoTransaction
+
+        ref_id = self._besitos_credit_reference_id(user_id, reward_id, mission_id)
+        return (
+            self.db.query(BesitoTransaction)
+            .filter(
+                BesitoTransaction.user_id == user_id,
+                BesitoTransaction.source == TransactionSource.MISSION,
+                BesitoTransaction.reference_id == ref_id,
+            )
+            .first()
+            is not None
+        )
+
+    async def _deliver_besitos(
+        self,
+        user_id: int,
+        reward: Reward,
+        *,
+        mission_id: int | None = None,
+    ) -> tuple[bool, str]:
         """Entrega recompensa de besitos (local BesitoService on-demand with shared db for atomicity)."""
-        besito_service = BesitoService(
-            db=self.db
-        )  # local, on-demand; owns=False (db shared); credit commits internally as before
+        besito_service = BesitoService(db=self.db)
+        if self._has_mission_besitos_credit(user_id, reward.id, mission_id=mission_id):
+            balance = besito_service.get_balance(user_id)
+            return True, LucienVoice.reward_besitos_received(reward.besito_amount, balance)
+
+        ref_id = self._besitos_credit_reference_id(user_id, reward.id, mission_id)
         success = besito_service.credit_besitos(
             user_id=user_id,
             amount=reward.besito_amount,
             source=TransactionSource.MISSION,
             description=f"Recompensa: {reward.name}",
-            reference_id=reward.id,
+            reference_id=ref_id,
         )
-
         if success:
             balance = besito_service.get_balance(user_id)
             return True, LucienVoice.reward_besitos_received(reward.besito_amount, balance)
-        else:
-            return False, LucienVoice.reward_besitos_failed()
+        return False, LucienVoice.reward_besitos_failed()
 
-    async def _deliver_package(self, bot, user_id: int, reward: Reward) -> tuple[bool, str]:
+    async def _deliver_package(
+        self,
+        bot,
+        user_id: int,
+        reward: Reward,
+        *,
+        mission_id: int | None = None,
+        since_completed_at: datetime | None = None,
+        frequency: MissionFrequency = MissionFrequency.ONE_TIME,
+    ) -> tuple[bool, str]:
         """Entrega recompensa de paquete"""
         if not reward.package_id:
             return False, LucienVoice.reward_package_not_configured()
+
+        if mission_id and self.has_mission_reward_been_delivered(
+            user_id,
+            mission_id,
+            since_completed_at=since_completed_at,
+            frequency=frequency,
+        ):
+            package = self.package_service.get_package(reward.package_id)
+            name = package.name if package else reward.name
+            return True, LucienVoice.reward_emoji_package(name)[1]
 
         # Verificar disponibilidad
         package = self.package_service.get_package(reward.package_id)
@@ -245,20 +379,59 @@ class RewardService:
         if not package.is_available_for_reward:
             return False, LucienVoice.reward_package_unavailable()
 
-        # Decrementar stock y entregar
         if not package.decrement_reward_stock():
             return False, LucienVoice.reward_stock_depleted()
 
-        self.db.commit()
-
-        # Enviar paquete
         success, message = await self.package_service.deliver_package_to_user(
             bot=bot, user_id=user_id, package_id=reward.package_id
         )
+        if not success:
+            if package.reward_stock >= 0:
+                package.reward_stock += 1
+            self.db.commit()
+            return False, LucienVoice.reward_package_delivery_failed()
 
-        return success, message if success else LucienVoice.reward_package_delivery_failed()
+        self.db.commit()
+        return success, message
 
-    async def _deliver_vip_access(self, bot, user_id: int, reward: Reward) -> tuple[bool, str]:
+    def _get_vip_token_from_claim_details(self, details: str):
+        """Obtiene token ACTIVE desde token: o sent:token: en claim.details."""
+        code = _parse_vip_token_code(details)
+        if not code:
+            return None
+        token = self.vip_service.get_token_by_code(code)
+        if token and token.status == TokenStatus.ACTIVE:
+            return token
+        return None
+
+    def _get_or_create_vip_delivery_token(
+        self, user_id: int, reward: Reward, mission_id: int | None
+    ):
+        """Reutiliza token de un intento fallido antes de generar uno nuevo."""
+        if mission_id:
+            claim = self._get_mission_delivery_claim(user_id, mission_id, reward.id)
+            if claim and claim.details:
+                if claim.details.startswith(_CLAIM_SENT_PREFIX):
+                    token = self._get_vip_token_from_claim_details(claim.details)
+                    if token:
+                        return token
+                elif claim.details.startswith(_CLAIM_TOKEN_PREFIX):
+                    token = self._get_vip_token_from_claim_details(claim.details)
+                    if token:
+                        return token
+        token = self.vip_service.generate_token(reward.tariff_id)
+        if mission_id:
+            claim = self._get_mission_delivery_claim(user_id, mission_id, reward.id)
+            if claim and not (
+                claim.details and claim.details.startswith(_CLAIM_SENT_PREFIX)
+            ):
+                claim.details = f"{_CLAIM_TOKEN_PREFIX}{token.token_code}"
+                self.db.commit()
+        return token
+
+    async def _deliver_vip_access(
+        self, bot, user_id: int, reward: Reward, *, mission_id: int | None = None
+    ) -> tuple[bool, str]:
         """Entrega recompensa de acceso VIP"""
         if not reward.tariff_id:
             return False, LucienVoice.reward_vip_not_configured()
@@ -267,22 +440,146 @@ class RewardService:
         if not tariff:
             return False, LucienVoice.reward_tariff_not_found()
 
-        # Generar token VIP
-        token = self.vip_service.generate_token(reward.tariff_id)
+        claim = (
+            self._get_mission_delivery_claim(user_id, mission_id, reward.id) if mission_id else None
+        )
+        already_sent = claim and claim.details and claim.details.startswith(_CLAIM_SENT_PREFIX)
+        if already_sent:
+            token = self._get_vip_token_from_claim_details(claim.details)
+            if not token:
+                return False, LucienVoice.reward_vip_not_configured()
+            return True, LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)
 
-        # Obtener info del bot para construir URL
+        token = self._get_or_create_vip_delivery_token(user_id, reward, mission_id)
         bot_info = await bot.get_me()
         token_url = f"https://t.me/{bot_info.username}?start={token.token_code}"
-
-        # Enviar mensaje al usuario
         await bot.send_message(
             chat_id=user_id,
-            text=LucienVoice.reward_vip_message(tariff.name, tariff.duration_days, token_url),
+            text=LucienVoice.reward_vip_message(
+                html.escape(tariff.name), tariff.duration_days, token_url
+            ),
+            parse_mode="HTML",
         )
+        if mission_id and claim:
+            token_detail = claim.details or f"{_CLAIM_TOKEN_PREFIX}{token.token_code}"
+            claim.details = f"{_CLAIM_SENT_PREFIX}{token_detail}"
+            self.db.commit()
 
         return True, LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)
 
     # ==================== HISTORIAL ====================
+
+    def _get_mission_delivery_claim(
+        self, user_id: int, mission_id: int, reward_id: int
+    ) -> UserRewardHistory | None:
+        return (
+            self.db.query(UserRewardHistory)
+            .filter(
+                UserRewardHistory.user_id == user_id,
+                UserRewardHistory.mission_id == mission_id,
+                UserRewardHistory.reward_id == reward_id,
+            )
+            .order_by(desc(UserRewardHistory.delivered_at))
+            .first()
+        )
+
+    def try_claim_mission_delivery(
+        self,
+        user_id: int,
+        mission_id: int,
+        reward_id: int,
+        *,
+        since_completed_at: datetime | None,
+        frequency: MissionFrequency,
+    ) -> bool:
+        """Reserva atómicamente el slot de entrega antes de side-effects."""
+        progress = (
+            self.db.query(UserMissionProgress)
+            .filter(
+                UserMissionProgress.user_id == user_id,
+                UserMissionProgress.mission_id == mission_id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not progress or not progress.is_completed:
+            return False
+        cycle_at = since_completed_at or progress.completed_at
+        if self.has_mission_reward_been_delivered(
+            user_id,
+            mission_id,
+            since_completed_at=cycle_at,
+            frequency=frequency,
+        ):
+            return False
+        existing = self._get_mission_delivery_claim(user_id, mission_id, reward_id)
+        if existing and _is_resumable_delivery_claim(existing.details):
+            if _is_fresh_delivery_claim(existing.details, existing.delivered_at):
+                return False
+            return True
+        self.db.add(
+            UserRewardHistory(
+                user_id=user_id,
+                reward_id=reward_id,
+                mission_id=mission_id,
+                details=_DELIVERY_CLAIM_MARKER,
+            )
+        )
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            return False
+        return True
+
+    def release_mission_delivery_claim(
+        self, user_id: int, mission_id: int, reward_id: int
+    ) -> None:
+        """Libera claim pendiente tras fallo. No borra si besitos ya fueron acreditados."""
+        claim = self._get_mission_delivery_claim(user_id, mission_id, reward_id)
+        if not claim or claim.details != _DELIVERY_CLAIM_MARKER:
+            return
+        if self._has_mission_besitos_credit(
+            user_id, reward_id, mission_id=mission_id
+        ):
+            self._finalize_delivery_claim(user_id, mission_id, reward_id)
+            return
+        self.db.delete(claim)
+        self.db.commit()
+
+    def _finalize_delivery_claim(
+        self, user_id: int, mission_id: int | None, reward_id: int
+    ) -> None:
+        """Marca claim como entrega finalizada."""
+        if not mission_id:
+            return
+        claim = self._get_mission_delivery_claim(user_id, mission_id, reward_id)
+        if claim:
+            claim.details = None
+            self.db.commit()
+
+    def has_mission_reward_been_delivered(
+        self,
+        user_id: int,
+        mission_id: int,
+        *,
+        since_completed_at: datetime | None = None,
+        frequency: MissionFrequency = MissionFrequency.ONE_TIME,
+    ) -> bool:
+        """Idempotencia: ONE_TIME si hay historial; RECURRING por ciclo (completed_at)."""
+        query = self.db.query(UserRewardHistory).filter(
+            UserRewardHistory.user_id == user_id,
+            UserRewardHistory.mission_id == mission_id,
+            _finalized_delivery_clause(),
+        )
+        if frequency == MissionFrequency.RECURRING and since_completed_at is not None:
+            ref = (
+                since_completed_at
+                if since_completed_at.tzinfo
+                else since_completed_at.replace(tzinfo=UTC)
+            )
+            return query.filter(UserRewardHistory.delivered_at >= ref).first() is not None
+        return query.first() is not None
 
     def log_reward_delivery(
         self, user_id: int, reward_id: int, mission_id: int = None, details: str = None

@@ -32,9 +32,19 @@ delete_mission(mission_id) -> bool
 get_or_create_progress(user_id, mission_id) -> UserMissionProgress
 get_user_progress(user_id, mission_id) -> UserMissionProgress
 get_user_all_progress(user_id) -> list[UserMissionProgress]
-get_user_active_missions(user_id) -> list[dict]
-increment_progress(user_id, mission_type, value) -> None  # Auto-incrementa todas las missions de ese tipo
-set_progress(user_id, mission_id, value) -> UserMissionProgress
+get_user_active_missions(user_id, bot=None) -> list[dict]  # catch-up si bot
+get_available_rewards_for_user(user_id, bot=None) -> list[dict]
+increment_progress(user_id, mission_type, amount=1, reference_id=None) -> list[UserMissionProgress]
+increment_progress_and_deliver(user_id, mission_type, amount=1, bot=None, reference_id=None) -> list
+set_progress(user_id, mission_id, value) -> UserMissionProgress  # preserva completed_at si ya completada
+
+# Entrega automática y catch-up
+deliver_pending_rewards(user_id, bot=None) -> int  # solo NEWLY_DELIVERED
+deliver_pending_rewards_for_mission(user_id, mission_id, bot=None) -> bool
+get_users_with_pending_reward_deliveries() -> list[int]  # scheduler scan
+is_mission_reward_delivered(user_id, mission_id) -> bool
+apply_daily_gift_mission_updates(user_id, bot=None) -> int
+apply_vip_active_mission_updates(user_id, bot=None) -> int
 ```
 
 ## RewardService API
@@ -42,7 +52,7 @@ set_progress(user_id, mission_id, value) -> UserMissionProgress
 # Creación por tipo
 create_reward_besitos(name, description, besito_amount) -> Reward
 create_reward_package(name, description, package_id) -> Reward
-create_reward_vip(name, description, tariff_id, duration_days) -> Reward
+create_reward_vip(name, description, tariff_id) -> Reward
 
 # CRUD
 get_reward(reward_id) -> Reward
@@ -51,8 +61,11 @@ get_rewards_by_type(reward_type) -> list[Reward]
 update_reward(reward_id, **kwargs) -> bool
 delete_reward(reward_id) -> bool
 
-# Entrega (async, llama internamente a BesitoService / PackageService / VIPService)
-deliver_reward(user_id, reward_id, mission_id=None) -> bool
+# Entrega (async; BesitoService / PackageService / VIPService internos)
+deliver_reward(bot, user_id, reward_id, mission_id=None, *, history_claimed=False) -> tuple[bool, str]
+try_claim_mission_delivery(user_id, mission_id, reward_id, *, since_completed_at, frequency) -> bool
+release_mission_delivery_claim(user_id, mission_id, reward_id) -> None
+has_mission_reward_been_delivered(user_id, mission_id, *, since_completed_at=None, frequency) -> bool
 
 # Historial y stats
 log_reward_delivery(user_id, reward_id, mission_id, details) -> None
@@ -65,15 +78,43 @@ get_reward_stats(reward_id) -> dict
 ```
 Admin crea Mission + Reward asociada
     → Admin configura tipo, target, reward
-Admin o sistema detecta progreso del visitante
-    → MissionService.increment_progress() o set_progress()
-    → Si current_value >= target_value → is_completed = True
-    → Handler ofrece "Reclamar recompensa"
-    → RewardService.deliver_reward()
-        → BESITOS: BesitoService.credit_besitos()
-        → PACKAGE: PackageService.deliver_package_to_user()
-        → VIP_ACCESS: VIPService (genera token + subscription)
+Disparador (reacción, regalo diario, tienda, VIP, etc.)
+    → MissionService.increment_progress_and_deliver() o set_progress() + pipeline
+    → Si current_value >= target_value → is_completed = True (commit primero)
+    → _deliver_mission_reward_if_allowed (automático, todos los MissionType)
+        → resolve_delivery_bot (handler o scheduler lazy)
+        → idempotencia UserRewardHistory (ONE_TIME / RECURRING por completed_at)
+        → RewardService.deliver_reward()
+        → Mensaje celebración LucienVoice (besitos / paquete / VIP)
+Catch-up si falló o sin bot
+    → deliver_pending_rewards en menús (/start, my_missions, rewards_list)
+    → deliver_pending_rewards_for_mission en reward_detail y mission_detail (por misión)
+    → Job scheduler cada 30 min (pending_mission_rewards)
+    → claim_mission_reward: callback-only safety net (no teclado; batch deliver_pending_rewards)
 ```
+
+## Entrega atómica e idempotencia
+
+- `RewardService.try_claim_mission_delivery()` — `FOR UPDATE` + claim en `UserRewardHistory` antes de side-effects
+- Claim fresco `__delivery_claim__` (<60s) bloquea invocaciones concurrentes; stale (>=60s) es resumible
+- Estados VIP `token:`/`sent:` son resumibles; `sent:` reutiliza token sin reenviar mensaje
+- Filas finalizadas (`details=None`) permiten nuevo claim en ciclos RECURRING
+- Claims pendientes no cuentan como entregadas hasta `_finalize_delivery_claim`
+- Besitos: idempotente por ciclo vía transacción MISSION + `reference_id=claim.id` (misión) o `reward.id` (directo)
+- RECURRING multi-ciclo: cada ciclo acredita besitos de nuevo (claim nuevo → reference_id distinto)
+- VIP: reutiliza token; `sent:token:CODE` parseado antes de generar token nuevo
+- Paquete: no decrementa stock si historial finalizado del ciclo ya existe
+- `deliver_pending_rewards` retorna solo `NEWLY_DELIVERED`; filtra misión/recompensa inactivas
+- Catch-up (`deliver_pending_rewards*`): `skip_cooldown=True` — entrega ciclos pendientes sin esperar cooldown
+- Flujo automático (`increment_progress_and_deliver`): respeta cooldown vía `previous_completed_at`
+- `increment_progress_and_deliver` captura `previous_completed_at` ANTES del reset RECURRING
+- `set_progress` preserva `completed_at` si ya estaba completada (RECURRING diario)
+
+## Handlers — claim_mission_reward (safety net)
+
+- Callback `claim_mission_reward` registrado pero **sin botón en teclados** (aceptable)
+- Uso: red de seguridad manual/debug; flujo normal es auto-entrega + catch-up en menús
+- Invoca `MissionService.deliver_pending_rewards(user_id, bot)` con alertas LucienVoice
 
 ## Reglas de Negocio
 - Missions de tipo RECURRING se reinician tras completar (progreso se resetea)

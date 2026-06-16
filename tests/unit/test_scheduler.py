@@ -76,6 +76,65 @@ class TestSchedulerTriggers:
                 f"Expected interval 30s, got {trigger.interval}"
             )
 
+    def test_pending_mission_rewards_job_registered_on_start(self):
+        """start() registra job pending_mission_rewards cada 30 min."""
+        mock_bot = AsyncMock()
+        mock_bot.token = "test_token"
+        scheduler = SchedulerService(mock_bot)
+
+        with patch.object(scheduler._scheduler, "add_job") as mock_add_job:
+            import asyncio
+
+            asyncio.run(scheduler.start())
+
+            pending_call = None
+            for call in mock_add_job.call_args_list:
+                if call.kwargs.get("id") == "pending_mission_rewards":
+                    pending_call = call
+                    break
+
+            assert pending_call is not None, "pending_mission_rewards job not found"
+            trigger = (
+                pending_call.kwargs.get("trigger")
+                if pending_call.kwargs.get("trigger") is not None
+                else (pending_call.args[1] if len(pending_call.args) > 1 else None)
+            )
+            assert isinstance(trigger, IntervalTrigger)
+            assert trigger.interval.total_seconds() == 30 * 60
+
+
+@pytest.mark.unit
+class TestPendingMissionRewardsJob:
+    """Tests para job _process_pending_mission_rewards."""
+
+    @pytest.mark.asyncio
+    @patch("services.mission_service.MissionService")
+    @patch("services.scheduler_service._get_bot")
+    @patch("services.scheduler_service.SessionLocal")
+    async def test_process_pending_mission_rewards_per_user(
+        self, mock_session_local, mock_get_bot, mock_mission_service_cls
+    ):
+        """Scheduler invoca deliver_pending_rewards por usuario con error isolation."""
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+        mock_bot = AsyncMock()
+        mock_get_bot.return_value = mock_bot
+
+        mock_service = MagicMock()
+        mock_service.get_users_with_pending_reward_deliveries.return_value = [111, 222]
+        mock_service.deliver_pending_rewards = AsyncMock(side_effect=[2, RuntimeError("boom")])
+        mock_mission_service_cls.return_value = mock_service
+
+        from services.scheduler_service import _process_pending_mission_rewards
+
+        await _process_pending_mission_rewards()
+
+        mock_service.get_users_with_pending_reward_deliveries.assert_called_once()
+        assert mock_service.deliver_pending_rewards.await_count == 2
+        mock_service.deliver_pending_rewards.assert_any_await(111, bot=mock_bot)
+        mock_service.deliver_pending_rewards.assert_any_await(222, bot=mock_bot)
+        mock_db.close.assert_called_once()
+
     def test_schedule_free_welcome_uses_date_trigger(self):
         """Test que schedule_free_welcome usa DateTrigger con replace_existing=True"""
         mock_bot = AsyncMock()

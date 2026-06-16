@@ -20,7 +20,7 @@ from models.models import (
     TransactionSource,
 )
 from services.besito_service import BesitoService
-from services.mission_service import MissionService
+from services.mission_service import MissionService, run_mission_side_effects_isolated
 
 logger = logging.getLogger(__name__)
 
@@ -379,25 +379,19 @@ class BroadcastService:
             reaction_id = reaction.id
             emoji_char = emoji.emoji
 
-            # Procesar misiones en una NUEVA transacción para evitar problemas de sesión
-            completed_count = 0
-            try:
-                mission_service = MissionService(db)
-                completed_missions = await mission_service.increment_progress_and_deliver(
-                    user_id,
-                    MissionType.REACTION_COUNT,
-                    amount=1,
-                    bot=bot,
-                    reference_id=broadcast_id,
+            # Misiones: sesión DB aislada + reintento (best-effort; no invalida la reacción)
+            completed_count = await run_mission_side_effects_isolated(
+                user_id,
+                MissionType.REACTION_COUNT,
+                amount=1,
+                bot=bot,
+                reference_id=broadcast_id,
+                db=db,
+            )
+            if completed_count:
+                logger.info(
+                    f"Misiones completadas por reacción: user={user_id}, broadcast={broadcast_id}, count={completed_count}"
                 )
-                completed_count = len(completed_missions)
-                if completed_missions:
-                    logger.info(
-                        f"Misiones completadas por reacción: user={user_id}, broadcast={broadcast_id}, count={completed_count}"
-                    )
-            except Exception as mission_error:
-                # Error en misiones no debe invalidar la reacción
-                logger.warning(f"Error procesando misiones para reacción: {mission_error}")
 
             # Retornar diccionario con datos GUARDADOS (no acceder al objeto reaction)
             return {

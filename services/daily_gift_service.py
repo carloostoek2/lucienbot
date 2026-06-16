@@ -200,6 +200,25 @@ class DailyGiftService:
             logger.error(f"Error reclamando regalo: {e}")
             return False, None, "Hubo un error al procesar tu regalo. Intenta de nuevo más tarde."
 
+    async def claim_gift_with_missions(self, user_id: int, bot=None) -> tuple:
+        """
+        Reclama regalo diario y actualiza misiones DAILY_GIFT_* (best-effort post-commit).
+        Un solo punto de entrada para handlers (1 service call).
+        """
+        result = self.claim_gift(user_id)
+        if not result[0]:
+            return result
+
+        from services.mission_service import run_daily_gift_mission_side_effects
+
+        completed = await run_daily_gift_mission_side_effects(user_id, bot=bot)
+        if completed:
+            logger.info(
+                f"daily_gift_service | claim_gift_with_missions | user_id={user_id} | "
+                f"missions_completed={completed}"
+            )
+        return result
+
     def get_claim_history(self, user_id: int, limit: int = 30) -> list:
         """Obtiene el historial de reclamos de un usuario"""
         return (

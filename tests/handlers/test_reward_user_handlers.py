@@ -6,7 +6,7 @@ Cubre:
 - reward_detail: detalle de recompensa con mision asociada, idempotencia, no encontrada
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -27,7 +27,7 @@ class TestShowAvailableRewards:
     async def test_empty_rewards_shows_empty_message(self, mock_get_service, make_callback):
         """Cuando no hay recompensas, muestra mensaje vacío."""
         mock_instance = MagicMock()
-        mock_instance.get_available_rewards_for_user.return_value = []
+        mock_instance.get_available_rewards_for_user = AsyncMock(return_value=[])
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="rewards_list")
 
@@ -51,9 +51,16 @@ class TestShowAvailableRewards:
         mock_reward.reward_type = RewardType.BESITOS
         mock_reward.besito_amount = 10
         mock_instance = MagicMock()
-        mock_instance.get_available_rewards_for_user.return_value = [
-            {"mission": mock_mission, "reward": mock_reward, "progress": None}
-        ]
+        mock_instance.get_available_rewards_for_user = AsyncMock(
+            return_value=[
+                {
+                    "mission": mock_mission,
+                    "reward": mock_reward,
+                    "progress": None,
+                    "reward_delivered": False,
+                }
+            ]
+        )
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="rewards_list")
 
@@ -69,7 +76,7 @@ class TestShowAvailableRewards:
     async def test_calls_service_with_user_id(self, mock_get_service, make_callback):
         """Llama a get_available_rewards_for_user con el user_id correcto."""
         mock_instance = MagicMock()
-        mock_instance.get_available_rewards_for_user.return_value = []
+        mock_instance.get_available_rewards_for_user = AsyncMock(return_value=[])
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="rewards_list")
 
@@ -77,13 +84,15 @@ class TestShowAvailableRewards:
 
         await show_available_rewards(cb)
 
-        mock_instance.get_available_rewards_for_user.assert_called_once_with(123456789)
+        mock_instance.get_available_rewards_for_user.assert_awaited_once_with(
+            123456789, bot=cb.bot
+        )
 
     @patch("handlers.reward_user_handlers.get_service")
     async def test_closes_service_via_context_manager(self, mock_get_service, make_callback):
         """El contexto cierra el servicio al salir (ported from closes_both)."""
         mock_instance = MagicMock()
-        mock_instance.get_available_rewards_for_user.return_value = []
+        mock_instance.get_available_rewards_for_user = AsyncMock(return_value=[])
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="rewards_list")
 
@@ -101,6 +110,10 @@ class TestRewardDetail:
 
     Tests ported to 1-service pattern (get_service + MissionService only) + pure formatting via get_reward_emoji. Arch-enforcer note addressed.
     """
+
+    @staticmethod
+    def _mock_catchup(instance):
+        instance.deliver_pending_rewards_for_mission = AsyncMock(return_value=False)
 
     @patch("handlers.reward_user_handlers.get_service")
     async def test_mission_not_found_shows_alert(self, mock_get_service, make_callback):
@@ -160,6 +173,8 @@ class TestRewardDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        mock_instance.is_mission_reward_delivered.return_value = False
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import RewardUserDetailCallback
@@ -200,6 +215,8 @@ class TestRewardDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        mock_instance.is_mission_reward_delivered.return_value = False
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import RewardUserDetailCallback
@@ -212,6 +229,7 @@ class TestRewardDetail:
 
         text = cb.message.edit_text.call_args[0][0]
         assert "completada" in text.lower()
+        assert "prepara su obsequio" in text.lower()
 
     @patch("handlers.reward_user_handlers.get_service")
     async def test_shows_progress_bar_when_incomplete(self, mock_get_service, make_callback):
@@ -237,6 +255,8 @@ class TestRewardDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        mock_instance.is_mission_reward_delivered.return_value = False
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import RewardUserDetailCallback
@@ -250,6 +270,81 @@ class TestRewardDetail:
         text = cb.message.edit_text.call_args[0][0]
         assert "Progreso" in text
         assert "3 / 10" in text
+
+    @patch("handlers.reward_user_handlers.get_service")
+    async def test_reward_detail_catch_up_before_render(self, mock_get_service, make_callback):
+        """Catch-up per-misión antes de renderizar detalle de recompensa."""
+        mock_mission = MagicMock()
+        mock_mission.id = 9
+        mock_mission.name = "Mission"
+        mock_mission.description = "Desc"
+        mock_mission.target_value = 10
+        mock_mission.reward_id = 5
+
+        mock_reward = MagicMock()
+        mock_reward.name = "Reward"
+        mock_reward.description = "Desc"
+        mock_reward.reward_type = RewardType.BESITOS
+        mock_reward.besito_amount = 0
+        mock_mission.reward = mock_reward
+
+        mock_instance = MagicMock()
+        mock_instance.get_mission.return_value = mock_mission
+        mock_instance.get_or_create_progress.return_value = MagicMock(
+            current_value=10, is_completed=True
+        )
+        mock_instance.deliver_pending_rewards_for_mission = AsyncMock(return_value=True)
+        mock_instance.is_mission_reward_delivered.return_value = True
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+
+        from keyboards.callback_data import RewardUserDetailCallback
+        cb = make_callback(data="reward_user_detail:9")
+
+        from handlers.reward_user_handlers import reward_detail
+        await reward_detail(cb, RewardUserDetailCallback(mission_id=9))
+
+        mock_instance.deliver_pending_rewards_for_mission.assert_awaited_once_with(
+            123456789, 9, bot=cb.bot
+        )
+
+    @patch("handlers.reward_user_handlers.get_service")
+    async def test_escapes_html_in_reward_detail(self, mock_get_service, make_callback):
+        """Escapa HTML en nombre y descripción de recompensa y misión."""
+        mock_mission = MagicMock()
+        mock_mission.id = 1
+        mock_mission.name = "<i>Mission</i>"
+        mock_mission.description = 'M & "D"'
+        mock_mission.target_value = 5
+        mock_mission.reward_id = 5
+
+        mock_reward = MagicMock()
+        mock_reward.name = "<b>Reward</b>"
+        mock_reward.description = "<script>x</script>"
+        mock_reward.reward_type = RewardType.BESITOS
+        mock_reward.besito_amount = 0
+        mock_mission.reward = mock_reward
+
+        mock_instance = MagicMock()
+        mock_instance.get_mission.return_value = mock_mission
+        mock_instance.get_or_create_progress.return_value = MagicMock(
+            current_value=1, is_completed=False
+        )
+        mock_instance.is_mission_reward_delivered.return_value = False
+        self._mock_catchup(mock_instance)
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+
+        from keyboards.callback_data import RewardUserDetailCallback
+        cb = make_callback(data="reward_user_detail:1")
+
+        from handlers.reward_user_handlers import reward_detail
+        await reward_detail(cb, RewardUserDetailCallback(mission_id=1))
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "<b>Reward</b>" not in text
+        assert "&lt;b&gt;Reward&lt;/b&gt;" in text
+        assert "<script>" not in text
+        assert "&lt;script&gt;" in text
+        assert "<i>Mission</i>" not in text
 
     @patch("handlers.reward_user_handlers.get_service")
     async def test_calls_service_with_correct_params(self, mock_get_service, make_callback):
@@ -275,6 +370,7 @@ class TestRewardDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import RewardUserDetailCallback
@@ -310,6 +406,7 @@ class TestRewardDetail:
         mock_instance.get_or_create_progress.return_value = MagicMock(
             current_value=0, is_completed=False
         )
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import RewardUserDetailCallback
@@ -326,12 +423,23 @@ class TestRewardDetail:
 class TestRewardUserPureHelpers:
     """Tests para los helpers puros extraídos de reward_user_handlers (Item 7 / arch-enforcer LOC)."""
 
-    def test_compute_reward_status_text_completed(self):
+    def test_compute_reward_status_text_completed_delivered(self):
         from handlers.reward_user_handlers import compute_reward_status_text
 
         progress = MagicMock(is_completed=True)
         mission = MagicMock()
-        assert "completada" in compute_reward_status_text(progress, mission).lower()
+        text = compute_reward_status_text(progress, mission, reward_delivered=True)
+        assert "completada" in text.lower()
+        assert "entregada" in text.lower()
+
+    def test_compute_reward_status_text_completed_pending(self):
+        from handlers.reward_user_handlers import compute_reward_status_text
+
+        progress = MagicMock(is_completed=True)
+        mission = MagicMock()
+        text = compute_reward_status_text(progress, mission, reward_delivered=False)
+        assert "completada" in text.lower()
+        assert "prepara su obsequio" in text.lower()
 
     def test_compute_reward_status_text_in_progress(self):
         from handlers.reward_user_handlers import compute_reward_status_text

@@ -18,6 +18,75 @@ pytestmark = [pytest.mark.unit]
 class TestCmdStart:
     """Tests para cmd_start — el handler más complejo del bot."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_mission_catchup(self):
+        """Evita DB real en deliver_pending_rewards de /start."""
+        with patch("handlers.common_handlers.get_service") as mock_gs:
+            mock_ms = MagicMock()
+            mock_ms.deliver_pending_rewards = AsyncMock(return_value=0)
+            mock_gs.return_value.__enter__.return_value = mock_ms
+            mock_gs.return_value.__exit__.return_value = False
+            yield mock_gs
+
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_start_invokes_mission_catchup_with_bot(
+        self, mock_user_svc, mock_vip_svc, make_message, make_user, _mock_mission_catchup
+    ):
+        """Catch-up en /start debe llamar deliver_pending_rewards con user.id y bot."""
+        user = make_user()
+        mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
+            role=MagicMock(value="user")
+        )
+        mock_vip_svc.return_value.is_user_vip.return_value = False
+        msg = make_message(text="/start", user=user)
+
+        from handlers.common_handlers import cmd_start
+        await cmd_start(msg)
+
+        mock_ms = _mock_mission_catchup.return_value.__enter__.return_value
+        mock_ms.deliver_pending_rewards.assert_awaited_once_with(user.id, bot=msg.bot)
+
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_start_continues_when_catchup_raises(
+        self, mock_user_svc, mock_vip_svc, make_message, make_user, _mock_mission_catchup
+    ):
+        """Flujo /start continúa si catch-up lanza excepción."""
+        user = make_user()
+        mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
+            role=MagicMock(value="user")
+        )
+        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_ms = _mock_mission_catchup.return_value.__enter__.return_value
+        mock_ms.deliver_pending_rewards = AsyncMock(side_effect=RuntimeError("catchup boom"))
+        msg = make_message(text="/start", user=user)
+
+        from handlers.common_handlers import cmd_start
+        await cmd_start(msg)
+
+        msg.answer.assert_called_once()
+
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_start_continues_when_catchup_delivers_one(
+        self, mock_user_svc, mock_vip_svc, make_message, make_user, _mock_mission_catchup
+    ):
+        """Flujo /start continúa sin excepción cuando catch-up entrega recompensas."""
+        user = make_user()
+        mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
+            role=MagicMock(value="user")
+        )
+        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_ms = _mock_mission_catchup.return_value.__enter__.return_value
+        mock_ms.deliver_pending_rewards = AsyncMock(return_value=1)
+        msg = make_message(text="/start", user=user)
+
+        from handlers.common_handlers import cmd_start
+        await cmd_start(msg)
+
+        msg.answer.assert_called_once()
+
     @patch("handlers.common_handlers.VIPService", autospec=True)
     @patch("handlers.common_handlers.UserService", autospec=True)
     async def test_new_user_no_args_greeting(
@@ -143,8 +212,8 @@ class TestCmdStart:
         mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(
             channel_id=-100123, invite_link="https://t.me/+fallback"
         )
-        mock_vip_svc.return_value.redeem_token.return_value = MagicMock(
-            id=1
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
+            return_value=MagicMock(id=1)
         )
         mock_vip_svc.INVITE_LINK_EXPIRATION_DAYS = 7
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
@@ -168,7 +237,7 @@ class TestCmdStart:
     ):
         """Token usado: mensaje específico."""
         user = make_user()
-        mock_vip_svc.return_value.redeem_token.return_value = None
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(return_value=None)
         mock_vip_svc.return_value.validate_token.return_value = (None, "used")
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
@@ -187,7 +256,7 @@ class TestCmdStart:
     ):
         """Token expirado: mensaje específico."""
         user = make_user()
-        mock_vip_svc.return_value.redeem_token.return_value = None
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(return_value=None)
         mock_vip_svc.return_value.validate_token.return_value = (None, "expired")
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
@@ -206,7 +275,7 @@ class TestCmdStart:
     ):
         """Token inválido: mensaje específico."""
         user = make_user()
-        mock_vip_svc.return_value.redeem_token.return_value = None
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(return_value=None)
         mock_vip_svc.return_value.validate_token.return_value = (None, "invalid")
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
@@ -267,7 +336,9 @@ class TestCmdStart:
         mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(
             channel_id=-100123, invite_link="https://t.me/+fallback"
         )
-        mock_vip_svc.return_value.redeem_token.return_value = MagicMock(id=1)
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
+            return_value=MagicMock(id=1)
+        )
         mock_vip_svc.INVITE_LINK_EXPIRATION_DAYS = 7
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")

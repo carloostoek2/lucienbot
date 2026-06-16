@@ -954,6 +954,65 @@ Enviando archivo(s)..."""
         return "Error al entregar recompensa"
 
     @staticmethod
+    def mission_reward_besitos_delivered(mission_name: str, amount: int, balance: int) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Una misión cumplida. «{mission_name}» — el visitante ha demostrado... constancia.</i>
+
+💋 <b>{amount} besitos</b> han sido acreditados a su favor.
+Saldo actual: <b>{balance}</b>.
+
+<i>Diana anota el gesto con interés moderado.</i>"""
+
+    @staticmethod
+    def mission_reward_package_delivered(mission_name: str, package_name: str) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>«{mission_name}» completada. Lucien confirma que el obsequio ha sido despachado.</i>
+
+📦 <b>{package_name}</b> — ya debe estar en su posesión.
+
+<i>Se espera una reacción... apropiada.</i>"""
+
+    @staticmethod
+    def mission_reward_vip_delivered(mission_name: str, tariff_name: str) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>La misión «{mission_name}» ha sido superada. El Diván abre una puerta adicional.</i>
+
+👑 Acceso VIP: <b>{tariff_name}</b>
+
+<i>Lucien observa con curiosidad si el visitante sabrá aprovecharlo.</i>"""
+
+    @staticmethod
+    def mission_reward_claim_success(mission_name: str) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>El obsequio pendiente de «{mission_name}» ha sido despachado.
+Lucien prefiere no preguntar por qué tardó tanto.</i>"""
+
+    @staticmethod
+    def mission_reward_claim_success_alert(mission_name: str) -> str:
+        return (
+            f"🎩 Lucien:\n\n"
+            f"El obsequio pendiente de «{mission_name}» ha sido despachado. "
+            f"Lucien prefiere no preguntar por qué tardó tanto."
+        )
+
+    @staticmethod
+    def mission_reward_claim_pending() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Lucien revisa sus registros... no encuentra obsequios pendientes por despachar.</i>"""
+
+    @staticmethod
+    def mission_reward_claim_pending_alert() -> str:
+        return (
+            "🎩 Lucien:\n\n"
+            "Lucien revisa sus registros... no encuentra obsequios pendientes por despachar."
+        )
+
+    @staticmethod
     def reward_besitos_received(amount: int, balance: int) -> str:
         return f"Has recibido {amount} besitos! Tu saldo es: {balance}"
 
@@ -1007,19 +1066,18 @@ Enviando archivo(s)..."""
 
     @staticmethod
     def reward_vip_message(tariff_name: str, duration_days: int, token_url: str) -> str:
-        return f"""🎩 Lucien:
+        return f"""🎩 <b>Lucien:</b>
 
-Diana te ha concedido acceso a El Diván...
+<i>Diana le ha concedido acceso a El Diván...</i>
 
-👑 Recompensa VIP Activada
+👑 <b>Recompensa VIP Activada</b>
 
-📋 Tarifa: {tariff_name}
-⏱ Duracion: {duration_days} dias
+📋 Tarifa: <b>{tariff_name}</b>
+⏱ Duración: <b>{duration_days}</b> días
 
-🔗 Tu enlace de acceso:
-{token_url}
+🔗 <a href="{token_url}">Su enlace de acceso</a>
 
-Haz clic para activar tu membresia VIP."""
+<i>Lucien observa si el visitante sabrá activarlo.</i>"""
 
     # ==================== SERVICIOS - PROMOCIONES ====================
 

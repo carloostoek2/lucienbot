@@ -301,6 +301,25 @@ class VIPService:
 
         return subscription
 
+    async def redeem_token_with_missions(
+        self, token_code: str, user_id: int, bot=None
+    ) -> Subscription | None:
+        """Canjea token VIP y procesa misiones VIP_ACTIVE con entrega automática."""
+        subscription = self.redeem_token(token_code, user_id)
+        if subscription:
+            from services.mission_service import run_vip_mission_side_effects
+
+            shared_db = self.db if not self._owns_session else None
+            completed = await run_vip_mission_side_effects(
+                user_id, bot=bot, db=shared_db
+            )
+            if completed:
+                logger.info(
+                    f"vip_service | vip_mission_side_effects | user_id={user_id} | "
+                    f"completed={completed}"
+                )
+        return subscription
+
     def set_gift_status(self, token_id: int, is_gift: bool) -> bool:
         """Marca/desmarca un token como regalo"""
         db = self._get_db()

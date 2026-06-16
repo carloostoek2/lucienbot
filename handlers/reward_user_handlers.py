@@ -4,6 +4,7 @@ Handlers de Recompensas para Usuarios - Lucien Bot
 Muestra recompensas disponibles y sus misiones asociadas.
 """
 
+import html
 import logging
 
 from aiogram import F, Router
@@ -69,10 +70,12 @@ def _build_progress_bar(current: int, target: int) -> tuple[str, int]:
     return bar, percentage
 
 
-def compute_reward_status_text(progress, mission) -> str:
-    """Construye el texto de status (completada o barra de progreso) para el detalle de recompensa. Función pura."""
+def compute_reward_status_text(progress, mission, *, reward_delivered: bool = False) -> str:
+    """Construye el texto de status (completada o barra de progreso) para el detalle de recompensa."""
     if progress.is_completed:
-        return "\n✅ ¡Mision completada! La recompensa ha sido entregada."
+        if reward_delivered:
+            return "\n✅ Misión completada — la recompensa ha sido entregada."
+        return "\n✅ Misión completada — Lucien prepara su obsequio..."
     bar, percentage = _build_progress_bar(progress.current_value, mission.target_value)
     return (
         f"\n📊 Progreso: {bar} {percentage}%\n   {progress.current_value} / {mission.target_value}"
@@ -100,7 +103,9 @@ async def show_available_rewards(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     with get_service(MissionService) as mission_service:
-        rewards_data = mission_service.get_available_rewards_for_user(user_id)
+        rewards_data = await mission_service.get_available_rewards_for_user(
+            user_id, bot=callback.bot
+        )
         logger.info(
             f"reward_user_handlers | show_available_rewards | user_id={user_id} | count={len(rewards_data)}"
         )
@@ -135,17 +140,23 @@ async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetail
             return
 
         progress = mission_service.get_or_create_progress(user_id, mission_id)
+        await mission_service.deliver_pending_rewards_for_mission(
+            user_id, mission_id, bot=callback.bot
+        )
         reward_emoji, reward_gives = get_reward_emoji(mission.reward)
+        reward_delivered = mission_service.is_mission_reward_delivered(user_id, mission_id)
 
-        status_text = compute_reward_status_text(progress, mission)
+        status_text = compute_reward_status_text(
+            progress, mission, reward_delivered=reward_delivered
+        )
 
         text = _build_reward_detail_text(
             reward_emoji,
-            mission.reward.name,
-            mission.reward.description,
-            reward_gives,
-            mission.name,
-            mission.description,
+            html.escape(mission.reward.name),
+            html.escape(mission.reward.description) if mission.reward.description else None,
+            html.escape(reward_gives) if reward_gives else reward_gives,
+            html.escape(mission.name),
+            html.escape(mission.description) if mission.description else None,
             status_text,
         )
 
@@ -169,7 +180,7 @@ def _build_rewards_buttons(rewards_data: list) -> list:
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"{status_emoji} {reward_emoji} {reward.name[:30]}",
+                    text=f"{status_emoji} {reward_emoji} {html.escape(reward.name[:30])}",
                     callback_data=RewardUserDetailCallback(mission_id=mission.id).pack(),
                 )
             ]

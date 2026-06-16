@@ -93,3 +93,76 @@ class TestAnalyticsService:
         db_session.query(BesitoTransaction).delete()
         db_session.commit()
         assert service.export_activity_csv() is None
+
+    # ==================== Slice 1 economy stats tests ====================
+    def test_get_economy_overview_keys_and_values(self, db_session, sample_user):
+        service = AnalyticsService(db_session)
+        bb = BesitoBalance(user_id=sample_user.id, balance=50, total_earned=120, total_spent=70)
+        db_session.add(bb)
+        db_session.commit()
+        stats = service.get_economy_overview(window_days=None)
+        assert stats["status"] == "ok"
+        assert stats["total_ever_earned"] == 120
+        assert stats["total_ever_spent"] == 70
+        assert stats["circulation"] == 50
+        assert stats["net_flow"] == 50
+        assert "burn_rate_pct" in stats
+        assert stats["window_days"] is None
+
+    def test_get_source_attribution_credits_only(self, db_session, sample_user):
+        service = AnalyticsService(db_session)
+        bb = BesitoBalance(user_id=sample_user.id, balance=0, total_earned=0, total_spent=0)
+        db_session.add(bb)
+        db_session.commit()
+        tx1 = BesitoTransaction(
+            user_id=sample_user.id, amount=30, type=TransactionType.CREDIT, source=TransactionSource.REACTION
+        )
+        tx2 = BesitoTransaction(
+            user_id=sample_user.id, amount=20, type=TransactionType.CREDIT, source=TransactionSource.DAILY_GIFT
+        )
+        tx3 = BesitoTransaction(
+            user_id=sample_user.id, amount=-10, type=TransactionType.DEBIT, source=TransactionSource.PURCHASE
+        )
+        db_session.add_all([tx1, tx2, tx3])
+        db_session.commit()
+        attr = service.get_source_attribution(window_days=None)
+        assert attr["status"] == "ok"
+        sources = {s["source"]: s for s in attr["sources"]}
+        assert "reaction" in sources
+        assert sources["reaction"]["total"] == 30
+        assert sources["daily_gift"]["total"] == 20
+        # Only CREDITs counted
+        assert attr["total_credits"] == 50
+        # % check
+        assert any(s["pct"] > 0 for s in attr["sources"])
+
+    def test_get_top_earners_order_and_net(self, db_session, sample_user, sample_admin):
+        service = AnalyticsService(db_session)
+        b1 = BesitoBalance(user_id=sample_user.id, balance=10, total_earned=150, total_spent=140)
+        b2 = BesitoBalance(user_id=sample_admin.id, balance=200, total_earned=300, total_spent=100)
+        db_session.add_all([b1, b2])
+        db_session.commit()
+        top = service.get_top_earners(limit=5)
+        assert len(top) >= 2
+        # Highest earned first
+        assert top[0]["total_earned"] == 300
+        assert top[0]["net"] == 200
+        assert top[1]["total_earned"] == 150
+        assert "username" in top[0]
+
+    def test_get_economy_methods_degraded_on_error(self, db_session):
+        service = AnalyticsService(db_session)
+        # Force error path (best-effort) - direct assign for reliable monkey in this fixture
+        original = service._get_db
+        def boom():
+            raise RuntimeError("simulated")
+        service._get_db = boom
+        try:
+            ov = service.get_economy_overview()
+            sa = service.get_source_attribution()
+            te = service.get_top_earners()
+            assert ov["status"] == "degraded"
+            assert sa["status"] == "degraded"
+            assert te == []  # empty list on error for top (per impl)
+        finally:
+            service._get_db = original

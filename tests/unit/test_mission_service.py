@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, patch
 
 from services.mission_service import MissionService
 from services.reward_service import RewardService
-from models.models import MissionType, MissionFrequency, UserMissionProgress
+from models.models import MissionType, MissionFrequency, UserMissionProgress, UserRewardHistory
+from services.besito_service import BesitoService
 
 
 @pytest.mark.unit
@@ -158,14 +159,15 @@ class TestMissionProgress:
 
         assert len(progress_list) >= 1
 
-    def test_get_user_active_missions(self, db_session, sample_user, sample_mission):
+    @pytest.mark.asyncio
+    async def test_get_user_active_missions(self, db_session, sample_user, sample_mission):
         """Test obtener misiones activas de usuario con progreso"""
         service = MissionService(db_session)
 
         # Crear progreso
         service.get_or_create_progress(sample_user.id, sample_mission.id)
 
-        active_missions = service.get_user_active_missions(sample_user.id)
+        active_missions = await service.get_user_active_missions(sample_user.id)
 
         assert len(active_missions) >= 1
         # Verificar estructura del resultado
@@ -316,6 +318,205 @@ class TestMissionIncrement:
         assert progress.current_value == 15
         assert progress.is_completed is True
         assert progress.completed_at is not None
+
+    def test_set_progress_preserves_completed_at_when_already_completed(
+        self, db_session, sample_user, sample_mission
+    ):
+        """RECURRING: set_progress diario no refresca completed_at si ya completada."""
+        service = MissionService(db_session)
+        sample_mission.frequency = MissionFrequency.RECURRING
+        db_session.commit()
+
+        first = service.set_progress(sample_user.id, sample_mission.id, 15)
+        original_completed_at = first.completed_at
+
+        second = service.set_progress(sample_user.id, sample_mission.id, 15)
+        assert second.completed_at == original_completed_at
+
+    @pytest.mark.asyncio
+    async def test_recurring_catchup_skips_cooldown_when_undelivered(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """Catch-up RECURRING entrega ciclo pendiente aunque completed_at esté en cooldown."""
+        service = MissionService(db_session)
+        mission = service.create_mission(
+            name="Recurring Catchup",
+            description="Undelivered catch-up",
+            mission_type=MissionType.DAILY_GIFT_STREAK,
+            target_value=3,
+            frequency=MissionFrequency.RECURRING,
+            reward_id=sample_reward_besitos.id,
+        )
+        mission.cooldown_hours = 24
+        db_session.commit()
+
+        progress = service.set_progress(sample_user.telegram_id, mission.id, 3)
+        progress.completed_at = datetime.now(UTC) - timedelta(hours=1)
+        db_session.commit()
+
+        delivered = await service.deliver_pending_rewards(
+            sample_user.telegram_id, bot=mock_bot
+        )
+        assert delivered == 1
+
+    @pytest.mark.asyncio
+    async def test_deliver_pending_rewards_skips_inactive_mission_or_reward(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """Catch-up ignora misiones/recompensas inactivas."""
+        service = MissionService(db_session)
+        inactive_mission = service.create_mission(
+            name="Inactive Mission",
+            description="Skip",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        inactive_mission.is_active = False
+        inactive_reward_mission = service.create_mission(
+            name="Inactive Reward Mission",
+            description="Skip reward",
+            mission_type=MissionType.DAILY_GIFT_TOTAL,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        sample_reward_besitos.is_active = False
+        db_session.commit()
+
+        service.set_progress(sample_user.telegram_id, inactive_mission.id, 1)
+        service.set_progress(sample_user.telegram_id, inactive_reward_mission.id, 1)
+
+        delivered = await service.deliver_pending_rewards(
+            sample_user.telegram_id, bot=mock_bot
+        )
+        assert delivered == 0
+
+    @pytest.mark.asyncio
+    async def test_stale_claim_pipeline_resumes_delivery(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """Claim stale reanuda entrega y finaliza historial."""
+        from services.reward_service import _DELIVERY_CLAIM_TTL_SECONDS, RewardService
+
+        service = MissionService(db_session)
+        reward_service = RewardService(db_session)
+        mission = service.create_mission(
+            name="Stale Pipeline",
+            description="Resume delivery",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        progress = service.set_progress(sample_user.telegram_id, mission.id, 1)
+        reward_service.try_claim_mission_delivery(
+            sample_user.telegram_id,
+            mission.id,
+            sample_reward_besitos.id,
+            since_completed_at=progress.completed_at,
+            frequency=MissionFrequency.ONE_TIME,
+        )
+        claim = reward_service._get_mission_delivery_claim(
+            sample_user.telegram_id, mission.id, sample_reward_besitos.id
+        )
+        claim.delivered_at = datetime.now(UTC) - timedelta(
+            seconds=_DELIVERY_CLAIM_TTL_SECONDS + 5
+        )
+        db_session.commit()
+
+        delivered = await service.deliver_pending_rewards(
+            sample_user.telegram_id, bot=mock_bot
+        )
+        assert delivered == 1
+        assert service.is_mission_reward_delivered(
+            sample_user.telegram_id, mission.id
+        )
+
+    def test_get_users_with_pending_reward_deliveries(
+        self, db_session, sample_user, sample_reward_besitos
+    ):
+        """Escaneo de usuarios con entrega pendiente del ciclo actual."""
+        service = MissionService(db_session)
+        mission = service.create_mission(
+            name="Pending Scan",
+            description="Scheduler scan",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        service.set_progress(sample_user.telegram_id, mission.id, 1)
+
+        pending = service.get_users_with_pending_reward_deliveries()
+        assert sample_user.telegram_id in pending
+
+        RewardService(db_session).log_reward_delivery(
+            sample_user.telegram_id, sample_reward_besitos.id, mission.id
+        )
+        assert sample_user.telegram_id not in service.get_users_with_pending_reward_deliveries()
+
+    @pytest.mark.asyncio
+    async def test_deliver_pending_rewards_partial_count(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """Multi-misión: retorna 1 si solo una es nueva (no 2)."""
+        service = MissionService(db_session)
+        m1 = service.create_mission(
+            name="First",
+            description="Already delivered",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        m2 = service.create_mission(
+            name="Second",
+            description="Pending",
+            mission_type=MissionType.DAILY_GIFT_TOTAL,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        service.set_progress(sample_user.telegram_id, m1.id, 1)
+        service.set_progress(sample_user.telegram_id, m2.id, 1)
+        RewardService(db_session).log_reward_delivery(
+            sample_user.telegram_id, sample_reward_besitos.id, m1.id
+        )
+
+        delivered = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
+        assert delivered == 1
+
+    @pytest.mark.asyncio
+    async def test_concurrent_deliver_pending_rewards_idempotent(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """Doble deliver_pending_rewards no duplica besitos."""
+        service = MissionService(db_session)
+        mission = service.create_mission(
+            name="Idempotent Catchup",
+            description="No double credit",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        service.set_progress(sample_user.telegram_id, mission.id, 1)
+
+        first = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
+        second = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
+
+        assert first == 1
+        assert second == 0
+        history = (
+            db_session.query(UserRewardHistory)
+            .filter(UserRewardHistory.mission_id == mission.id)
+            .all()
+        )
+        assert len(history) == 1
+        balance = BesitoService(db=db_session).get_balance(sample_user.telegram_id)
+        assert balance == sample_reward_besitos.besito_amount
 
 
 @pytest.mark.unit

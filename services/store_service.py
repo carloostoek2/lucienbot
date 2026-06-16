@@ -16,6 +16,7 @@ from config.settings import bot_config
 from models.database import SessionLocal
 from models.models import (
     CartItem,
+    MissionType,
     Order,
     OrderItem,
     OrderStatus,
@@ -611,6 +612,23 @@ class StoreService:
             await self._notify_admins_of_purchase(bot, order)
         except Exception as e:
             logger.error(f"store | purchase_notif_failed | order_id={order.id} | error={e}")
+
+        try:
+            from services.mission_service import run_mission_side_effects_isolated
+
+            await run_mission_side_effects_isolated(
+                user_id,
+                MissionType.STORE_PURCHASE,
+                amount=1,
+                bot=bot,
+                reference_id=order.id,
+                db=db,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"store_service | store_mission_side_effects_failed | user_id={user_id} | "
+                f"order_id={order.id} | error={exc}"
+            )
 
         logger.info(f"Orden completada: {order.id}")
         return True, LucienVoice.store_purchase_completed(order.total_price)

@@ -14,6 +14,15 @@ pytestmark = [pytest.mark.integration]
 class TestCmdStartIntegration:
     """Integración de cmd_start con BD real."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_mission_catchup(self):
+        with patch("handlers.common_handlers.get_service") as mock_gs:
+            mock_ms = MagicMock()
+            mock_ms.deliver_pending_rewards = AsyncMock(return_value=0)
+            mock_gs.return_value.__enter__.return_value = mock_ms
+            mock_gs.return_value.__exit__.return_value = False
+            yield mock_gs
+
     @patch("handlers.common_handlers.VIPService")
     @patch("handlers.common_handlers.UserService")
     async def test_new_user_created_in_db(
@@ -67,7 +76,9 @@ class TestCmdStartIntegration:
         mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(
             channel_id=-100123, invite_link="https://t.me/+vip"
         )
-        mock_vip_svc.return_value.redeem_token.return_value = MagicMock(id=1)
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
+            return_value=MagicMock(id=1)
+        )
         mock_vip_svc.INVITE_LINK_EXPIRATION_DAYS = 7
         msg = make_message(text="/start ABC123", user=user)
         msg.bot.create_chat_invite_link.return_value = MagicMock(
@@ -77,7 +88,9 @@ class TestCmdStartIntegration:
         from handlers.common_handlers import cmd_start
         await cmd_start(msg)
 
-        mock_vip_svc.return_value.redeem_token.assert_called_once_with("ABC123", user.id)
+        mock_vip_svc.return_value.redeem_token_with_missions.assert_awaited_once_with(
+            "ABC123", user.id, bot=msg.bot
+        )
 
     @patch("handlers.common_handlers.VIPService")
     @patch("handlers.common_handlers.UserService")

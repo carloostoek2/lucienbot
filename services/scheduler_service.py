@@ -150,6 +150,32 @@ async def _process_expiring_subscriptions():
         db.close()
 
 
+async def _process_pending_mission_rewards():
+    """Reintenta entregas de recompensas de misiones pendientes (llamado por APScheduler)."""
+    db = SessionLocal()
+    try:
+        from services.mission_service import MissionService
+
+        mission_service = MissionService(db)
+        bot = _get_bot()
+        user_ids = mission_service.get_users_with_pending_reward_deliveries()
+        for user_id in user_ids:
+            try:
+                count = await mission_service.deliver_pending_rewards(user_id, bot=bot)
+                if count:
+                    logger.info(
+                        f"scheduler_service | pending_mission_rewards | user_id={user_id} | "
+                        f"delivered={count}"
+                    )
+            except Exception as exc:
+                logger.error(
+                    f"scheduler_service | pending_mission_rewards | user_id={user_id} | "
+                    f"error={exc}"
+                )
+    finally:
+        db.close()
+
+
 async def _process_expired_subscriptions():
     """Procesa suscripciones vencidas (llamado por APScheduler)."""
     db = SessionLocal()
@@ -455,6 +481,13 @@ class SchedulerService:
             id="cleanup_streak_sessions",
             replace_existing=True,
             name="Limpieza de sesiones de racha expiradas",
+        )
+        self._scheduler.add_job(
+            _process_pending_mission_rewards,
+            IntervalTrigger(minutes=30),
+            id="pending_mission_rewards",
+            replace_existing=True,
+            name="Retry pending mission reward deliveries",
         )
         self._scheduler.start()
         self.running = True

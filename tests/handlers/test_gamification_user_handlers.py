@@ -224,7 +224,9 @@ class TestClaimDailyGift:
     async def test_successful_claim_shows_success(self, mock_get_service, make_callback):
         """Cuando claim_gift retorna éxito, muestra mensaje positivo."""
         mock_instance = MagicMock()
-        mock_instance.claim_gift.return_value = (True, 10, "Has recibido 10 besitos")
+        mock_instance.claim_gift_with_missions = AsyncMock(
+            return_value=(True, 10, "Has recibido 10 besitos")
+        )
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="claim_gift")
 
@@ -240,7 +242,9 @@ class TestClaimDailyGift:
     async def test_failed_claim_shows_error(self, mock_get_service, make_callback):
         """Cuando claim_gift retorna fallo, muestra mensaje de error."""
         mock_instance = MagicMock()
-        mock_instance.claim_gift.return_value = (False, 0, "Ya reclamaste hoy")
+        mock_instance.claim_gift_with_missions = AsyncMock(
+            return_value=(False, 0, "Ya reclamaste hoy")
+        )
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="claim_gift")
 
@@ -254,9 +258,9 @@ class TestClaimDailyGift:
 
     @patch("handlers.gamification_user_handlers.get_service")
     async def test_calls_service_with_user_id(self, mock_get_service, make_callback):
-        """Llama a claim_gift con el user_id correcto."""
+        """Llama a claim_gift_with_missions con el user_id correcto."""
         mock_instance = MagicMock()
-        mock_instance.claim_gift.return_value = (True, 10, "OK")
+        mock_instance.claim_gift_with_missions = AsyncMock(return_value=(True, 10, "OK"))
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="claim_gift")
 
@@ -264,13 +268,15 @@ class TestClaimDailyGift:
 
         await claim_daily_gift(cb)
 
-        mock_instance.claim_gift.assert_called_once_with(123456789)
+        mock_instance.claim_gift_with_missions.assert_awaited_once_with(
+            123456789, bot=cb.bot
+        )
 
     @patch("handlers.gamification_user_handlers.get_service")
     async def test_closes_service_via_context_manager(self, mock_get_service, make_callback):
         """El contexto cierra el servicio al salir."""
         mock_instance = MagicMock()
-        mock_instance.claim_gift.return_value = (True, 10, "OK")
+        mock_instance.claim_gift_with_missions = AsyncMock(return_value=(True, 10, "OK"))
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="claim_gift")
 

@@ -266,55 +266,43 @@ class TestDailyGiftConcurrentClaim:
     """
 
     async def test_concurrent_first_claims_at_most_one_succeeds(self, db_session, sample_user):
-        """
-        Two concurrent first claims: at most 1 succeeds (claim row + credit); no double besitos.
+        """Two concurrent first claims: at most 1 succeeds (claim row + credit); no double besitos.
 
-        NOTE on fragility (shared db_session across to_thread): Session is not thread-safe.
-        Real concurrent protection golds use file-based SQLite + isolated sessions (see cross_service_atomicity
-        and the "file variant" comments). Here we tolerate exceptions in results (expected loser path when
-        hitting unique on DailyGiftClaim or related during race) + explicit session cleanup before asserts.
-        This reduces leaking IntegrityError as top-level test failure.
+        Each thread gets its own isolated session to avoid SQLAlchemy thread-safety violations
+        (shared Session is not thread-safe and causes intermittent IntegrityError).
         """
-        service = DailyGiftService(db_session)
+        from models.database import SessionLocal
+
         tg = sample_user.telegram_id
 
-        # Pre-create config to avoid concurrent default creation inside claim_gift.get_config() (would hit UNIQUE on daily_gift_config.id=1 from 2 threads).
-        # This lets the race be on the claim/credit path itself (the intended for this test).
+        # Pre-create config on the fixture session so both threads see it.
         cfg = DailyGiftConfig(besito_amount=10, is_active=True)
         db_session.add(cfg)
         db_session.commit()
-        db_session.expire_all()
+
+        def _claim_with_own_session():
+            sess = SessionLocal()
+            try:
+                svc = DailyGiftService(sess)
+                return svc.claim_gift(tg)
+            finally:
+                sess.close()
 
         results = await asyncio.gather(
-            asyncio.to_thread(service.claim_gift, tg),
-            asyncio.to_thread(service.claim_gift, tg),
+            asyncio.to_thread(_claim_with_own_session),
+            asyncio.to_thread(_claim_with_own_session),
             return_exceptions=True,
         )
 
-        # Explicitly tolerate exceptions in results: the "loser" of the first-claim race may surface
-        # as IntegrityError (constraint) or other, caught inside claim_gift or bubbling from thread.
-        # We only care that the *business* outcome (successes + claim rows + balance) respects the contract.
         successes = [r for r in results if isinstance(r, tuple) and r[0] is True]
         assert len(successes) <= 1
 
-        # Note: we do NOT force rollback/expire here to avoid de-associating the tx from the test fixture
-        # (which can trigger SAWarning + failures in some runs). The original expire_all() before gather
-        # + the filter on results already provide the tolerance. Full isolation is in the integration
-        # file-variant versions of concurrent atomicity tests.
+        db_session.expire_all()
         claim_count = db_session.query(DailyGiftClaim).filter(DailyGiftClaim.user_id == tg).count()
         assert claim_count <= 1
 
-        bal = (
-            service.besito_service.get_balance(tg)
-            if hasattr(service, "besito_service")
-            else BesitoService(db_session).get_balance(tg)
-        )  # 1-line fix post local-in-claim (F5); daily precedent guard preserved
-        assert bal <= 10  # default config amt; never double in race
-
-        # Exceptions (e.g. IntegrityError) appearing in `results` are acceptable for the race loser path.
-        # The test uses return_exceptions=True precisely because the second concurrent claim can hit
-        # DB constraints (unique on claim or besito tx) or application checks. The filter + asserts
-        # verify the contract regardless of whether the loser returned a tuple or an exception object.
+        bal = BesitoService(db_session).get_balance(tg)
+        assert bal <= 10  # never double in race
 
     def test_property_kept_for_guard_and_compat(self, db_session, sample_user):
         """Post Item 6: @property besito_service kept (for test guards/compat + hasattr precedent) even though claim_gift uses local inside."""

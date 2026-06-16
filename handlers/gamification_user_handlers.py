@@ -151,7 +151,9 @@ async def claim_daily_gift(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     with get_service(DailyGiftService) as gift_service:
-        success, amount, message = gift_service.claim_gift(user_id)
+        success, amount, message = await gift_service.claim_gift_with_missions(
+            user_id, bot=callback.bot
+        )
 
     if success:
         text = f"""🎩 <b>Lucien:</b>

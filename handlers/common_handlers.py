@@ -18,6 +18,8 @@ from keyboards.inline_keyboards import (
     returning_user_keyboard,
     vip_access_keyboard,
 )
+from services import get_service
+from services.mission_service import MissionService
 from services.user_service import UserService
 from services.vip_service import VIPService
 from utils.lucien_voice import LucienVoice
@@ -90,9 +92,20 @@ async def cmd_start(message: Message):
             last_name=user.last_name,
         )
 
+        # Best-effort: entregas de misiones pendientes al volver
+        try:
+            with get_service(MissionService) as mission_service:
+                await mission_service.deliver_pending_rewards(user.id, bot=message.bot)
+        except Exception as exc:
+            logger.warning(
+                f"common_handlers | pending_rewards_catchup | user_id={user.id} | error={exc}"
+            )
+
         # Verificar si es token de acceso VIP
         if args:
-            subscription = vip_service.redeem_token(args, user.id)
+            subscription = await vip_service.redeem_token_with_missions(
+                args, user.id, bot=message.bot
+            )
 
             if subscription:
                 # Token válido - enviar enlace directo al canal VIP

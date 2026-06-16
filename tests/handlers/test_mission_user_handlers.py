@@ -4,7 +4,7 @@ Tests unitarios para mission_user_handlers.
 Cubre:
 - show_my_missions: lista de misiones activas (vacía y con datos)
 - mission_detail: detalle de una misión (no encontrada, varios tipos de recompensa)
-- claim_mission_reward: stub "en desarrollo"
+- claim_mission_reward: catch-up de entregas pendientes (safety net)
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,7 +19,7 @@ class TestShowMyMissions:
     async def test_empty_missions_shows_empty_message(self, mock_get_service, make_callback):
         """Cuando no hay misiones activas, muestra mensaje vacío."""
         mock_instance = MagicMock()
-        mock_instance.get_user_active_missions.return_value = []
+        mock_instance.get_user_active_missions = AsyncMock(return_value=[])
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="my_missions")
 
@@ -45,9 +45,11 @@ class TestShowMyMissions:
         mock_progress.is_completed = False
 
         mock_instance = MagicMock()
-        mock_instance.get_user_active_missions.return_value = [
-            {"mission": mock_mission, "progress": mock_progress, "percentage": 50}
-        ]
+        mock_instance.get_user_active_missions = AsyncMock(
+            return_value=[
+                {"mission": mock_mission, "progress": mock_progress, "percentage": 50}
+            ]
+        )
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="my_missions")
 
@@ -66,20 +68,22 @@ class TestShowMyMissions:
     async def test_calls_service_with_user_id(self, mock_get_service, make_callback):
         """Llama a get_user_active_missions con el user_id correcto."""
         mock_instance = MagicMock()
-        mock_instance.get_user_active_missions.return_value = []
+        mock_instance.get_user_active_missions = AsyncMock(return_value=[])
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="my_missions")
 
         from handlers.mission_user_handlers import show_my_missions
         await show_my_missions(cb)
 
-        mock_instance.get_user_active_missions.assert_called_once_with(123456789)
+        mock_instance.get_user_active_missions.assert_awaited_once_with(
+            123456789, bot=cb.bot
+        )
 
     @patch("handlers.mission_user_handlers.get_service")
     async def test_closes_service_via_context_manager(self, mock_get_service, make_callback):
         """El contexto cierra el servicio al salir."""
         mock_instance = MagicMock()
-        mock_instance.get_user_active_missions.return_value = []
+        mock_instance.get_user_active_missions = AsyncMock(return_value=[])
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="my_missions")
 
@@ -91,6 +95,10 @@ class TestShowMyMissions:
 
 class TestMissionDetail:
     """Tests para mission_detail - detalle de una misión."""
+
+    @staticmethod
+    def _mock_catchup(instance):
+        instance.deliver_pending_rewards_for_mission = AsyncMock(return_value=False)
 
     @patch("handlers.mission_user_handlers.get_service")
     async def test_mission_not_found_shows_alert(self, mock_get_service, make_callback):
@@ -125,6 +133,7 @@ class TestMissionDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import MissionDetailCallback
@@ -163,6 +172,7 @@ class TestMissionDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import MissionDetailCallback
@@ -196,6 +206,7 @@ class TestMissionDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import MissionDetailCallback
@@ -228,6 +239,7 @@ class TestMissionDetail:
         mock_instance = MagicMock()
         mock_instance.get_mission.return_value = mock_mission
         mock_instance.get_or_create_progress.return_value = mock_progress
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import MissionDetailCallback
@@ -254,6 +266,7 @@ class TestMissionDetail:
         mock_instance.get_or_create_progress.return_value = MagicMock(
             current_value=0, is_completed=False
         )
+        mock_instance.deliver_pending_rewards_for_mission = AsyncMock(return_value=False)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import MissionDetailCallback
@@ -264,6 +277,71 @@ class TestMissionDetail:
 
         mock_instance.get_mission.assert_called_once_with(42)
         mock_instance.get_or_create_progress.assert_called_once_with(123456789, 42)
+        mock_instance.deliver_pending_rewards_for_mission.assert_awaited_once_with(
+            123456789, 42, bot=cb.bot
+        )
+
+    @patch("handlers.mission_user_handlers.get_service")
+    async def test_mission_detail_catch_up_before_render(self, mock_get_service, make_callback):
+        """Catch-up per-misión antes de renderizar detalle."""
+        mock_mission = MagicMock()
+        mock_mission.id = 7
+        mock_mission.name = "Catchup Mission"
+        mock_mission.description = "Desc"
+        mock_mission.target_value = 5
+        mock_mission.reward = None
+
+        mock_instance = MagicMock()
+        mock_instance.get_mission.return_value = mock_mission
+        mock_instance.get_or_create_progress.return_value = MagicMock(
+            current_value=5, is_completed=True
+        )
+        mock_instance.deliver_pending_rewards_for_mission = AsyncMock(return_value=True)
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+
+        from keyboards.callback_data import MissionDetailCallback
+        cb = make_callback(data=MissionDetailCallback(mission_id=7).pack())
+
+        from handlers.mission_user_handlers import mission_detail
+        await mission_detail(cb, MissionDetailCallback(mission_id=7))
+
+        mock_instance.deliver_pending_rewards_for_mission.assert_awaited_once_with(
+            123456789, 7, bot=cb.bot
+        )
+
+    @patch("handlers.mission_user_handlers.get_service")
+    async def test_escapes_html_in_mission_detail(self, mock_get_service, make_callback):
+        """Escapa HTML en nombre, descripción y recompensa paquete."""
+        mock_reward = MagicMock()
+        mock_reward.reward_type.value = "package"
+        mock_reward.name = '<script>alert("x")</script>'
+
+        mock_mission = MagicMock()
+        mock_mission.id = 1
+        mock_mission.name = "<b>Mission</b>"
+        mock_mission.description = 'Desc & "quotes"'
+        mock_mission.target_value = 10
+        mock_mission.reward = mock_reward
+
+        mock_instance = MagicMock()
+        mock_instance.get_mission.return_value = mock_mission
+        mock_instance.get_or_create_progress.return_value = MagicMock(
+            current_value=1, is_completed=False
+        )
+        mock_instance.deliver_pending_rewards_for_mission = AsyncMock(return_value=False)
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+
+        from keyboards.callback_data import MissionDetailCallback
+        cb = make_callback(data=MissionDetailCallback(mission_id=1).pack())
+
+        from handlers.mission_user_handlers import mission_detail
+        await mission_detail(cb, MissionDetailCallback(mission_id=1))
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "<b>Mission</b>" not in text
+        assert "&lt;b&gt;Mission&lt;/b&gt;" in text
+        assert "<script>" not in text
+        assert "&lt;script&gt;" in text
 
     @patch("handlers.mission_user_handlers.get_service")
     async def test_closes_service_via_context_manager(self, mock_get_service, make_callback):
@@ -280,6 +358,7 @@ class TestMissionDetail:
         mock_instance.get_or_create_progress.return_value = MagicMock(
             current_value=0, is_completed=False
         )
+        self._mock_catchup(mock_instance)
         mock_get_service.return_value.__enter__.return_value = mock_instance
 
         from keyboards.callback_data import MissionDetailCallback
@@ -292,13 +371,45 @@ class TestMissionDetail:
 
 
 class TestClaimMissionReward:
-    """Tests para claim_mission_reward - stub."""
+    """Tests para claim_mission_reward - catch-up de entregas pendientes."""
 
-    async def test_shows_in_development_alert(self, make_callback):
-        """Muestra alerta de funcionalidad en desarrollo."""
+    @patch("handlers.mission_user_handlers.get_service")
+    async def test_delivers_pending_rewards_success(self, mock_get_service, make_callback):
+        """Entrega pendientes: alerta de éxito."""
+        mock_instance = MagicMock()
+        mock_instance.deliver_pending_rewards = AsyncMock(return_value=1)
+        mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="claim_mission_reward")
 
         from handlers.mission_user_handlers import claim_mission_reward
+
         await claim_mission_reward(cb)
 
-        cb.answer.assert_called_once_with("Funcion en desarrollo", show_alert=True)
+        mock_instance.deliver_pending_rewards.assert_awaited_once_with(
+            123456789, bot=cb.bot
+        )
+        cb.answer.assert_called_once()
+        assert cb.answer.call_args.kwargs.get("show_alert") is True
+        alert_text = cb.answer.call_args[0][0]
+        assert "obsequio" in alert_text.lower()
+        assert "<" not in alert_text
+        assert ">" not in alert_text
+
+    @patch("handlers.mission_user_handlers.get_service")
+    async def test_no_pending_shows_pending_message(self, mock_get_service, make_callback):
+        """Sin pendientes: alerta informativa."""
+        mock_instance = MagicMock()
+        mock_instance.deliver_pending_rewards = AsyncMock(return_value=0)
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+        cb = make_callback(data="claim_mission_reward")
+
+        from handlers.mission_user_handlers import claim_mission_reward
+
+        await claim_mission_reward(cb)
+
+        cb.answer.assert_called_once()
+        assert cb.answer.call_args.kwargs.get("show_alert") is True
+        alert_text = cb.answer.call_args[0][0]
+        assert "pendientes" in alert_text.lower()
+        assert "<" not in alert_text
+        assert ">" not in alert_text
