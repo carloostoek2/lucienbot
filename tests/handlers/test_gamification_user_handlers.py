@@ -297,7 +297,9 @@ class TestHandleReaction:
         """Llama a check_and_register_reaction con parámetros correctos."""
         # (idempotency_cache patch removed - phase 5 centralized in middleware)
         mock_instance = MagicMock()
-        mock_instance.check_and_register_reaction = AsyncMock(return_value={"besitos_awarded": 5})
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": True, "besitos_awarded": 5}
+        )
         mock_instance.get_broadcast.return_value = MagicMock(has_reactions=False)
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="react:1:2")
@@ -311,13 +313,17 @@ class TestHandleReaction:
         assert kwargs["broadcast_id"] == 1
         assert kwargs["emoji_id"] == 2
         assert kwargs["user_id"] == 123456789
+        assert kwargs["channel_id"] == -1001
+        assert kwargs["message_id"] == 100
 
     @patch("handlers.gamification_user_handlers.get_service")
     async def test_shows_besitos_awarded(self, mock_get_service, make_callback):
         """Responde con la cantidad de besitos ganados."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = MagicMock()
-        mock_instance.check_and_register_reaction = AsyncMock(return_value={"besitos_awarded": 5})
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": True, "besitos_awarded": 5}
+        )
         mock_instance.get_broadcast.return_value = MagicMock(has_reactions=False)
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="react:1:2")
@@ -333,7 +339,9 @@ class TestHandleReaction:
         """Si el usuario ya reaccionó, muestra alerta."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = MagicMock()
-        mock_instance.check_and_register_reaction = AsyncMock(return_value=None)
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": False, "reason": "duplicate"}
+        )
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="react:1:2")
 
@@ -344,12 +352,32 @@ class TestHandleReaction:
         cb.answer.assert_called_with("Ya reaccionaste a este mensaje", show_alert=True)
 
     @patch("handlers.gamification_user_handlers.get_service")
+    async def test_shows_credit_failed_message(self, mock_get_service, make_callback):
+        """Muestra mensaje distinto cuando falla el crédito de besitos."""
+        mock_instance = MagicMock()
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": False, "reason": "credit_failed"}
+        )
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+        cb = make_callback(data="react:1:2")
+
+        from handlers.gamification_user_handlers import handle_reaction
+
+        await handle_reaction(cb, self._make_callback_data())
+
+        cb.answer.assert_called_with(
+            "No pudimos registrar tu reacción. Inténtalo de nuevo.", show_alert=True
+        )
+
+    @patch("handlers.gamification_user_handlers.get_service")
     async def test_updates_reaction_counts(self, mock_get_service, make_callback):
         """Cuando has_reactions=True, actualiza los contadores."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = MagicMock()
-        mock_instance.check_and_register_reaction = AsyncMock(return_value={"besitos_awarded": 5})
-        mock_instance.update_reaction_message = AsyncMock()
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": True, "besitos_awarded": 5}
+        )
+        mock_instance.update_reaction_message = AsyncMock(return_value=True)
         mock_instance.get_broadcast.return_value = MagicMock(
             has_reactions=True, channel_id=-100, message_id=42
         )
@@ -361,16 +389,26 @@ class TestHandleReaction:
 
         from handlers.gamification_user_handlers import handle_reaction
 
-        await handle_reaction(cb, self._make_callback_data())
+        await handle_reaction(cb, self._make_callback_data(broadcast_id=1, emoji_id=2))
 
         mock_instance.update_reaction_message.assert_called_once()
+        _, kwargs = mock_instance.update_reaction_message.call_args
+        assert kwargs["channel_id"] == -100
+        assert kwargs["message_id"] == 42
+        button_data = kwargs["new_markup"].inline_keyboard[0][0].callback_data
+        from keyboards.callback_data import ReactionCallback
+
+        unpacked = ReactionCallback.unpack(button_data)
+        assert unpacked.broadcast_id == 1
 
     @patch("handlers.gamification_user_handlers.get_service")
     async def test_closes_service_via_context_manager(self, mock_get_service, make_callback):
         """El contexto cierra el servicio al salir."""
         # (no longer patches idempotency_cache - centralized mw in phase 5)
         mock_instance = MagicMock()
-        mock_instance.check_and_register_reaction = AsyncMock(return_value=None)
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": False, "reason": "duplicate"}
+        )
         mock_get_service.return_value.__enter__.return_value = mock_instance
         cb = make_callback(data="react:1:2")
 
@@ -379,6 +417,101 @@ class TestHandleReaction:
         await handle_reaction(cb, self._make_callback_data())
 
         mock_get_service.return_value.__exit__.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "markup_result",
+        [False, True],
+        ids=["markup_failure", "message_not_modified"],
+    )
+    @patch("handlers.gamification_user_handlers.get_service")
+    async def test_answers_callback_when_markup_update_fails(
+        self, mock_get_service, make_callback, markup_result
+    ):
+        """Besitos ya acreditados: callback.answer() aunque falle o no modifique el markup."""
+        mock_instance = MagicMock()
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": True, "besitos_awarded": 5}
+        )
+        mock_instance.update_reaction_message = AsyncMock(return_value=markup_result)
+        mock_instance.get_broadcast.return_value = MagicMock(
+            has_reactions=True, channel_id=-100, message_id=42
+        )
+        mock_instance.get_selected_emoji_ids.return_value = [1]
+        mock_instance.get_reactions_by_broadcast.return_value = []
+        mock_instance.get_reaction_emoji.return_value = MagicMock(emoji="💋")
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+        cb = make_callback(data="react:1:2")
+
+        from handlers.gamification_user_handlers import handle_reaction
+
+        await handle_reaction(cb, self._make_callback_data())
+
+        cb.answer.assert_called_with("¡+5 besitos! 💋")
+
+    async def test_handles_missing_message(self, make_callback):
+        """Si callback.message es None, responde con error sin llamar al servicio."""
+        cb = make_callback(data="react:1:2")
+        cb.message = None
+
+        with patch("handlers.gamification_user_handlers.get_service") as mock_get_service:
+            from handlers.gamification_user_handlers import handle_reaction
+
+            await handle_reaction(cb, self._make_callback_data())
+
+            mock_get_service.assert_not_called()
+
+        cb.answer.assert_called_with(
+            "No pudimos procesar tu reacción. Inténtalo de nuevo.", show_alert=True
+        )
+
+    @pytest.mark.parametrize(
+        "reason,expected_message",
+        [
+            ("duplicate", "Ya reaccionaste a este mensaje"),
+            ("credit_failed", "No pudimos registrar tu reacción. Inténtalo de nuevo."),
+            ("invalid_broadcast", "Este mensaje ya no está disponible para reaccionar."),
+            ("message_mismatch", "Este mensaje ya no está disponible para reaccionar."),
+            ("no_reactions", "Este mensaje no acepta reacciones."),
+            ("inactive_emoji", "Esta reacción no está disponible en este mensaje."),
+            ("emoji_not_allowed", "Esta reacción no está disponible en este mensaje."),
+            ("invalid_emoji", "Emoji no válido."),
+            ("error", "No pudimos procesar tu reacción. Inténtalo de nuevo."),
+        ],
+    )
+    @patch("handlers.gamification_user_handlers.get_service")
+    async def test_shows_failure_message_per_reason(
+        self, mock_get_service, make_callback, reason, expected_message
+    ):
+        """Cada reason del servicio muestra el mensaje Lucien correcto."""
+        mock_instance = MagicMock()
+        mock_instance.check_and_register_reaction = AsyncMock(
+            return_value={"success": False, "reason": reason}
+        )
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+        cb = make_callback(data="react:1:2")
+
+        from handlers.gamification_user_handlers import handle_reaction
+
+        await handle_reaction(cb, self._make_callback_data())
+
+        cb.answer.assert_called_with(expected_message, show_alert=True)
+
+
+class TestReactionFailureMessage:
+    """Tests para el helper puro reaction_failure_message."""
+
+    @pytest.mark.parametrize(
+        "reason,expected",
+        [
+            ("duplicate", "Ya reaccionaste a este mensaje"),
+            ("credit_failed", "No pudimos registrar tu reacción. Inténtalo de nuevo."),
+            ("unknown_reason", "No pudimos procesar tu reacción. Inténtalo de nuevo."),
+        ],
+    )
+    def test_maps_reason_to_message(self, reason, expected):
+        from handlers.gamification_user_handlers import reaction_failure_message
+
+        assert reaction_failure_message(reason) == expected
 
 
 class TestCalculateEmojiCountsFromReactions:

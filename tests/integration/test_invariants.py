@@ -413,7 +413,7 @@ class TestReactionInvariants:
 
     async def test_check_and_register_reaction_idempotent_no_duplicate_besitos(self, tmp_path):
         """I6: Two reactions with same user+broadcast+emoji: first succeeds (besitos awarded),
-        second is caught by IntegrityError and returns None. Besitos credited only once."""
+        second is caught by IntegrityError and returns duplicate reason. Besitos credited only once."""
         engine, TestSession = self._create_engine_and_session(tmp_path)
         db = TestSession()
         broadcast_svc = None
@@ -482,7 +482,7 @@ class TestReactionInvariants:
                 username="reactuser_inv",
                 bot=mock_bot,
             )
-            assert r1 is not None
+            assert r1["success"] is True
             assert r1["besitos_awarded"] == 4
 
             # Second reaction (same params): must fail gracefully
@@ -493,7 +493,8 @@ class TestReactionInvariants:
                 username="reactuser_inv",
                 bot=mock_bot,
             )
-            assert r2 is None
+            assert r2["success"] is False
+            assert r2["reason"] == "duplicate"
 
             # Only ONE reaction row exists
             reaction_count = (

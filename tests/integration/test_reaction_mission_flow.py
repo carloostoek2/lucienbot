@@ -412,14 +412,15 @@ class TestReactionMissionFlowAsync:
             channel_id=sample_free_channel.channel_id,
             admin_id=987654321,
             text="Test async - Entrega automática",
-            has_reactions=True
+            has_reactions=True,
+            selected_emoji_ids=str(emoji.id),
         )
         db_session.add(broadcast_msg)
         db_session.commit()
         db_session.refresh(broadcast_msg)
 
         # Balance inicial
-        initial_balance = besito_service.get_balance(sample_user.id)
+        initial_balance = besito_service.get_balance(sample_user.telegram_id)
         print(f"\nBalance inicial: {initial_balance} besitos")
 
         # Mock del bot (no necesitamos enviar mensajes reales)
@@ -428,19 +429,19 @@ class TestReactionMissionFlowAsync:
         # Usar el método async que entrega recompensas automáticamente
         result = await broadcast_service.check_and_register_reaction(
             broadcast_id=broadcast_msg.id,
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             emoji_id=emoji.id,
             username=sample_user.username,
-            bot=mock_bot
+            bot=mock_bot,
         )
 
-        if result:
+        if result.get("success"):
             print(f"\n✅ Reacción registrada async")
             print(f"   Besitos otorgados: {result['besitos_awarded']}")
             print(f"   Emoji: {result['emoji_char']}")
 
         # Balance final
-        final_balance = besito_service.get_balance(sample_user.id)
+        final_balance = besito_service.get_balance(sample_user.telegram_id)
         total_gained = final_balance - initial_balance
 
         print(f"\n📊 Balance final: {final_balance} besitos")
@@ -450,11 +451,11 @@ class TestReactionMissionFlowAsync:
         reaction_missions = mission_service.get_missions_by_type(MissionType.REACTION_COUNT)
         completed_count = 0
         for m in reaction_missions:
-            progress = mission_service.get_user_progress(sample_user.id, m.id)
+            progress = mission_service.get_user_progress(sample_user.telegram_id, m.id)
             if progress and progress.is_completed:
                 completed_count += 1
 
         print(f"\n🎯 Misiones completadas: {completed_count}/{len(reaction_missions)}")
 
-        assert result is not None, "La reacción debería registrarse"
+        assert result["success"] is True, "La reacción debería registrarse"
         assert total_gained > 0, "Deberían haberse acreditado besitos"

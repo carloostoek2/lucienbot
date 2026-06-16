@@ -205,7 +205,7 @@ class TestCrossServiceAtomicity:
                     bot=mock_bot,
                 )
 
-                assert reaction_result is not None
+                assert reaction_result["success"] is True
                 assert reaction_result["besitos_awarded"] == 3
                 assert reaction_result["user_id"] == env["user_id"]
                 assert mock_sched.called, (
@@ -312,7 +312,7 @@ class TestCrossServiceAtomicity:
                 bot=mock_bot,
             )
 
-            assert reaction_result is not None
+            assert reaction_result["success"] is True
             assert reaction_result["besitos_awarded"] == 3
 
             db.commit()
@@ -427,7 +427,7 @@ class TestCrossServiceAtomicity:
                 bot=mock_bot,
             )
 
-            assert reaction_result is not None
+            assert reaction_result["success"] is True
             assert reaction_result["besitos_awarded"] == 3
 
             db.commit()
@@ -519,7 +519,7 @@ class TestCrossServiceAtomicity:
                 bot=mock_bot,
             )
 
-            assert reaction_result is not None
+            assert reaction_result["success"] is True
             assert reaction_result["besitos_awarded"] == 3
 
             db.commit()
@@ -598,7 +598,7 @@ class TestCrossServiceAtomicity:
                 )
 
             # No exception propagated
-            assert reaction_result is not None
+            assert reaction_result["success"] is True
             assert reaction_result["besitos_awarded"] == 3
 
             db.commit()

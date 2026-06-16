@@ -14,6 +14,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from keyboards.callback_data import (
     BroadcastChannelCallback,
     BroadcastProtectCallback,
+    ReactionCallback,
     ToggleReactionCallback,
 )
 from keyboards.inline_keyboards import (
@@ -28,6 +29,29 @@ from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def build_send_reaction_markup(
+    broadcast_id: int,
+    selected_emoji_ids: list[int],
+    get_emoji,
+) -> InlineKeyboardMarkup | None:
+    """Construye teclado de reacciones para envío de broadcast. Función pura."""
+    buttons = []
+    for emoji_id in selected_emoji_ids:
+        emoji = get_emoji(emoji_id)
+        if emoji:
+            buttons.append(
+                InlineKeyboardButton(
+                    text=f"{emoji.emoji}",
+                    callback_data=ReactionCallback(
+                        broadcast_id=broadcast_id, emoji_id=emoji.id
+                    ).pack(),
+                )
+            )
+    if not buttons:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
 # Estados para FSM
@@ -699,76 +723,9 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
     is_protected = data.get("is_protected", False)
 
     with get_service(BroadcastService) as broadcast_service:
-        # Construir teclado de reacciones - todos los botones en una sola hilera
-        reply_markup = None
-        if selected_emojis:
-            buttons = []
-            for emoji_id in selected_emojis:
-                emoji = broadcast_service.get_reaction_emoji(emoji_id)
-                if emoji:
-                    buttons.append(
-                        InlineKeyboardButton(
-                            text=f"{emoji.emoji}",
-                            callback_data=f"react_0_{emoji.id}",  # broadcast_id se actualizará después
-                        )
-                    )
-            if buttons:
-                reply_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
-
-        # Enviar mensaje
-        protect_content = is_protected
-
-        if has_attachment and attachment_file_id:
-            # Enviar con adjunto
-            if attachment_type == "photo":
-                sent_message = await bot.send_photo(
-                    chat_id=channel_id,
-                    photo=attachment_file_id,
-                    caption=text,
-                    reply_markup=reply_markup,
-                    protect_content=protect_content,
-                )
-            elif attachment_type == "video":
-                sent_message = await bot.send_video(
-                    chat_id=channel_id,
-                    video=attachment_file_id,
-                    caption=text,
-                    reply_markup=reply_markup,
-                    protect_content=protect_content,
-                )
-            elif attachment_type == "document":
-                sent_message = await bot.send_document(
-                    chat_id=channel_id,
-                    document=attachment_file_id,
-                    caption=text,
-                    reply_markup=reply_markup,
-                    protect_content=protect_content,
-                )
-            elif attachment_type == "animation":
-                sent_message = await bot.send_animation(
-                    chat_id=channel_id,
-                    animation=attachment_file_id,
-                    caption=text,
-                    reply_markup=reply_markup,
-                    protect_content=protect_content,
-                )
-            else:
-                sent_message = await bot.send_message(
-                    chat_id=channel_id, text=text, reply_markup=reply_markup
-                )
-        else:
-            # Enviar solo texto
-            sent_message = await bot.send_message(
-                chat_id=channel_id,
-                text=text,
-                reply_markup=reply_markup,
-                protect_content=protect_content,
-            )
-
-        # Registrar en base de datos
         selected_emoji_ids_str = ",".join(str(eid) for eid in selected_emojis)
         broadcast = broadcast_service.create_broadcast_message(
-            message_id=sent_message.message_id,
+            message_id=0,
             channel_id=channel_id,
             admin_id=callback.from_user.id,
             text=text,
@@ -780,27 +737,120 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
             selected_emoji_ids=selected_emoji_ids_str,
         )
 
-        # Actualizar callback_data de los botones con el ID real del broadcast
-        if reply_markup and selected_emojis:
-            buttons = []
-            for emoji_id in selected_emojis:
-                emoji = broadcast_service.get_reaction_emoji(emoji_id)
-                if emoji:
-                    buttons.append(
-                        InlineKeyboardButton(
-                            text=f"{emoji.emoji}", callback_data=f"react_{broadcast.id}_{emoji.id}"
-                        )
+        reaction_markup = None
+        if selected_emojis:
+            reaction_markup = build_send_reaction_markup(
+                broadcast.id,
+                selected_emojis,
+                broadcast_service.get_reaction_emoji,
+            )
+
+        # Sin botones de reacción en el envío inicial: se adjuntan tras fijar message_id
+        send_markup = None
+        protect_content = is_protected
+
+        try:
+            if has_attachment and attachment_file_id:
+                if attachment_type == "photo":
+                    sent_message = await bot.send_photo(
+                        chat_id=channel_id,
+                        photo=attachment_file_id,
+                        caption=text,
+                        reply_markup=send_markup,
+                        protect_content=protect_content,
                     )
-            new_markup = InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
+                elif attachment_type == "video":
+                    sent_message = await bot.send_video(
+                        chat_id=channel_id,
+                        video=attachment_file_id,
+                        caption=text,
+                        reply_markup=send_markup,
+                        protect_content=protect_content,
+                    )
+                elif attachment_type == "document":
+                    sent_message = await bot.send_document(
+                        chat_id=channel_id,
+                        document=attachment_file_id,
+                        caption=text,
+                        reply_markup=send_markup,
+                        protect_content=protect_content,
+                    )
+                elif attachment_type == "animation":
+                    sent_message = await bot.send_animation(
+                        chat_id=channel_id,
+                        animation=attachment_file_id,
+                        caption=text,
+                        reply_markup=send_markup,
+                        protect_content=protect_content,
+                    )
+                else:
+                    sent_message = await bot.send_message(
+                        chat_id=channel_id, text=text, reply_markup=send_markup
+                    )
+            else:
+                sent_message = await bot.send_message(
+                    chat_id=channel_id,
+                    text=text,
+                    reply_markup=send_markup,
+                    protect_content=protect_content,
+                )
+        except Exception as e:
+            broadcast_service.delete_broadcast(broadcast.id)
+            logger.error(
+                f"broadcast_handlers | confirm_and_send_broadcast | send_failed | broadcast_id={broadcast.id} | error={e}"
+            )
+            await callback.answer(
+                "No pudimos enviar el mensaje al canal. Inténtelo de nuevo.", show_alert=True
+            )
+            return
+
+        if not broadcast_service.update_broadcast_message_id(
+            broadcast.id, sent_message.message_id
+        ):
+            logger.error(
+                f"broadcast_handlers | confirm_and_send_broadcast | message_id_update_failed | broadcast_id={broadcast.id}"
+            )
+            try:
+                await bot.delete_message(chat_id=channel_id, message_id=sent_message.message_id)
+            except Exception as cleanup_err:
+                logger.warning(
+                    f"broadcast_handlers | confirm_and_send_broadcast | cleanup_failed | broadcast_id={broadcast.id} | error={cleanup_err}"
+                )
+            broadcast_service.delete_broadcast(broadcast.id)
+            await callback.answer(
+                "El mensaje se envió pero no pudimos activar las reacciones. Inténtelo de nuevo.",
+                show_alert=True,
+            )
+            return
+
+        if reaction_markup:
             try:
                 await bot.edit_message_reply_markup(
-                    chat_id=channel_id, message_id=sent_message.message_id, reply_markup=new_markup
+                    chat_id=channel_id,
+                    message_id=sent_message.message_id,
+                    reply_markup=reaction_markup,
                 )
             except Exception as e:
                 if "message is not modified" in str(e).lower():
-                    pass  # Ignorar si no hay cambios
+                    pass
                 else:
-                    logger.warning(f"Error actualizando reply markup: {e}")
+                    logger.error(
+                        f"broadcast_handlers | attach_reaction_markup | broadcast_id={broadcast.id} | error={e}"
+                    )
+                    try:
+                        await bot.delete_message(
+                            chat_id=channel_id, message_id=sent_message.message_id
+                        )
+                    except Exception as cleanup_err:
+                        logger.warning(
+                            f"broadcast_handlers | attach_reaction_markup | cleanup_failed | broadcast_id={broadcast.id} | error={cleanup_err}"
+                        )
+                    broadcast_service.delete_broadcast(broadcast.id)
+                    await callback.answer(
+                        "El mensaje se envió pero no pudimos activar las reacciones. Inténtelo de nuevo.",
+                        show_alert=True,
+                    )
+                    return
 
         try:
             await callback.message.edit_text(

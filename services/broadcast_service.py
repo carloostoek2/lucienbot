@@ -138,6 +138,29 @@ class BroadcastService:
         """Obtiene un mensaje de broadcast por ID"""
         return self.db.query(BroadcastMessage).filter(BroadcastMessage.id == broadcast_id).first()
 
+    def update_broadcast_message_id(self, broadcast_id: int, message_id: int) -> bool:
+        """Actualiza el message_id de Telegram tras el envío al canal."""
+        broadcast = self.get_broadcast(broadcast_id)
+        if not broadcast:
+            return False
+        broadcast.message_id = message_id
+        self.db.commit()
+        return True
+
+    def delete_broadcast(self, broadcast_id: int) -> bool:
+        """Elimina un broadcast huérfano (p. ej. fallo de envío a Telegram)."""
+        broadcast = self.get_broadcast(broadcast_id)
+        if not broadcast:
+            return False
+        self.db.delete(broadcast)
+        self.db.commit()
+        logger.info(f"broadcast_service | delete_broadcast | broadcast_id={broadcast_id} | ok")
+        return True
+
+    @staticmethod
+    def _reaction_failure(reason: str) -> dict:
+        return {"success": False, "reason": reason}
+
     def get_selected_emoji_ids(self, broadcast_id: int) -> list[int]:
         """Obtiene la lista de IDs de emojis seleccionados para un broadcast"""
         broadcast = self.get_broadcast(broadcast_id)
@@ -186,6 +209,12 @@ class BroadcastService:
         self, broadcast_id: int, user_id: int, emoji_id: int, username: str = None
     ) -> BroadcastReaction | None:
         """
+        DEPRECATED: Use check_and_register_reaction instead.
+
+        Legacy sync path kept for existing tests. Does not deliver mission rewards
+        via bot and duplicates mission logic differently than the production async
+        path. New code must call check_and_register_reaction.
+
         Registra una reacción y otorga besitos al usuario.
         Retorna None si el usuario ya reaccionó.
         """
@@ -226,13 +255,19 @@ class BroadcastService:
             besito_service = BesitoService(
                 db=self.db
             )  # local, on-demand; owns=False (db shared); credit commits internally as before + schedule_emit best-effort
-            besito_service.credit_besitos(
+            credited = besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besito_value,
                 source=TransactionSource.REACTION,
                 description=description,
                 reference_id=broadcast_id,
             )
+            if not credited:
+                self.db.rollback()
+                logger.error(
+                    f"broadcast_service | register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | credit_failed"
+                )
+                return None
 
             self.db.commit()
             self.db.refresh(reaction)
@@ -254,24 +289,50 @@ class BroadcastService:
             return None
 
     async def check_and_register_reaction(
-        self, broadcast_id: int, user_id: int, emoji_id: int, username: str = None, bot=None
-    ) -> dict | None:
+        self,
+        broadcast_id: int,
+        user_id: int,
+        emoji_id: int,
+        username: str = None,
+        bot=None,
+        channel_id: int = None,
+        message_id: int = None,
+    ) -> dict:
         """
         Verifica y registra una reacción en una sola transacción atómica.
         Entrega recompensas de misiones automáticamente.
-        Retorna None si el usuario ya reaccionó.
-        Retorna dict con datos de la reacción si fue exitosa.
+
+        Retorna dict con ``success`` True y datos de la reacción, o
+        ``success`` False con ``reason`` (duplicate, invalid_broadcast, etc.).
 
         IMPORTANTE: Construye el dict de retorno ANTES del segundo commit
         para evitar el bug 'DetachedInstanceError' que existe en main.
         """
         db = self.db
 
-        # Obtener el emoji y su valor primero (no necesita transacción)
+        broadcast = self.get_broadcast(broadcast_id)
+        if not broadcast:
+            logger.warning(
+                f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | invalid_broadcast"
+            )
+            return self._reaction_failure("invalid_broadcast")
+        if not broadcast.has_reactions:
+            return self._reaction_failure("no_reactions")
+        if channel_id is not None and broadcast.channel_id != channel_id:
+            return self._reaction_failure("message_mismatch")
+        if message_id is not None and broadcast.message_id != message_id:
+            return self._reaction_failure("message_mismatch")
+
         emoji = self.get_reaction_emoji(emoji_id)
         if not emoji:
             logger.error(f"Emoji {emoji_id} no encontrado")
-            return None
+            return self._reaction_failure("invalid_emoji")
+        if not emoji.is_active:
+            return self._reaction_failure("inactive_emoji")
+
+        selected_emoji_ids = self.get_selected_emoji_ids(broadcast_id)
+        if emoji_id not in selected_emoji_ids:
+            return self._reaction_failure("emoji_not_allowed")
 
         besito_value = emoji.besito_value
 
@@ -292,13 +353,19 @@ class BroadcastService:
             besito_service = BesitoService(
                 db=self.db
             )  # local, on-demand; owns=False (db shared); credit commits internally as before + schedule_emit best-effort
-            besito_service.credit_besitos(
+            credited = besito_service.credit_besitos(
                 user_id=user_id,
                 amount=besito_value,
                 source=TransactionSource.REACTION,
                 description=description,
                 reference_id=broadcast_id,
             )
+            if not credited:
+                db.rollback()
+                logger.error(
+                    f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | credit_failed"
+                )
+                return self._reaction_failure("credit_failed")
 
             # Commit de la transacción principal
             db.commit()
@@ -334,6 +401,7 @@ class BroadcastService:
 
             # Retornar diccionario con datos GUARDADOS (no acceder al objeto reaction)
             return {
+                "success": True,
                 "id": reaction_id,
                 "broadcast_id": broadcast_id,
                 "user_id": user_id,
@@ -342,17 +410,36 @@ class BroadcastService:
                 "emoji_char": emoji_char,
             }
 
-        except IntegrityError:
-            # UniqueConstraint violado - usuario ya reaccionó (race condition)
+        except IntegrityError as exc:
             db.rollback()
-            logger.info(
-                f"Usuario {user_id} ya reaccionó al broadcast {broadcast_id} (detectado por constraint)"
+            err_text = str(exc.orig) if getattr(exc, "orig", None) else str(exc)
+            err_lower = err_text.lower()
+            is_duplicate = (
+                "uq_broadcast_user_reaction" in err_text
+                or (
+                    "unique" in err_lower
+                    and "broadcast_reactions" in err_lower
+                    and "user_id" in err_lower
+                )
             )
-            return None
+            if is_duplicate:
+                logger.info(
+                    f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | duplicate"
+                )
+                return self._reaction_failure("duplicate")
+            if "foreign key" in err_lower:
+                logger.warning(
+                    f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | invalid_broadcast_fk"
+                )
+                return self._reaction_failure("invalid_broadcast")
+            logger.error(
+                f"broadcast_service | check_and_register_reaction | user_id={user_id} | integrity_error={exc}"
+            )
+            return self._reaction_failure("error")
         except Exception as e:
             db.rollback()
-            logger.error(f"Error registrando reacción: {e}")
-            return None
+            logger.error(f"broadcast_service | check_and_register_reaction | user_id={user_id} | error={e}")
+            return self._reaction_failure("error")
 
     def get_reactions_by_broadcast(self, broadcast_id: int) -> list[BroadcastReaction]:
         """Obtiene todas las reacciones de un mensaje"""
@@ -417,22 +504,20 @@ class BroadcastService:
 
     async def update_reaction_message(
         self, bot, channel_id: int, message_id: int, new_markup: InlineKeyboardMarkup
-    ):
-        """Actualiza el markup de un mensaje de broadcast con los nuevos conteos.
-
-        Args:
-            bot: Instancia de bot de Telegram
-            channel_id: ID del canal
-            message_id: ID del mensaje
-            new_markup: Nuevo teclado inline
-        """
+    ) -> bool:
+        """Actualiza el markup de un mensaje de broadcast con los nuevos conteos."""
         try:
             await bot.edit_message_reply_markup(
                 chat_id=channel_id, message_id=message_id, reply_markup=new_markup
             )
+            return True
         except Exception as e:
-            logger.warning(f"No se pudo actualizar conteo en mensaje: {e}")
-            raise
+            if "message is not modified" in str(e).lower():
+                return True
+            logger.warning(
+                f"broadcast_service | update_reaction_message | channel_id={channel_id} | message_id={message_id} | error={e}"
+            )
+            return False
 
 
 # =============================================================================

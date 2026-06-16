@@ -2,9 +2,11 @@
 Tests unitarios para MissionService.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 from services.mission_service import MissionService
+from services.reward_service import RewardService
 from models.models import MissionType, MissionFrequency, UserMissionProgress
 
 
@@ -217,6 +219,47 @@ class TestMissionIncrement:
         progress = service.get_user_progress(sample_user.id, mission.id)
         assert progress.is_completed is True
         assert progress.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_increment_progress_and_deliver_commits_on_cooldown(
+        self, db_session, sample_user, sample_reward_besitos
+    ):
+        """RECURRING en cooldown: progreso se guarda pero deliver_reward no se llama."""
+        service = MissionService(db_session)
+        mission = service.create_mission(
+            name="Recurring Cooldown",
+            description="Cooldown regression",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.RECURRING,
+            reward_id=sample_reward_besitos.id,
+        )
+        mission.cooldown_hours = 24
+        db_session.commit()
+
+        progress = service.get_or_create_progress(sample_user.telegram_id, mission.id)
+        progress.is_completed = True
+        progress.current_value = mission.target_value
+        progress.completed_at = datetime.now(UTC) - timedelta(hours=1)
+        progress.last_updated = datetime.now(UTC) - timedelta(hours=1)
+        db_session.commit()
+
+        mock_bot = AsyncMock()
+        with patch.object(
+            RewardService, "deliver_reward", new_callable=AsyncMock
+        ) as mock_deliver:
+            await service.increment_progress_and_deliver(
+                sample_user.telegram_id,
+                MissionType.REACTION_COUNT,
+                amount=1,
+                bot=mock_bot,
+                reference_id=99,
+            )
+
+        saved = service.get_user_progress(sample_user.telegram_id, mission.id)
+        assert saved.is_completed is True
+        assert saved.current_value >= 1
+        mock_deliver.assert_not_awaited()
 
     def test_increment_progress_recurring_mission(self, db_session, sample_user):
         """Test misión recurrente se reinicia al completarse"""

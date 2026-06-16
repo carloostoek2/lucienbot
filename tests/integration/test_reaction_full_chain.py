@@ -69,13 +69,6 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
         TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         return engine, TestSession
 
-    @pytest.mark.xfail(
-        reason="Even with dedicated file-based DB, some internal SessionLocal() creations "
-        "in RewardService/BesitoService can cause attachment issues in very heavy flows. "
-        "The pattern (SQLite en archivo + TestSession) is correctly implemented as the standard "
-        "for complex cross-service tests. The keyboard count logic (historically flaky part) "
-        "is validated by the passing second test + the unit tests for check_and_register_reaction."
-    )
     @pytest.mark.asyncio
     async def test_reaction_advances_mission_and_updates_keyboard_counts(self, tmp_path):
         """
@@ -112,9 +105,13 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             emoji2 = ReactionEmoji(emoji="❤️", name="corazon", besito_value=1, is_active=True)
             db.add_all([emoji1, emoji2])
             db.commit()
+            db.refresh(emoji1)
+            db.refresh(emoji2)
+            emoji1_id = emoji1.id
+            emoji2_id = emoji2.id
 
             # Broadcast con reacciones
-            selected_ids_str = f"{emoji1.id},{emoji2.id}"
+            selected_ids_str = f"{emoji1_id},{emoji2_id}"
             broadcast = BroadcastMessage(
                 message_id=999001,
                 channel_id=channel.channel_id,
@@ -183,12 +180,12 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             reaction_result = await broadcast_service.check_and_register_reaction(
                 broadcast_id=broadcast_db_id,
                 user_id=user_id,
-                emoji_id=emoji1.id,
+                emoji_id=emoji1_id,
                 username="testuser",
                 bot=mock_bot,
             )
 
-            assert reaction_result is not None
+            assert reaction_result["success"] is True
             assert reaction_result["besitos_awarded"] == 2
 
             # Lógica exacta de actualización de teclado del handler
@@ -242,8 +239,8 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             final_balance = besito_service.get_balance(user_id)
             assert final_balance == 7  # 2 (reacción) + 5 (recompensa de misión)
 
-            assert emoji_counts.get(emoji1.id) == 1
-            assert emoji_counts.get(emoji2.id, 0) == 0
+            assert emoji_counts.get(emoji1_id) == 1
+            assert emoji_counts.get(emoji2_id, 0) == 0
 
             mock_bot.edit_message_reply_markup.assert_awaited()
 

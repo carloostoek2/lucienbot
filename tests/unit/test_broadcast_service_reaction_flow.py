@@ -9,10 +9,10 @@ issues (DetachedInstanceError, session problems when calling mission delivery).
 These tests enforce the *intended contract*, not just current behavior:
 
 - Reaction + besitos credit are atomic from the caller's perspective.
-- Duplicate reaction returns None and produces no side effects.
+- Duplicate reaction returns ``{"success": False, "reason": "duplicate"}``.
 - Failure during mission delivery MUST NOT rollback the reaction + besitos.
-- Early return on invalid emoji.
-- Return value is a plain dict with stable keys (to avoid DetachedInstanceError).
+- Validation failures return structured dict with specific ``reason`` codes.
+- Success returns ``{"success": True, ...}`` with stable keys (avoids DetachedInstanceError).
 
 Note: The 3-phase VIP entry ritual was removed (simplified to single invite link
 delivery). Any future VIP-related tests should reflect the current simple flow.
@@ -39,6 +39,13 @@ from services.mission_service import MissionService
 @pytest.mark.unit
 class TestCheckAndRegisterReaction:
     """Tests for the production async reaction registration path."""
+
+    @pytest.fixture(autouse=True)
+    def link_broadcast_selected_emojis(
+        self, db_session, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
+        db_session.commit()
 
     async def test_success_registers_reaction_and_credits_besitos(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
@@ -71,7 +78,7 @@ class TestCheckAndRegisterReaction:
             )
 
         # Verify return shape (plain dict, stable keys)
-        assert result is not None
+        assert result["success"] is True
         assert isinstance(result, dict)
         assert result["broadcast_id"] == sample_broadcast_message.id
         assert result["user_id"] == sample_user.telegram_id
@@ -140,8 +147,9 @@ class TestCheckAndRegisterReaction:
                 bot=AsyncMock(),
             )
 
-        assert first is not None
-        assert second is None
+        assert first["success"] is True
+        assert second["success"] is False
+        assert second["reason"] == "duplicate"
 
         # Mission delivery attempted only for the first (successful) call
         assert mock_mission.await_count == 1
@@ -168,7 +176,8 @@ class TestCheckAndRegisterReaction:
             bot=AsyncMock(),
         )
 
-        assert result is None
+        assert result["success"] is False
+        assert result["reason"] == "invalid_emoji"
 
         # No reaction row should exist
         count = (
@@ -181,6 +190,93 @@ class TestCheckAndRegisterReaction:
         # Balance must remain untouched
         db_session.refresh(balance)
         assert balance.balance == 0
+
+    async def test_invalid_broadcast_returns_structured_reason(
+        self, db_session, sample_user, sample_reaction_emoji
+    ):
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=999999,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+        )
+        assert result["success"] is False
+        assert result["reason"] == "invalid_broadcast"
+
+    async def test_message_mismatch_channel_returns_structured_reason(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+            channel_id=-999,
+            message_id=sample_broadcast_message.message_id,
+        )
+        assert result["success"] is False
+        assert result["reason"] == "message_mismatch"
+
+    async def test_message_mismatch_message_id_returns_structured_reason(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji, sample_free_channel
+    ):
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+            channel_id=sample_free_channel.channel_id,
+            message_id=888888,
+        )
+        assert result["success"] is False
+        assert result["reason"] == "message_mismatch"
+
+    async def test_inactive_emoji_returns_structured_reason(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_reaction_emoji.is_active = False
+        db_session.commit()
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+        )
+        assert result["success"] is False
+        assert result["reason"] == "inactive_emoji"
+
+    async def test_emoji_not_allowed_returns_structured_reason(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        service = BroadcastService(db_session)
+        other = service.create_reaction_emoji(emoji="🔥", name="other", besito_value=1)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=other.id,
+            bot=AsyncMock(),
+        )
+        assert result["success"] is False
+        assert result["reason"] == "emoji_not_allowed"
+
+    async def test_no_reactions_returns_structured_reason(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_broadcast_message.has_reactions = False
+        db_session.commit()
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+        )
+        assert result["success"] is False
+        assert result["reason"] == "no_reactions"
 
     async def test_mission_delivery_failure_does_not_rollback_reaction(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
@@ -216,7 +312,7 @@ class TestCheckAndRegisterReaction:
             )
 
         # Reaction must have succeeded despite the mission failure
-        assert result is not None
+        assert result["success"] is True
         assert result["besitos_awarded"] == sample_reaction_emoji.besito_value
 
         reaction = (
@@ -231,6 +327,53 @@ class TestCheckAndRegisterReaction:
 
         db_session.refresh(balance)
         assert balance.balance == sample_reaction_emoji.besito_value
+
+    async def test_credit_failure_rolls_back_and_returns_none(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """Si credit_besitos falla, no debe quedar reacción huérfana."""
+        broadcast_id = sample_broadcast_message.id
+        user_id = sample_user.telegram_id
+        emoji_id = sample_reaction_emoji.id
+        service = BroadcastService(db_session)
+
+        with patch(
+            "services.broadcast_service.BesitoService.credit_besitos", return_value=False
+        ) as mock_credit:
+            result = await service.check_and_register_reaction(
+                broadcast_id=broadcast_id,
+                user_id=user_id,
+                emoji_id=emoji_id,
+                bot=AsyncMock(),
+            )
+
+        assert result["success"] is False
+        assert result["reason"] == "credit_failed"
+        mock_credit.assert_called_once()
+
+        reaction_count = (
+            db_session.query(BroadcastReaction)
+            .filter(
+                BroadcastReaction.broadcast_id == broadcast_id,
+                BroadcastReaction.user_id == user_id,
+            )
+            .count()
+        )
+        assert reaction_count == 0
+
+        balance = (
+            db_session.query(BesitoBalance).filter(BesitoBalance.user_id == user_id).first()
+        )
+        assert balance is None or balance.balance == 0
+        tx_count = (
+            db_session.query(BesitoTransaction)
+            .filter(
+                BesitoTransaction.user_id == user_id,
+                BesitoTransaction.source == TransactionSource.REACTION,
+            )
+            .count()
+        )
+        assert tx_count == 0
 
     async def test_mission_delivery_success_is_called_with_correct_params(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
@@ -315,14 +458,11 @@ class TestCheckAndRegisterReaction:
                 return_exceptions=True,
             )
 
-        # Filter real results (ignore exceptions/None)
-        successes = [r for r in results if isinstance(r, dict)]
-        nones_or_errs = [r for r in results if r is None or isinstance(r, Exception)]
+        successes = [r for r in results if isinstance(r, dict) and r.get("success")]
+        failures = [r for r in results if isinstance(r, dict) and not r.get("success")]
 
-        # At most one success (core protection; gather may yield 0 or 1 due to cooperative SQLite)
         assert len(successes) <= 1
-        # nones_or_errs documents the dup path was exercised (may be 2 in pure coop no-overlap)
-        assert len(nones_or_errs) >= 1 or len(successes) == 0
+        assert len(failures) >= 1 or len(successes) == 0
 
         # NEVER more than 1 reaction row (the safety invariant; ==1 or 0 acceptable in this test setup)
         reaction_count = (
@@ -453,6 +593,7 @@ class TestServiceLifecycleOrGetServiceContext:
             user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
         db_session.add(bal)
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
         db_session.commit()
 
         svc = BroadcastService(db=db_session)
@@ -464,7 +605,7 @@ class TestServiceLifecycleOrGetServiceContext:
                 username="test",
                 bot=None,
             )
-            assert res is not None
+            assert res["success"] is True
             assert res["besitos_awarded"] == sample_reaction_emoji.besito_value
             assert mock_emit.called  # emit scheduled from the *local* Besito(db=) inside check_and_register (Item 6); real credit path
         # verify tx/credit survives (re-query) + REACTION source

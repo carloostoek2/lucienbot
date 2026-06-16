@@ -189,49 +189,88 @@ def calculate_emoji_counts_from_reactions(reactions: list) -> dict[int, int]:
     return emoji_counts
 
 
+REACTION_FAILURE_MESSAGES = {
+    "duplicate": "Ya reaccionaste a este mensaje",
+    "invalid_broadcast": "Este mensaje ya no está disponible para reaccionar.",
+    "message_mismatch": "Este mensaje ya no está disponible para reaccionar.",
+    "no_reactions": "Este mensaje no acepta reacciones.",
+    "inactive_emoji": "Esta reacción no está disponible en este mensaje.",
+    "emoji_not_allowed": "Esta reacción no está disponible en este mensaje.",
+    "invalid_emoji": "Emoji no válido.",
+    "credit_failed": "No pudimos registrar tu reacción. Inténtalo de nuevo.",
+}
+
+
+def reaction_failure_message(reason: str) -> str:
+    """Mensaje de error para el usuario según el motivo de fallo. Función pura."""
+    return REACTION_FAILURE_MESSAGES.get(
+        reason, "No pudimos procesar tu reacción. Inténtalo de nuevo."
+    )
+
+
+async def refresh_reaction_markup_counts(
+    broadcast_service: BroadcastService,
+    bot,
+    broadcast,
+    broadcast_id: int,
+) -> None:
+    """Reconstruye y actualiza el teclado de reacciones con conteos."""
+    selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
+    reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
+    emoji_counts = calculate_emoji_counts_from_reactions(reactions)
+    emojis = []
+    for selected_emoji_id in selected_emoji_ids:
+        emoji_obj = broadcast_service.get_reaction_emoji(selected_emoji_id)
+        if emoji_obj:
+            emojis.append((selected_emoji_id, emoji_obj.emoji))
+    if emojis:
+        new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
+        await broadcast_service.update_reaction_message(
+            bot=bot,
+            channel_id=broadcast.channel_id,
+            message_id=broadcast.message_id,
+            new_markup=new_markup,
+        )
+
+
 @router.callback_query(ReactionCallback.filter())
 async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallback):
     """Maneja las reacciones a mensajes de broadcast y actualiza conteos"""
+    if not callback.message:
+        await callback.answer(
+            "No pudimos procesar tu reacción. Inténtalo de nuevo.", show_alert=True
+        )
+        return
+
     user = callback.from_user
     broadcast_id = callback_data.broadcast_id
     emoji_id = callback_data.emoji_id
 
-    # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
     with get_service(BroadcastService) as broadcast_service:
-        reaction = await broadcast_service.check_and_register_reaction(
+        result = await broadcast_service.check_and_register_reaction(
             broadcast_id=broadcast_id,
             user_id=user.id,
             emoji_id=emoji_id,
             username=user.username,
             bot=callback.bot,
+            channel_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
         )
 
-        if reaction:
-            besitos = reaction.get("besitos_awarded", 0)
-
-            # Obtener el broadcast para actualizar el mensaje
+        if result.get("success"):
+            besitos = result.get("besitos_awarded", 0)
             broadcast = broadcast_service.get_broadcast(broadcast_id)
             if broadcast and broadcast.has_reactions:
-                selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
-                reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
-                emoji_counts = calculate_emoji_counts_from_reactions(reactions)
-                emojis = []
-                for emoji_id in selected_emoji_ids:
-                    emoji_obj = broadcast_service.get_reaction_emoji(emoji_id)
-                    if emoji_obj:
-                        emojis.append((emoji_id, emoji_obj.emoji))
-                if emojis:
-                    new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
-                    await broadcast_service.update_reaction_message(
-                        bot=callback.bot,
-                        channel_id=broadcast.channel_id,
-                        message_id=broadcast.message_id,
-                        new_markup=new_markup,
-                    )
-
+                await refresh_reaction_markup_counts(
+                    broadcast_service, callback.bot, broadcast, broadcast_id
+                )
             logger.info(
                 f"gamification_user_handlers | handle_reaction | user_id={user.id} | broadcast_id={broadcast_id} | emoji={emoji_id} | besitos={besitos}"
             )
             await callback.answer(f"¡+{besitos} besitos! 💋")
         else:
-            await callback.answer("Ya reaccionaste a este mensaje", show_alert=True)
+            reason = result.get("reason", "error")
+            logger.info(
+                f"gamification_user_handlers | handle_reaction | user_id={user.id} | broadcast_id={broadcast_id} | emoji={emoji_id} | reason={reason}"
+            )
+            await callback.answer(reaction_failure_message(reason), show_alert=True)

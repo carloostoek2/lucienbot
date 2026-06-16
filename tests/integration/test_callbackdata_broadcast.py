@@ -11,8 +11,9 @@ from unittest.mock import MagicMock
 
 from keyboards.callback_data import (
     BroadcastChannelCallback,
-    ToggleReactionCallback,
     BroadcastProtectCallback,
+    ReactionCallback,
+    ToggleReactionCallback,
 )
 
 
@@ -154,6 +155,36 @@ class TestBroadcastProtectCallback:
 
         assert prefix == "bc_protect"
         assert action_str == "yes"
+
+
+class TestReactionCallback:
+    """Tests para ReactionCallback (botones de reacción en broadcasts enviados)."""
+
+    def test_callback_packs_correctly(self):
+        """ReactionCallback.pack() genera el formato react:broadcast_id:emoji_id."""
+        packed = ReactionCallback(broadcast_id=5, emoji_id=3).pack()
+        assert packed == "react:5:3"
+
+    def test_callback_unpack_round_trip(self):
+        """pack/unpack conserva broadcast_id y emoji_id."""
+        original = ReactionCallback(broadcast_id=42, emoji_id=7)
+        packed = original.pack()
+        unpacked = ReactionCallback.unpack(packed)
+        assert unpacked.broadcast_id == 42
+        assert unpacked.emoji_id == 7
+
+    def test_build_send_reaction_markup_uses_reaction_callback(self):
+        """Helper de envío genera callback_data compatible con handle_reaction."""
+        from handlers.broadcast_handlers import build_send_reaction_markup
+
+        emoji = MagicMock()
+        emoji.id = 3
+        emoji.emoji = "💋"
+        markup = build_send_reaction_markup(99, [3], lambda _eid: emoji)
+        button = markup.inline_keyboard[0][0]
+        unpacked = ReactionCallback.unpack(button.callback_data)
+        assert unpacked.broadcast_id == 99
+        assert unpacked.emoji_id == 3
 
 
 class TestBroadcastCallbacksNoCollisions:

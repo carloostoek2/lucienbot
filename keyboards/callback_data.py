@@ -11,7 +11,7 @@ from aiogram.filters.callback_data import CallbackData
 
 
 class ReactionCallback(CallbackData, prefix="react"):
-    """Reacciones a mensajes broadcast: react_{broadcast_id}_{emoji_id}"""
+    """Reacciones a mensajes broadcast: react:broadcast_id:emoji_id"""
 
     broadcast_id: int
     emoji_id: int

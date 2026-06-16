@@ -347,6 +347,8 @@ class MissionService:
             if reference_id is not None:
                 progress.last_reference_id = reference_id
 
+            previous_completed_at = progress.completed_at
+
             # Verificar completitud
             if progress.current_value >= mission.target_value:
                 progress.is_completed = True
@@ -356,29 +358,34 @@ class MissionService:
 
                 # Auto-entregar recompensa si está configurada (verificar cooldown para RECURRING)
                 if mission.reward_id and bot:
-                    # Verificar cooldown para misiones RECURRING
+                    deliver_reward = True
+                    cooldown_ref = previous_completed_at or progress.last_updated
                     if (
                         mission.frequency == MissionFrequency.RECURRING
                         and mission.cooldown_hours
-                        and progress.last_updated
+                        and cooldown_ref
                     ):
                         hours_since = (
-                            datetime.now(UTC) - progress.last_updated
+                            datetime.now(UTC) - cooldown_ref
                         ).total_seconds() / 3600
                         if hours_since < mission.cooldown_hours:
                             logger.info(
                                 f"Mision {mission.id}: en cooldown ({hours_since:.1f}h / {mission.cooldown_hours}h), saltando recompensa"
                             )
-                            continue
+                            deliver_reward = False
 
-                    reward_service = RewardService(db)
-                    success, message = await reward_service.deliver_reward(
-                        bot=bot, user_id=user_id, reward_id=mission.reward_id, mission_id=mission.id
-                    )
-                    if success:
-                        logger.info(
-                            f"Recompensa entregada: user={user_id}, reward={mission.reward_id}"
+                    if deliver_reward:
+                        reward_service = RewardService(db)
+                        success, message = await reward_service.deliver_reward(
+                            bot=bot,
+                            user_id=user_id,
+                            reward_id=mission.reward_id,
+                            mission_id=mission.id,
                         )
+                        if success:
+                            logger.info(
+                                f"Recompensa entregada: user={user_id}, reward={mission.reward_id}"
+                            )
 
             db.commit()
 
