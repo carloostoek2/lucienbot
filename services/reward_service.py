@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 def get_reward_emoji(reward: Reward) -> tuple[str, str]:
     """Retorna (emoji, description) según tipo de recompensa. Función pura (sin estado ni side-effects)."""
     if reward.reward_type == RewardType.BESITOS:
-        return "💋", f"{reward.besito_amount} besitos"
+        return "💋", LucienVoice.reward_emoji_besitos(reward.besito_amount)
     elif reward.reward_type == RewardType.PACKAGE:
-        return "📦", f"Paquete exclusivo: {reward.name}"
+        return "📦", LucienVoice.reward_emoji_package(reward.name)
     elif reward.reward_type == RewardType.VIP_ACCESS:
-        return "👑", f"Acceso VIP: {reward.name}"
+        return "👑", LucienVoice.reward_emoji_vip(reward.name)
     return "🎁", ""
 
 
@@ -182,10 +182,10 @@ class RewardService:
         """
         reward = self.get_reward(reward_id)
         if not reward:
-            return False, "Recompensa no encontrada"
+            return False, LucienVoice.reward_not_found()
 
         if not reward.is_active:
-            return False, "Recompensa inactiva"
+            return False, LucienVoice.reward_inactive()
 
         try:
             if reward.reward_type == RewardType.BESITOS:
@@ -207,11 +207,11 @@ class RewardService:
                 return success, message
 
             else:
-                return False, "Tipo de recompensa no soportado"
+                return False, LucienVoice.reward_type_unsupported()
 
         except Exception as e:
             logger.error(f"Error entregando recompensa {reward_id}: {e}")
-            return False, f"Error al entregar recompensa: {str(e)}"
+            return False, LucienVoice.reward_delivery_error(str(e))
 
     async def _deliver_besitos(self, user_id: int, reward: Reward) -> tuple[bool, str]:
         """Entrega recompensa de besitos (local BesitoService on-demand with shared db for atomicity)."""
@@ -228,26 +228,26 @@ class RewardService:
 
         if success:
             balance = besito_service.get_balance(user_id)
-            return True, f"Has recibido {reward.besito_amount} besitos! Tu saldo es: {balance}"
+            return True, LucienVoice.reward_besitos_received(reward.besito_amount, balance)
         else:
-            return False, "Error al acreditar besitos"
+            return False, LucienVoice.reward_besitos_failed()
 
     async def _deliver_package(self, bot, user_id: int, reward: Reward) -> tuple[bool, str]:
         """Entrega recompensa de paquete"""
         if not reward.package_id:
-            return False, "Paquete no configurado"
+            return False, LucienVoice.reward_package_not_configured()
 
         # Verificar disponibilidad
         package = self.package_service.get_package(reward.package_id)
         if not package:
-            return False, "Paquete no encontrado"
+            return False, LucienVoice.reward_package_not_found()
 
         if not package.is_available_for_reward:
-            return False, "Paquete no disponible para recompensas"
+            return False, LucienVoice.reward_package_unavailable()
 
         # Decrementar stock y entregar
         if not package.decrement_reward_stock():
-            return False, "Stock de recompensas agotado"
+            return False, LucienVoice.reward_stock_depleted()
 
         self.db.commit()
 
@@ -256,16 +256,16 @@ class RewardService:
             bot=bot, user_id=user_id, package_id=reward.package_id
         )
 
-        return success, message if success else "Error al enviar paquete"
+        return success, message if success else LucienVoice.reward_package_delivery_failed()
 
     async def _deliver_vip_access(self, bot, user_id: int, reward: Reward) -> tuple[bool, str]:
         """Entrega recompensa de acceso VIP"""
         if not reward.tariff_id:
-            return False, "Tarifa VIP no configurada"
+            return False, LucienVoice.reward_vip_not_configured()
 
         tariff = self.vip_service.get_tariff(reward.tariff_id)
         if not tariff:
-            return False, "Tarifa no encontrada"
+            return False, LucienVoice.reward_tariff_not_found()
 
         # Generar token VIP
         token = self.vip_service.generate_token(reward.tariff_id)
@@ -277,19 +277,7 @@ class RewardService:
         # Enviar mensaje al usuario
         await bot.send_message(
             chat_id=user_id,
-            text=f"""🎩 Lucien:
-
-Diana te ha concedido acceso a El Diván...
-
-👑 Recompensa VIP Activada
-
-📋 Tarifa: {tariff.name}
-⏱ Duracion: {tariff.duration_days} dias
-
-🔗 Tu enlace de acceso:
-{token_url}
-
-Haz clic para activar tu membresia VIP.""",
+            text=LucienVoice.reward_vip_message(tariff.name, tariff.duration_days, token_url),
         )
 
         return True, LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)

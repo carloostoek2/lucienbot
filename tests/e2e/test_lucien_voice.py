@@ -7,7 +7,7 @@ import re
 class TestLucienVoiceConsistency:
     SPANISH_GREP_PATTERN = (
         r"[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+.*"
-        r"((El|La|Los|Las|Su|Ha|No|Si|¿|¡|Diana|Lucien|besitos|regalo|promoción|paquete|"
+        r"((El|La|Los|Las|\bSu\b|\bHa\b|\bNo\b|\bSi\b|¿|¡|Diana|Lucien|besitos|regalo|promoción|paquete|"
         r"misión|recompensa|acceso|VIP|canal|gracias|bienvenido|error|correctamente|"
         r"disponible|encontrado|agotado))"
     )

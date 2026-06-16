@@ -19,6 +19,7 @@ from models.models import (
     PromotionInterest,
     PromotionStatus,
 )
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
@@ -255,15 +256,15 @@ class PromotionService:
         if self.is_user_blocked(user_id):
             blocked_info = self.get_blocked_user_info(user_id)
             reason = blocked_info.reason if blocked_info else "Razon no especificada"
-            return False, f"No puedes expresar interes. Razon: {reason}", None
+            return False, LucienVoice.promotion_blocked(reason), None
 
         # Verificar si la promocion existe y esta disponible
         promotion = self.get_promotion(promotion_id)
         if not promotion:
-            return False, "Promocion no encontrada", None
+            return False, LucienVoice.promotion_not_found(), None
 
         if not promotion.is_available:
-            return False, "Esta promocion no esta disponible actualmente", None
+            return False, LucienVoice.promotion_unavailable(), None
 
         # Verificar si ya expreso interes (con lock para evitar race conditions)
         existing = (
@@ -275,7 +276,7 @@ class PromotionService:
             .first()
         )
         if existing:
-            return False, "Ya has expresado interes en esta promocion", None
+            return False, LucienVoice.promotion_already_interested(), None
 
         # Crear el registro de interes
         interest = PromotionInterest(
@@ -291,7 +292,7 @@ class PromotionService:
         db.refresh(interest)
 
         logger.info(f"Usuario {user_id} expreso interes en promocion {promotion_id}")
-        return True, "Interes registrado correctamente", interest
+        return True, LucienVoice.promotion_interest_registered(), interest
 
     def get_interest(self, interest_id: int) -> PromotionInterest | None:
         """Obtiene un registro de interes por ID"""

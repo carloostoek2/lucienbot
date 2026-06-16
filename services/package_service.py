@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from models.database import SessionLocal
 from models.models import Category, Package, PackageFile
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
@@ -332,11 +333,11 @@ class PackageService:
         """
         package = self.get_package(package_id)
         if not package:
-            return False, "Paquete no encontrado"
+            return False, LucienVoice.package_not_found()
 
         files = self.get_package_files(package_id)
         if not files:
-            return False, "El paquete no contiene archivos"
+            return False, LucienVoice.package_empty_files()
 
         try:
             # Construir grupos de media
@@ -380,11 +381,11 @@ Enviando {len(files)} archivo(s)...""",
                     continue
 
             logger.info(f"Paquete {package_id} entregado a usuario {user_id}")
-            return True, f"Paquete '{package.name}' entregado exitosamente"
+            return True, LucienVoice.package_delivery_success(package.name)
 
         except Exception as e:
             logger.error(f"Error entregando paquete {package_id}: {e}")
-            return False, "Error al entregar el paquete"
+            return False, LucienVoice.package_delivery_failed()
 
     # ==================== ESTADÍSTICAS ====================
 

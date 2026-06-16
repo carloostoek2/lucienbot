@@ -13,6 +13,7 @@ from models.database import SessionLocal
 from models.models import Order, Package, Reward, StoreProduct, Subscription, UserRewardHistory
 from services.besito_service import BesitoService
 from services.package_service import PackageService
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +268,7 @@ class BackpackService:
             logger.warning(
                 f"backpack_service | deliver_package_content | user_id={user_id} | package_id={package_id} | result=not_found"
             )
-            return False, "Paquete no encontrado"
+            return False, LucienVoice.package_not_found()
 
         success, message = await package_service.deliver_package_to_user(
             bot=bot, user_id=user_id, package_id=package_id

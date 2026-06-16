@@ -986,6 +986,22 @@ Enviando archivo(s)..."""
         return "Tarifa no encontrada"
 
     @staticmethod
+    def reward_emoji_besitos(amount: int) -> str:
+        return f"{amount} besitos"
+
+    @staticmethod
+    def reward_emoji_package(name: str) -> str:
+        return f"Paquete exclusivo: {name}"
+
+    @staticmethod
+    def reward_emoji_vip(name: str) -> str:
+        return f"Acceso VIP: {name}"
+
+    @staticmethod
+    def reward_package_delivery_failed() -> str:
+        return "Error al enviar paquete"
+
+    @staticmethod
     def reward_vip_received(tariff_name: str, days: int) -> str:
         return f"Has recibido acceso VIP: {tariff_name} ({days} dias)"
 
