@@ -7,6 +7,7 @@ Gestiona la creación, edición y entrega de paquetes de contenido.
 import html
 import logging
 
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InputMediaPhoto, InputMediaVideo
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, selectinload
@@ -344,9 +345,10 @@ class PackageService:
             media_groups, individual_files = self._build_media_groups(files)
 
             # Enviar mensaje introductorio
-            await bot.send_message(
-                chat_id=user_id,
-                text=f"""🎩 <b>Lucien:</b>
+            try:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"""🎩 <b>Lucien:</b>
 
 <i>Diana ha preparado algo especial para usted...</i>
 
@@ -355,8 +357,22 @@ class PackageService:
 <i>{html.escape(package.description or "Un obsequio del reino...")}</i>
 
 Enviando {len(files)} archivo(s)...""",
-                parse_mode="HTML",
-            )
+                    parse_mode="HTML",
+                )
+            except TelegramBadRequest as e:
+                if "chat not found" in str(e):
+                    logger.warning(
+                        f"Paquete {package_id} no entregable: chat {user_id} no existe"
+                    )
+                    return False, "permanent:chat_not_found"
+                raise
+            except TelegramForbiddenError as e:
+                if "bot was blocked" in str(e):
+                    logger.warning(
+                        f"Paquete {package_id} no entregable: usuario {user_id} bloqueó al bot"
+                    )
+                    return False, "permanent:bot_blocked"
+                raise
 
             # Enviar media groups (fotos y videos agrupados)
             for media_group in media_groups:

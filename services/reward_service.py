@@ -386,6 +386,17 @@ class RewardService:
             bot=bot, user_id=user_id, package_id=reward.package_id
         )
         if not success:
+            # Fallo permanente: el usuario nunca podrá recibir este paquete
+            if message.startswith("permanent:"):
+                logger.warning(
+                    f"reward_service | _deliver_package | permanent_failure | "
+                    f"user_id={user_id} | package_id={reward.package_id} | reason={message}"
+                )
+                if mission_id:
+                    self._finalize_delivery_claim(user_id, mission_id, reward.id)
+                self.db.commit()
+                return True, message
+
             if package.reward_stock >= 0:
                 package.reward_stock += 1
             self.db.commit()

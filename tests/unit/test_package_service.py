@@ -280,3 +280,81 @@ class TestPackageService:
         stats = service.get_package_stats(99999)
 
         assert stats == {}
+
+    # ==================== REGRESIÓN: FALLOS PERMANENTES ====================
+
+    @pytest.mark.asyncio
+    async def test_deliver_package_chat_not_found_returns_permanent(self, db_session, sample_user, mock_bot):
+        """TelegramBadRequest 'chat not found' retorna permanent:chat_not_found sin loguear ERROR"""
+        from aiogram.exceptions import TelegramBadRequest
+
+        mock_bot.send_message.side_effect = TelegramBadRequest(
+            method="sendMessage", message="Bad Request: chat not found"
+        )
+        service = PackageService(db_session)
+        package = service.create_package("Test Package")
+        service.add_file_to_package(package.id, "file_id_1", "photo")
+
+        success, msg = await service.deliver_package_to_user(
+            mock_bot, sample_user.id, package.id
+        )
+
+        assert success is False
+        assert msg == "permanent:chat_not_found"
+
+    @pytest.mark.asyncio
+    async def test_deliver_package_bot_blocked_returns_permanent(self, db_session, sample_user, mock_bot):
+        """TelegramForbiddenError 'bot was blocked' retorna permanent:bot_blocked sin loguear ERROR"""
+        from aiogram.exceptions import TelegramForbiddenError
+
+        mock_bot.send_message.side_effect = TelegramForbiddenError(
+            method="sendMessage", message="Forbidden: bot was blocked by the user"
+        )
+        service = PackageService(db_session)
+        package = service.create_package("Test Package")
+        service.add_file_to_package(package.id, "file_id_1", "photo")
+
+        success, msg = await service.deliver_package_to_user(
+            mock_bot, sample_user.id, package.id
+        )
+
+        assert success is False
+        assert msg == "permanent:bot_blocked"
+
+    @pytest.mark.asyncio
+    async def test_deliver_package_other_bad_request_is_logged_as_error(self, db_session, sample_user, mock_bot):
+        """Otros TelegramBadRequest son atrapados por el except externo y retornan False"""
+        from aiogram.exceptions import TelegramBadRequest
+
+        mock_bot.send_message.side_effect = TelegramBadRequest(
+            method="sendMessage", message="Bad Request: message text is empty"
+        )
+        service = PackageService(db_session)
+        package = service.create_package("Test Package")
+        service.add_file_to_package(package.id, "file_id_1", "photo")
+
+        success, msg = await service.deliver_package_to_user(
+            mock_bot, sample_user.id, package.id
+        )
+
+        assert success is False
+        assert "permanent:" not in msg  # no es fallo permanente
+
+    @pytest.mark.asyncio
+    async def test_deliver_package_other_forbidden_is_logged_as_error(self, db_session, sample_user, mock_bot):
+        """Otros TelegramForbiddenError son atrapados por el except externo y retornan False"""
+        from aiogram.exceptions import TelegramForbiddenError
+
+        mock_bot.send_message.side_effect = TelegramForbiddenError(
+            method="sendMessage", message="Forbidden: bot is not an admin"
+        )
+        service = PackageService(db_session)
+        package = service.create_package("Test Package")
+        service.add_file_to_package(package.id, "file_id_1", "photo")
+
+        success, msg = await service.deliver_package_to_user(
+            mock_bot, sample_user.id, package.id
+        )
+
+        assert success is False
+        assert "permanent:" not in msg  # no es fallo permanente
