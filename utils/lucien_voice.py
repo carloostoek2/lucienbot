@@ -689,6 +689,23 @@ Verifique permisos del bot o que la solicitud siga pendiente."""
 
     # ==================== ANALYTICS ====================
 
+    _SOURCE_LABELS = {
+        "reaction": "Reacciones",
+        "daily_gift": "Regalo diario",
+        "mission": "Misiones",
+        "game": "Juegos",
+        "trivia": "Trivia",
+        "admin": "Ajustes de custodios",
+        "purchase": "Compras",
+        "anonymous_message": "Mensajes anónimos",
+        "streak_protection": "Protección de rachas",
+    }
+
+    @staticmethod
+    def _traducir_fuente(src: str) -> str:
+        """Traduce el código de fuente a nombre legible en español."""
+        return LucienVoice._SOURCE_LABELS.get(src, src.replace("_", " ").capitalize())
+
     @staticmethod
     def analytics_dashboard(stats: dict) -> str:
         """Dashboard de metricas para Custodios."""
@@ -708,117 +725,125 @@ Verifique permisos del bot o que la solicitud siga pendiente."""
     def analytics_patterns_dashboard(
         dashboard: dict, economy: dict, attribution: dict, top_earners: list
     ) -> str:
-        """Patrones completos (dashboard + economía del día) para el botón del menú."""
+        """Patrones completos (dashboard + economía) para custodios."""
         d = dashboard or {}
         e = economy or {}
         a = attribution or {}
         t = top_earners or []
+
         win = e.get("window_days")
-        win_str = "histórico completo" if not win else f"últimos {win} días"
-        econ_status = e.get("status")
-        attr_status = a.get("status")
-        srcs = (a.get("sources") or [])[:6]
-        tops = t[:7] if isinstance(t, list) else []
-        src_lines = (
-            "\n".join(
-                [
-                    f"• {s.get('source', '?')}: {s.get('total', 0)} ({s.get('pct', 0)}%, {s.get('count', 0)} ops)"
-                    for s in srcs
-                ]
+        win_str = "histórico" if not win else f"últimos {win} días"
+
+        # Resumen compacto
+        resumen = f"""👥 <b>Resumen del Reino</b>
+• Visitantes: {d.get("total_users", 0)}   • VIP activos: {d.get("active_vip", 0)}
+• Besitos en circulación: {d.get("total_besitos", 0)}"""
+
+        # Economía
+        if e.get("status") == "degraded":
+            econ_block = "💰 <b>Economía</b>\n<i>Datos temporariamente no disponibles.</i>"
+        else:
+            econ_block = f"""💰 <b>Economía ({win_str})</b>
+• Ingresados: {e.get("total_ever_earned", 0)}   • Gastados: {e.get("total_ever_spent", 0)}
+• Circulación: {e.get("circulation", 0)}   • Tasa de gasto: {e.get("burn_rate_pct", 0)}%"""
+
+        # Fuentes (top 5)
+        if a.get("status") == "degraded":
+            attr_block = "📈 <b>Fuentes de ingreso</b>\n<i>No disponibles en este momento.</i>"
+        else:
+            srcs = (a.get("sources") or [])[:5]
+            src_lines = (
+                "\n".join(
+                    [
+                        f"• {LucienVoice._traducir_fuente(s.get('source', ''))}: {s.get('total', 0)} ({s.get('pct', 0)}%)"
+                        for s in srcs
+                    ]
+                )
+                or "• Sin datos"
             )
-            or "• (sin datos en la ventana)"
-        )
-        top_lines = (
-            "\n".join(
+            attr_block = f"📈 <b>Principales fuentes de ingreso</b>\n{src_lines}"
+
+        # Top extractores
+        tops = t[:6] if isinstance(t, list) else []
+        if tops:
+            top_lines = "\n".join(
                 [
-                    f"• {(tt.get('username') or str(tt.get('user_id', '?')))}: earned {tt.get('total_earned', 0)} | spent {tt.get('total_spent', 0)} | net {tt.get('net', 0)} | saldo {tt.get('current_balance', 0)}"
+                    f"• {(tt.get('username') or str(tt.get('user_id', '?')))} — {tt.get('total_earned', 0)} acumulados (neto {tt.get('net', 0)})"
                     for tt in tops
                 ]
             )
-            or "• (sin datos)"
-        )
-        econ_block = (
-            f"💰 <b>Economía ({win_str})</b>\n• Total ever earned: {e.get('total_ever_earned', 0)}\n• Total ever spent: {e.get('total_ever_spent', 0)}\n• Circulación actual: {e.get('circulation', 0)}\n• Net flow: {e.get('net_flow', 0)}\n• Burn rate: {e.get('burn_rate_pct', 0)}%"
-            if econ_status != "degraded"
-            else f"💰 <b>Economía (degradado)</b>\n<i>Error: {e.get('error', 'desconocido')}</i>"
-        )
-        attr_block = (
-            f"📈 <b>Fuentes de ingresos (créditos)</b>\n{src_lines}"
-            if attr_status != "degraded"
-            else "📈 <b>Fuentes de ingresos (degradado)</b>"
-        )
+        else:
+            top_lines = "• Sin datos"
+
         return f"""🎩 <b>Los patrones que revelan deseos</b>
 
 <i>Los flujos del reino, al descubierto para los custodios...</i>
 
-👥 <b>Resumen del Reino</b>
-• Visitantes totales: {d.get("total_users", 0)}
-• VIP activos: {d.get("active_vip", 0)}
-• Besitos en circulación: {d.get("total_besitos", 0)}
-• VIP por expirar (48h): {d.get("expiring_soon", 0)}
-• Nuevos hoy: {d.get("new_today", 0)}
+{resumen}
 
 {econ_block}
 
 {attr_block}
 
-🏆 <b>Los que más han acumulado</b>
+🏆 <b>Los que más han extraído</b>
 {top_lines}
 
 <i>Diana observa estos patrones con interés.</i>"""
 
     @staticmethod
     def economy_report(economy: dict, attribution: dict, top_earners: list) -> str:
-        """Reporte enfocado de la economía de besitos (fuentes + top extractores + flujo). Para /economy."""
+        """Reporte enfocado y legible de la economía de besitos. Para /economy."""
         e = economy or {}
         a = attribution or {}
         t = top_earners or []
+
         win = e.get("window_days")
         win_str = "histórico" if not win else f"últimos {win} días"
-        status = e.get("status", "ok")
-        if status == "degraded":
-            return f"""🎩 <b>Economía del Reino</b>
+
+        if e.get("status") == "degraded":
+            return """🎩 <b>Economía del Reino</b>
 
 <i>Los flujos están velados en este momento...</i>
 
-⚠️ <b>Reporte degradado</b>
-<i>Error: {e.get("error", "desconocido")}</i>
+⚠️ <b>Reporte no disponible</b>
+<i>Intente nuevamente en unos minutos.</i>"""
 
-<i>Los custodios pueden intentarlo de nuevo más tarde.</i>"""
+        # Resumen compacto (lo más importante primero)
+        resumen = f"""💰 <b>Resumen ({win_str})</b>
+Ingresados: {e.get("total_ever_earned", 0)}   •   Gastados: {e.get("total_ever_spent", 0)}
+En circulación: {e.get("circulation", 0)}   •   Tasa de gasto: {e.get("burn_rate_pct", 0)}%"""
 
+        # Fuentes principales (máx 5)
         srcs = (a.get("sources") or [])[:5]
-        src_lines = (
-            "\n".join(
+        if srcs:
+            src_lines = "\n".join(
                 [
-                    f"• {s.get('source', '?')}: {s.get('total', 0)} besitos ({s.get('pct', 0)}%, {s.get('count', 0)} tx)"
+                    f"• {LucienVoice._traducir_fuente(s.get('source', ''))}: {s.get('total', 0)} ({s.get('pct', 0)}%)"
                     for s in srcs
                 ]
             )
-            or "• (sin datos)"
-        )
+        else:
+            src_lines = "• Sin datos en el período"
 
-        top_lines = (
-            "\n".join(
+        # Top extractores (máx 6 para no saturar)
+        tops = t[:6] if isinstance(t, list) else []
+        if tops:
+            top_lines = "\n".join(
                 [
-                    f"• {(tt.get('username') or str(tt.get('user_id', '?')))} — earned {tt.get('total_earned', 0)} | net {tt.get('net', 0)}"
-                    for tt in t[:8]
+                    f"• {(tt.get('username') or str(tt.get('user_id', '?')))} — {tt.get('total_earned', 0)} acumulados (neto {tt.get('net', 0)})"
+                    for tt in tops
                 ]
             )
-            or "• (sin datos)"
-        )
+        else:
+            top_lines = "• Sin datos"
 
         return f"""🎩 <b>Economía del Reino</b>
 
-<i>Las fuentes del deseo, contadas con precisión para los custodios...</i>
+<i>Las fuentes del deseo, contadas con claridad...</i>
 
-💰 <b>Resumen ({win_str})</b>
-• Ingresos totales acumulados: {e.get("total_ever_earned", 0)}
-• Gastados acumulados: {e.get("total_ever_spent", 0)}
-• Circulación actual: {e.get("circulation", 0)}
-• Flujo neto: {e.get("net_flow", 0)}
-• Tasa de quema: {e.get("burn_rate_pct", 0)}%
+{resumen}
 
-📈 <b>Fuentes de ingresos (créditos)</b>
+📈 <b>Principales fuentes de ingreso</b>
 {src_lines}
 
 🏆 <b>Los que más han extraído</b>
