@@ -11,7 +11,7 @@ Focus (smallest effective change, 10+ high-value deterministic unit tests):
 - Streak calculation (_get_*_streak via GameRecord) + milestone bonuses (3/5/7/10, VIP *2)
 - Promo code "entrega" hook (claim_for_streak integration via play_* when correct + streak tier)
 - Error paths (question not found / bad idx, limit reached structure)
-- VIP-specific (play_trivia_vip requires active sub, separate game_type records, 5 besitos base)
+- VIP-specific (play_trivia_vip requires active sub, separate game_type records, base reward)
 
 Patterns replicated exactly from prior sessions:
 - @pytest.mark.unit + descriptive class + per-test docstrings
@@ -118,6 +118,7 @@ class TestGameServiceTriviaPaths:
                 game_type="trivia",
                 result=f"pre_{i}",
                 payout=1,
+                correct=True,
                 played_at=today + timedelta(minutes=i),
             )
             db_session.add(rec)
@@ -135,7 +136,7 @@ class TestGameServiceTriviaPaths:
     def test_play_trivia_vip_requires_vip_and_uses_vip_limit_and_besitos(
         self, db_session, sample_user, sample_vip_channel, sample_tariff
     ):
-        """play_trivia_vip: non-VIP gets specific 'exclusiva' message; VIP path uses 5 besitos base + trivia_vip records."""
+        """play_trivia_vip: non-VIP gets specific 'exclusiva' message; VIP path uses base reward + trivia_vip records."""
         service = GameService(db_session)
         user_tg = sample_user.telegram_id
 
@@ -166,7 +167,7 @@ class TestGameServiceTriviaPaths:
             result = service.play_trivia_vip(user_id=user_tg, question_idx=0, answer_idx=0)
 
         assert result["correct"] is True
-        assert result["besitos"] == 5  # TRIVIA_VIP_WIN_BESITOS
+        assert result["besitos"] == 2  # TRIVIA_VIP_WIN_BESITOS (actualizado)
         # Verify separate game_type record
         vip_count = (
             db_session.query(GameRecord)
@@ -191,6 +192,7 @@ class TestGameServiceTriviaPaths:
                 game_type="trivia",
                 result=f"prior_{i}",
                 payout=1,
+                correct=True,
                 played_at=today + timedelta(minutes=i),
             )
             db_session.add(rec)
@@ -219,7 +221,7 @@ class TestGameServiceTriviaPaths:
         assert result["correct"] is True
         assert result["new_streak"] == 3
         assert result["streak_bonus"] == 4  # 2 * 2 (VIP)
-        assert result["besitos_total"] == 1 + 4
+        assert result["besitos_total"] == 1 + 4  # base 1 + bonus
         service.close()
 
     def test_play_trivia_wrong_answer_after_streak_resets_and_no_bonus(
@@ -365,6 +367,58 @@ class TestGameServiceTriviaPaths:
             assert isinstance(result2.get("besitos"), int)
         service.close()
 
+    def test_trivia_besitos_daily_cap_enforced_and_streak_survives_zero_payout(
+        self, db_session, sample_user
+    ):
+        """Correct answers respect daily earning cap; streak continues even if besitos awarded=0; payout recorded matches credit."""
+        service = GameService(db_session)
+        user_tg = sample_user.telegram_id
+        # Force low cap via direct TriviaConfig (bypasses some get but fine for unit)
+        from models.models import TriviaConfig
+
+        cfg = TriviaConfig(
+            trivia_besitos_daily_free=2,
+            trivia_besitos_daily_vip=2,
+            trivia_besitos_weekly_free=100,
+            trivia_besitos_weekly_vip=100,
+        )
+        db_session.add(cfg)
+        db_session.commit()
+
+        mock_q = {"question": "Q?", "opts": ["A", "B"], "answer": 0}
+        with patch.object(service, "load_trivia_questions", return_value=[mock_q]):
+            # First correct: awards 1
+            r1 = service.play_trivia(user_id=user_tg, question_idx=0, answer_idx=0)
+            assert r1["correct"] is True
+            assert r1["besitos"] == 1
+            assert r1["besitos_total"] == 1
+
+            # Second correct (would be another 1): hits cap, awards 1 more then 0 on next
+            r2 = service.play_trivia(user_id=user_tg, question_idx=0, answer_idx=0)
+            assert r2["correct"] is True
+            # Depending on order, second may get the last 1 or 0
+            assert r2["besitos"] + r1["besitos"] <= 2
+
+            # Third: must award 0 but still correct + streak advances
+            r3 = service.play_trivia(user_id=user_tg, question_idx=0, answer_idx=0)
+            assert r3["correct"] is True
+            assert r3["besitos"] == 0
+            # New streak should be 3 (previous two + this)
+            assert r3["new_streak"] == 3
+
+        # Verify GameRecords have correct flag and payout matches what was "awarded"
+        records = (
+            db_session.query(GameRecord)
+            .filter(GameRecord.user_id == user_tg, GameRecord.game_type == "trivia")
+            .order_by(GameRecord.played_at)
+            .all()
+        )
+        awarded_sum = sum(r.payout for r in records if r.game_type == "trivia")
+        assert awarded_sum <= 2
+        # At least the third record should have correct=True even with payout 0
+        assert any(r.correct is True and r.payout == 0 for r in records)
+        service.close()
+
     def test_get_daily_limits_vip_vs_free_differs(
         self, db_session, sample_user, sample_vip_channel, sample_tariff
     ):
@@ -481,6 +535,10 @@ class TestGameServiceLimitsAndConcurrent:
             trivia_vip_limit=5,
             trivia_simple_limit_free=5,
             trivia_simple_limit_vip=10,
+            trivia_besitos_daily_free=10,
+            trivia_besitos_daily_vip=15,
+            trivia_besitos_weekly_free=30,
+            trivia_besitos_weekly_vip=40,
         )
         db_session.add(tcfg)
         db_session.commit()

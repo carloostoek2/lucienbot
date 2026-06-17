@@ -354,6 +354,11 @@ class TriviaConfig(Base):
     trivia_vip_limit = Column(Integer, default=5, nullable=False)
     trivia_simple_limit_free = Column(Integer, default=5, nullable=False)
     trivia_simple_limit_vip = Column(Integer, default=10, nullable=False)
+    # Nuevos límites de besitos ganados (no de jugadas)
+    trivia_besitos_daily_free = Column(Integer, default=10, nullable=False)
+    trivia_besitos_daily_vip = Column(Integer, default=15, nullable=False)
+    trivia_besitos_weekly_free = Column(Integer, default=30, nullable=False)
+    trivia_besitos_weekly_vip = Column(Integer, default=40, nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     updated_by = Column(BigInteger, nullable=True)
 
@@ -1278,6 +1283,7 @@ class GameRecord(Base):
     game_type = Column(String(20), nullable=False)  # 'dice', 'trivia'
     result = Column(String(50), nullable=False)
     payout = Column(Integer, default=0)
+    correct = Column(Boolean, default=False, nullable=False)
     played_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -72,6 +72,19 @@ def _config_keyboard(config: dict) -> InlineKeyboardMarkup:
                 callback_data=TriviaConfigFieldCallback(field_key="trivia_simple").pack(),
             )
         ],
+        # Nuevos: límites de besitos ganados (earning caps diario/semanal)
+        [
+            InlineKeyboardButton(
+                text=f"Besitos diarios Free: {config['trivia_besitos_daily_free']} | VIP: {config['trivia_besitos_daily_vip']}",
+                callback_data=TriviaConfigFieldCallback(field_key="besitos_daily").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"Besitos semanales Free: {config['trivia_besitos_weekly_free']} | VIP: {config['trivia_besitos_weekly_vip']}",
+                callback_data=TriviaConfigFieldCallback(field_key="besitos_weekly").pack(),
+            )
+        ],
         [InlineKeyboardButton(text="🔙 Volver a Trivias", callback_data="admin_trivia")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -87,6 +100,8 @@ FIELD_LABELS = {
         "trivia_simple_limit_vip",
         False,
     ),
+    "besitos_daily": ("Besitos diarios (trivia)", "trivia_besitos_daily_free", "trivia_besitos_daily_vip", False),
+    "besitos_weekly": ("Besitos semanales (trivia)", "trivia_besitos_weekly_free", "trivia_besitos_weekly_vip", False),
 }
 
 
@@ -127,12 +142,13 @@ async def trivia_config_select_field(
             f"Indique el nuevo límite (número entero, 0 o más):"
         )
     else:
+        unit = "besitos" if "besitos" in field_key else "intentos"
         text = (
             f"⚙️ <b>Configurar {label}</b>\n\n"
-            f"Límite Free actual: <b>{config[free_key]}</b> intentos\n"
-            f"Límite VIP actual: <b>{config[vip_key]}</b> intentos\n\n"
+            f"Límite Free actual: <b>{config[free_key]}</b> {unit}\n"
+            f"Límite VIP actual: <b>{config[vip_key]}</b> {unit}\n\n"
             f"Indique los nuevos valores en formato: <b>free vip</b>\n"
-            f"Ejemplo: <b>5 10</b> para 5 intentos free y 10 VIP"
+            f"Ejemplo: <b>10 15</b>"
         )
 
     await callback.message.edit_text(text, reply_markup=cancel_keyboard(), parse_mode="HTML")

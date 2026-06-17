@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.database import SessionLocal
@@ -34,7 +35,7 @@ class GameService:
     # Recompensas por victoria
     DICE_WIN_BESITOS = 1
     TRIVIA_WIN_BESITOS = 1
-    TRIVIA_VIP_WIN_BESITOS = 5
+    TRIVIA_VIP_WIN_BESITOS = 2
 
     # Límites trivia VIP
     DAILY_TRIVIA_VIP_LIMIT = 5
@@ -43,12 +44,18 @@ class GameService:
     DAILY_TRIVIA_SIMPLE_LIMIT_FREE = 5
     DAILY_TRIVIA_SIMPLE_LIMIT_VIP = 10
 
-    # Recompensas trivia simple
-    TRIVIA_SIMPLE_WIN_BESITOS = 2
-    TRIVIA_SIMPLE_VIP_WIN_BESITOS = 4
+    # Recompensas trivia simple (estandarizadas al mismo esquema 1/2)
+    TRIVIA_SIMPLE_WIN_BESITOS = 1
+    TRIVIA_SIMPLE_VIP_WIN_BESITOS = 2
 
     # Hitos de racha (D-09): {streak: bonus_base}
     STREAK_MILESTONES = {3: 2, 5: 5, 7: 10, 10: 20}
+
+    # Límites de besitos ganados en trivia (earning caps, distintos de límites de jugadas)
+    TRIVIA_BESITOS_DAILY_FREE = 10
+    TRIVIA_BESITOS_DAILY_VIP = 15
+    TRIVIA_BESITOS_WEEKLY_FREE = 30
+    TRIVIA_BESITOS_WEEKLY_VIP = 40
 
     # ==================== TEMPLATES DE COPY ====================
 
@@ -382,11 +389,14 @@ class GameService:
         return records
 
     def _get_trivia_streak(self, user_id: int) -> int:
-        """Calcula racha actual de victorias en trivia (solo hoy)"""
+        """Calcula racha actual de victorias en trivia (solo hoy).
+        Soporta payout==0 en respuestas correctas por tope de besitos (usa .correct si existe).
+        """
         records = self._get_today_trivia_records(user_id)
         streak = 0
         for record in records:
-            if record.payout > 0:
+            is_win = getattr(record, "correct", None)
+            if is_win is True or (is_win is None and record.payout > 0):
                 streak += 1
             else:
                 break
@@ -540,6 +550,79 @@ class GameService:
                 )
         return True, played, limit, None
 
+    # ==================== BESITOS EARNING CAPS (TRIVIA) ====================
+
+    TRIVIA_GAME_TYPES = ("trivia", "trivia_vip", "trivia_simple")
+
+    def _get_trivia_besitos_earned_since(self, user_id: int, since: datetime) -> int:
+        """Suma payout de todos los tipos de trivia desde 'since' (usado para caps)."""
+        total = (
+            self.db.query(func.sum(GameRecord.payout))
+            .filter(
+                GameRecord.user_id == user_id,
+                GameRecord.game_type.in_(self.TRIVIA_GAME_TYPES),
+                GameRecord.played_at >= since,
+            )
+            .scalar()
+        )
+        return int(total or 0)
+
+    def get_trivia_besitos_earned_today(self, user_id: int) -> int:
+        """Besitos totales ganados hoy en cualquier variante de trivia."""
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        return self._get_trivia_besitos_earned_since(user_id, today)
+
+    def get_trivia_besitos_earned_week(self, user_id: int) -> int:
+        """Besitos totales ganados en ventana rolling de 7 días (semanal)."""
+        week_ago = datetime.now(UTC) - timedelta(days=7)
+        return self._get_trivia_besitos_earned_since(user_id, week_ago)
+
+    def get_trivia_besitos_limits(self, user_id: int) -> dict:
+        """Devuelve caps + earned + remaining para daily y weekly según VIP."""
+        is_vip = self.is_user_vip(user_id)
+        try:
+            from services.trivia_config_service import TriviaConfigService
+
+            config_svc = TriviaConfigService(self.db)
+            config = config_svc.get_config()
+        except Exception:
+            config = {}
+
+        if is_vip:
+            daily_cap = config.get("trivia_besitos_daily_vip", self.TRIVIA_BESITOS_DAILY_VIP)
+            weekly_cap = config.get("trivia_besitos_weekly_vip", self.TRIVIA_BESITOS_WEEKLY_VIP)
+        else:
+            daily_cap = config.get("trivia_besitos_daily_free", self.TRIVIA_BESITOS_DAILY_FREE)
+            weekly_cap = config.get("trivia_besitos_weekly_free", self.TRIVIA_BESITOS_WEEKLY_FREE)
+
+        earned_daily = self.get_trivia_besitos_earned_today(user_id)
+        earned_weekly = self.get_trivia_besitos_earned_week(user_id)
+
+        return {
+            "daily_cap": daily_cap,
+            "weekly_cap": weekly_cap,
+            "earned_daily": earned_daily,
+            "earned_weekly": earned_weekly,
+            "remaining_daily": max(0, daily_cap - earned_daily),
+            "remaining_weekly": max(0, weekly_cap - earned_weekly),
+            "is_vip": is_vip,
+        }
+
+    def _apply_trivia_besitos_cap(
+        self, user_id: int, desired_base: int, desired_bonus: int
+    ) -> tuple[int, int]:
+        """Aplica los caps daily+weekly y devuelve (awarded_base, awarded_bonus)."""
+        limits = self.get_trivia_besitos_limits(user_id)
+        total_desired = desired_base + desired_bonus
+        allowed = min(
+            total_desired,
+            limits["remaining_daily"],
+            limits["remaining_weekly"],
+        )
+        awarded_base = min(desired_base, allowed)
+        awarded_bonus = min(desired_bonus, max(0, allowed - awarded_base))
+        return awarded_base, awarded_bonus
+
     # ==================== DADOS ====================
 
     def get_dice_entry_data(self, user_id: int) -> dict:
@@ -630,7 +713,7 @@ class GameService:
 
         # 6. Registrar jugada
         record = GameRecord(
-            user_id=user_id, game_type="dice", result=f"{dice1}+{dice2}", payout=besitos
+            user_id=user_id, game_type="dice", result=f"{dice1}+{dice2}", payout=besitos, correct=False
         )
         self.db.add(record)
         self.db.commit()
@@ -849,31 +932,39 @@ class GameService:
         if is_correct:
             streak_message = self._get_streak_message(new_streak)
 
-        # 7. Acreditar besitos si correcto
+        # 7. Calcular recompensa deseada + aplicar caps de besitos ganados
         besitos = 0
+        streak_bonus = 0
         if is_correct:
-            besitos = self.TRIVIA_WIN_BESITOS
+            desired_base = self.TRIVIA_WIN_BESITOS
+            desired_bonus = 0
+            if new_streak in self.STREAK_MILESTONES:
+                bonus = self.STREAK_MILESTONES[new_streak]
+                desired_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
+
+            awarded_base, awarded_bonus = self._apply_trivia_besitos_cap(
+                user_id, desired_base, desired_bonus
+            )
+            besitos = awarded_base
+            streak_bonus = awarded_bonus
+
             besito_service = BesitoService(
                 db=self.db
             )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
-            besito_service.credit_besitos(
-                user_id=user_id,
-                amount=besitos,
-                source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia (racha: {new_streak})",
-            )
-
-        # 7b. Verificar hito de racha (D-09, D-10)
-        streak_bonus = 0
-        if is_correct and new_streak in self.STREAK_MILESTONES:
-            bonus = self.STREAK_MILESTONES[new_streak]
-            streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
-            besito_service.credit_besitos(  # re-use the local from above
-                user_id=user_id,
-                amount=streak_bonus,
-                source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia",
-            )
+            if besitos > 0:
+                besito_service.credit_besitos(
+                    user_id=user_id,
+                    amount=besitos,
+                    source=TransactionSource.TRIVIA,
+                    description=f"Victoria en trivia (racha: {new_streak})",
+                )
+            if streak_bonus > 0:
+                besito_service.credit_besitos(
+                    user_id=user_id,
+                    amount=streak_bonus,
+                    source=TransactionSource.TRIVIA,
+                    description=f"Bonus por racha de {new_streak} en trivia",
+                )
 
         # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
@@ -881,6 +972,7 @@ class GameService:
             game_type="trivia",
             result=f"question_{question_idx}",
             payout=besitos + streak_bonus,
+            correct=is_correct,
         )
         self.db.add(record)
 
@@ -1083,11 +1175,14 @@ class GameService:
         return records
 
     def _get_vip_trivia_streak(self, user_id: int) -> int:
-        """Calcula racha actual de victorias en trivia VIP (solo hoy)"""
+        """Calcula racha actual de victorias en trivia VIP (solo hoy).
+        Soporta payout==0 en respuestas correctas por tope de besitos (usa .correct si existe).
+        """
         records = self._get_today_vip_trivia_records(user_id)
         streak = 0
         for record in records:
-            if record.payout > 0:
+            is_win = getattr(record, "correct", None)
+            if is_win is True or (is_win is None and record.payout > 0):
                 streak += 1
             else:
                 break
@@ -1196,7 +1291,7 @@ class GameService:
 
     def play_trivia_vip(self, user_id: int, question_idx: int, answer_idx: int) -> dict[str, Any]:
         """
-        Procesa respuesta de trivia VIP con sistema de rachas y 5 besitos.
+        Procesa respuesta de trivia VIP con sistema de rachas y recompensa VIP.
         Returns: {correct, besitos, previous_streak, new_streak, streak_message,
                  message, message_parts, remaining_after, limit_reached}
         """
@@ -1244,31 +1339,39 @@ class GameService:
         if is_correct:
             streak_message = self._get_streak_message(new_streak)
 
-        # 7. Acreditar 5 besitos si correcto
+        # 7. Calcular recompensa deseada + aplicar caps de besitos ganados
         besitos = 0
+        streak_bonus = 0
         if is_correct:
-            besitos = self.TRIVIA_VIP_WIN_BESITOS
+            desired_base = self.TRIVIA_VIP_WIN_BESITOS
+            desired_bonus = 0
+            if new_streak in self.STREAK_MILESTONES:
+                bonus = self.STREAK_MILESTONES[new_streak]
+                desired_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
+
+            awarded_base, awarded_bonus = self._apply_trivia_besitos_cap(
+                user_id, desired_base, desired_bonus
+            )
+            besitos = awarded_base
+            streak_bonus = awarded_bonus
+
             besito_service = BesitoService(
                 db=self.db
             )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
-            besito_service.credit_besitos(
-                user_id=user_id,
-                amount=besitos,
-                source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia VIP (racha: {new_streak})",
-            )
-
-        # 7b. Verificar hito de racha (D-09, D-10)
-        streak_bonus = 0
-        if is_correct and new_streak in self.STREAK_MILESTONES:
-            bonus = self.STREAK_MILESTONES[new_streak]
-            streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
-            besito_service.credit_besitos(  # re-use the local from above
-                user_id=user_id,
-                amount=streak_bonus,
-                source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia VIP",
-            )
+            if besitos > 0:
+                besito_service.credit_besitos(
+                    user_id=user_id,
+                    amount=besitos,
+                    source=TransactionSource.TRIVIA,
+                    description=f"Victoria en trivia VIP (racha: {new_streak})",
+                )
+            if streak_bonus > 0:
+                besito_service.credit_besitos(
+                    user_id=user_id,
+                    amount=streak_bonus,
+                    source=TransactionSource.TRIVIA,
+                    description=f"Bonus por racha de {new_streak} en trivia VIP",
+                )
 
         # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
@@ -1276,6 +1379,7 @@ class GameService:
             game_type="trivia_vip",
             result=f"vip_question_{question_idx}",
             payout=besitos + streak_bonus,
+            correct=is_correct,
         )
         self.db.add(record)
 
@@ -1485,11 +1589,14 @@ class GameService:
         return questions[idx], idx
 
     def _get_simple_trivia_streak(self, user_id: int) -> int:
-        """Calcula racha actual de victorias en trivia simple (solo hoy)."""
+        """Calcula racha actual de victorias en trivia simple (solo hoy).
+        Soporta payout==0 en respuestas correctas por tope de besitos (usa .correct si existe).
+        """
         records = self._get_today_simple_trivia_records(user_id)
         streak = 0
         for record in records:
-            if record.payout > 0:
+            is_win = getattr(record, "correct", None)
+            if is_win is True or (is_win is None and record.payout > 0):
                 streak += 1
             else:
                 break
@@ -1598,30 +1705,41 @@ class GameService:
             streak_message = self._get_simple_streak_message(new_streak)
 
         besitos = 0
+        streak_bonus = 0
         if is_correct:
-            besitos = self.TRIVIA_SIMPLE_WIN_BESITOS
-            if self.is_user_vip(user_id):
-                besitos = self.TRIVIA_SIMPLE_VIP_WIN_BESITOS
+            desired_base = (
+                self.TRIVIA_SIMPLE_VIP_WIN_BESITOS
+                if self.is_user_vip(user_id)
+                else self.TRIVIA_SIMPLE_WIN_BESITOS
+            )
+            desired_bonus = 0
+            if new_streak in self.STREAK_MILESTONES:
+                bonus = self.STREAK_MILESTONES[new_streak]
+                desired_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
+
+            awarded_base, awarded_bonus = self._apply_trivia_besitos_cap(
+                user_id, desired_base, desired_bonus
+            )
+            besitos = awarded_base
+            streak_bonus = awarded_bonus
+
             besito_service = BesitoService(
                 db=self.db
             )  # local on-demand inside credit site; shared db; credit internal commit + schedule_emit
-            besito_service.credit_besitos(
-                user_id=user_id,
-                amount=besitos,
-                source=TransactionSource.TRIVIA,
-                description=f"Victoria en trivia simple (racha: {new_streak})",
-            )
-
-        streak_bonus = 0
-        if is_correct and new_streak in self.STREAK_MILESTONES:
-            bonus = self.STREAK_MILESTONES[new_streak]
-            streak_bonus = bonus * 2 if self.is_user_vip(user_id) else bonus
-            besito_service.credit_besitos(  # re-use the local from above
-                user_id=user_id,
-                amount=streak_bonus,
-                source=TransactionSource.TRIVIA,
-                description=f"Bonus por racha de {new_streak} en trivia simple",
-            )
+            if besitos > 0:
+                besito_service.credit_besitos(
+                    user_id=user_id,
+                    amount=besitos,
+                    source=TransactionSource.TRIVIA,
+                    description=f"Victoria en trivia simple (racha: {new_streak})",
+                )
+            if streak_bonus > 0:
+                besito_service.credit_besitos(
+                    user_id=user_id,
+                    amount=streak_bonus,
+                    source=TransactionSource.TRIVIA,
+                    description=f"Bonus por racha de {new_streak} en trivia simple",
+                )
 
         # Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
@@ -1629,6 +1747,7 @@ class GameService:
             game_type="trivia_simple",
             result=f"simple_question_{question_idx}",
             payout=besitos + streak_bonus,
+            correct=is_correct,
         )
         self.db.add(record)
 

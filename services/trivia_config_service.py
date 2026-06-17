@@ -23,6 +23,11 @@ DEFAULTS = {
     "trivia_vip_limit": 5,
     "trivia_simple_limit_free": 5,
     "trivia_simple_limit_vip": 10,
+    # Límites de besitos ganados por trivia (diario y semanal)
+    "trivia_besitos_daily_free": 10,
+    "trivia_besitos_daily_vip": 15,
+    "trivia_besitos_weekly_free": 30,
+    "trivia_besitos_weekly_vip": 40,
 }
 
 
@@ -61,6 +66,10 @@ class TriviaConfigService:
             "trivia_vip_limit": config.trivia_vip_limit,
             "trivia_simple_limit_free": config.trivia_simple_limit_free,
             "trivia_simple_limit_vip": config.trivia_simple_limit_vip,
+            "trivia_besitos_daily_free": config.trivia_besitos_daily_free,
+            "trivia_besitos_daily_vip": config.trivia_besitos_daily_vip,
+            "trivia_besitos_weekly_free": config.trivia_besitos_weekly_free,
+            "trivia_besitos_weekly_vip": config.trivia_besitos_weekly_vip,
         }
 
     def update_config(self, admin_id: int, **kwargs) -> dict:
