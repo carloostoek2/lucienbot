@@ -341,7 +341,7 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
     with get_service(PackageService) as package_service:
         pkg_id = product.package_id
         files = package_service.get_package_files(pkg_id) if pkg_id else []
-        preview_files = files[:3]
+        preview_files = files[:1]
 
     with get_service(BesitoService) as besito_service:
         user_id = callback.from_user.id

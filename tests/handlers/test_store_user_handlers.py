@@ -690,6 +690,42 @@ class TestProductPreview:
     @patch("handlers.store_user_handlers.BesitoService")
     @patch("handlers.store_user_handlers.PackageService")
     @patch("handlers.store_user_handlers.StoreService")
+    async def test_sends_only_first_file_when_multiple_available(
+        self, mock_store, mock_pkg, mock_besito, make_callback
+    ):
+        """Con varios archivos en el paquete, solo envia el primero como preview."""
+        from keyboards.callback_data import ProductPreviewCallback
+
+        product = MagicMock()
+        product.id = 1
+        product.name = "Varios archivos"
+        product.description = "Paquete grande"
+        product.price = 100
+        product.stock = 5
+        product.is_available = True
+        product.package_id = 1
+        file1 = MagicMock(file_id="first", file_type="photo")
+        file2 = MagicMock(file_id="second", file_type="photo")
+        file3 = MagicMock(file_id="third", file_type="photo")
+        mock_store.return_value.get_product.return_value = product
+        mock_pkg.return_value.get_package_files.return_value = [file1, file2, file3]
+        mock_besito.return_value.get_balance.return_value = 200
+        cb = make_callback(data="product_preview:1")
+        cd = ProductPreviewCallback(product_id=1)
+
+        from handlers.store_user_handlers import product_preview
+
+        await product_preview(cb, cd)
+
+        cb.message.answer_photo.assert_called_once_with(
+            photo="first",
+            caption="<i>Preview del contenido...</i>",
+            parse_mode="HTML",
+        )
+
+    @patch("handlers.store_user_handlers.BesitoService")
+    @patch("handlers.store_user_handlers.PackageService")
+    @patch("handlers.store_user_handlers.StoreService")
     async def test_sends_preview_and_product_card(self, mock_store, mock_pkg, mock_besito, make_callback):
         """Envia preview y luego la tarjeta del producto."""
         from keyboards.callback_data import ProductPreviewCallback
