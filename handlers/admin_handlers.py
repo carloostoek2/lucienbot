@@ -16,9 +16,7 @@ from keyboards.inline_keyboards import (
     channel_management_keyboard,
     vip_management_keyboard,
 )
-from services.channel_service import ChannelService
 from services.user_service import UserService
-from services.vip_service import VIPService
 from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
@@ -84,42 +82,6 @@ async def admin_users(callback: CallbackQuery):
 <i>Use el sistema de gestión de canales para ver detalles específicos.</i>"""
     finally:
         user_service.close()
-
-    await callback.message.edit_text(
-        text, reply_markup=back_keyboard("back_to_admin"), parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "admin_analytics", lambda cb: is_admin(cb.from_user.id))
-async def admin_analytics(callback: CallbackQuery):
-    """Analytics"""
-    channel_service = ChannelService()
-    vip_service = VIPService()
-    try:
-        free_channels = len(channel_service.get_free_channels())
-        vip_channels = len(channel_service.get_vip_channels())
-        active_subs = len(vip_service.get_active_subscriptions())
-        pending = channel_service.count_pending_requests()
-
-        text = f"""🎩 <b>Lucien:</b>
-
-<i>Los patrones que revelan los deseos ocultos...</i>
-
-📊 <b>Métricas del Reino:</b>
-
-🏛️ <b>Dominios:</b>
-   • Vestíbulos (Free): {free_channels}
-   • Círculos VIP: {vip_channels}
-
-👥 <b>Visitantes:</b>
-   • Suscriptores VIP activos: {active_subs}
-   • En espera (Free): {pending}
-
-<i>Diana observa estos números con... interés.</i>"""
-    finally:
-        channel_service.close()
-        vip_service.close()
 
     await callback.message.edit_text(
         text, reply_markup=back_keyboard("back_to_admin"), parse_mode="HTML"

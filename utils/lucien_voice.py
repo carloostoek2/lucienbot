@@ -705,6 +705,128 @@ Verifique permisos del bot o que la solicitud siga pendiente."""
 <i>El reino de Diana observa con atencion...</i>"""
 
     @staticmethod
+    def analytics_patterns_dashboard(
+        dashboard: dict, economy: dict, attribution: dict, top_earners: list
+    ) -> str:
+        """Patrones completos (dashboard + economía del día) para el botón del menú."""
+        d = dashboard or {}
+        e = economy or {}
+        a = attribution or {}
+        t = top_earners or []
+        win = e.get("window_days")
+        win_str = "histórico completo" if not win else f"últimos {win} días"
+        econ_status = e.get("status")
+        attr_status = a.get("status")
+        srcs = (a.get("sources") or [])[:6]
+        tops = t[:7] if isinstance(t, list) else []
+        src_lines = (
+            "\n".join(
+                [
+                    f"• {s.get('source', '?')}: {s.get('total', 0)} ({s.get('pct', 0)}%, {s.get('count', 0)} ops)"
+                    for s in srcs
+                ]
+            )
+            or "• (sin datos en la ventana)"
+        )
+        top_lines = (
+            "\n".join(
+                [
+                    f"• {(tt.get('username') or str(tt.get('user_id', '?')))}: earned {tt.get('total_earned', 0)} | spent {tt.get('total_spent', 0)} | net {tt.get('net', 0)} | saldo {tt.get('current_balance', 0)}"
+                    for tt in tops
+                ]
+            )
+            or "• (sin datos)"
+        )
+        econ_block = (
+            f"💰 <b>Economía ({win_str})</b>\n• Total ever earned: {e.get('total_ever_earned', 0)}\n• Total ever spent: {e.get('total_ever_spent', 0)}\n• Circulación actual: {e.get('circulation', 0)}\n• Net flow: {e.get('net_flow', 0)}\n• Burn rate: {e.get('burn_rate_pct', 0)}%"
+            if econ_status != "degraded"
+            else f"💰 <b>Economía (degradado)</b>\n<i>Error: {e.get('error', 'desconocido')}</i>"
+        )
+        attr_block = (
+            f"📈 <b>Fuentes de ingresos (créditos)</b>\n{src_lines}"
+            if attr_status != "degraded"
+            else "📈 <b>Fuentes de ingresos (degradado)</b>"
+        )
+        return f"""🎩 <b>Los patrones que revelan deseos</b>
+
+<i>Los flujos del reino, al descubierto para los custodios...</i>
+
+👥 <b>Resumen del Reino</b>
+• Visitantes totales: {d.get("total_users", 0)}
+• VIP activos: {d.get("active_vip", 0)}
+• Besitos en circulación: {d.get("total_besitos", 0)}
+• VIP por expirar (48h): {d.get("expiring_soon", 0)}
+• Nuevos hoy: {d.get("new_today", 0)}
+
+{econ_block}
+
+{attr_block}
+
+🏆 <b>Los que más han acumulado</b>
+{top_lines}
+
+<i>Diana observa estos patrones con interés.</i>"""
+
+    @staticmethod
+    def economy_report(economy: dict, attribution: dict, top_earners: list) -> str:
+        """Reporte enfocado de la economía de besitos (fuentes + top extractores + flujo). Para /economy."""
+        e = economy or {}
+        a = attribution or {}
+        t = top_earners or []
+        win = e.get("window_days")
+        win_str = "histórico" if not win else f"últimos {win} días"
+        status = e.get("status", "ok")
+        if status == "degraded":
+            return f"""🎩 <b>Economía del Reino</b>
+
+<i>Los flujos están velados en este momento...</i>
+
+⚠️ <b>Reporte degradado</b>
+<i>Error: {e.get("error", "desconocido")}</i>
+
+<i>Los custodios pueden intentarlo de nuevo más tarde.</i>"""
+
+        srcs = (a.get("sources") or [])[:5]
+        src_lines = (
+            "\n".join(
+                [
+                    f"• {s.get('source', '?')}: {s.get('total', 0)} besitos ({s.get('pct', 0)}%, {s.get('count', 0)} tx)"
+                    for s in srcs
+                ]
+            )
+            or "• (sin datos)"
+        )
+
+        top_lines = (
+            "\n".join(
+                [
+                    f"• {(tt.get('username') or str(tt.get('user_id', '?')))} — earned {tt.get('total_earned', 0)} | net {tt.get('net', 0)}"
+                    for tt in t[:8]
+                ]
+            )
+            or "• (sin datos)"
+        )
+
+        return f"""🎩 <b>Economía del Reino</b>
+
+<i>Las fuentes del deseo, contadas con precisión para los custodios...</i>
+
+💰 <b>Resumen ({win_str})</b>
+• Ingresos totales acumulados: {e.get("total_ever_earned", 0)}
+• Gastados acumulados: {e.get("total_ever_spent", 0)}
+• Circulación actual: {e.get("circulation", 0)}
+• Flujo neto: {e.get("net_flow", 0)}
+• Tasa de quema: {e.get("burn_rate_pct", 0)}%
+
+📈 <b>Fuentes de ingresos (créditos)</b>
+{src_lines}
+
+🏆 <b>Los que más han extraído</b>
+{top_lines}
+
+<i>Diana vigila el equilibrio del reino.</i>"""
+
+    @staticmethod
     def export_ready(filename: str) -> str:
         """Confirmacion de exportacion."""
         return f"""🎩 <b>Lucien:</b>
