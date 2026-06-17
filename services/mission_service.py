@@ -662,9 +662,11 @@ class MissionService:
             self._log_delivery_attempt(user_id, mission, MissionDeliveryResult.FAILED)
             return MissionDeliveryResult.FAILED
 
-        await self._send_celebration_if_delivered(
-            delivery_bot, user_id, mission, reward_service, db
-        )
+        # Saltar celebración si la entrega fue un fallo permanente (chat no existe o bot bloqueado)
+        if not _message.startswith("permanent:"):
+            await self._send_celebration_if_delivered(
+                delivery_bot, user_id, mission, reward_service, db
+            )
         self._log_delivery_attempt(user_id, mission, MissionDeliveryResult.NEWLY_DELIVERED)
         return MissionDeliveryResult.NEWLY_DELIVERED
 
