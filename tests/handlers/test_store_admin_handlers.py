@@ -965,11 +965,38 @@ class TestStoreAdminPureHelpers:
         from handlers.store_admin_handlers import build_product_detail_keyboard
 
         kb = build_product_detail_keyboard(42, is_active=True)
-        assert len(kb.inline_keyboard) == 5
-        assert "Desactivar" in kb.inline_keyboard[0][0].text
-        assert "42" in kb.inline_keyboard[0][0].callback_data  # packed contains id
-        assert "Reabastecer" in kb.inline_keyboard[1][0].text
-        assert "list_products" in kb.inline_keyboard[4][0].callback_data
+        assert len(kb.inline_keyboard) == 6
+        assert "Editar" in kb.inline_keyboard[0][0].text
+        assert "Desactivar" in kb.inline_keyboard[1][0].text
+        assert "42" in kb.inline_keyboard[1][0].callback_data  # packed contains id
+        assert "Reabastecer" in kb.inline_keyboard[2][0].text
+        assert "list_products" in kb.inline_keyboard[5][0].callback_data
+
+    def test_build_product_edit_menu_text(self):
+        from handlers.store_admin_handlers import build_product_edit_menu_text
+
+        mock_product = MagicMock()
+        mock_product.name = "Pack VIP"
+        mock_product.description = "Contenido exclusivo"
+        mock_product.price = 200
+        mock_product.stock = 10
+        mock_product.package.name = "Paquete Marzo"
+
+        text = build_product_edit_menu_text(mock_product)
+        assert "Pack VIP" in text
+        assert "Contenido exclusivo" in text
+        assert "Paquete Marzo" in text
+        assert "200" in text
+        assert "10" in text
+
+    def test_build_product_edit_menu_keyboard(self):
+        from handlers.store_admin_handlers import build_product_edit_menu_keyboard
+
+        kb = build_product_edit_menu_keyboard(7)
+        assert len(kb.inline_keyboard) == 6
+        assert "Nombre" in kb.inline_keyboard[0][0].text
+        assert "Paquete" in kb.inline_keyboard[2][0].text
+        assert "7" in kb.inline_keyboard[5][0].callback_data
 
     def test_build_product_confirmation_text_and_keyboard(self):
         from handlers.store_admin_handlers import build_product_confirmation_text_and_keyboard
@@ -1000,5 +1027,163 @@ class TestStoreAdminPureHelpers:
         assert "Sample Product Name That Is Long"[:30] in button[0].text
 
 
+class TestEditProductMenu:
+    """Tests para edit_product_menu — menú de edición de producto."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_shows_edit_menu(self, mock_get_service, make_callback):
+        mock_product = MagicMock()
+        mock_product.name = "Producto Test"
+        mock_product.description = "Desc"
+        mock_product.price = 100
+        mock_product.stock = -1
+        mock_product.package.name = "Paquete A"
+
+        mock_store = MagicMock()
+        mock_store.get_product.return_value = mock_product
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from keyboards.callback_data import EditProductCallback
+
+        cb_data = EditProductCallback(product_id=5)
+        cb = make_callback(data=cb_data.pack())
+
+        from handlers.store_admin_handlers import edit_product_menu
+
+        await edit_product_menu(cb, cb_data)
+
+        mock_store.get_product.assert_called_once_with(5)
+        cb.message.edit_text.assert_called_once()
+        text = cb.message.edit_text.call_args[0][0]
+        assert "Producto Test" in text
+        assert "Que campo deseas modificar" in text
+        cb.answer.assert_called_once()
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_product_not_found(self, mock_get_service, make_callback):
+        mock_store = MagicMock()
+        mock_store.get_product.return_value = None
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from keyboards.callback_data import EditProductCallback
+
+        cb_data = EditProductCallback(product_id=999)
+        cb = make_callback(data=cb_data.pack())
+
+        from handlers.store_admin_handlers import edit_product_menu
+
+        await edit_product_menu(cb, cb_data)
+
+        cb.answer.assert_called_once_with("Producto no encontrado", show_alert=True)
+
+
+class TestProcessEditProductName:
+    """Tests para process_edit_product_name — edición de nombre."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_updates_name_successfully(self, mock_get_service, make_message, make_fsm_context):
+        mock_store = MagicMock()
+        mock_store.update_product.return_value = True
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from handlers.store_admin_handlers import ProductEditStates, process_edit_product_name
+
+        msg = make_message(text="Nuevo Nombre Producto")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductEditStates.waiting_name)
+        await fsm.update_data(edit_product_id=3)
+
+        await process_edit_product_name(msg, fsm)
+
+        mock_store.update_product.assert_called_once_with(3, name="Nuevo Nombre Producto")
+        msg.answer.assert_called_once()
+        text = msg.answer.call_args[0][0]
+        assert "actualizado" in text.lower()
+        assert await fsm.get_state() is None
+
+    async def test_rejects_short_name(self, make_message, make_fsm_context):
+        from handlers.store_admin_handlers import ProductEditStates, process_edit_product_name
+
+        msg = make_message(text="AB")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductEditStates.waiting_name)
+        await fsm.update_data(edit_product_id=3)
+
+        await process_edit_product_name(msg, fsm)
+
+        msg.answer.assert_called_once()
+        assert "3 caracteres" in msg.answer.call_args[0][0]
+        assert await fsm.get_state() == ProductEditStates.waiting_name
+
+
+class TestProcessEditProductPrice:
+    """Tests para process_edit_product_price — edición de precio."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_updates_price_successfully(self, mock_get_service, make_message, make_fsm_context):
+        mock_store = MagicMock()
+        mock_store.update_product.return_value = True
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from handlers.store_admin_handlers import ProductEditStates, process_edit_product_price
+
+        msg = make_message(text="250")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductEditStates.waiting_price)
+        await fsm.update_data(edit_product_id=8)
+
+        await process_edit_product_price(msg, fsm)
+
+        mock_store.update_product.assert_called_once_with(8, price=250)
+        msg.answer.assert_called_once()
+        assert await fsm.get_state() is None
+
+    async def test_rejects_invalid_price(self, make_message, make_fsm_context):
+        from handlers.store_admin_handlers import ProductEditStates, process_edit_product_price
+
+        msg = make_message(text="cero")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductEditStates.waiting_price)
+        await fsm.update_data(edit_product_id=8)
+
+        await process_edit_product_price(msg, fsm)
+
+        msg.answer.assert_called_once()
+        assert "numero valido" in msg.answer.call_args[0][0]
+
+
+class TestProcessEditProductPackage:
+    """Tests para process_edit_product_package — edición de paquete."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_updates_package_successfully(self, mock_get_service, make_callback, make_fsm_context):
+        mock_store = MagicMock()
+        mock_store.update_product.return_value = True
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from keyboards.callback_data import SelectPkgEditProductCallback
+        from handlers.store_admin_handlers import ProductEditStates, process_edit_product_package
+
+        cb_data = SelectPkgEditProductCallback(product_id=4, package_id=12)
+        cb = make_callback(data=cb_data.pack())
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductEditStates.selecting_package)
+        await process_edit_product_package(cb, fsm, cb_data)
+
+        mock_store.update_product.assert_called_once_with(4, package_id=12)
+        cb.message.edit_text.assert_called_once()
+        assert await fsm.get_state() is None
+
+
 # Necesario para evitar NameError en la referencia de clase inline de los handlers
-from handlers.store_admin_handlers import ProductWizardStates
+from handlers.store_admin_handlers import ProductEditStates, ProductWizardStates

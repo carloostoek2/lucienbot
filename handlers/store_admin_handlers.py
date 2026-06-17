@@ -14,8 +14,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from keyboards.callback_data import (
     ConfigStockAlertCallback,
     DeleteProductCallback,
+    EditProductCallback,
+    EditProductFieldCallback,
     ProductAdminDetailCallback,
     RestockProductCallback,
+    SelectPkgEditProductCallback,
     SelectPkgProductCallback,
     ToggleProductCallback,
 )
@@ -42,6 +45,14 @@ class ProductRestockStates(StatesGroup):
     waiting_threshold = State()
 
 
+class ProductEditStates(StatesGroup):
+    waiting_name = State()
+    waiting_description = State()
+    selecting_package = State()
+    waiting_price = State()
+    waiting_stock = State()
+
+
 # ==================== PURE HELPERS (extracted for <=50 LOC rule - Item 8 / arch-enforcer) ====================
 
 
@@ -52,8 +63,14 @@ def compute_restock_new_stock(current_stock: int, amount: int) -> int:
 
 
 def build_product_detail_keyboard(product_id: int, is_active: bool) -> InlineKeyboardMarkup:
-    """Construye el teclado para detalle de producto admin (toggle/restock/config/delete/back). Función pura."""
+    """Construye el teclado para detalle de producto admin (edit/toggle/restock/config/delete/back). Función pura."""
     buttons = [
+        [
+            InlineKeyboardButton(
+                text="✏️ Editar",
+                callback_data=EditProductCallback(product_id=product_id).pack(),
+            )
+        ],
         [
             InlineKeyboardButton(
                 text=f"{'Desactivar' if is_active else 'Activar'}",
@@ -163,6 +180,141 @@ def build_product_confirmation_text_and_keyboard(data: dict) -> tuple[str, Inlin
         ]
     )
     return text, keyboard
+
+
+def build_product_edit_menu_text(product) -> str:
+    """Construye el texto del menú de edición con valores actuales. Función pura."""
+    stock_text = "Ilimitado" if product.stock == -1 else str(product.stock)
+    package_name = product.package.name if getattr(product, "package", None) else "Sin paquete"
+    description = product.description or "Sin descripcion"
+    return (
+        f"🎩 Lucien:\n\n"
+        f"Editar producto:\n\n"
+        f"📦 {product.name}\n"
+        f"📝 {description}\n"
+        f"📁 Paquete: {package_name}\n"
+        f"💰 Precio: {product.price} besitos\n"
+        f"📊 Stock: {stock_text}\n\n"
+        f"Que campo deseas modificar?"
+    )
+
+
+def build_product_edit_menu_keyboard(product_id: int) -> InlineKeyboardMarkup:
+    """Construye el teclado del menú de edición por campo. Función pura."""
+    fields = [
+        ("📦 Nombre", "name"),
+        ("📝 Descripcion", "description"),
+        ("📁 Paquete", "package"),
+        ("💰 Precio", "price"),
+        ("📊 Stock", "stock"),
+    ]
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=EditProductFieldCallback(product_id=product_id, field=field).pack(),
+            )
+        ]
+        for label, field in fields
+    ]
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🔙 Volver",
+                callback_data=ProductAdminDetailCallback(product_id=product_id).pack(),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_edit_cancel_keyboard(product_id: int) -> InlineKeyboardMarkup:
+    """Construye teclado de cancelar para flujos de edición. Función pura."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❌ Cancelar",
+                    callback_data=EditProductCallback(product_id=product_id).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def build_edit_name_prompt_and_keyboard(product_id: int, name: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Construye prompt y teclado para editar nombre. Función pura."""
+    text = f"🎩 Lucien:\n\nNombre actual: {name}\n\nIndica el nuevo nombre:"
+    return text, build_edit_cancel_keyboard(product_id)
+
+
+def build_edit_description_prompt_and_keyboard(
+    product_id: int, description: str | None
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Construye prompt y teclado para editar descripción. Función pura."""
+    current = description or "Sin descripcion"
+    text = (
+        f"🎩 Lucien:\n\nDescripcion actual: {current}\n\n"
+        f"Escribe la nueva descripcion o envia /skip para quitarla:"
+    )
+    return text, build_edit_cancel_keyboard(product_id)
+
+
+def build_edit_price_prompt_and_keyboard(
+    product_id: int, price: int
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Construye prompt y teclado para editar precio. Función pura."""
+    text = f"🎩 Lucien:\n\nPrecio actual: {price} besitos\n\nIndica el nuevo precio:"
+    return text, build_edit_cancel_keyboard(product_id)
+
+
+def build_edit_stock_prompt_and_keyboard(
+    product_id: int, stock: int
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Construye prompt y teclado para editar stock. Función pura."""
+    stock_text = "Ilimitado" if stock == -1 else str(stock)
+    text = f"🎩 Lucien:\n\nStock actual: {stock_text}\n\nConfigura el nuevo stock:"
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="♾️ Ilimitado", callback_data="edit_product_stock_unlimited")],
+            [InlineKeyboardButton(text="📦 Limitado", callback_data="edit_product_stock_limited")],
+            [
+                InlineKeyboardButton(
+                    text="❌ Cancelar",
+                    callback_data=EditProductCallback(product_id=product_id).pack(),
+                )
+            ],
+        ]
+    )
+    return text, keyboard
+
+
+def build_edit_package_buttons(
+    product_id: int, packages: list
+) -> list[list[InlineKeyboardButton]]:
+    """Construye botones de selección de paquete para edición. Función pura."""
+    buttons = []
+    for pkg in packages:
+        stock_text = "∞" if pkg.store_stock == -1 else str(pkg.store_stock)
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
+                    callback_data=SelectPkgEditProductCallback(
+                        product_id=product_id, package_id=pkg.id
+                    ).pack(),
+                )
+            ]
+        )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="❌ Cancelar",
+                callback_data=EditProductCallback(product_id=product_id).pack(),
+            )
+        ]
+    )
+    return buttons
 
 
 def build_delete_confirm_keyboard(product_id: int) -> InlineKeyboardMarkup:
@@ -654,6 +806,7 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
 
         status = "✅ Activo" if product.is_active else "❌ Inactivo"
         stock_text = "Ilimitado" if product.stock == -1 else str(product.stock)
+        package_name = product.package.name if product.package else "Sin paquete"
 
         keyboard = build_product_detail_keyboard(product_id, product.is_active)
 
@@ -661,6 +814,7 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
             f"🎩 Lucien:\n\n"
             f"📦 {product.name}\n\n"
             f"📝 {product.description or 'Sin descripcion'}\n\n"
+            f"📁 Paquete: {package_name}\n"
             f"💰 Precio: {product.price} besitos\n"
             f"📊 Stock: {stock_text}\n"
             f"Estado: {status}\n\n"
@@ -668,6 +822,227 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
             reply_markup=keyboard,
         )
         await callback.answer()
+
+
+# ==================== EDITAR PRODUCTO ====================
+
+
+@router.callback_query(EditProductCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def edit_product_menu(callback: CallbackQuery, callback_data: EditProductCallback):
+    """Muestra menú de edición de producto"""
+    product_id = callback_data.product_id
+
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product(product_id)
+        if not product:
+            await callback.answer("Producto no encontrado", show_alert=True)
+            return
+
+        await callback.message.edit_text(
+            build_product_edit_menu_text(product),
+            reply_markup=build_product_edit_menu_keyboard(product_id),
+        )
+        await callback.answer()
+
+
+@router.callback_query(EditProductFieldCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def edit_product_field_start(
+    callback: CallbackQuery, state: FSMContext, callback_data: EditProductFieldCallback
+):
+    """Inicia edición de un campo específico del producto"""
+    product_id = callback_data.product_id
+    field = callback_data.field
+
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product(product_id)
+        if not product:
+            await callback.answer("Producto no encontrado", show_alert=True)
+            return
+
+        await state.update_data(edit_product_id=product_id, edit_field=field)
+
+        if field == "name":
+            text, keyboard = build_edit_name_prompt_and_keyboard(product_id, product.name)
+            next_state = ProductEditStates.waiting_name
+        elif field == "description":
+            text, keyboard = build_edit_description_prompt_and_keyboard(
+                product_id, product.description
+            )
+            next_state = ProductEditStates.waiting_description
+        elif field == "package":
+            packages = store_service.get_packages_for_product_edit(product_id)
+            if not packages:
+                await callback.answer("No hay paquetes disponibles", show_alert=True)
+                return
+            text = "🎩 Lucien:\n\nSelecciona el nuevo paquete:"
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=build_edit_package_buttons(product_id, packages)
+            )
+            next_state = ProductEditStates.selecting_package
+        elif field == "price":
+            text, keyboard = build_edit_price_prompt_and_keyboard(product_id, product.price)
+            next_state = ProductEditStates.waiting_price
+        elif field == "stock":
+            text, keyboard = build_edit_stock_prompt_and_keyboard(product_id, product.stock)
+            next_state = ProductEditStates.waiting_stock
+        else:
+            await callback.answer("Campo no valido", show_alert=True)
+            return
+
+        await callback.message.edit_text(text, reply_markup=keyboard)
+        await state.set_state(next_state)
+        await callback.answer()
+
+
+@router.message(ProductEditStates.waiting_name)
+async def process_edit_product_name(message: Message, state: FSMContext):
+    """Procesa nuevo nombre del producto"""
+    name = message.text.strip()
+    if len(name) < 3:
+        await message.answer("El nombre debe tener al menos 3 caracteres.")
+        return
+
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, name=name)
+        await _finish_product_edit(message, state, product_id, success, "nombre")
+
+
+@router.message(ProductEditStates.waiting_description)
+async def process_edit_product_description(message: Message, state: FSMContext):
+    """Procesa nueva descripcion del producto"""
+    description = None if message.text == "/skip" else message.text.strip()
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, description=description)
+        await _finish_product_edit(message, state, product_id, success, "descripcion")
+
+
+@router.callback_query(
+    ProductEditStates.selecting_package, SelectPkgEditProductCallback.filter()
+)
+async def process_edit_product_package(
+    callback: CallbackQuery, state: FSMContext, callback_data: SelectPkgEditProductCallback
+):
+    """Procesa nuevo paquete del producto"""
+    product_id = callback_data.product_id
+    package_id = callback_data.package_id
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, package_id=package_id)
+        await _finish_product_edit(callback, state, product_id, success, "paquete")
+
+
+@router.message(ProductEditStates.waiting_price)
+async def process_edit_product_price(message: Message, state: FSMContext):
+    """Procesa nuevo precio del producto"""
+    try:
+        price = int(message.text.strip())
+        if price < 1:
+            raise ValueError("Debe ser mayor a 0")
+    except ValueError:
+        await message.answer("Por favor indica un numero valido mayor a 0.")
+        return
+
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, price=price)
+        await _finish_product_edit(message, state, product_id, success, "precio")
+
+
+@router.callback_query(ProductEditStates.waiting_stock, F.data == "edit_product_stock_unlimited")
+async def edit_product_stock_unlimited(callback: CallbackQuery, state: FSMContext):
+    """Establece stock ilimitado al editar"""
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, stock=-1)
+        await _finish_product_edit(callback, state, product_id, success, "stock")
+
+
+@router.callback_query(ProductEditStates.waiting_stock, F.data == "edit_product_stock_limited")
+async def edit_product_stock_limited(callback: CallbackQuery, state: FSMContext):
+    """Pide cantidad limitada al editar stock"""
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    await callback.message.edit_text(
+        "🎩 Lucien:\n\nIndica la nueva cantidad de unidades disponibles:\nEjemplo: 50",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="❌ Cancelar",
+                        callback_data=EditProductCallback(product_id=product_id).pack(),
+                    )
+                ]
+            ]
+        ),
+    )
+    await callback.answer()
+
+
+@router.message(ProductEditStates.waiting_stock)
+async def process_edit_product_stock(message: Message, state: FSMContext):
+    """Procesa nuevo stock del producto"""
+    try:
+        stock = int(message.text.strip())
+        if stock < 0:
+            raise ValueError("Debe ser 0 o mayor")
+    except ValueError:
+        await message.answer("Indica un numero valido (0 o mayor).")
+        return
+
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, stock=stock)
+        await _finish_product_edit(message, state, product_id, success, "stock")
+
+
+async def _finish_product_edit(target, state: FSMContext, product_id: int, success: bool, field: str):
+    """Muestra resultado de edición y limpia estado FSM."""
+    if success:
+        text = f"🎩 Lucien:\n\n✅ {field.capitalize()} actualizado correctamente."
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📦 Ver producto",
+                        callback_data=ProductAdminDetailCallback(product_id=product_id).pack(),
+                    )
+                ],
+                [InlineKeyboardButton(text="🔙 Tienda", callback_data="admin_store")],
+            ]
+        )
+    else:
+        text = f"🎩 Lucien:\n\nError al actualizar el {field}."
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔙 Volver",
+                        callback_data=EditProductCallback(product_id=product_id).pack(),
+                    )
+                ]
+            ]
+        )
+
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=keyboard)
+        await target.answer()
+    else:
+        await target.answer(text, reply_markup=keyboard)
+
+    await state.clear()
 
 
 @router.callback_query(ConfigStockAlertCallback.filter(), lambda cb: is_admin(cb.from_user.id))

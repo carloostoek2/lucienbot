@@ -51,6 +51,41 @@ class TestStoreService:
         assert updated.name == "Updated"
         assert updated.price == 200
 
+    def test_update_product_package_id(self, db_session, sample_store_product):
+        service = StoreService(db_session)
+        new_pkg = Package(name="Nuevo Paquete", description="Desc", is_active=True)
+        db_session.add(new_pkg)
+        db_session.commit()
+        db_session.refresh(new_pkg)
+
+        result = service.update_product(sample_store_product.id, package_id=new_pkg.id)
+        assert result is True
+        updated = service.get_product(sample_store_product.id)
+        assert updated.package_id == new_pkg.id
+
+    def test_update_product_rejects_inactive_package(self, db_session, sample_store_product):
+        service = StoreService(db_session)
+        inactive_pkg = Package(name="Inactivo", description="Desc", is_active=False)
+        db_session.add(inactive_pkg)
+        db_session.commit()
+        db_session.refresh(inactive_pkg)
+
+        result = service.update_product(sample_store_product.id, package_id=inactive_pkg.id)
+        assert result is False
+
+    def test_get_packages_for_product_edit_includes_current_package(
+        self, db_session, sample_store_product
+    ):
+        service = StoreService(db_session)
+        current_pkg = db_session.get(Package, sample_store_product.package_id)
+        current_pkg.is_active = False
+        current_pkg.store_stock = 0
+        db_session.commit()
+
+        packages = service.get_packages_for_product_edit(sample_store_product.id)
+        package_ids = {pkg.id for pkg in packages}
+        assert sample_store_product.package_id in package_ids
+
     def test_delete_product(self, db_session, sample_store_product):
         service = StoreService(db_session)
         result = service.delete_product(sample_store_product.id)

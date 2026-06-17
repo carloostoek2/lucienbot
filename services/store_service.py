@@ -260,9 +260,26 @@ class StoreService:
         if not product:
             return False
 
+        if "package_id" in kwargs:
+            new_package_id = kwargs["package_id"]
+            package = self.package_service.get_package(new_package_id)
+            if not package:
+                logger.warning(
+                    f"store_service | update_product | product_id={product_id} | "
+                    f"package_id={new_package_id} | resultado=paquete_no_encontrado"
+                )
+                return False
+            if new_package_id != product.package_id and not package.is_active:
+                logger.warning(
+                    f"store_service | update_product | product_id={product_id} | "
+                    f"package_id={new_package_id} | resultado=paquete_inactivo"
+                )
+                return False
+
         allowed_fields = [
             "name",
             "description",
+            "package_id",
             "price",
             "stock",
             "is_active",
@@ -273,7 +290,10 @@ class StoreService:
                 setattr(product, field, value)
 
         db.commit()
-        logger.info(f"Producto {product_id} actualizado")
+        logger.info(
+            f"store_service | update_product | product_id={product_id} | "
+            f"fields={list(kwargs.keys())} | resultado=ok"
+        )
         return True
 
     def delete_product(self, product_id: int) -> bool:
@@ -295,6 +315,22 @@ class StoreService:
         Not core CRUD. 0 behavior change.
         """
         return self.package_service.get_available_packages_for_store()
+
+    def get_packages_for_product_edit(self, product_id: int) -> list[Package]:
+        """Paquetes elegibles al editar un producto: disponibles + paquete actual."""
+        available = self.package_service.get_available_packages_for_store()
+        product = self.get_product(product_id)
+        if not product:
+            return available
+
+        current = self.package_service.get_package(product.package_id)
+        if not current:
+            return available
+
+        available_ids = {pkg.id for pkg in available}
+        if current.id in available_ids:
+            return available
+        return [current, *available]
 
     # ==================== CARRITO ====================
 

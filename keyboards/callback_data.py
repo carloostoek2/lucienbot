@@ -166,6 +166,26 @@ class DeleteProductCallback(CallbackData, prefix="del_prod"):
     confirmed: bool = False
 
 
+class EditProductCallback(CallbackData, prefix="edit_prod"):
+    """Abrir menú de edición de producto"""
+
+    product_id: int
+
+
+class EditProductFieldCallback(CallbackData, prefix="edit_prod_field"):
+    """Editar un campo específico del producto"""
+
+    product_id: int
+    field: str  # name | description | package | price | stock
+
+
+class SelectPkgEditProductCallback(CallbackData, prefix="sel_pkg_edit"):
+    """Seleccionar paquete al editar producto"""
+
+    product_id: int
+    package_id: int
+
+
 # ==================== PROMOTIONS ====================
 
 
