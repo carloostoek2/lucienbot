@@ -10,7 +10,7 @@ Utilidades y helpers del bot.
 <!-- AUTO:FUNCTIONS -->
 | Módulo | Función | Descripción |
 |--------|---------|-------------|
-| `admin` | `is_admin(user_id)` | Verifica si un usuario es administrador (ADMIN_IDS) |
+| `admin` | `is_admin(user_id)` | Verifica si un usuario es administrador (ADMIN_IDS + role en BD) |
 | `helpers` | `get_current_time()` | Obtiene la hora actual en la zona horaria configurada |
 | `helpers` | `format_datetime(dt, format_str)` | Formatea una fecha/hora |
 | `helpers` | `escape_markdown(text)` | Escapa caracteres especiales de Markdown |

@@ -108,7 +108,7 @@ class TestCmdStart:
         mock_user_svc.return_value.close.assert_called_once()
         mock_vip_svc.return_value.close.assert_called_once()
 
-    @patch("handlers.common_handlers.bot_config")
+    @patch("utils.admin.bot_config")
     @patch("handlers.common_handlers.VIPService", autospec=True)
     @patch("handlers.common_handlers.UserService", autospec=True)
     async def test_admin_user_receives_admin_menu(
@@ -305,11 +305,12 @@ class TestCmdStart:
 
         msg.answer.assert_called_once()
 
-    @patch("handlers.common_handlers.bot_config")
+    @patch("utils.admin._is_admin_in_db", return_value=True)
+    @patch("utils.admin.bot_config")
     @patch("handlers.common_handlers.VIPService", autospec=True)
     @patch("handlers.common_handlers.UserService", autospec=True)
     async def test_admin_by_role_in_db(
-        self, mock_user_svc, mock_vip_svc, mock_config, make_message, make_user
+        self, mock_user_svc, mock_vip_svc, mock_config, _mock_db_admin, make_message, make_user
     ):
         """Usuario con role=admin en DB recibe admin_greeting."""
         user = make_user(user_id=555)
@@ -372,10 +373,11 @@ class TestCmdStart:
         mock_user_svc.return_value.close.assert_called_once()
         mock_vip_svc.return_value.close.assert_called_once()
 
+    @patch("utils.admin._is_admin_in_db", return_value=True)
     @patch("handlers.common_handlers.VIPService", autospec=True)
     @patch("handlers.common_handlers.UserService", autospec=True)
     async def test_no_args_existing_user_admin(
-        self, mock_user_svc, mock_vip_svc, make_message, make_user
+        self, mock_user_svc, mock_vip_svc, _mock_db_admin, make_message, make_user
     ):
         """Usuario existente admin sin args: admin menu."""
         user = make_user(user_id=999)

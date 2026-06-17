@@ -11,7 +11,6 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
-from config.settings import bot_config
 from keyboards.inline_keyboards import (
     admin_menu_keyboard,
     main_menu_keyboard,
@@ -146,12 +145,8 @@ async def cmd_start(message: Message):
                     await message.answer(LucienVoice.token_invalid(), parse_mode="HTML")
                 return
 
-        # Verificar si es administrador
-        # NOTA: Combina ADMIN_IDS + role en BD — NO cambiar a utils.admin.is_admin()
-        # porque esa función solo verifica ADMIN_IDS. Esta línea es intencionalmente diferente.
-        is_admin = user.id in bot_config.ADMIN_IDS or db_user.role.value == "admin"
-
-        if is_admin:
+        # Verificar si es administrador (ADMIN_IDS + role en BD via utils.admin)
+        if is_admin(user.id):
             await message.answer(
                 LucienVoice.admin_greeting(), reply_markup=admin_menu_keyboard(), parse_mode="HTML"
             )

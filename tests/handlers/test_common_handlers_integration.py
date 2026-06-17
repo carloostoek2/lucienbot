@@ -42,7 +42,7 @@ class TestCmdStartIntegration:
         mock_user_svc.return_value.get_or_create_user.assert_called_once()
         msg.answer.assert_called_once()
 
-    @patch("handlers.common_handlers.bot_config")
+    @patch("utils.admin.bot_config")
     @patch("handlers.common_handlers.VIPService")
     @patch("handlers.common_handlers.UserService")
     async def test_admin_id_detected(

@@ -40,3 +40,27 @@ class TestIsAdmin:
         """String '123' no debe coincidir con int 123 (type safety)."""
         mock_config.ADMIN_IDS = [123, 456]
         assert is_admin("123") is False
+
+    @patch("utils.admin._is_admin_in_db", return_value=True)
+    @patch("utils.admin.bot_config")
+    def test_admin_by_db_role_when_not_in_admin_ids(self, mock_config, mock_db_check):
+        """Usuario con role=admin en BD debe retornar True aunque no esté en ADMIN_IDS."""
+        mock_config.ADMIN_IDS = [999]
+        assert is_admin(555) is True
+        mock_db_check.assert_called_once_with(555)
+
+    @patch("utils.admin._is_admin_in_db", return_value=False)
+    @patch("utils.admin.bot_config")
+    def test_non_admin_skips_db_when_in_admin_ids(self, mock_config, mock_db_check):
+        """Si está en ADMIN_IDS, no consulta la base de datos."""
+        mock_config.ADMIN_IDS = [123, 456]
+        assert is_admin(123) is True
+        mock_db_check.assert_not_called()
+
+    @patch("utils.admin._is_admin_in_db", return_value=False)
+    @patch("utils.admin.bot_config")
+    def test_non_admin_checks_db_fallback(self, mock_config, mock_db_check):
+        """Usuario fuera de ADMIN_IDS y sin role admin en BD retorna False."""
+        mock_config.ADMIN_IDS = [123]
+        assert is_admin(789) is False
+        mock_db_check.assert_called_once_with(789)
