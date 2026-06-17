@@ -20,6 +20,7 @@ from keyboards.callback_data import (
 )
 from services.backpack_service import BackpackService
 from services.vip_service import VIPService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -206,7 +207,7 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
 # ==================== COMMAND ====================
 
 
-@router.message(Command("mochila"))
+@router.message(Command("mochila"), lambda m: not is_admin(m.from_user.id))
 async def cmd_mochila(message: Message, bot: Bot):
     """Muestra el menú principal de la mochila"""
     user_id = message.from_user.id
@@ -230,7 +231,7 @@ async def cmd_mochila(message: Message, bot: Bot):
 # ==================== CALLBACKS ====================
 
 
-@router.callback_query(F.data == "backpack_menu")
+@router.callback_query(F.data == "backpack_menu", lambda cb: not is_admin(cb.from_user.id))
 async def callback_backpack_menu(callback: CallbackQuery, bot: Bot):
     """Accede al menú de la mochila desde el menú principal"""
     user_id = callback.from_user.id
@@ -252,7 +253,7 @@ async def callback_backpack_menu(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar la mochila", show_alert=True)
 
 
-@router.callback_query(F.data == "backpack_main")
+@router.callback_query(F.data == "backpack_main", lambda cb: not is_admin(cb.from_user.id))
 async def callback_backpack_main(callback: CallbackQuery, bot: Bot):
     """Vuelve al menú principal de la mochila"""
     user_id = callback.from_user.id
@@ -274,7 +275,7 @@ async def callback_backpack_main(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar la mochila", show_alert=True)
 
 
-@router.callback_query(F.data == "backpack_rewards")
+@router.callback_query(F.data == "backpack_rewards", lambda cb: not is_admin(cb.from_user.id))
 async def callback_rewards(callback: CallbackQuery, bot: Bot):
     """Muestra lista de recompensas del usuario"""
     user_id = callback.from_user.id
@@ -298,7 +299,7 @@ async def callback_rewards(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar recompensas", show_alert=True)
 
 
-@router.callback_query(BackpackRewardsPageCallback.filter())
+@router.callback_query(BackpackRewardsPageCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def callback_rewards_page(
     callback: CallbackQuery, callback_data: BackpackRewardsPageCallback
 ):
@@ -323,7 +324,7 @@ async def callback_rewards_page(
         await callback.answer("Error al cargar página", show_alert=True)
 
 
-@router.callback_query(F.data == "backpack_purchases")
+@router.callback_query(F.data == "backpack_purchases", lambda cb: not is_admin(cb.from_user.id))
 async def callback_purchases(callback: CallbackQuery, bot: Bot):
     """Muestra lista de compras del usuario"""
     user_id = callback.from_user.id
@@ -347,7 +348,7 @@ async def callback_purchases(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar compras", show_alert=True)
 
 
-@router.callback_query(BackpackPurchasesPageCallback.filter())
+@router.callback_query(BackpackPurchasesPageCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def callback_purchases_page(
     callback: CallbackQuery, callback_data: BackpackPurchasesPageCallback
 ):
@@ -372,7 +373,7 @@ async def callback_purchases_page(
         await callback.answer("Error al cargar página", show_alert=True)
 
 
-@router.callback_query(F.data == "backpack_vip")
+@router.callback_query(F.data == "backpack_vip", lambda cb: not is_admin(cb.from_user.id))
 async def callback_vip(callback: CallbackQuery, bot: Bot):
     """Muestra membresías VIP activas"""
     user_id = callback.from_user.id
@@ -413,7 +414,7 @@ async def callback_vip(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar VIP", show_alert=True)
 
 
-@router.callback_query(BackpackRewardDetailCallback.filter())
+@router.callback_query(BackpackRewardDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def callback_reward_detail(
     callback: CallbackQuery, callback_data: BackpackRewardDetailCallback
 ):
@@ -451,7 +452,7 @@ async def callback_reward_detail(
         await callback.answer("Error al cargar detalle", show_alert=True)
 
 
-@router.callback_query(BackpackPurchaseDetailCallback.filter())
+@router.callback_query(BackpackPurchaseDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def callback_purchase_detail(
     callback: CallbackQuery, callback_data: BackpackPurchaseDetailCallback
 ):
@@ -501,7 +502,7 @@ async def callback_purchase_detail(
         await callback.answer("Error al cargar detalle", show_alert=True)
 
 
-@router.callback_query(BackpackDeliverCallback.filter())
+@router.callback_query(BackpackDeliverCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def callback_deliver_package(callback: CallbackQuery, callback_data: BackpackDeliverCallback):
     """Entrega contenido de un paquete como álbum"""
     user_id = callback.from_user.id
@@ -528,7 +529,7 @@ async def callback_deliver_package(callback: CallbackQuery, callback_data: Backp
         await callback.answer("Error al entregar contenido", show_alert=True)
 
 
-@router.callback_query(F.data == "backpack_balance")
+@router.callback_query(F.data == "backpack_balance", lambda cb: not is_admin(cb.from_user.id))
 async def callback_balance(callback: CallbackQuery, bot: Bot):
     """Muestra información del balance de besitos"""
     user_id = callback.from_user.id

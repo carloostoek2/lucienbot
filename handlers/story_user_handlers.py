@@ -23,6 +23,7 @@ from models.models import NodeType
 from services import get_service
 from services.story_service import StoryService
 from services.vip_service import VIPService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -36,7 +37,7 @@ class ArchetypeQuizStates(StatesGroup):
 # ==================== MENU PRINCIPAL ====================
 
 
-@router.callback_query(F.data == "narrative")
+@router.callback_query(F.data == "narrative", lambda cb: not is_admin(cb.from_user.id))
 async def narrative_menu(callback: CallbackQuery):
     """Menu principal de narrativa - Voz de Lucien"""
     with get_service(StoryService) as story_service:
@@ -112,7 +113,7 @@ async def narrative_menu(callback: CallbackQuery):
     # ==================== INICIAR HISTORIA ====================
 
 
-@router.callback_query(F.data == "start_story")
+@router.callback_query(F.data == "start_story", lambda cb: not is_admin(cb.from_user.id))
 async def start_story(callback: CallbackQuery):
     """Inicia la historia para el usuario - Voz de Lucien"""
     with get_service(StoryService) as story_service:
@@ -158,7 +159,7 @@ async def start_story(callback: CallbackQuery):
         await show_node(callback, starting_node.id)
 
 
-@router.callback_query(F.data == "continue_story")
+@router.callback_query(F.data == "continue_story", lambda cb: not is_admin(cb.from_user.id))
 async def continue_story(callback: CallbackQuery):
     """Continua la historia del usuario - Voz de Lucien"""
     with get_service(StoryService) as story_service:
@@ -271,13 +272,13 @@ async def show_node(callback: CallbackQuery, node_id: int):
         await callback.answer()
 
 
-@router.callback_query(ContinueStoryCallback.filter())
+@router.callback_query(ContinueStoryCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def go_to_node(callback: CallbackQuery, callback_data: ContinueStoryCallback):
     """Navega a un nodo especifico"""
     await show_node(callback, callback_data.node_id)
 
 
-@router.callback_query(StoryChoiceCallback.filter())
+@router.callback_query(StoryChoiceCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def make_choice(callback: CallbackQuery, callback_data: StoryChoiceCallback):
     """Procesa la eleccion del usuario"""
     choice_id = callback_data.choice_id
@@ -330,7 +331,7 @@ async def make_choice(callback: CallbackQuery, callback_data: StoryChoiceCallbac
     # ==================== CUESTIONARIO DE ARQUETIPO ====================
 
 
-@router.callback_query(F.data == "discover_archetype")
+@router.callback_query(F.data == "discover_archetype", lambda cb: not is_admin(cb.from_user.id))
 async def start_archetype_quiz(callback: CallbackQuery, state: FSMContext):
     """Inicia el cuestionario de arquetipo - Voz de Lucien"""
     with get_service(StoryService) as story_service:
@@ -378,7 +379,7 @@ async def show_quiz_question(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
 
 
-@router.callback_query(QuizAnswerCallback.filter())
+@router.callback_query(QuizAnswerCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def process_quiz_answer(
     callback: CallbackQuery, state: FSMContext, callback_data: QuizAnswerCallback
 ):
@@ -444,7 +445,7 @@ async def calculate_and_show_archetype(callback: CallbackQuery, state: FSMContex
     # ==================== VER ARQUETIPO ====================
 
 
-@router.callback_query(F.data == "view_my_archetype")
+@router.callback_query(F.data == "view_my_archetype", lambda cb: not is_admin(cb.from_user.id))
 async def view_my_archetype(callback: CallbackQuery):
     """Muestra el arquetipo del usuario - Voz de Lucien"""
     with get_service(StoryService) as story_service:
@@ -514,7 +515,7 @@ async def view_my_archetype(callback: CallbackQuery):
     # ==================== LOGROS ====================
 
 
-@router.callback_query(F.data == "my_story_achievements")
+@router.callback_query(F.data == "my_story_achievements", lambda cb: not is_admin(cb.from_user.id))
 async def my_story_achievements(callback: CallbackQuery):
     """Muestra los logros del usuario - Voz de Lucien"""
     with get_service(StoryService) as story_service:

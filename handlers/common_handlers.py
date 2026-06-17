@@ -22,6 +22,7 @@ from services import get_service
 from services.mission_service import MissionService
 from services.user_service import UserService
 from services.vip_service import VIPService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -199,10 +200,18 @@ async def cmd_help(message: Message):
 
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main(callback: CallbackQuery):
-    """Volver al menú principal"""
+    """Volver al menú principal (o admin según rol)"""
     user = callback.from_user
 
-    # Verificar si es VIP
+    if is_admin(user.id):
+        # Administradores se quedan en su panel
+        await callback.message.edit_text(
+            LucienVoice.admin_greeting(), reply_markup=admin_menu_keyboard(), parse_mode="HTML"
+        )
+        await callback.answer()
+        return
+
+    # Verificar si es VIP (solo para visitantes)
     vip_service = VIPService()
     try:
         is_vip = vip_service.is_user_vip(user.id)
@@ -221,7 +230,7 @@ async def back_to_main(callback: CallbackQuery):
         logger.debug(f"callback.answer() expirada en back_to_main para user {user.id}: {e}")
 
 
-@router.callback_query(F.data == "back_to_admin")
+@router.callback_query(F.data == "back_to_admin", lambda cb: is_admin(cb.from_user.id))
 async def back_to_admin(callback: CallbackQuery):
     """Volver al menú de administrador"""
     await callback.message.edit_text(
@@ -243,7 +252,13 @@ async def cancel_action(callback: CallbackQuery):
 @router.callback_query(F.data.in_({"profile", "narrative"}))
 async def coming_soon_features(callback: CallbackQuery):
     """Features aún no implementadas"""
-    await callback.message.edit_text(
-        LucienVoice.coming_soon(), reply_markup=main_menu_keyboard(), parse_mode="HTML"
-    )
+    user = callback.from_user
+    if is_admin(user.id):
+        await callback.message.edit_text(
+            LucienVoice.admin_greeting(), reply_markup=admin_menu_keyboard(), parse_mode="HTML"
+        )
+    else:
+        await callback.message.edit_text(
+            LucienVoice.coming_soon(), reply_markup=main_menu_keyboard(), parse_mode="HTML"
+        )
     await callback.answer()

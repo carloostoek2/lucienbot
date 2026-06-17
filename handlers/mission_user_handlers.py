@@ -14,13 +14,14 @@ from keyboards.callback_data import MissionDetailCallback
 from keyboards.inline_keyboards import back_keyboard
 from services import get_service
 from services.mission_service import MissionService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.callback_query(F.data == "my_missions")
+@router.callback_query(F.data == "my_missions", lambda cb: not is_admin(cb.from_user.id))
 async def show_my_missions(callback: CallbackQuery):
     """Muestra las misiones activas del usuario"""
     user_id = callback.from_user.id
@@ -85,7 +86,7 @@ async def show_my_missions(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(MissionDetailCallback.filter())
+@router.callback_query(MissionDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def mission_detail(callback: CallbackQuery, callback_data: MissionDetailCallback):
     """Muestra detalles de una mision"""
     mission_id = callback_data.mission_id
@@ -139,7 +140,7 @@ async def mission_detail(callback: CallbackQuery, callback_data: MissionDetailCa
         await callback.answer()
 
 
-@router.callback_query(F.data == "claim_mission_reward")
+@router.callback_query(F.data == "claim_mission_reward", lambda cb: not is_admin(cb.from_user.id))
 async def claim_mission_reward(callback: CallbackQuery):
     """Catch-up de recompensas de misiones pendientes (red de seguridad)."""
     user_id = callback.from_user.id

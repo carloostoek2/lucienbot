@@ -15,6 +15,7 @@ from keyboards.inline_keyboards import back_keyboard
 from services import get_service
 from services.mission_service import MissionService
 from services.reward_service import get_reward_emoji
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -96,7 +97,7 @@ def build_reward_detail_keyboard(mission_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-@router.callback_query(F.data == "rewards_list")
+@router.callback_query(F.data == "rewards_list", lambda cb: not is_admin(cb.from_user.id))
 async def show_available_rewards(callback: CallbackQuery):
     """Muestra las recompensas disponibles con sus misiones asociadas"""
     # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)
@@ -126,7 +127,7 @@ async def show_available_rewards(callback: CallbackQuery):
         _safe_answer(callback, user_id)
 
 
-@router.callback_query(RewardUserDetailCallback.filter())
+@router.callback_query(RewardUserDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def reward_detail(callback: CallbackQuery, callback_data: RewardUserDetailCallback):
     """Muestra detalles de una recompensa y su mision asociada"""
     # Idempotency / dedup now handled globally by IdempotencyMiddleware (gsd-mw-hardening phase 5 cleanup)

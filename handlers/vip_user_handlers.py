@@ -25,6 +25,7 @@ from services.anonymous_message_service import AnonymousMessageService
 from services.besito_service import BesitoService
 from services.promotion_service import PromotionService
 from services.vip_service import VIPService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -68,7 +69,7 @@ def anonymous_message_confirm_keyboard() -> InlineKeyboardMarkup:
 # ==================== MENÚ DE EL DIVÁN ====================
 
 
-@router.callback_query(F.data == "vip_area")
+@router.callback_query(F.data == "vip_area", lambda cb: not is_admin(cb.from_user.id))
 async def vip_area_menu(callback: CallbackQuery):
     """Muestra el menú exclusivo del círculo VIP"""
     user = callback.from_user
@@ -106,7 +107,7 @@ async def vip_area_menu(callback: CallbackQuery):
 # ==================== EL MAPA DEL DESEO ====================
 
 
-@router.callback_query(F.data == "vip_map_of_desire")
+@router.callback_query(F.data == "vip_map_of_desire", lambda cb: not is_admin(cb.from_user.id))
 async def show_map_of_desire(callback: CallbackQuery):
     """Muestra El Mapa del Deseo - promociones VIP exclusivas"""
     user = callback.from_user
@@ -186,7 +187,7 @@ async def show_map_of_desire(callback: CallbackQuery):
         vip_service.close()
 
 
-@router.callback_query(VipPromoDetailCallback.filter())
+@router.callback_query(VipPromoDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipPromoDetailCallback):
     """Muestra detalle de una promoción VIP exclusiva"""
     promo_id = callback_data.promo_id
@@ -241,7 +242,7 @@ async def view_vip_promotion_detail(callback: CallbackQuery, callback_data: VipP
         promotion_service.close()
 
 
-@router.callback_query(VipPromoInterestCallback.filter())
+@router.callback_query(VipPromoInterestCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def express_vip_promo_interest(
     callback: CallbackQuery, bot: Bot, callback_data: VipPromoInterestCallback
 ):
@@ -323,7 +324,7 @@ async def express_vip_promo_interest(
 # ==================== MENSAJES ANÓNIMOS ====================
 
 
-@router.callback_query(F.data == "send_anonymous_message")
+@router.callback_query(F.data == "send_anonymous_message", lambda cb: not is_admin(cb.from_user.id))
 async def start_anonymous_message(callback: CallbackQuery, state: FSMContext):
     """Inicia el flujo de envío de mensaje anónimo"""
     user = callback.from_user
@@ -361,7 +362,7 @@ async def start_anonymous_message(callback: CallbackQuery, state: FSMContext):
         vip_service.close()
 
 
-@router.message(AnonymousMessageStates.waiting_message)
+@router.message(AnonymousMessageStates.waiting_message, lambda msg: not is_admin(msg.from_user.id))
 async def process_anonymous_message(message: Message, state: FSMContext):
     """Procesa el mensaje anónimo ingresado"""
     content = message.text.strip()
@@ -405,7 +406,7 @@ async def process_anonymous_message(message: Message, state: FSMContext):
     await state.set_state(AnonymousMessageStates.confirming_send)
 
 
-@router.callback_query(AnonymousMessageStates.confirming_send, F.data == "confirm_anonymous_send")
+@router.callback_query(AnonymousMessageStates.confirming_send, F.data == "confirm_anonymous_send", lambda cb: not is_admin(cb.from_user.id))
 async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
     """Confirma y envía el mensaje anónimo, debitando besitos primero"""
     user = callback.from_user
@@ -525,7 +526,7 @@ async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data == "cancel_anonymous")
+@router.callback_query(F.data == "cancel_anonymous", lambda cb: not is_admin(cb.from_user.id))
 async def cancel_anonymous_message(callback: CallbackQuery, state: FSMContext):
     """Cancela el envío del mensaje anónimo"""
     await state.clear()

@@ -31,6 +31,7 @@ from keyboards.inline_keyboards import (
     trivia_vip_result_keyboard,
 )
 from services import GameService, StreakPromotionService, get_service
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.callback_query(lambda c: c.data == "game_menu")
+@router.callback_query(lambda c: c.data == "game_menu" and not is_admin(c.from_user.id))
 async def game_menu(callback: CallbackQuery):
     """Muestra menú de minijuegos"""
     user_id = callback.from_user.id
@@ -73,7 +74,7 @@ async def game_menu(callback: CallbackQuery):
         logger.info(f"game_user_handlers - game_menu - {user_id} - shown")
 
 
-@router.callback_query(lambda c: c.data == "game_dice")
+@router.callback_query(lambda c: c.data == "game_dice" and not is_admin(c.from_user.id))
 async def game_dice(callback: CallbackQuery):
     """Muestra interfaz de dados"""
     user_id = callback.from_user.id
@@ -93,7 +94,7 @@ async def game_dice(callback: CallbackQuery):
     logger.info(f"game_user_handlers - game_dice - {user_id} - shown")
 
 
-@router.callback_query(lambda c: c.data == "dice_play")
+@router.callback_query(lambda c: c.data == "dice_play" and not is_admin(c.from_user.id))
 async def dice_play(callback: CallbackQuery):
     """Procesa lanzamiento de dados"""
     user_id = callback.from_user.id
@@ -106,7 +107,7 @@ async def dice_play(callback: CallbackQuery):
     logger.info(f"game_user_handlers - dice_play - {user_id} - completed")
 
 
-@router.callback_query(lambda c: c.data == "game_trivia")
+@router.callback_query(lambda c: c.data == "game_trivia" and not is_admin(c.from_user.id))
 async def game_trivia(callback: CallbackQuery):
     """Inicia trivia con pregunta aleatoria"""
     user_id = callback.from_user.id
@@ -151,7 +152,7 @@ async def game_trivia(callback: CallbackQuery):
     logger.info(f"game_user_handlers - game_trivia - {user_id} - shown")
 
 
-@router.callback_query(TriviaAnswerCallback.filter())
+@router.callback_query(TriviaAnswerCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCallback):
     """Procesa respuesta de trivia"""
     user_id = callback.from_user.id
@@ -208,7 +209,7 @@ async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCall
 # ==================== TRIVIA VIP ====================
 
 
-@router.callback_query(lambda c: c.data == "game_trivia_vip")
+@router.callback_query(lambda c: c.data == "game_trivia_vip" and not is_admin(c.from_user.id))
 async def game_trivia_vip(callback: CallbackQuery):
     """Inicia trivia VIP con pregunta aleatoria"""
     user_id = callback.from_user.id
@@ -253,7 +254,7 @@ async def game_trivia_vip(callback: CallbackQuery):
     logger.info(f"game_user_handlers - game_trivia_vip - {user_id} - shown")
 
 
-@router.callback_query(TriviaVipAnswerCallback.filter())
+@router.callback_query(TriviaVipAnswerCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAnswerCallback):
     """Procesa respuesta de trivia VIP"""
     user_id = callback.from_user.id
@@ -312,7 +313,7 @@ async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAns
 # ==================== TRIVIA ESPECIAL (PHASE 16) ====================
 
 
-@router.callback_query(lambda c: c.data == "game_trivia_simple")
+@router.callback_query(lambda c: c.data == "game_trivia_simple" and not is_admin(c.from_user.id))
 async def game_trivia_simple(callback: CallbackQuery):
     """Inicia trivia especial con pregunta aleatoria de categoria activa."""
     user_id = callback.from_user.id
@@ -377,7 +378,7 @@ async def game_trivia_simple(callback: CallbackQuery):
     )
 
 
-@router.callback_query(TriviaSimpleAnswerCallback.filter())
+@router.callback_query(TriviaSimpleAnswerCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSimpleAnswerCallback):
     """Procesa respuesta de trivia especial."""
     user_id = callback.from_user.id
@@ -454,7 +455,7 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
 # ==================== PHASE 18: PROTECCION DE RACHA ====================
 
 
-@router.callback_query(StreakProtectAcceptCallback.filter())
+@router.callback_query(StreakProtectAcceptCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def handle_protection_accept(
     callback: CallbackQuery, callback_data: StreakProtectAcceptCallback
 ):
@@ -476,7 +477,7 @@ async def handle_protection_accept(
     await _redirect_to_trivia(callback, game_type)
 
 
-@router.callback_query(StreakProtectDeclineCallback.filter())
+@router.callback_query(StreakProtectDeclineCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def handle_protection_decline(
     callback: CallbackQuery, callback_data: StreakProtectDeclineCallback
 ):
@@ -505,7 +506,7 @@ async def _redirect_to_trivia(callback: CallbackQuery, game_type: str):
         await game_trivia(callback)
 
 
-@router.callback_query(StreakRetireCallback.filter())
+@router.callback_query(StreakRetireCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def handle_streak_retire(callback: CallbackQuery):
     """Retirarse del modo arriesgo conservando codigos."""
     user_id = callback.from_user.id
@@ -525,7 +526,7 @@ async def handle_streak_retire(callback: CallbackQuery):
     logger.info(f"game_user_handlers - handle_streak_retire - {user_id} - codes:{code_count}")
 
 
-@router.callback_query(StreakContinueCallback.filter())
+@router.callback_query(StreakContinueCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def handle_streak_continue(callback: CallbackQuery):
     """Continuar en modo arriesgo."""
     user_id = callback.from_user.id

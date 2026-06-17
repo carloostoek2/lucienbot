@@ -18,6 +18,7 @@ from services import get_service
 from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -26,7 +27,7 @@ router = Router()
 # ==================== CONSULTAR SALDO ====================
 
 
-@router.callback_query(F.data == "my_balance")
+@router.callback_query(F.data == "my_balance", lambda cb: not is_admin(cb.from_user.id))
 async def show_balance(callback: CallbackQuery):
     """Muestra el saldo de besitos del usuario"""
     user_id = callback.from_user.id
@@ -52,7 +53,7 @@ async def show_balance(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "transaction_history")
+@router.callback_query(F.data == "transaction_history", lambda cb: not is_admin(cb.from_user.id))
 async def show_transaction_history(callback: CallbackQuery):
     """Muestra el historial de transacciones"""
     user_id = callback.from_user.id
@@ -102,7 +103,7 @@ async def show_transaction_history(callback: CallbackQuery):
 # ==================== REGALO DIARIO ====================
 
 
-@router.callback_query(F.data == "daily_gift")
+@router.callback_query(F.data == "daily_gift", lambda cb: not is_admin(cb.from_user.id))
 async def daily_gift_menu(callback: CallbackQuery):
     """Menú del regalo diario"""
     user_id = callback.from_user.id
@@ -145,7 +146,7 @@ async def daily_gift_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "claim_gift")
+@router.callback_query(F.data == "claim_gift", lambda cb: not is_admin(cb.from_user.id))
 async def claim_daily_gift(callback: CallbackQuery):
     """Procesa el reclamo del regalo diario"""
     user_id = callback.from_user.id
@@ -235,7 +236,7 @@ async def refresh_reaction_markup_counts(
         )
 
 
-@router.callback_query(ReactionCallback.filter())
+@router.callback_query(ReactionCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallback):
     """Maneja las reacciones a mensajes de broadcast y actualiza conteos"""
     if not callback.message:

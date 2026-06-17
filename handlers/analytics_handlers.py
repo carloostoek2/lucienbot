@@ -130,7 +130,7 @@ async def health_cmd(message: Message):
         await message.answer(LucienVoice.error_message())
 
 
-@router.callback_query(F.data == "admin_health")
+@router.callback_query(F.data == "admin_health", lambda cb: is_admin(cb.from_user.id))
 async def health_cb(callback: CallbackQuery):
     """Callback desde menú admin '🛡️ Pulso del reino'."""
     if not is_admin(callback.from_user.id):
@@ -151,7 +151,7 @@ async def health_cb(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(F.data == "admin_analytics")
+@router.callback_query(F.data == "admin_analytics", lambda cb: is_admin(cb.from_user.id))
 async def admin_analytics(callback: CallbackQuery):
     """Callback desde menú admin '📊 Los patrones que revelan deseos'. Muestra el detalle completo (dashboard + economía desarrollada)."""
     if not is_admin(callback.from_user.id):

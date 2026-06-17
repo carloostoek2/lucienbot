@@ -264,7 +264,7 @@ async def select_package_for_reward(
     await callback.answer()
 
 
-@router.callback_query(RewardWizardStates.selecting_package, F.data == "create_package_for_reward")
+@router.callback_query(RewardWizardStates.selecting_package, F.data == "create_package_for_reward", lambda cb: is_admin(cb.from_user.id))
 async def create_package_for_reward(callback: CallbackQuery, state: FSMContext):
     """Inicia creacion de paquete desde recompensa"""
     await callback.message.edit_text(

@@ -138,7 +138,7 @@ async def add_emoji_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(EmojiConfigStates.waiting_emoji)
+@router.message(EmojiConfigStates.waiting_emoji, lambda msg: is_admin(msg.from_user.id))
 async def process_emoji(message: Message, state: FSMContext):
     """Procesa el emoji ingresado"""
     emoji_char = message.text.strip()

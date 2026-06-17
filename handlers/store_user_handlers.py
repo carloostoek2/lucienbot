@@ -24,6 +24,7 @@ from services import get_service
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.store_service import StoreService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -41,7 +42,7 @@ class SearchStates(StatesGroup):
     waiting_query = State()
 
 
-@router.callback_query(F.data == "shop")
+@router.callback_query(F.data == "shop", lambda cb: not is_admin(cb.from_user.id))
 async def shop_menu(callback: CallbackQuery):
     """Menu principal de la tienda"""
     user_id = callback.from_user.id
@@ -75,7 +76,7 @@ async def shop_menu(callback: CallbackQuery):
 # ==================== CATALOGO ====================
 
 
-@router.callback_query(F.data == "store_catalog")
+@router.callback_query(F.data == "store_catalog", lambda cb: not is_admin(cb.from_user.id))
 async def store_catalog(callback: CallbackQuery):
     """Muestra el catalogo de productos con botones minimalistas"""
     with get_service(StoreService) as store_service:
@@ -121,7 +122,7 @@ async def store_catalog(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "store_categories")
+@router.callback_query(F.data == "store_categories", lambda cb: not is_admin(cb.from_user.id))
 async def store_categories(callback: CallbackQuery):
     """Muestra categorias disponibles"""
     with get_service(PackageService) as package_service:
@@ -171,7 +172,7 @@ async def store_categories(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(StoreCategoryCallback.filter())
+@router.callback_query(StoreCategoryCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def store_category_products(callback: CallbackQuery, callback_data: StoreCategoryCallback):
     """Muestra productos de una categoria con botones minimalistas"""
     category_id = callback_data.category_id
@@ -240,7 +241,7 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
     await callback.answer()
 
 
-@router.callback_query(ProductDetailCallback.filter())
+@router.callback_query(ProductDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCallback):
     """Muestra detalle de un producto sin preview automatico"""
     product_id = callback_data.product_id
@@ -327,7 +328,7 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
     await callback.answer()
 
 
-@router.callback_query(ProductPreviewCallback.filter())
+@router.callback_query(ProductPreviewCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def product_preview(callback: CallbackQuery, callback_data: ProductPreviewCallback):
     """Envía el preview del producto bajo demanda y vuelve a mostrar la tarjeta"""
     product_id = callback_data.product_id
@@ -429,7 +430,7 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
 # ==================== COMPRA DIRECTA ====================
 
 
-@router.callback_query(DirectBuyCallback.filter())
+@router.callback_query(DirectBuyCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
     """Muestra confirmacion de compra directa"""
     product_id = callback_data.product_id
@@ -478,7 +479,7 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
     await callback.answer()
 
 
-@router.callback_query(ConfirmDirectBuyCallback.filter())
+@router.callback_query(ConfirmDirectBuyCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def confirm_direct_buy(
     callback: CallbackQuery, callback_data: ConfirmDirectBuyCallback, bot: Bot
 ):
@@ -528,7 +529,7 @@ async def confirm_direct_buy(
 # ==================== HISTORIAL DE COMPRAS ====================
 
 
-@router.callback_query(F.data == "purchase_history")
+@router.callback_query(F.data == "purchase_history", lambda cb: not is_admin(cb.from_user.id))
 async def purchase_history(callback: CallbackQuery):
     """Muestra el historial de compras del usuario"""
     with get_service(StoreService) as store_service:
@@ -578,7 +579,7 @@ async def purchase_history(callback: CallbackQuery):
 # ==================== BUSQUEDA Y FILTROS ====================
 
 
-@router.callback_query(F.data == "store_search")
+@router.callback_query(F.data == "store_search", lambda cb: not is_admin(cb.from_user.id))
 async def store_search_start(callback: CallbackQuery, state: FSMContext):
     """Inicia busqueda de productos"""
     await callback.message.edit_text(
@@ -593,7 +594,7 @@ async def store_search_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(SearchStates.waiting_query, F.text)
+@router.message(SearchStates.waiting_query, F.text, lambda msg: not is_admin(msg.from_user.id))
 async def process_search_query(message: Message, state: FSMContext):
     """Procesa busqueda de productos"""
     query = message.text.strip()
@@ -656,7 +657,7 @@ async def process_search_query(message: Message, state: FSMContext):
     await state.clear()
 
 
-@router.callback_query(F.data == "store_filters")
+@router.callback_query(F.data == "store_filters", lambda cb: not is_admin(cb.from_user.id))
 async def store_filters(callback: CallbackQuery):
     """Muestra opciones de filtrado"""
     keyboard = InlineKeyboardMarkup(
@@ -684,7 +685,7 @@ async def store_filters(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "filter_price_asc")
+@router.callback_query(F.data == "filter_price_asc", lambda cb: not is_admin(cb.from_user.id))
 async def filter_price_asc(callback: CallbackQuery):
     """Muestra productos ordenados por precio ascendente"""
     with get_service(StoreService) as store_service:
@@ -694,7 +695,7 @@ async def filter_price_asc(callback: CallbackQuery):
         await show_filtered_products(callback, products, "Precio: menor a mayor")
 
 
-@router.callback_query(F.data == "filter_price_desc")
+@router.callback_query(F.data == "filter_price_desc", lambda cb: not is_admin(cb.from_user.id))
 async def filter_price_desc(callback: CallbackQuery):
     """Muestra productos ordenados por precio descendente"""
     with get_service(StoreService) as store_service:
@@ -704,7 +705,7 @@ async def filter_price_desc(callback: CallbackQuery):
         await show_filtered_products(callback, products, "Precio: mayor a menor")
 
 
-@router.callback_query(F.data == "filter_in_stock")
+@router.callback_query(F.data == "filter_in_stock", lambda cb: not is_admin(cb.from_user.id))
 async def filter_in_stock(callback: CallbackQuery):
     """Muestra solo productos disponibles"""
     with get_service(StoreService) as store_service:
@@ -713,7 +714,7 @@ async def filter_in_stock(callback: CallbackQuery):
         await show_filtered_products(callback, products, "Solo disponibles")
 
 
-@router.callback_query(F.data == "filter_recent")
+@router.callback_query(F.data == "filter_recent", lambda cb: not is_admin(cb.from_user.id))
 async def filter_recent(callback: CallbackQuery):
     """Muestra productos mas recientes"""
     with get_service(StoreService) as store_service:

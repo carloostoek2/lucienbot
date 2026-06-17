@@ -21,6 +21,7 @@ from keyboards.callback_data import (
 from keyboards.inline_keyboards import offer_detail_keyboard
 from services import get_service
 from services.promotion_service import PromotionService
+from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -29,7 +30,7 @@ router = Router()
 # ==================== MENU PRINCIPAL ====================
 
 
-@router.callback_query(F.data == "offers")
+@router.callback_query(F.data == "offers", lambda cb: not is_admin(cb.from_user.id))
 async def offers_menu(callback: CallbackQuery):
     """Menu principal de ofertas/promociones - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
@@ -70,7 +71,7 @@ async def offers_menu(callback: CallbackQuery):
     # ==================== CATALOGO DE PROMOCIONES ====================
 
 
-@router.callback_query(F.data == "offers_catalog")
+@router.callback_query(F.data == "offers_catalog", lambda cb: not is_admin(cb.from_user.id))
 async def offers_catalog(callback: CallbackQuery):
     """Muestra el catalogo de promociones disponibles - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
@@ -131,7 +132,7 @@ async def offers_catalog(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.callback_query(ViewOfferCallback.filter())
+@router.callback_query(ViewOfferCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def view_offer_detail(callback: CallbackQuery, callback_data: ViewOfferCallback):
     """Muestra detalle de una promocion - Voz de Lucien"""
     promo_id = callback_data.promo_id
@@ -185,7 +186,7 @@ async def view_offer_detail(callback: CallbackQuery, callback_data: ViewOfferCal
         # ==================== SISTEMA "ME INTERESA" ====================
 
 
-@router.callback_query(OfferInterestCallback.filter())
+@router.callback_query(OfferInterestCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def express_interest(callback: CallbackQuery, callback_data: OfferInterestCallback, bot: Bot):
     """Procesa el interes del usuario en una promocion - Voz de Lucien"""
     promo_id = callback_data.promo_id
@@ -324,7 +325,7 @@ async def notify_admins_about_interest(bot: Bot, interest, promo):
 # ==================== HISTORIAL DE INTERESES ====================
 
 
-@router.callback_query(F.data == "my_offers_history")
+@router.callback_query(F.data == "my_offers_history", lambda cb: not is_admin(cb.from_user.id))
 async def my_offers_history(callback: CallbackQuery):
     """Muestra el historial de intereses del usuario - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:

@@ -24,6 +24,7 @@ from keyboards.inline_keyboards import (
     vip_management_keyboard,
 )
 from services.vip_service import VIPService
+from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class TokenStates(StatesGroup):
 # ==================== GESTIÓN DE TARIFAS ====================
 
 
-@router.callback_query(F.data == "manage_tariffs")
+@router.callback_query(F.data == "manage_tariffs", lambda cb: is_admin(cb.from_user.id))
 async def manage_tariffs(callback: CallbackQuery):
     """Gestión de tarifas VIP"""
     vip_service = VIPService()
@@ -62,7 +63,7 @@ async def manage_tariffs(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "create_tariff")
+@router.callback_query(F.data == "create_tariff", lambda cb: is_admin(cb.from_user.id))
 async def create_tariff_start(callback: CallbackQuery, state: FSMContext):
     """Inicia creación de tarifa"""
     await callback.message.edit_text(
@@ -77,7 +78,7 @@ async def create_tariff_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(TariffStates.waiting_name)
+@router.message(TariffStates.waiting_name, lambda msg: is_admin(msg.from_user.id))
 async def process_tariff_name(message: Message, state: FSMContext):
     """Procesa nombre de tarifa"""
     await state.update_data(name=message.text.strip())
@@ -93,7 +94,7 @@ async def process_tariff_name(message: Message, state: FSMContext):
     await state.set_state(TariffStates.waiting_days)
 
 
-@router.message(TariffStates.waiting_days)
+@router.message(TariffStates.waiting_days, lambda msg: is_admin(msg.from_user.id))
 async def process_tariff_days(message: Message, state: FSMContext):
     """Procesa duración de tarifa"""
     try:
@@ -121,7 +122,7 @@ async def process_tariff_days(message: Message, state: FSMContext):
         )
 
 
-@router.message(TariffStates.waiting_price)
+@router.message(TariffStates.waiting_price, lambda msg: is_admin(msg.from_user.id))
 async def process_tariff_price(message: Message, state: FSMContext):
     """Procesa precio y confirma tarifa"""
     price_text = message.text.strip()
@@ -207,7 +208,7 @@ async def generate_token_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(TokenStates.selecting_tariff, SelectTariffCallback.filter())
+@router.callback_query(TokenStates.selecting_tariff, SelectTariffCallback.filter(), lambda cb: is_admin(cb.from_user.id))
 async def generate_token(
     callback: CallbackQuery, state: FSMContext, callback_data: SelectTariffCallback
 ):
