@@ -4,12 +4,21 @@ Servicio de Mensajes Anónimos - Lucien Bot
 Gestiona el envío y recepción de mensajes anónimos de suscriptores VIP a Diana.
 """
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from models.database import SessionLocal
-from models.models import AnonymousMessage, AnonymousMessageStatus, User
+from models.models import AnonymousMessage, AnonymousMessageStatus, TransactionSource, User
+from services.besito_service import BesitoService
+from services.vip_service import VIPService
+
+logger = logging.getLogger(__name__)
+
+ANONYMOUS_MESSAGE_COST = 50
+ANONYMOUS_MESSAGE_MIN_LENGTH = 3
+ANONYMOUS_MESSAGE_MAX_LENGTH = 4000
 
 
 class AnonymousMessageService:
@@ -41,6 +50,66 @@ class AnonymousMessageService:
         db.commit()
         db.refresh(message)
         return message
+
+    def send_paid_anonymous_message(
+        self, user_id: int, content: str, cost: int = ANONYMOUS_MESSAGE_COST
+    ) -> tuple[bool, str, AnonymousMessage | None]:
+        """Debita besitos y persiste mensaje anónimo en una sola transacción."""
+        content = (content or "").strip()
+        if len(content) < ANONYMOUS_MESSAGE_MIN_LENGTH or len(content) > ANONYMOUS_MESSAGE_MAX_LENGTH:
+            logger.info(
+                f"anonymous_message_service | send_paid | user_id={user_id} | result=invalid_content"
+            )
+            return False, "invalid_content", None
+
+        db = self._get_db()
+        vip_service = VIPService(db=db)
+        if not vip_service.is_user_vip(user_id):
+            logger.info(
+                f"anonymous_message_service | send_paid | user_id={user_id} | result=not_vip"
+            )
+            return False, "not_vip", None
+
+        besito_service = BesitoService(db=db)
+        if not besito_service.has_sufficient_balance(user_id, cost):
+            logger.info(
+                f"anonymous_message_service | send_paid | user_id={user_id} | "
+                f"result=insufficient_balance"
+            )
+            return False, "insufficient_balance", None
+
+        try:
+            if not besito_service.debit_besitos(
+                user_id=user_id,
+                amount=cost,
+                source=TransactionSource.ANONYMOUS_MESSAGE,
+                description="Envío de mensaje anónimo a Diana",
+                commit=False,
+            ):
+                # debit_besitos already rollbacks on real failure; no full rollback here
+                logger.info(
+                    f"anonymous_message_service | send_paid | user_id={user_id} | result=debit_failed"
+                )
+                return False, "debit_failed", None
+
+            message = AnonymousMessage(
+                sender_id=user_id, content=content, status=AnonymousMessageStatus.UNREAD
+            )
+            db.add(message)
+            db.commit()
+            db.refresh(message)
+            logger.info(
+                f"anonymous_message_service | send_paid | user_id={user_id} | "
+                f"result=ok | message_id={message.id}"
+            )
+            return True, "ok", message
+        except Exception as e:
+            db.rollback()
+            logger.error(
+                f"anonymous_message_service | send_paid | user_id={user_id} | "
+                f"result=internal_error | error={e}"
+            )
+            return False, "internal_error", None
 
     def get_message(self, message_id: int) -> AnonymousMessage | None:
         """Obtiene un mensaje por ID."""

@@ -295,4 +295,51 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 
 ---
 
+## Handoff Tirón Fase 6/7/8 (2026-06-18)
+
+**Resumen tirón:** Completados 6 pasos por fase (docs/fase_testing_review_process.md) para Fase6 (Tienda+Prom+Narr bundle), Fase7 (VIP Invite), Fase08 (meta debt). Hoja actualizada, secciones detalladas + brechas/recs/pilots Alta en fases_refactor_testing.md. Pilots implementados + review fixes: atomic gold + expanded asserts (store), cost>0+strict (story), member_limit=1+fallback+caplog (common). All 13 issues fixed or defended in review_file. GSD pre every (wc fase6~44+ etc at close). 0 prod, 0 impact 3 crit. Security pre-existing documented + defensive in pilots.
+
+**Actualizaciones en refactor:** 
+- Fase6/7/8 pilots + handoff append (this). 
+- Próximos naturales post tirón: handler e2e buy/interest/advance callbacks (make_callback), full cov %, property Hypothesis on purchase/narr, concurrent on store complete + invite, tz modern global, Fase08 items remaining (e2e, races beyond).
+
+**Archivos clave re-touched (review):** fases_refactor_testing.md (recs esfuerzo/riesgo + sync), refactor (handoff), store test (tighten docstring, partial asserts, import to top, security notes), story test (cost/choice/strict/ID/doc), common test (VIP rewrite + caplog), /tmp/grok-review-ea699af0.md (Status+Response 1-13), gsd, summary.
+
+**Gates post review fixes (re-run exact):** see embedded below.
+
+**Decisiones:** extend; verbatim; pushback on full DB/scope (handler direct VIPService() evidence); security via pilots/docs not prod. Pre-existing TOCTOU/token noted "pre-existing contract not altered; pilots protect atomic paths".
+
+**Verif:** GSD pre, strict, no drift, review complete. 
+
+(End handoff tirón 6-7-8 post review fixes. All issues addressed. Update next from here.)
+
+---
+
+## Handoff Tirón Fases 9-10-11 (Testing Roadmap Ligera, 2026-06-18)
+
+**Resumen tirón:** Aplicada metodología exacta docs/fase_testing_review_process.md (6 pasos: promesa, map, inventario, brechas vs contrato, recs prior tipo/esfuerzo/riesgo, registro) a fases 9,10,11 de fases_refactor_testing.md . Actualizada Hoja (En progreso -> ✅ completed). Pilots: ID duality fix + strict DESIRED + hygiene/UTC en test_analytics_service (extend); sqlite happy (tolerant) en test_backup; expire guard mid-ritual en test_vip_ritual_flow (Fase10). GSD pre every edit (logs fase9:12+ ,10:5 ,11:2). 0 prod changes. 0 impact 3 crit (gamif/narr/ch-VIP). 
+
+**Actualizaciones:**
+- fases_refactor_testing.md: tabla Hoja (9-11 en progreso + completed), secciones completas Fase9/10/11 (promesa/ component file:line / tests classif / brechas table / recs / registro / refs / archivos / decisiones / verif) + pilots.
+- refactor_testing.md: este handoff.
+- tests/unit/test_analytics_service.py , tests/unit/test_backup_service.py , tests/integration/test_vip_ritual_flow.py (pilots + fixes ID/strict/guard).
+- GSD logs + will run gates.
+
+**Gates outputs (to execute post):**
+- ruff check --fix ; ruff format (on touched)
+- pytest -q -k "phase9 or polish or rate or redis or backup or analytics or TestThrottling or TestBackup or TestAnalytics or TestScheduler or free_entry or vip_ritual or ritual or entrada or cobertura or e2e or critical" --tb=line + broader smoke (besito|daily|vip|channel|cross|invariants) expect 0 reg.
+
+**Decisiones:** extend existing (smallest); gold patterns verbatim (DESIRED, fresh 7770 tg, strict==, try/finally, N806 tol, SQLite if needed); bat/rg/eza in terminal; no new files; review only (no feature); avoid past: strict vs loose, close hygiene, ID duality full align, doc/code no drift, gates captured.
+Wontfix: no prod even for multi svc in free (pre debt, per prior); no full redis E2E (Fase11 overlap).
+
+**Archivos cambiados:** fases_refactor_testing.md, refactor_testing.md, 3 test py (ID/guard/sqlite pilots).
+**GSD counts:** 12+ fase9, 5+ fase10, 2+ fase11 (pre every).
+**Fases restantes post 9-11:** 7 según tabla.
+
+**Próximos:** Fase12 Mejorar tienda per Hoja.
+
+(End handoff tirón 9-10-11.)
+
+---
+
 Este archivo debe mantenerse actualizado al final de cada sesión de trabajo de testing/refactor.

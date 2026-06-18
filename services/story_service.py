@@ -402,24 +402,36 @@ class StoryService:
                 self._grant_achievement(user_id, achievement)
 
     def _grant_achievement(self, user_id: int, achievement: StoryAchievement):
-        """Otorga un logro al usuario"""
+        """Otorga un logro al usuario (achievement + besitos en una transacción si hay recompensa).
+
+        reward_package_id delivery is pre-existing out-of-scope (package rewards unhandled).
+        """
         user_achievement = UserStoryAchievement(
             user_id=user_id, achievement_id=achievement.id, reward_delivered=False
         )
         self.db.add(user_achievement)
-        self.db.commit()
 
-        # Otorgar recompensa en besitos
         if achievement.reward_besitos > 0:
-            self.besito_service.credit_besitos(
+            user_achievement.reward_delivered = True
+            user_achievement.reward_delivered_at = datetime.now(UTC)
+            besito_service = BesitoService(db=self.db)
+            if not besito_service.credit_besitos(
                 user_id=user_id,
                 amount=achievement.reward_besitos,
                 source=TransactionSource.MISSION,
                 description=f"Logro desbloqueado: {achievement.name}",
                 reference_id=achievement.id,
-            )
+            ):
+                self.db.expunge(user_achievement)
+                logger.error(
+                    f"story_service | grant_achievement | user_id={user_id} | "
+                    f"result=credit_failed | achievement={achievement.name}"
+                )
+                return
+        else:
+            self.db.commit()
 
-        logger.info(f"Logro '{achievement.name}' otorgado a usuario {user_id}")
+        logger.info(f"story_service | grant_achievement | user_id={user_id} | result=ok | achievement={achievement.name}")
 
     # ==================== ARQUETIPOS ====================
 

@@ -57,6 +57,15 @@ get_vip_channel() -> Channel
 
 ## AnonymousMessageService API
 ```python
+# Constantes
+ANONYMOUS_MESSAGE_COST = 50          # besitos por mensaje
+ANONYMOUS_MESSAGE_MIN_LENGTH = 3
+ANONYMOUS_MESSAGE_MAX_LENGTH = 4000
+
+# Envío pagado (atómico: VIP check + debit + persist)
+send_paid_anonymous_message(user_id, content, cost=50) -> tuple  # (success, result_code, message|None)
+# result_code: ok | not_vip | insufficient_balance | debit_failed | invalid_content | internal_error
+
 # Envío y consulta
 send_message(sender_id, content) -> AnonymousMessage
 get_message(message_id) -> AnonymousMessage
@@ -79,8 +88,8 @@ Suscriptor VIP
     → Click "💌 Enviar mensaje a Diana"
     → Escribe mensaje (3-4000 chars)
     → Confirma envío
-    → AnonymousMessageService.send_message()
-    → Diana recibe notificación (estado: UNREAD)
+    → AnonymousMessageService.send_paid_anonymous_message()  # debit ANONYMOUS_MESSAGE + persist
+    → Diana recibe notificación (estado: UNREAD, post-commit best-effort)
 
 Diana (Admin)
     → Click "💌 Susurros del círculo"

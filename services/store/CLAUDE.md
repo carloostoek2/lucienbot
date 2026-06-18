@@ -35,11 +35,14 @@ Usuario → /shop → Ver catálogo
     → view_cart / remove_from_cart / update_quantity
     → checkout
     → StoreService.complete_order()
-        → Verificar has_sufficient_balance (BesitoService)
-        → Debitar besitos (BesitoService.debit_besitos())
-        → Marcar orden como COMPLETED
-        → Decrementar store_stock del Package
-        → Entregar: PackageService.deliver_package_to_user()
+        → Fase atómica DB (single commit):
+            → Verificar saldo (BesitoService)
+            → Debitar besitos (BesitoService.debit_besitos commit=False, PURCHASE)
+            → Decrementar stock (StoreProduct.with_for_update)
+            → Marcar orden COMPLETED + completed_at
+        → Post-commit best-effort:
+            → Entregar: PackageService.deliver_package_to_user() por ítem
+            → Fallo TG no revierte cobro/stock; redelivery vía backpack
             → Enviar archivos via bot.send_media_group()
 ```
 
@@ -64,7 +67,7 @@ clear_cart(user_id) -> bool
 
 # Órdenes
 create_order(user_id) -> tuple  # (order, error) — crea orden PENDING
-complete_order(user_id) -> tuple  # (order_id, error) — debit + deliver
+complete_order(bot, order_id) -> tuple  # (success, message) — atomic debit + stock; post-commit deliver
 cancel_order(order_id) -> bool
 get_order(order_id) -> Order
 get_user_orders(user_id, limit=20) -> list[Order]
@@ -98,10 +101,13 @@ get_package_stats(package_id) -> dict
 ```
 
 ## Reglas de Negocio
-- Verificar `has_sufficient_balance` ANTES de complete_order
-- Stock se decrementa SOLO en complete_order (no en create_order)
-- Entrega ocurre DENTRO de complete_order después del debit exitoso
-- No существует "process_purchase" — el flujo completo está en complete_order
+- Verificar `has_sufficient_balance` ANTES de complete_order (create_order también recheck)
+- Stock se decrementa SOLO en complete_order (no en create_order), con `FOR UPDATE` y re-check `stock >= qty`
+- Fase atómica DB: debit + stock + order COMPLETED en un solo commit; fallo → rollback
+- Entrega TG es post-commit best-effort (una entrega por unidad de cantidad); fallo no revierte cobro
+- Redelivery de paquetes fallidos vía backpack
+- `complete_order` bloquea orden con `FOR UPDATE` y evita doble débito PURCHASE por `reference_id`
+- No existe "process_purchase" — el flujo completo está en complete_order
 
 ## Antes de Implementar
 1. Lee [@architecture.md](../../architecture.md)

@@ -12,6 +12,7 @@ sys.path.insert(0, "/data/data/com.termux/files/home/repos/lucien_bot")
 from models.models import (
     ArchetypeType,
     NodeType,
+    StoryChoice,
     StoryNode,
     TransactionSource,
     UserStoryProgress,
@@ -105,9 +106,11 @@ class TestStoryServiceAtomicity:
 
         # Both besitos and progress are persisted atomically
         db_session.expire_all()
-        from models.models import BesitoBalance as BB
+        from models.models import BesitoBalance
 
-        db_balance = db_session.query(BB).filter(BB.user_id == sample_user.id).first()
+        db_balance = (
+            db_session.query(BesitoBalance).filter(BesitoBalance.user_id == sample_user.id).first()
+        )
         assert db_balance.balance == 95, "Besitos deben estar debitados en la BD"
 
         db_session.expire(progress)
@@ -480,7 +483,11 @@ class TestStoryAccessGatesPhase6:
         service = StoryService(db_session)
         can, reason = service.can_access_node(sample_user.id, node.id, is_vip=False)
         assert can is False
-        assert "diván" in (reason or "").lower() or "requiere acceso" in (reason or "").lower() or "el diván" in (reason or "").lower()
+        assert (
+            "diván" in (reason or "").lower()
+            or "requiere acceso" in (reason or "").lower()
+            or "el diván" in (reason or "").lower()
+        )
 
     def test_can_access_node_archetype_required_denies_mismatch(self, db_session, sample_user):
         node = StoryNode(
@@ -514,6 +521,7 @@ class TestStoryAccessGatesPhase6:
         db_session.commit()
         # Low balance
         from models.models import BesitoBalance
+
         bal = BesitoBalance(user_id=sample_user.id, balance=10, total_earned=10, total_spent=0)
         db_session.add(bal)
         db_session.commit()
@@ -521,4 +529,210 @@ class TestStoryAccessGatesPhase6:
         service = StoryService(db_session)
         can, reason = service.can_access_node(sample_user.id, node.id, is_vip=False)
         assert can is False
-        assert "besito" in (reason or "").lower() or "costo" in (reason or "").lower() or "50" in (reason or "")
+        assert (
+            "besito" in (reason or "").lower()
+            or "costo" in (reason or "").lower()
+            or "50" in (reason or "")
+        )
+
+
+# GOLD PILOT Fase6 NARR #4 (extend existing): advance + archetype contract
+# DESIRED CONTRACT: advance_to_node debits with commit=False (atomic with progress), archetype calc from points, achievements.
+# Uses db_session + explicit .telegram_id (TG BigInt) + cost>0 + choice_id for archetype. Full SQLite+TestSession + saved_tg verbatim gold is used in pilots with internal besito commits (store atomic, cross); here commit=False + unit scope makes db_session + explicit sufficient and lower risk. See store gold for verbatim file+TS example.
+# Pre-existing legacy (sys.path, some .id) untouched.
+@pytest.mark.unit
+class TestStoryNarrativeGoldFase6:
+    """Pilots contrato deseado narrativa (Fase 6)."""
+
+    def test_advance_and_archetype_contract_gold(self, db_session, sample_user):
+        """DESIRED CONTRACT: advance persists debit+progress atomic; calc archetype from choices points. Cost>0 + choice_id exercised; strict TG ID and re-query."""
+        from models.models import BesitoBalance
+
+        node1 = StoryNode(
+            title="Start",
+            content="..",
+            node_type=NodeType.NARRATIVE,
+            is_starting_node=True,
+            is_active=True,
+            cost_besitos=10,  # >0 to exercise debit path in gold pilot
+        )
+        db_session.add(node1)
+        db_session.commit()
+        db_session.refresh(node1)
+
+        choice = StoryChoice(
+            node_id=node1.id,
+            text="Go Devoto",
+            choice_archetype=ArchetypeType.DEVOTO,
+            archetype_points=5,
+        )
+        db_session.add(choice)
+        db_session.commit()
+
+        bal = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=100, total_earned=100, total_spent=0
+        )
+        db_session.add(bal)
+        db_session.commit()
+
+        service = StoryService(db_session)
+        # advance with choice_id to exercise archetype + debit (cost>0)
+        result = service.advance_to_node(sample_user.telegram_id, node1.id, choice_id=choice.id)
+        assert result and result[0] is True, "advance returns (True, msg, progress) per contract"
+
+        progress = service.get_user_progress(sample_user.telegram_id)
+        assert progress is not None
+        assert progress.current_node_id == node1.id
+
+        # archetype calc (exact per dominant points from choice)
+        arch = service.calculate_archetype(progress)
+        assert arch == ArchetypeType.DEVOTO
+
+        # re-query strict post
+        re_prog = (
+            db_session.query(UserStoryProgress).filter_by(user_id=sample_user.telegram_id).first()
+        )
+        assert re_prog is not None
+        assert re_prog.current_node_id == node1.id  # strict contract verification
+
+        # debit side-effect assert (cost=10 exercised)
+        re_bal = db_session.query(BesitoBalance).filter_by(user_id=sample_user.telegram_id).first()
+        assert re_bal.balance == 90
+        assert re_bal.total_spent == 10
+
+
+@pytest.mark.unit
+class TestStoryAchievementAtomicity:
+    """Achievement + besitos reward must commit atomically via single credit_besitos commit."""
+
+    def test_grant_achievement_with_besitos_atomic(self, db_session, sample_user):
+        from models.models import BesitoBalance, StoryAchievement, UserStoryAchievement
+
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=100,
+            total_earned=100,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+
+        achievement = StoryAchievement(
+            name="Primer Fragmento",
+            description="Desbloquea el inicio",
+            reward_besitos=25,
+            is_active=True,
+        )
+        db_session.add(achievement)
+        db_session.commit()
+        db_session.refresh(achievement)
+
+        service = StoryService(db_session)
+        service._grant_achievement(sample_user.telegram_id, achievement)
+
+        user_ach = (
+            db_session.query(UserStoryAchievement)
+            .filter_by(user_id=sample_user.telegram_id, achievement_id=achievement.id)
+            .first()
+        )
+        assert user_ach is not None
+        assert user_ach.reward_delivered is True
+        assert user_ach.reward_delivered_at is not None
+
+        re_bal = db_session.query(BesitoBalance).filter_by(user_id=sample_user.telegram_id).first()
+        assert re_bal.balance == 125
+        assert re_bal.total_earned == 125
+
+        from models.models import BesitoTransaction
+
+        tx = (
+            db_session.query(BesitoTransaction)
+            .filter_by(user_id=sample_user.telegram_id, source=TransactionSource.MISSION)
+            .first()
+        )
+        assert tx is not None
+        assert tx.amount == 25
+        assert tx.reference_id == achievement.id
+
+    def test_grant_achievement_credit_failure_rolls_back(self, db_session, sample_user):
+        from models.models import BesitoBalance, StoryAchievement, UserStoryAchievement
+
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=100,
+            total_earned=100,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+
+        achievement = StoryAchievement(
+            name="Fallo Credito",
+            description="Test rollback",
+            reward_besitos=25,
+            is_active=True,
+        )
+        db_session.add(achievement)
+        db_session.commit()
+        db_session.refresh(achievement)
+
+        saved_tg = sample_user.telegram_id
+        saved_ach_id = achievement.id
+        service = StoryService(db_session)
+        with patch("services.story_service.BesitoService.credit_besitos", return_value=False):
+            service._grant_achievement(saved_tg, achievement)
+
+        assert (
+            db_session.query(UserStoryAchievement)
+            .filter_by(user_id=saved_tg, achievement_id=saved_ach_id)
+            .count()
+            == 0
+        )
+        re_bal = db_session.query(BesitoBalance).filter_by(user_id=saved_tg).first()
+        assert re_bal.balance == 100
+
+    def test_grant_achievement_without_besitos_commits_only_achievement(
+        self, db_session, sample_user
+    ):
+        from models.models import (
+            BesitoBalance,
+            BesitoTransaction,
+            StoryAchievement,
+            UserStoryAchievement,
+        )
+
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=100,
+            total_earned=100,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+
+        achievement = StoryAchievement(
+            name="Sin Recompensa",
+            description="Solo logro",
+            reward_besitos=0,
+            is_active=True,
+        )
+        db_session.add(achievement)
+        db_session.commit()
+        db_session.refresh(achievement)
+
+        service = StoryService(db_session)
+        service._grant_achievement(sample_user.telegram_id, achievement)
+
+        user_ach = (
+            db_session.query(UserStoryAchievement)
+            .filter_by(user_id=sample_user.telegram_id, achievement_id=achievement.id)
+            .first()
+        )
+        assert user_ach is not None
+        assert user_ach.reward_delivered is False
+        assert user_ach.reward_delivered_at is None
+
+        re_bal = db_session.query(BesitoBalance).filter_by(user_id=sample_user.telegram_id).first()
+        assert re_bal.balance == 100
+        assert re_bal.total_earned == 100
+        assert db_session.query(BesitoTransaction).filter_by(user_id=sample_user.telegram_id).count() == 0

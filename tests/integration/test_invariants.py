@@ -643,10 +643,10 @@ class TestStoreOrderInvariants:
         # Cancel a COMPLETED order must fail
         assert svc.cancel_order(order.id) is False
 
-        # Complete an already-COMPLETED order must fail
+        # Complete an already-COMPLETED order is idempotent (success, no re-debit)
         mock_bot = AsyncMock()
         ok, msg = await svc.complete_order(mock_bot, order.id)
-        assert ok is False
+        assert ok is True
         # Status unchanged
         db_session.refresh(order)
         assert order.status == OrderStatus.COMPLETED

@@ -4,6 +4,7 @@ Handlers Admin para Mensajes Anónimos - Lucien Bot
 Gestión de mensajes anónimos por parte de Diana (admin).
 """
 
+import html
 import logging
 
 from aiogram import F, Router
@@ -248,6 +249,7 @@ async def view_anonymous_message(callback: CallbackQuery, callback_data: AnonVie
             message.created_at.strftime("%d/%m/%Y %H:%M") if message.created_at else "Desconocida"
         )
 
+        safe_content = html.escape(message.content)
         text = f"""🎩 <b>Lucien:</b>
 
 💌 <b>Mensaje Anónimo</b>
@@ -256,10 +258,11 @@ async def view_anonymous_message(callback: CallbackQuery, callback_data: AnonVie
 📊 <b>Estado:</b> {status_emoji}
 
 💬 <b>Contenido:</b>
-<blockquote>{message.content}</blockquote>"""
+<blockquote>{safe_content}</blockquote>"""
 
         if message.admin_reply:
-            text += f"\n\n💬 <b>Su respuesta:</b>\n<blockquote>{message.admin_reply}</blockquote>"
+            safe_admin_reply = html.escape(message.admin_reply)
+            text += f"\n\n💬 <b>Su respuesta:</b>\n<blockquote>{safe_admin_reply}</blockquote>"
 
         await callback.message.edit_text(
             text, reply_markup=anonymous_message_actions_keyboard(message_id), parse_mode="HTML"
@@ -287,6 +290,7 @@ async def reveal_anonymous_sender(callback: CallbackQuery, callback_data: AnonRe
         username = f"@{sender.username}" if sender.username else "Sin username"
         name = f"{sender.first_name or ''} {sender.last_name or ''}".strip() or "Sin nombre"
 
+        safe_content_preview = html.escape(message.content[:100])
         text = f"""🎩 <b>Lucien:</b>
 
 <i>Información revelada del remitente...</i>
@@ -300,7 +304,7 @@ async def reveal_anonymous_sender(callback: CallbackQuery, callback_data: AnonRe
 Úsela solo si es absolutamente necesario.
 
 💬 <b>Mensaje:</b>
-<blockquote>{message.content[:100]}...</blockquote>"""
+<blockquote>{safe_content_preview}...</blockquote>"""
 
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -388,6 +392,9 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 
         if anon_message and anon_message.sender_id:
             try:
+                safe_user_content = html.escape(anon_message.content[:100])
+                safe_reply_content = html.escape(reply_content)
+                content_suffix = "..." if len(anon_message.content) > 100 else ""
                 # Enviar respuesta al remitente
                 await message.bot.send_message(
                     chat_id=anon_message.sender_id,
@@ -396,10 +403,10 @@ async def process_anonymous_reply(message: Message, state: FSMContext):
 <i>Diana ha respondido a su susurro...</i>
 
 💬 <b>Su mensaje:</b>
-<blockquote>{anon_message.content[:100]}{"..." if len(anon_message.content) > 100 else ""}</blockquote>
+<blockquote>{safe_user_content}{content_suffix}</blockquote>
 
 💌 <b>Respuesta de Diana:</b>
-<blockquote>{reply_content}</blockquote>
+<blockquote>{safe_reply_content}</blockquote>
 
 <i>El Diván agradece su confianza.</i>""",
                     parse_mode="HTML",

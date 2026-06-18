@@ -1,12 +1,19 @@
-import pytest
 import csv
 import os
-from services.analytics_service import AnalyticsService
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 from models.models import (
-    Subscription, BesitoTransaction, TransactionType, TransactionSource,
-    BesitoBalance, User, UserRole
+    BesitoBalance,
+    BesitoTransaction,
+    Subscription,
+    TransactionSource,
+    TransactionType,
+    User,
+    UserRole,
 )
-from datetime import datetime, timedelta
+from services.analytics_service import AnalyticsService
 
 
 @pytest.mark.unit
@@ -14,26 +21,40 @@ class TestAnalyticsService:
     def test_get_dashboard_stats_keys(self, db_session):
         service = AnalyticsService(db_session)
         stats = service.get_dashboard_stats()
-        assert set(stats.keys()) == {"total_users", "active_vip", "total_besitos", "expiring_soon", "new_today"}
+        assert set(stats.keys()) == {
+            "total_users",
+            "active_vip",
+            "total_besitos",
+            "expiring_soon",
+            "new_today",
+        }
 
     def test_get_dashboard_stats_total_besitos(self, db_session, sample_user, sample_admin):
+        """DESIRED CONTRACT: user_id in BesitoBalance always matches User.telegram_id (TG BigInt, not PK .id)."""
         service = AnalyticsService(db_session)
-        bb1 = BesitoBalance(user_id=sample_user.id, balance=100, total_earned=100, total_spent=0)
-        bb2 = BesitoBalance(user_id=sample_admin.id, balance=200, total_earned=200, total_spent=0)
+        bb1 = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=100, total_earned=100, total_spent=0
+        )
+        bb2 = BesitoBalance(
+            user_id=sample_admin.telegram_id, balance=200, total_earned=200, total_spent=0
+        )
         db_session.add(bb1)
         db_session.add(bb2)
         db_session.commit()
         stats = service.get_dashboard_stats()
         assert stats["total_besitos"] == 300
 
-    def test_get_dashboard_stats_expiring_soon(self, db_session, sample_user, sample_vip_channel, sample_token):
+    def test_get_dashboard_stats_expiring_soon(
+        self, db_session, sample_user, sample_vip_channel, sample_token
+    ):
+        """DESIRED CONTRACT: Subscription.user_id = TG BigInt (telegram_id)."""
         service = AnalyticsService(db_session)
         sub = Subscription(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             channel_id=sample_vip_channel.id,
             token_id=sample_token.id,
-            end_date=datetime.utcnow() + timedelta(hours=12),
-            is_active=True
+            end_date=datetime.now(UTC) + timedelta(hours=12),
+            is_active=True,
         )
         db_session.add(sub)
         db_session.commit()
@@ -41,23 +62,29 @@ class TestAnalyticsService:
         assert stats["expiring_soon"] >= 1
 
     def test_get_dashboard_stats_new_today(self, db_session):
+        """DESIRED CONTRACT: new users keyed by TG; analytics uses telegram_id."""
         service = AnalyticsService(db_session)
-        user = User(telegram_id=111222333, username="todayuser", role=UserRole.USER)
+        fresh_tg = 77709001
+        user = User(telegram_id=fresh_tg, username="todayuser", role=UserRole.USER)
         db_session.add(user)
         db_session.commit()
         stats = service.get_dashboard_stats()
         assert stats["new_today"] >= 1
 
     def test_export_users_csv(self, db_session, sample_user):
+        """DESIRED CONTRACT: export uses TG keys; service close hygiene even for injected."""
         service = AnalyticsService(db_session)
-        path = service.export_users_csv()
-        assert path is not None
-        assert os.path.exists(path)
-        with open(path, "r", newline="") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            assert "telegram_id" in reader.fieldnames
-            assert any(r["telegram_id"] == str(sample_user.telegram_id) for r in rows)
+        try:
+            path = service.export_users_csv()
+            assert path is not None
+            assert os.path.exists(path)
+            with open(path, newline="") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                assert "telegram_id" in reader.fieldnames
+                assert any(r["telegram_id"] == str(sample_user.telegram_id) for r in rows)
+        finally:
+            service.close()  # no-op for injected but documents contract
 
     def test_export_users_csv_no_users(self, db_session):
         service = AnalyticsService(db_session)
@@ -67,26 +94,28 @@ class TestAnalyticsService:
         assert service.export_users_csv() is None
 
     def test_export_activity_csv(self, db_session, sample_user):
+        """DESIRED CONTRACT: Besito* user_id = telegram_id TG (not .id); tx reflects TG."""
         service = AnalyticsService(db_session)
-        bb = BesitoBalance(user_id=sample_user.id, balance=10, total_earned=10, total_spent=0)
+        bb = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=10, total_earned=10, total_spent=0
+        )
         db_session.add(bb)
         db_session.commit()
         tx = BesitoTransaction(
-            user_id=sample_user.id,
+            user_id=sample_user.telegram_id,
             amount=10,
             type=TransactionType.CREDIT,
-            source=TransactionSource.DAILY_GIFT
+            source=TransactionSource.DAILY_GIFT,
         )
         db_session.add(tx)
         db_session.commit()
         path = service.export_activity_csv()
         assert path is not None
-        with open(path, "r", newline="") as f:
+        with open(path, newline="") as f:
             reader = csv.DictReader(f)
             rows = list(reader)
             assert "amount" in reader.fieldnames
-            # export_activity_csv writes tx.user_id which is the internal user id
-            assert any(r["user_id"] == str(sample_user.id) for r in rows)
+            assert any(r["user_id"] == str(sample_user.telegram_id) for r in rows)
 
     def test_export_activity_csv_no_transactions(self, db_session):
         service = AnalyticsService(db_session)
@@ -96,8 +125,11 @@ class TestAnalyticsService:
 
     # ==================== Slice 1 economy stats tests ====================
     def test_get_economy_overview_keys_and_values(self, db_session, sample_user):
+        """DESIRED CONTRACT: economy reads use TG keys; best-effort read-only."""
         service = AnalyticsService(db_session)
-        bb = BesitoBalance(user_id=sample_user.id, balance=50, total_earned=120, total_spent=70)
+        bb = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=50, total_earned=120, total_spent=70
+        )
         db_session.add(bb)
         db_session.commit()
         stats = service.get_economy_overview(window_days=None)
@@ -110,18 +142,30 @@ class TestAnalyticsService:
         assert stats["window_days"] is None
 
     def test_get_source_attribution_credits_only(self, db_session, sample_user):
+        """DESIRED CONTRACT: attribution aggregates by TG user_id keys (credits only)."""
         service = AnalyticsService(db_session)
-        bb = BesitoBalance(user_id=sample_user.id, balance=0, total_earned=0, total_spent=0)
+        bb = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
+        )
         db_session.add(bb)
         db_session.commit()
         tx1 = BesitoTransaction(
-            user_id=sample_user.id, amount=30, type=TransactionType.CREDIT, source=TransactionSource.REACTION
+            user_id=sample_user.telegram_id,
+            amount=30,
+            type=TransactionType.CREDIT,
+            source=TransactionSource.REACTION,
         )
         tx2 = BesitoTransaction(
-            user_id=sample_user.id, amount=20, type=TransactionType.CREDIT, source=TransactionSource.DAILY_GIFT
+            user_id=sample_user.telegram_id,
+            amount=20,
+            type=TransactionType.CREDIT,
+            source=TransactionSource.DAILY_GIFT,
         )
         tx3 = BesitoTransaction(
-            user_id=sample_user.id, amount=-10, type=TransactionType.DEBIT, source=TransactionSource.PURCHASE
+            user_id=sample_user.telegram_id,
+            amount=-10,
+            type=TransactionType.DEBIT,
+            source=TransactionSource.PURCHASE,
         )
         db_session.add_all([tx1, tx2, tx3])
         db_session.commit()
@@ -137,9 +181,14 @@ class TestAnalyticsService:
         assert any(s["pct"] > 0 for s in attr["sources"])
 
     def test_get_top_earners_order_and_net(self, db_session, sample_user, sample_admin):
+        """DESIRED CONTRACT: top earners ordered by earned, use TG keys."""
         service = AnalyticsService(db_session)
-        b1 = BesitoBalance(user_id=sample_user.id, balance=10, total_earned=150, total_spent=140)
-        b2 = BesitoBalance(user_id=sample_admin.id, balance=200, total_earned=300, total_spent=100)
+        b1 = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=10, total_earned=150, total_spent=140
+        )
+        b2 = BesitoBalance(
+            user_id=sample_admin.telegram_id, balance=200, total_earned=300, total_spent=100
+        )
         db_session.add_all([b1, b2])
         db_session.commit()
         top = service.get_top_earners(limit=5)
@@ -154,8 +203,10 @@ class TestAnalyticsService:
         service = AnalyticsService(db_session)
         # Force error path (best-effort) - direct assign for reliable monkey in this fixture
         original = service._get_db
+
         def boom():
             raise RuntimeError("simulated")
+
         service._get_db = boom
         try:
             ov = service.get_economy_overview()

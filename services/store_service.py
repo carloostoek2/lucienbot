@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from config.settings import bot_config
 from models.database import SessionLocal
 from models.models import (
+    BesitoTransaction,
     CartItem,
     MissionType,
     Order,
@@ -30,6 +31,10 @@ from services.package_service import PackageService
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
+
+
+class _OrderAtomicError(Exception):
+    """Fallo en fase atómica de complete_order (stock/producto); provoca rollback."""
 
 
 # Support added for store_admin_handlers 1-service + pure extract (item8).
@@ -565,44 +570,12 @@ class StoreService:
         logger.info(f"Orden creada: {order.id} para usuario {user_id}")
         return order, None
 
-    async def complete_order(self, bot, order_id: int) -> tuple:
-        """
-        Completa una orden: cobra besitos, decrementa stock y entrega productos.
-        Retorna (exito, mensaje)
-        """
-        db = self._get_db()
-        order = db.query(Order).filter(Order.id == order_id).first()
-        if not order:
-            return False, "Orden no encontrada"
-
-        if order.status != OrderStatus.PENDING:
-            return False, LucienVoice.store_order_already_processed()
-
-        user_id = order.user_id
-
-        # Verificar saldo nuevamente
-        besito_service = BesitoService(
-            db=self.db
-        )  # local, on-demand; owns=False (db shared); recheck for atomicity with debit
-        balance = besito_service.get_balance(user_id)
-        if balance < order.total_price:
-            return False, "Saldo insuficiente"
-
-        # Cobrar besitos
-        success = besito_service.debit_besitos(
-            user_id=user_id,
-            amount=order.total_price,
-            source=TransactionSource.PURCHASE,
-            description=f"Compra en tienda - Orden #{order.id}",
-            reference_id=order.id,
-        )
-        # (no schedule for debit; debit internal commit authoritative; outer stock/deliver/order COMPLETE + db.commit() unchanged)
-
-        if not success:
-            return False, "Error al procesar el pago"
-
-        # Procesar cada item
+    def _decrement_stock_for_order(
+        self, db: Session, order: Order
+    ) -> tuple[list[int], list[int]]:
+        """Decrementa stock con FOR UPDATE. Retorna (low_stock_product_ids, package_ids_a_entregar)."""
         low_stock_products = []
+        package_ids = []
         for order_item in order.items:
             product = (
                 db.query(StoreProduct)
@@ -610,45 +583,74 @@ class StoreService:
                 .with_for_update()
                 .first()
             )
-
             if not product:
-                continue
-
-            # Decrementar stock
+                raise _OrderAtomicError(f"product_not_found | product_id={order_item.product_id}")
+            if product.stock != -1 and product.stock < order_item.quantity:
+                raise _OrderAtomicError(
+                    f"insufficient_stock | product_id={product.id} | "
+                    f"stock={product.stock} | qty={order_item.quantity}"
+                )
             if product.stock != -1:
                 product.stock -= order_item.quantity
-
-                # Check for low stock alert
                 if product.stock <= product.low_stock_threshold:
                     low_stock_products.append(product.id)
                     logger.warning(
                         f"STOCK_ALERT: Product {product.id} ({product.name}) - "
                         f"Stock: {product.stock}, Threshold: {product.low_stock_threshold}"
                     )
-
-            # Entregar paquete
             if product.package:
-                await self.package_service.deliver_package_to_user(
-                    bot=bot, user_id=user_id, package_id=product.package_id
+                package_ids.extend([product.package_id] * order_item.quantity)
+        return low_stock_products, package_ids
+
+    async def _deliver_order_packages_best_effort(
+        self, bot, order_id: int, user_id: int, package_ids: list[int]
+    ) -> None:
+        """Entrega paquetes post-commit; fallos TG no revierten cobro ni stock."""
+        for package_id in package_ids:
+            try:
+                success, msg = await self.package_service.deliver_package_to_user(
+                    bot=bot, user_id=user_id, package_id=package_id
+                )
+                if not success:
+                    logger.error(
+                        f"store | deliver_failed | order_id={order_id} | "
+                        f"user_id={user_id} | package_id={package_id} | msg={msg}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"store | deliver_failed | order_id={order_id} | "
+                    f"user_id={user_id} | package_id={package_id} | error={e}"
                 )
 
-        # Actualizar orden
-        order.status = OrderStatus.COMPLETED
-        order.completed_at = datetime.now(UTC)
-        db.commit()
+    def _has_purchase_for_order(self, db: Session, user_id: int, order_id: int) -> bool:
+        """Idempotencia: PURCHASE con reference_id=order_id ya registrado."""
+        return (
+            db.query(BesitoTransaction)
+            .filter(
+                BesitoTransaction.user_id == user_id,
+                BesitoTransaction.source == TransactionSource.PURCHASE,
+                BesitoTransaction.reference_id == order_id,
+            )
+            .first()
+            is not None
+        )
 
-        # Notificar alertas de stock a admins (stub para low-stock; ver notify_stock_alert)
+    async def _complete_order_post_commit_side_effects(
+        self,
+        bot,
+        order: Order,
+        user_id: int,
+        low_stock_products: list[int],
+        package_ids: list[int],
+    ) -> None:
+        """Post-commit best-effort: entrega TG, alertas stock, notif admins, misiones."""
+        await self._deliver_order_packages_best_effort(bot, order.id, user_id, package_ids)
         for product_id in low_stock_products:
             await self.notify_stock_alert(bot, product_id)
-
-        # Notificar a administradores de la compra (best-effort; side-effect post-commit).
-        # Garantiza cobertura para TODAS las compras (directa + carrito/futuras) sin tocar handlers.
-        # 0 impacto en atomicidad del débito PURCHASE + stock + entrega (precedente stock alert + observers).
         try:
             await self._notify_admins_of_purchase(bot, order)
         except Exception as e:
             logger.error(f"store | purchase_notif_failed | order_id={order.id} | error={e}")
-
         try:
             from services.mission_service import run_mission_side_effects_isolated
 
@@ -658,7 +660,7 @@ class StoreService:
                 amount=1,
                 bot=bot,
                 reference_id=order.id,
-                db=db,
+                db=self._get_db(),
             )
         except Exception as exc:
             logger.warning(
@@ -666,6 +668,65 @@ class StoreService:
                 f"order_id={order.id} | error={exc}"
             )
 
+    async def complete_order(self, bot, order_id: int) -> tuple:
+        """
+        Completa una orden: cobra besitos, decrementa stock y entrega productos.
+        Retorna (exito, mensaje)
+        """
+        db = self._get_db()
+        order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        if not order:
+            return False, "Orden no encontrada"
+
+        user_id = order.user_id
+
+        if order.status == OrderStatus.COMPLETED:
+            return True, LucienVoice.store_purchase_completed(order.total_price)
+
+        if order.status != OrderStatus.PENDING:
+            return False, LucienVoice.store_order_already_processed()
+
+        if self._has_purchase_for_order(db, user_id, order.id):
+            order.status = OrderStatus.COMPLETED
+            order.completed_at = order.completed_at or datetime.now(UTC)
+            db.commit()
+            logger.info(f"store | complete_order_idempotent | order_id={order.id}")
+            return True, LucienVoice.store_purchase_completed(order.total_price)
+
+        besito_service = BesitoService(
+            db=self.db
+        )  # local, on-demand; owns=False (db shared); balance check + debit for atomic complete_order
+        if besito_service.get_balance(user_id) < order.total_price:
+            return False, "Saldo insuficiente"
+
+        try:
+            if not besito_service.debit_besitos(
+                user_id=user_id,
+                amount=order.total_price,
+                source=TransactionSource.PURCHASE,
+                description=f"Compra en tienda - Orden #{order.id}",
+                reference_id=order.id,
+                commit=False,
+            ):
+                db.rollback()
+                return False, "Error al procesar el pago"
+
+            low_stock_products, package_ids = self._decrement_stock_for_order(db, order)
+            order.status = OrderStatus.COMPLETED
+            order.completed_at = datetime.now(UTC)
+            db.commit()
+        except _OrderAtomicError as e:
+            db.rollback()
+            logger.error(f"store | complete_order_failed | order_id={order_id} | error={e}")
+            return False, "Error al procesar el pago"
+        except Exception as e:
+            db.rollback()
+            logger.error(f"store | complete_order_failed | order_id={order_id} | error={e}")
+            return False, "Error al procesar el pago"
+
+        await self._complete_order_post_commit_side_effects(
+            bot, order, user_id, low_stock_products, package_ids
+        )
         logger.info(f"Orden completada: {order.id}")
         return True, LucienVoice.store_purchase_completed(order.total_price)
 

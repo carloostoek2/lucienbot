@@ -77,8 +77,46 @@ class TestVIPRitualFlow:
             mock_bot.send_message(
                 chat_id=sample_user.telegram_id,
                 text=f"Su enlace: {invite_link.invite_link}",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
+
+    def test_vip_entry_expire_guard_during_ritual_cancels(self, db_session, sample_user, sample_token, sample_vip_channel):
+        """DESIRED CONTRACT (Fase10): if sub expires mid ritual (stage>0), clear state, no link gen, blocked."""
+        vip_service = VIPService(db_session)
+        # simulate redeem sets pending (per Fase10 req + svc)
+        # (tests show direct, but contract in vip_service redeem + sched clear)
+        sub = vip_service.redeem_token(sample_token.token_code, sample_user.telegram_id)
+        assert sub is not None
+        # force pending stage (as would in full flow)
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 2
+        db_session.commit()
+        # now expire guard via svc/scheduler
+        cleared = vip_service.clear_vip_entry_state(sample_user.telegram_id)
+        assert cleared is True
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_status is None
+        assert sample_user.vip_entry_stage is None
+        # is_vip false after expire clear
+        assert vip_service.is_user_vip(sample_user.telegram_id) is False  # or check sub active false in full
 
         assert mock_bot.create_chat_invite_link.called
         assert mock_bot.send_message.called
+
+    def test_vip_entry_expire_guard_during_ritual_cancels(self, db_session, sample_user, sample_token, sample_vip_channel):
+        """DESIRED CONTRACT (Fase10): if sub expires mid ritual (stage>0), clear state, no link gen, blocked."""
+        vip_service = VIPService(db_session)
+        sub = vip_service.redeem_token(sample_token.token_code, sample_user.telegram_id)
+        assert sub is not None
+        # force pending stage (as would in full flow)
+        sample_user.vip_entry_status = "pending_entry"
+        sample_user.vip_entry_stage = 2
+        db_session.commit()
+        # now expire guard via svc/scheduler
+        cleared = vip_service.clear_vip_entry_state(sample_user.telegram_id)
+        assert cleared is True
+        db_session.refresh(sample_user)
+        assert sample_user.vip_entry_status is None
+        assert sample_user.vip_entry_stage is None
+        # is_vip false after
+        assert vip_service.is_user_vip(sample_user.telegram_id) is False
