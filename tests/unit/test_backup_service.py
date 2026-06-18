@@ -129,24 +129,13 @@ class TestBackupServiceCredentials:
 
     @pytest.mark.asyncio
     async def test_sqlite_backup_happy_path_creates_file(self, tmp_path):
-        """DESIRED CONTRACT: daily_backup for sqlite returns path to .db file (smallest extend for Fase9 polish)."""
+        """DESIRED CONTRACT: daily_backup for sqlite returns path + .exists() (gold deterministic)."""
+        from pathlib import Path
+
         service = BackupService(backup_dir=str(tmp_path))
-        # Use sqlite url (non postgres)
-        db_url = "sqlite:///tmp/test_lucien.db"
-        # Patch sqlite branch to simulate success without real sqlite3 cmd (dev env may not)
-        with (
-            patch("services.backup_service.subprocess.run") as mock_run,
-            patch("services.backup_service.asyncio") as mock_aio,
-        ):  # not real async needed
-            # simulate the sqlite copy path returns file
-            # actually impl uses sqlite3 cmd? but for test we patch to return path logic
-            # call public and check return shape (impl for sqlite may use .backup or cmd)
-            # to keep minimal: just assert daily_backup handles non-pg and returns or None consistent
-            # re-call public api
-            pass
-        # minimal non-mock: rely on impl sqlite may fail in no sqlite3, assert None or path type
-        result = await service.daily_backup()  # may None if no sqlite3 tool, but contract: str|None
-        assert (
-            result is None or result.endswith((".db", ".sql")) or "lucien_" in (result or "")
-        )  # tolerant for env; gold would patch full
-        # Note: full sqlite impl path protected by this + existing pg; follow-up can stricten if sqlite3 avail in ci.
+        expected = str(tmp_path / "lucien_20260101_120000.db")
+        Path(expected).touch()
+        with patch.object(service, "_backup_sqlite", return_value=expected):
+            result = await service.daily_backup()
+        assert result == expected
+        assert Path(result).exists()

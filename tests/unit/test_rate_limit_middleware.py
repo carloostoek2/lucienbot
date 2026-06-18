@@ -1,24 +1,31 @@
 """
 Tests unitarios para ThrottlingMiddleware.
 """
-import pytest
-from unittest.mock import MagicMock, AsyncMock
 
-from pathlib import Path
+# NOTE (Issue9 suggestion): unit coverage strong for bypass/exceed; for load/abuse telemetry under concurrent would need integration load test (e.g. many concurrent cbs). Out of unit scope for this tirón; documented for future (no prod).
 import sys
+from pathlib import Path
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from middlewares.rate_limiter import ThrottlingMiddleware, _LIMITER_TTL  # gsd-mw-hardening phase 2: import from canonical location
+from middlewares.rate_limiter import (  # gsd-mw-hardening phase 2: import from canonical location
+    _LIMITER_TTL,
+    ThrottlingMiddleware,
+)
 
 
 class MockUser:
     """Mock user object for testing."""
+
     def __init__(self, user_id: int):
         self.id = user_id
 
 
 class MockEvent:
     """Mock Telegram event (Message/CallbackQuery) with answer method."""
+
     def __init__(self):
         self.answered = False
         self.answer_text = None
@@ -60,6 +67,7 @@ class TestThrottlingMiddleware:
 
         # Mock config (real config objects; gsd-mw-hardening phase 2: updated import path)
         import middlewares.rate_limiter as rl_module
+
         original_admin_bypass = rl_module.rate_limit_config.ADMIN_BYPASS
         original_admin_ids = rl_module.bot_config.ADMIN_IDS
 
@@ -145,6 +153,7 @@ class TestThrottlingMiddleware:
 
         # Manually age the entries past TTL
         import time
+
         old_time = time.monotonic() - _LIMITER_TTL - 10
         for uid in [100, 200]:
             limiter, _ = mw._limiters[uid]
@@ -158,7 +167,6 @@ class TestThrottlingMiddleware:
 
     def test_get_limiter_updates_last_seen(self):
         """Test que _get_limiter actualiza last_seen para evitar cleanup."""
-        import time
         mw = ThrottlingMiddleware()
 
         # Create limiter
@@ -167,6 +175,7 @@ class TestThrottlingMiddleware:
 
         # Call again after a small delay
         import time as t
+
         t.sleep(0.01)
         mw._get_limiter(100)
         _, last_seen_after = mw._limiters[100]
@@ -254,7 +263,7 @@ class TestThrottlingMiddleware:
     @pytest.mark.asyncio
     async def test_admin_bypass_with_live_config_mutation(self):
         """Realistic bypass test mutating the live singleton config objects directly (not module patch)."""
-        from config.settings import rate_limit_config, bot_config
+        from config.settings import bot_config, rate_limit_config
 
         mw = ThrottlingMiddleware()
         orig_bypass = rate_limit_config.ADMIN_BYPASS

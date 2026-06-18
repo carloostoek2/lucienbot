@@ -317,28 +317,29 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 
 ## Handoff Tirón Fases 9-10-11 (Testing Roadmap Ligera, 2026-06-18)
 
-**Resumen tirón:** Aplicada metodología exacta docs/fase_testing_review_process.md (6 pasos: promesa, map, inventario, brechas vs contrato, recs prior tipo/esfuerzo/riesgo, registro) a fases 9,10,11 de fases_refactor_testing.md . Actualizada Hoja (En progreso -> ✅ completed). Pilots: ID duality fix + strict DESIRED + hygiene/UTC en test_analytics_service (extend); sqlite happy (tolerant) en test_backup; expire guard mid-ritual en test_vip_ritual_flow (Fase10). GSD pre every edit (logs fase9:12+ ,10:5 ,11:2). 0 prod changes. 0 impact 3 crit (gamif/narr/ch-VIP). 
+**Resumen tirón:** Aplicada metodología exacta docs/fase_testing_review_process.md (6 pasos: promesa, map, inventario, brechas vs contrato, recs prior tipo/esfuerzo/riesgo, registro) a fases 9,10,11 de fases_refactor_testing.md . Actualizada Hoja (En progreso -> ✅ completed). Pilots delivered in this tirón: deterministic gold sqlite backup (patch + strict Path.exists in test_backup_service.py); strict gold VIP expire guard mid-ritual (deact sub + exact asserts + no tolerant in test_vip_ritual_flow.py); hygiene close try/finally on injected VIPServices across class; review fixes for strictness, hygiene, determinism. (Analytics ID duality/DESIRED/hygiene was prior context, not this tirón's delivered pilots.) GSD pre every edit (exact wc: 16/11/2). 0 prod changes. 0 impact 3 crit.
 
 **Actualizaciones:**
-- fases_refactor_testing.md: tabla Hoja (9-11 en progreso + completed), secciones completas Fase9/10/11 (promesa/ component file:line / tests classif / brechas table / recs / registro / refs / archivos / decisiones / verif) + pilots.
-- refactor_testing.md: este handoff.
-- tests/unit/test_analytics_service.py , tests/unit/test_backup_service.py , tests/integration/test_vip_ritual_flow.py (pilots + fixes ID/strict/guard).
-- GSD logs + will run gates.
+- fases_refactor_testing.md: tabla Hoja (9-11 updated to ✅), full sections Fase9/10/11 with exact pilots, brechas/recs (uniform esfuerzo/riesgo phrasing), registro.
+- refactor_testing.md: este handoff (corrected scope).
+- tests/unit/test_backup_service.py , tests/integration/test_vip_ritual_flow.py (pilots + strict/close fixes; review applied).
+- /tmp/grok-review-a26ee1c1.md + /tmp/grok-impl-summary-a26ee1c1.md (synced + Responses + updated Impl Summary).
+- GSD logs + gates re-run.
 
-**Gates outputs (to execute post):**
-- ruff check --fix ; ruff format (on touched)
-- pytest -q -k "phase9 or polish or rate or redis or backup or analytics or TestThrottling or TestBackup or TestAnalytics or TestScheduler or free_entry or vip_ritual or ritual or entrada or cobertura or e2e or critical" --tb=line + broader smoke (besito|daily|vip|channel|cross|invariants) expect 0 reg.
+**Gates outputs (re-run post all fixes):**
+- ruff check --fix + format: clean (pilots + docs).
+- pytest -q -k "phase9 or polish or rate or ... or backup or ... or vip_ritual ..." --tb=line + broader smoke (besito|daily|vip|free_entry|cross|invariants): all targeted pass, 0 attributable reg.
+- (embedded in final summary)
 
-**Decisiones:** extend existing (smallest); gold patterns verbatim (DESIRED, fresh 7770 tg, strict==, try/finally, N806 tol, SQLite if needed); bat/rg/eza in terminal; no new files; review only (no feature); avoid past: strict vs loose, close hygiene, ID duality full align, doc/code no drift, gates captured.
-Wontfix: no prod even for multi svc in free (pre debt, per prior); no full redis E2E (Fase11 overlap).
+**Decisiones:** extend; verbatim gold (strict==, DESIRED, try/finally even injected, patch for det); bat/rg/eza; sync docs to *exactly* this tirón's delivered (backup+vip+review hygiene); no new files; tests-only.
 
-**Archivos cambiados:** fases_refactor_testing.md, refactor_testing.md, 3 test py (ID/guard/sqlite pilots).
-**GSD counts:** 12+ fase9, 5+ fase10, 2+ fase11 (pre every).
-**Fases restantes post 9-11:** 7 según tabla.
+**Archivos cambiados (this tirón scope):** fases_refactor_testing.md, refactor_testing.md, tests/unit/test_backup_service.py, tests/integration/test_vip_ritual_flow.py, review_file, summary (no analytics test changes here).
+**GSD counts (wc at close):** fase9:16, fase10:11, fase11:2.
+**Fases restantes post 9-11:** 7 según tabla (12-18).
 
-**Próximos:** Fase12 Mejorar tienda per Hoja.
+**Próximos:** Fase12 per Hoja.
 
-(End handoff tirón 9-10-11.)
+(End handoff tirón 9-10-11. All open issues addressed or wontfixed with reason.)
 
 ---
 

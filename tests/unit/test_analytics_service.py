@@ -72,7 +72,9 @@ class TestAnalyticsService:
         assert stats["new_today"] >= 1
 
     def test_export_users_csv(self, db_session, sample_user):
-        """DESIRED CONTRACT: export uses TG keys; service close hygiene even for injected."""
+        """DESIRED CONTRACT: export uses TG keys; service close hygiene even for injected.
+        NOTE (pre-existing security): uses NamedTemporaryFile(delete=False) + no unlink; PII lingers on disk. Canary comment for when fixed (tests-only; no prod this tirón).
+        """
         service = AnalyticsService(db_session)
         try:
             path = service.export_users_csv()
@@ -201,7 +203,7 @@ class TestAnalyticsService:
 
     def test_get_economy_methods_degraded_on_error(self, db_session):
         service = AnalyticsService(db_session)
-        # Force error path (best-effort) - direct assign for reliable monkey in this fixture
+        # Force error path (best-effort) - direct assign on _get_db is documented test seam for internal error injection (public API would require heavier mocking of queries; aligns with Health/Analytics read-only best-effort pattern)
         original = service._get_db
 
         def boom():

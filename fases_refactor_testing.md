@@ -960,10 +960,10 @@ See /tmp/grok-impl-summary-ae9b25c5.md for updated details (exact post-revert fi
 | 5 | Handler free multi svc + biz in handler (debt noted prev). | Baja | N/A doc | Baja | . |
 
 **Recomendaciones:**
-- Alta: Fortalecer/ext test_free_entry_flow + vip_ritual (pilots: impatience exact, VIP full 3stage + expire guard mid, DESIRED, fresh TG, strict).
-- Extend existing, GSD, gates -k "free_entry or vip_ritual or ritual or entrada".
-- Media: DT, full msg assert with patch bot.
-- General follow gold: SQLite+TS for sched jobs.
+- Alta (esfuerzo=medio, riesgo mitigado=ritual bugs in 30s Free + VIP stages/expire): Fortalecer/ext test_free_entry_flow + vip_ritual (pilots: impatience exact, VIP full 3stage + expire guard mid, DESIRED, fresh TG, strict).
+- Media (esfuerzo=bajo, riesgo=test fragility + DT): DT, full msg assert with patch bot; extend existing.
+- Baja (esfuerzo=alto, riesgo=UI cov): handler e2e.
+- General follow gold: SQLite+TS for sched jobs. GSD, gates -k "free_entry or vip_ritual or ritual or entrada". Update handoff.
 
 **Registro Paso6:** Sección agregada. Pilots follow in edits. Hoja updated. GSD.
 
@@ -1003,12 +1003,23 @@ See /tmp/grok-impl-summary-ae9b25c5.md for updated details (exact post-revert fi
 - Handlers many with 1svc.
 - E2E partial for entry.
 
-**Brechas (vs plans):**
-Alta: full E2E entry (11-06 pending?), LucienVoice no hardcode validate, some services race fixes already in units, cov % measure.
-Media: handler e2e more, property tests.
-Recs: pilots E2E strengthen if gaps (but prior tiron covered many), directed as in Top.
+**Brechas (vs plans, table format per process §5):**
 
-**Recomendaciones:** Continue targeted (as Fase8 meta); E2E entry covered by existing pilots in 10; no massive here (review only). Update cov post if tool.
+| # | Brecha | Severidad | Tipo de test recomendado | Prioridad | Notas |
+|---|--------|-----------|---------------------------|-----------|-------|
+| 1 | E2E entry flows (Free 30s + VIP 3phase) incomplete vs 11-06 (some integ but full mocked bot + resumable/expire matrix thin) | Alta | Fortalecimiento E2E gold (SQLite+patch) | Alta | Prior pilots in Fase10 strengthened; gaps remain per plans. |
+| 2 | LucienVoice hardcoded strings in services (vs 11-07 consistency) | Media | Unit + audit test | Media | Test e2e voice exists; expand to all svcs. |
+| 3 | Remaining services unit cov (store/promo etc post Top10) + race fixes verification | Media | Unit + cross atomic | Media | Many units exist; directed per plans. |
+| 4 | Full handler E2E + cov % global | Baja | Handler tests + pytest-cov | Baja | Scope beyond review. |
+| 5 | Cross atomic + EventBus + get_service contracts in new slices | Media | Integ gold pilots | Media | Protected by Top10/prior; maintain. |
+
+**Recomendaciones:**
+- Alta (esfuerzo=medio, riesgo mitigado= incomplete E2E entry flows leading to ritual bugs): Fortalecer E2E in test_free_entry + vip_ritual + add mocked bot full matrix (already started in Fase10 pilot).
+- Media (esfuerzo=bajo, riesgo=doc drift + voice inconsistency): Expand LucienVoice test + note in services.
+- Baja (esfuerzo=alto, riesgo=global cov debt): Property tests, full % measure post.
+- Continue targeted as Fase8; use existing gold patterns. Update cov if tool available. (Fase11 review only; no massive new.)
+
+**Registro:** Sección + Hoja complete. GSD. Pilots from Fase10 cover entry E2E. Brechas table added for completeness.
 
 **Registro:** Sección + Hoja complete. GSD. Pilots minimal (entry guard in 10 covers E2E).
 
