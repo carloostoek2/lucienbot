@@ -7,8 +7,17 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from models.models import BesitoTransaction, DailyGiftClaim, DailyGiftConfig, TransactionSource
+from models.database import Base
+from models.models import (
+    BesitoBalance,
+    BesitoTransaction,
+    DailyGiftClaim,
+    DailyGiftConfig,
+    TransactionSource,
+)
 from services.besito_service import BesitoService
 from services.daily_gift_service import DailyGiftService
 
@@ -265,44 +274,66 @@ class TestDailyGiftConcurrentClaim:
     Usa sample TG (contract). Build on daily atomic pilot in cross (claim+credit visibility post internal).
     """
 
-    async def test_concurrent_first_claims_at_most_one_succeeds(self, db_session, sample_user):
+    def _create_engine_and_session(self, tmp_path):
+        """SQLite file + TestSession (gold pattern: besito concurrent + daily atomicity)."""
+        db_path = tmp_path / "test_daily_concurrent.db"
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(engine)
+        TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)  # noqa: N806
+        return engine, TestSession
+
+    async def test_concurrent_first_claims_at_most_one_succeeds(self, tmp_path):
         """Two concurrent first claims: at most 1 succeeds (claim row + credit); no double besitos.
 
-        Each thread gets its own isolated session to avoid SQLAlchemy thread-safety violations
-        (shared Session is not thread-safe and causes intermittent IntegrityError).
+        Uses isolated file SQLite + separate TestSession per thread (not SessionLocal/prod DB).
         """
-        from models.database import SessionLocal
+        engine, TestSession = self._create_engine_and_session(tmp_path)  # noqa: N806
+        tg = 77709010
 
-        tg = sample_user.telegram_id
-
-        # Pre-create config on the fixture session so both threads see it.
-        cfg = DailyGiftConfig(besito_amount=10, is_active=True)
-        db_session.add(cfg)
-        db_session.commit()
+        setup = TestSession()
+        try:
+            setup.add_all(
+                [
+                    DailyGiftConfig(besito_amount=10, is_active=True),
+                    BesitoBalance(user_id=tg, balance=0, total_earned=0, total_spent=0),
+                ]
+            )
+            setup.commit()
+        finally:
+            setup.close()
 
         def _claim_with_own_session():
-            sess = SessionLocal()
+            sess = TestSession()
             try:
-                svc = DailyGiftService(sess)
-                return svc.claim_gift(tg)
+                with patch("services.event_bus.schedule_emit"):
+                    return DailyGiftService(sess).claim_gift(tg)
             finally:
                 sess.close()
 
-        results = await asyncio.gather(
-            asyncio.to_thread(_claim_with_own_session),
-            asyncio.to_thread(_claim_with_own_session),
-            return_exceptions=True,
-        )
+        try:
+            results = await asyncio.gather(
+                asyncio.to_thread(_claim_with_own_session),
+                asyncio.to_thread(_claim_with_own_session),
+                return_exceptions=True,
+            )
 
-        successes = [r for r in results if isinstance(r, tuple) and r[0] is True]
-        assert len(successes) <= 1
+            successes = [r for r in results if isinstance(r, tuple) and r[0] is True]
+            assert len(successes) <= 1
 
-        db_session.expire_all()
-        claim_count = db_session.query(DailyGiftClaim).filter(DailyGiftClaim.user_id == tg).count()
-        assert claim_count <= 1
-
-        bal = BesitoService(db_session).get_balance(tg)
-        assert bal <= 10  # never double in race
+            verify = TestSession()
+            try:
+                claim_count = (
+                    verify.query(DailyGiftClaim).filter(DailyGiftClaim.user_id == tg).count()
+                )
+                assert claim_count <= 1
+                assert BesitoService(verify).get_balance(tg) <= 10
+            finally:
+                verify.close()
+        finally:
+            engine.dispose()
 
     def test_property_kept_for_guard_and_compat(self, db_session, sample_user):
         """Post Item 6: @property besito_service kept (for test guards/compat + hasattr precedent) even though claim_gift uses local inside."""

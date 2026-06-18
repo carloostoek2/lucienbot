@@ -5,6 +5,7 @@ Gestiona el sistema de regalo diario de besitos.
 """
 
 import logging
+import threading
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import desc
@@ -15,6 +16,19 @@ from models.models import DailyGiftClaim, DailyGiftConfig, TransactionSource
 from services.besito_service import BesitoService
 
 logger = logging.getLogger(__name__)
+
+_daily_claim_locks_guard = threading.Lock()
+_daily_claim_locks: dict[int, threading.Lock] = {}
+
+
+def _get_daily_claim_process_lock(user_id: int) -> threading.Lock:
+    """Lock in-process por user_id (SQLite no soporta FOR UPDATE real entre hilos)."""
+    with _daily_claim_locks_guard:
+        lock = _daily_claim_locks.get(user_id)
+        if lock is None:
+            lock = threading.Lock()
+            _daily_claim_locks[user_id] = lock
+        return lock
 
 
 class DailyGiftService:
@@ -146,32 +160,30 @@ class DailyGiftService:
         message = f"Debes esperar {hours}h {minutes}m para tu próximo regalo."
         return False, time_remaining, message
 
-    def claim_gift(self, user_id: int) -> tuple:
-        """
-        Procesa el reclamo del regalo diario.
+    def _acquire_db_claim_lock(self, user_id: int) -> BesitoService:
+        """Postgres: FOR UPDATE en saldo. SQLite: lock in-process (ver claim_gift)."""
+        db = self._get_db()
+        besito_service = BesitoService(db=db)
+        if db.get_bind().dialect.name == "postgresql":
+            besito_service.get_or_create_balance(user_id, lock=True)
+        return besito_service
 
-        Returns:
-            tuple: (éxito: bool, cantidad: int o None, mensaje: str)
-        """
-        # Verificar si puede reclamar
+    def _process_claim_gift(self, user_id: int) -> tuple:
+        """Lógica de reclamo tras adquirir lock de concurrencia."""
+        db = self._get_db()
+        besito_service = self._acquire_db_claim_lock(user_id)
+
         can_claim, time_remaining, message = self.can_claim(user_id)
-
         if not can_claim:
             return False, None, message
 
         config = self.get_config()
         amount = config.besito_amount
-        db = self._get_db()
-        besito_service = BesitoService(
-            db=self._get_db()
-        )  # local on-demand inside credit method only (Item 6); property kept for test guards/compat (hasattr daily precedent)
 
         try:
-            # Registrar el reclamo
             claim = DailyGiftClaim(user_id=user_id, besitos_received=amount)
             db.add(claim)
 
-            # Acreditar besitos
             success = besito_service.credit_besitos(
                 user_id=user_id,
                 amount=amount,
@@ -184,10 +196,7 @@ class DailyGiftService:
                 return False, None, "Hubo un error al procesar tu regalo. Intenta de nuevo."
 
             db.commit()
-
-            # Obtener saldo actual
             balance = besito_service.get_balance(user_id)
-
             logger.info(f"Regalo diario reclamado: user={user_id}, amount={amount}")
             return (
                 True,
@@ -199,6 +208,19 @@ class DailyGiftService:
             db.rollback()
             logger.error(f"Error reclamando regalo: {e}")
             return False, None, "Hubo un error al procesar tu regalo. Intenta de nuevo más tarde."
+
+    def claim_gift(self, user_id: int) -> tuple:
+        """
+        Procesa el reclamo del regalo diario.
+
+        Returns:
+            tuple: (éxito: bool, cantidad: int o None, mensaje: str)
+        """
+        db = self._get_db()
+        if db.get_bind().dialect.name == "sqlite":
+            with _get_daily_claim_process_lock(user_id):
+                return self._process_claim_gift(user_id)
+        return self._process_claim_gift(user_id)
 
     async def claim_gift_with_missions(self, user_id: int, bot=None) -> tuple:
         """
