@@ -188,6 +188,8 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 - Matriz completa ritual + scheduler (múltiples canales VIP, renovación mid-ritual).
 - Mantener estándar: file SQLite + TestSession + patch SessionLocal/_get_bot.
 
+**Nota Fase 5 Misiones (actualización desde fases_refactor_testing.md):** Revisión sistemática por fases iniciada (Paso 1-2 map completos + Hoja actualizada + sección detallada append). Promesa MISS-01-04 + ADMIN-03. Componentes principales + brechas (dup ref, recurring cooldown, partial deliver/catch-up, gold side-effects, ID fixtures) + recs pilots Alta (extend cross/invariants + unit increment + ID fix + isolated gold) registrados. Pilots follow-up Alta #1-5 + ID + full gold for isolated side in named test delivered (184/706 gates, 0 reg). GSD pre used. Smoke pytest -k mission: 164+ passing (pre-exist warns only). Ver fases_refactor_testing.md##Fase 5 + Pilots Follow-up subsection + process.md. (Nota updated post-pilots for traceability.)
+
 ---
 
 ## 7. Notas y Decisiones Importantes

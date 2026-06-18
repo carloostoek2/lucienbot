@@ -553,13 +553,14 @@ class TestMissionInvariants:
         db_session.refresh(mission)
 
         # First call with reference_id=42: progress +1
+        # DESIRED CONTRACT: user_id param and stored value is TG BigInt (.telegram_id)
         svc.increment_progress(
-            sample_user.id, MissionType.REACTION_COUNT, amount=1, reference_id=42
+            sample_user.telegram_id, MissionType.REACTION_COUNT, amount=1, reference_id=42
         )
         progress = (
             db_session.query(UserMissionProgress)
             .filter(
-                UserMissionProgress.user_id == sample_user.id,
+                UserMissionProgress.user_id == sample_user.telegram_id,
                 UserMissionProgress.mission_id == mission.id,
             )
             .first()
@@ -570,7 +571,7 @@ class TestMissionInvariants:
 
         # Second call with SAME reference_id=42: must be skipped (no double-count)
         svc.increment_progress(
-            sample_user.id, MissionType.REACTION_COUNT, amount=1, reference_id=42
+            sample_user.telegram_id, MissionType.REACTION_COUNT, amount=1, reference_id=42
         )
         db_session.refresh(progress)
         assert progress.current_value == 1  # unchanged
@@ -578,7 +579,7 @@ class TestMissionInvariants:
 
         # Call with DIFFERENT reference_id=43: must increment
         svc.increment_progress(
-            sample_user.id, MissionType.REACTION_COUNT, amount=1, reference_id=43
+            sample_user.telegram_id, MissionType.REACTION_COUNT, amount=1, reference_id=43
         )
         db_session.refresh(progress)
         assert progress.current_value == 2

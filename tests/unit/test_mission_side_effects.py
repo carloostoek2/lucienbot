@@ -1,8 +1,10 @@
 """Tests para side-effects de misiones y helpers de racha diaria."""
+
 import html
-import pytest
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from models.models import MissionFrequency, MissionType, UserRewardHistory
 from services.besito_service import BesitoService
@@ -276,6 +278,7 @@ class TestMissionSideEffects:
             reward_id=sample_reward_besitos.id,
         )
         from datetime import UTC, datetime
+
         from models.models import DailyGiftClaim
 
         db_session.add(
@@ -323,9 +326,7 @@ class TestMissionSideEffects:
             reference_id=77001,
         )
         celebration = [
-            c
-            for c in mock_bot.send_message.await_args_list
-            if c.kwargs.get("parse_mode") == "HTML"
+            c for c in mock_bot.send_message.await_args_list if c.kwargs.get("parse_mode") == "HTML"
         ]
         assert celebration
         text = celebration[-1].kwargs.get("text", "")
@@ -366,7 +367,57 @@ class TestMissionSideEffects:
         celebration_calls = [
             c
             for c in mock_bot.send_message.await_args_list
-            if c.kwargs.get("parse_mode") == "HTML"
-            and "VIP Mission" in c.kwargs.get("text", "")
+            if c.kwargs.get("parse_mode") == "HTML" and "VIP Mission" in c.kwargs.get("text", "")
         ]
         assert len(celebration_calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_dup_ref_guard_prevents_re_deliver_on_and_deliver_path(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """DESIRED CONTRACT: ref guard on increment_progress_and_deliver prevents re-complete + re-deliver for same ref (no double reward). Enforce *intended contract* not just current impl. Explicit deterministic Mission+Reward+user TG."""
+        mission_service = MissionService(db_session)
+        mission = mission_service.create_mission(
+            name="Dup Ref No Redeliver",
+            description="guard + deliver",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        ref = 888002
+        # first
+        await mission_service.increment_progress_and_deliver(
+            sample_user.telegram_id,
+            MissionType.REACTION_COUNT,
+            amount=1,
+            bot=mock_bot,
+            reference_id=ref,
+        )
+        bal1 = BesitoService(db=db_session).get_balance(sample_user.telegram_id)
+        hist1 = (
+            db_session.query(UserRewardHistory)
+            .filter(UserRewardHistory.mission_id == mission.id)
+            .count()
+        )
+        assert bal1 == sample_reward_besitos.besito_amount
+        assert hist1 == 1
+        # dup ref
+        await mission_service.increment_progress_and_deliver(
+            sample_user.telegram_id,
+            MissionType.REACTION_COUNT,
+            amount=1,
+            bot=mock_bot,
+            reference_id=ref,
+        )
+        bal2 = BesitoService(db=db_session).get_balance(sample_user.telegram_id)
+        hist2 = (
+            db_session.query(UserRewardHistory)
+            .filter(UserRewardHistory.mission_id == mission.id)
+            .count()
+        )
+        assert bal2 == bal1  # no double
+        assert hist2 == 1  # no re history
+        p = mission_service.get_user_progress(sample_user.telegram_id, mission.id)
+        assert p.is_completed is True
+        assert p.last_reference_id == ref

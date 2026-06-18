@@ -1,14 +1,16 @@
 """
 Tests unitarios para MissionService.
 """
-import pytest
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
-from services.mission_service import MissionService
-from services.reward_service import RewardService
-from models.models import MissionType, MissionFrequency, UserMissionProgress, UserRewardHistory
+import pytest
+
+from models.models import MissionFrequency, MissionType, UserRewardHistory
 from services.besito_service import BesitoService
+from services.mission_service import MissionService, _recurring_cooldown_blocks
+from services.reward_service import RewardService
 
 
 @pytest.mark.unit
@@ -24,7 +26,7 @@ class TestMissionService:
             description="A test mission description",
             mission_type=MissionType.REACTION_COUNT,
             target_value=10,
-            frequency=MissionFrequency.ONE_TIME
+            frequency=MissionFrequency.ONE_TIME,
         )
 
         assert mission.name == "Test Mission"
@@ -85,9 +87,7 @@ class TestMissionService:
         service = MissionService(db_session)
 
         result = service.update_mission(
-            sample_mission.id,
-            name="Updated Mission Name",
-            target_value=20
+            sample_mission.id, name="Updated Mission Name", target_value=20
         )
 
         assert result is True
@@ -114,10 +114,10 @@ class TestMissionProgress:
         """Test crear progreso para nuevo usuario"""
         service = MissionService(db_session)
 
-        progress = service.get_or_create_progress(sample_user.id, sample_mission.id)
+        progress = service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
 
         assert progress is not None
-        assert progress.user_id == sample_user.id
+        assert progress.user_id == sample_user.telegram_id
         assert progress.mission_id == sample_mission.id
         assert progress.current_value == 0
         assert progress.target_value == sample_mission.target_value
@@ -128,8 +128,7 @@ class TestMissionProgress:
         service = MissionService(db_session)
 
         progress = service.get_or_create_progress(
-            sample_mission_progress.user_id,
-            sample_mission_progress.mission_id
+            sample_mission_progress.user_id, sample_mission_progress.mission_id
         )
 
         assert progress is not None
@@ -141,8 +140,7 @@ class TestMissionProgress:
         service = MissionService(db_session)
 
         progress = service.get_user_progress(
-            sample_mission_progress.user_id,
-            sample_mission_progress.mission_id
+            sample_mission_progress.user_id, sample_mission_progress.mission_id
         )
 
         assert progress is not None
@@ -153,9 +151,9 @@ class TestMissionProgress:
         service = MissionService(db_session)
 
         # Crear progreso para el usuario
-        service.get_or_create_progress(sample_user.id, sample_mission.id)
+        service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
 
-        progress_list = service.get_user_all_progress(sample_user.id)
+        progress_list = service.get_user_all_progress(sample_user.telegram_id)
 
         assert len(progress_list) >= 1
 
@@ -165,16 +163,16 @@ class TestMissionProgress:
         service = MissionService(db_session)
 
         # Crear progreso
-        service.get_or_create_progress(sample_user.id, sample_mission.id)
+        service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
 
-        active_missions = await service.get_user_active_missions(sample_user.id)
+        active_missions = await service.get_user_active_missions(sample_user.telegram_id)
 
         assert len(active_missions) >= 1
         # Verificar estructura del resultado
         for item in active_missions:
-            assert 'mission' in item
-            assert 'progress' in item
-            assert 'percentage' in item
+            assert "mission" in item
+            assert "progress" in item
+            assert "percentage" in item
 
 
 @pytest.mark.unit
@@ -186,18 +184,16 @@ class TestMissionIncrement:
         service = MissionService(db_session)
 
         # Crear progreso inicial
-        progress = service.get_or_create_progress(sample_user.id, sample_mission.id)
+        progress = service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
         initial_value = progress.current_value
 
         # Incrementar progreso
         completed = service.increment_progress(
-            sample_user.id,
-            MissionType.REACTION_COUNT,
-            amount=1
+            sample_user.telegram_id, MissionType.REACTION_COUNT, amount=1
         )
 
         # Verificar que se incrementó
-        updated = service.get_user_progress(sample_user.id, sample_mission.id)
+        updated = service.get_user_progress(sample_user.telegram_id, sample_mission.id)
         assert updated.current_value == initial_value + 1
         assert len(completed) == 0  # No debería completarse con solo 1
 
@@ -211,14 +207,14 @@ class TestMissionIncrement:
             description="Complete with 2 actions",
             mission_type=MissionType.REACTION_COUNT,
             target_value=2,
-            frequency=MissionFrequency.ONE_TIME
+            frequency=MissionFrequency.ONE_TIME,
         )
 
         # Incrementar hasta completar
-        service.increment_progress(sample_user.id, MissionType.REACTION_COUNT, amount=2)
+        service.increment_progress(sample_user.telegram_id, MissionType.REACTION_COUNT, amount=2)
 
         # Verificar que se completó
-        progress = service.get_user_progress(sample_user.id, mission.id)
+        progress = service.get_user_progress(sample_user.telegram_id, mission.id)
         assert progress.is_completed is True
         assert progress.completed_at is not None
 
@@ -247,9 +243,7 @@ class TestMissionIncrement:
         db_session.commit()
 
         mock_bot = AsyncMock()
-        with patch.object(
-            RewardService, "deliver_reward", new_callable=AsyncMock
-        ) as mock_deliver:
+        with patch.object(RewardService, "deliver_reward", new_callable=AsyncMock) as mock_deliver:
             await service.increment_progress_and_deliver(
                 sample_user.telegram_id,
                 MissionType.REACTION_COUNT,
@@ -273,33 +267,150 @@ class TestMissionIncrement:
             description="Recurring test",
             mission_type=MissionType.DAILY_GIFT_TOTAL,
             target_value=1,
-            frequency=MissionFrequency.RECURRING
+            frequency=MissionFrequency.RECURRING,
         )
 
         # Completar una vez
-        service.increment_progress(sample_user.id, MissionType.DAILY_GIFT_TOTAL, amount=1)
+        service.increment_progress(sample_user.telegram_id, MissionType.DAILY_GIFT_TOTAL, amount=1)
 
         # Verificar completada
-        progress = service.get_user_progress(sample_user.id, mission.id)
+        progress = service.get_user_progress(sample_user.telegram_id, mission.id)
         assert progress.is_completed is True
 
         # Incrementar de nuevo (debería reiniciarse)
-        service.increment_progress(sample_user.id, MissionType.DAILY_GIFT_TOTAL, amount=1)
+        service.increment_progress(sample_user.telegram_id, MissionType.DAILY_GIFT_TOTAL, amount=1)
 
         # Verificar reinicio
-        progress = service.get_user_progress(sample_user.id, mission.id)
+        progress = service.get_user_progress(sample_user.telegram_id, mission.id)
         # Después del reinicio y nuevo incremento, debería estar completada de nuevo
         assert progress.is_completed is True
+
+    @pytest.mark.asyncio
+    async def test_increment_dup_ref_skips_on_both_paths_and_no_recomplete(
+        self, db_session, sample_user, sample_reward_besitos
+    ):
+        """DESIRED CONTRACT: last_reference_id guard prevents re-increment and re-deliver for same ref on sync increment_progress AND async increment_progress_and_deliver paths.
+        Covers different mission types; no re-complete for ONE_TIME; no re-deliver. Enforce *intended contract* not just current. Deterministic explicit create, use .telegram_id."""
+        service = MissionService(db_session)
+        # REACTION one_time
+        m1 = service.create_mission(
+            name="Dup Ref Reaction",
+            description="ref guard",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        # DAILY one_time
+        m2 = service.create_mission(
+            name="Dup Ref Daily",
+            description="ref guard daily",
+            mission_type=MissionType.DAILY_GIFT_TOTAL,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=sample_reward_besitos.id,
+        )
+        ref = 777001
+        # sync path first call
+        completed1 = service.increment_progress(
+            sample_user.telegram_id, MissionType.REACTION_COUNT, amount=1, reference_id=ref
+        )
+        assert len(completed1) == 1
+        p1 = service.get_user_progress(sample_user.telegram_id, m1.id)
+        assert p1.is_completed is True
+        assert p1.last_reference_id == ref
+        # sync dup -> skip
+        completed_dup = service.increment_progress(
+            sample_user.telegram_id, MissionType.REACTION_COUNT, amount=1, reference_id=ref
+        )
+        assert len(completed_dup) == 0
+        p1b = service.get_user_progress(sample_user.telegram_id, m1.id)
+        assert p1b.current_value == 1
+        assert p1b.is_completed is True
+
+        # async path different type
+        mock_bot = AsyncMock()
+        completed_a = await service.increment_progress_and_deliver(
+            sample_user.telegram_id,
+            MissionType.DAILY_GIFT_TOTAL,
+            amount=1,
+            bot=mock_bot,
+            reference_id=ref,
+        )
+        assert len(completed_a) == 1
+        p2 = service.get_user_progress(sample_user.telegram_id, m2.id)
+        assert p2.last_reference_id == ref
+        # async dup
+        completed_a_dup = await service.increment_progress_and_deliver(
+            sample_user.telegram_id,
+            MissionType.DAILY_GIFT_TOTAL,
+            amount=1,
+            bot=mock_bot,
+            reference_id=ref,
+        )
+        assert len(completed_a_dup) == 0
+        # no re-deliver would be checked in side but here guard before
+
+    @pytest.mark.asyncio
+    async def test_recurring_cooldown_blocks_before_hours_allows_after_and_resets_only_on_recomplete(
+        self, db_session, sample_user, sample_reward_besitos
+    ):
+        """DESIRED CONTRACT: for RECURRING: cooldown_blocks before cooldown_hours (no reset/deliver); allows after elapsed; reset only on re-complete of recurring (not ONE_TIME). Use explicit Mission+Progress setup, aware DT, .telegram_id. Enforce intended contract."""
+
+        service = MissionService(db_session)
+        mission = service.create_mission(
+            name="Cooldown Pilot",
+            description="test reset/cooldown",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.RECURRING,
+            reward_id=sample_reward_besitos.id,
+        )
+        mission.cooldown_hours = 2
+        db_session.commit()
+        # simulate completed recently
+        progress = service.get_or_create_progress(sample_user.telegram_id, mission.id)
+        progress.is_completed = True
+        progress.current_value = 1
+        progress.completed_at = datetime.now(UTC) - timedelta(hours=1)
+        progress.last_updated = progress.completed_at
+        db_session.commit()
+
+        # Use pure for exact block check (strict, per sig mission, previous_completed_at, progress)
+        assert _recurring_cooldown_blocks(mission, progress.completed_at, progress) is True
+        mock_bot = AsyncMock()
+        res = await service.increment_progress_and_deliver(
+            sample_user.telegram_id,
+            MissionType.REACTION_COUNT,
+            amount=1,
+            bot=mock_bot,
+            reference_id=7001,
+        )
+        assert len(res) == 1  # exact: progress returned; deliver blocked (verified by helper)
+        # fast forward
+        progress.completed_at = datetime.now(UTC) - timedelta(hours=3)
+        db_session.commit()
+        assert _recurring_cooldown_blocks(mission, progress.completed_at, progress) is False
+        res2 = await service.increment_progress_and_deliver(
+            sample_user.telegram_id,
+            MissionType.REACTION_COUNT,
+            amount=1,
+            bot=mock_bot,
+            reference_id=7002,
+        )
+        p2 = service.get_user_progress(sample_user.telegram_id, mission.id)
+        assert p2.is_completed is True
+        assert len(res2) == 1  # exact: allows after + reset only on recurring re-complete
 
     def test_set_progress(self, db_session, sample_user, sample_mission):
         """Test establecer progreso a valor específico"""
         service = MissionService(db_session)
 
         # Crear progreso
-        service.get_or_create_progress(sample_user.id, sample_mission.id)
+        service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
 
         # Establecer progreso
-        progress = service.set_progress(sample_user.id, sample_mission.id, 8)
+        progress = service.set_progress(sample_user.telegram_id, sample_mission.id, 8)
 
         assert progress is not None
         assert progress.current_value == 8
@@ -310,10 +421,10 @@ class TestMissionIncrement:
         service = MissionService(db_session)
 
         # Crear progreso
-        service.get_or_create_progress(sample_user.id, sample_mission.id)
+        service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
 
         # Establecer progreso que completa la misión
-        progress = service.set_progress(sample_user.id, sample_mission.id, 15)
+        progress = service.set_progress(sample_user.telegram_id, sample_mission.id, 15)
 
         assert progress.current_value == 15
         assert progress.is_completed is True
@@ -327,10 +438,10 @@ class TestMissionIncrement:
         sample_mission.frequency = MissionFrequency.RECURRING
         db_session.commit()
 
-        first = service.set_progress(sample_user.id, sample_mission.id, 15)
+        first = service.set_progress(sample_user.telegram_id, sample_mission.id, 15)
         original_completed_at = first.completed_at
 
-        second = service.set_progress(sample_user.id, sample_mission.id, 15)
+        second = service.set_progress(sample_user.telegram_id, sample_mission.id, 15)
         assert second.completed_at == original_completed_at
 
     @pytest.mark.asyncio
@@ -354,9 +465,7 @@ class TestMissionIncrement:
         progress.completed_at = datetime.now(UTC) - timedelta(hours=1)
         db_session.commit()
 
-        delivered = await service.deliver_pending_rewards(
-            sample_user.telegram_id, bot=mock_bot
-        )
+        delivered = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
         assert delivered == 1
 
     @pytest.mark.asyncio
@@ -388,9 +497,7 @@ class TestMissionIncrement:
         service.set_progress(sample_user.telegram_id, inactive_mission.id, 1)
         service.set_progress(sample_user.telegram_id, inactive_reward_mission.id, 1)
 
-        delivered = await service.deliver_pending_rewards(
-            sample_user.telegram_id, bot=mock_bot
-        )
+        delivered = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
         assert delivered == 0
 
     @pytest.mark.asyncio
@@ -421,18 +528,12 @@ class TestMissionIncrement:
         claim = reward_service._get_mission_delivery_claim(
             sample_user.telegram_id, mission.id, sample_reward_besitos.id
         )
-        claim.delivered_at = datetime.now(UTC) - timedelta(
-            seconds=_DELIVERY_CLAIM_TTL_SECONDS + 5
-        )
+        claim.delivered_at = datetime.now(UTC) - timedelta(seconds=_DELIVERY_CLAIM_TTL_SECONDS + 5)
         db_session.commit()
 
-        delivered = await service.deliver_pending_rewards(
-            sample_user.telegram_id, bot=mock_bot
-        )
+        delivered = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
         assert delivered == 1
-        assert service.is_mission_reward_delivered(
-            sample_user.telegram_id, mission.id
-        )
+        assert service.is_mission_reward_delivered(sample_user.telegram_id, mission.id)
 
     def test_get_users_with_pending_reward_deliveries(
         self, db_session, sample_user, sample_reward_besitos
@@ -528,16 +629,16 @@ class TestMissionStats:
         service = MissionService(db_session)
 
         # Crear progreso para el usuario
-        service.get_or_create_progress(sample_user.id, sample_mission.id)
+        service.get_or_create_progress(sample_user.telegram_id, sample_mission.id)
 
         stats = service.get_mission_stats(sample_mission.id)
 
         assert stats is not None
-        assert stats['mission_name'] == sample_mission.name
-        assert stats['total_users'] >= 1
-        assert 'completed' in stats
-        assert 'in_progress' in stats
-        assert 'completion_rate' in stats
+        assert stats["mission_name"] == sample_mission.name
+        assert stats["total_users"] >= 1
+        assert "completed" in stats
+        assert "in_progress" in stats
+        assert "completion_rate" in stats
 
     def test_get_mission_stats_not_found(self, db_session):
         """Test estadísticas de misión inexistente"""

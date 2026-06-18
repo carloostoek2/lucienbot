@@ -6,26 +6,29 @@ Este test verifica el flujo completo:
 2. Se dispara la misión de tipo REACTION_COUNT
 3. Al completar la misión, se otorgan los besitos de recompensa
 """
-import pytest
-import sys
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, AsyncMock
 
-from services.mission_service import MissionService
-from services.besito_service import BesitoService
-from services.reward_service import RewardService
+
+import pytest
+
 from models.models import (
-    Mission, MissionType, MissionFrequency,
-    UserMissionProgress, User, BesitoBalance, Reward, RewardType,
-    TransactionSource
+    BesitoBalance,
+    Mission,
+    MissionFrequency,
+    MissionType,
+    Reward,
+    RewardType,
+    TransactionSource,
 )
+from services.besito_service import BesitoService
+from services.mission_service import MissionService
+from services.reward_service import RewardService
 
 
 def log_step(message: str):
     """Print estructurado para ver el flujo en pytest"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {message}")
-    print('='*60)
+    print("=" * 60)
 
 
 def log_detail(message: str):
@@ -50,7 +53,7 @@ class TestMissionE2E:
         log_step("INICIANDO SETUP - Preparando datos de prueba")
         mission_service = MissionService(db_session)
         besito_service = BesitoService(db_session)
-        reward_service = RewardService(db_session)
+        _ = RewardService(db_session)  # imported for potential future; keep to avoid scope drift
 
         # Crear recompensa de besitos para la misión
         reward = Reward(
@@ -58,13 +61,15 @@ class TestMissionE2E:
             description="20 besitos por completar misión de reacciones",
             reward_type=RewardType.BESITOS,
             besito_amount=20,
-            is_active=True
+            is_active=True,
         )
         db_session.add(reward)
         db_session.commit()
         db_session.refresh(reward)
 
-        log_detail(f"Recompensa creada: ID={reward.id}, tipo={reward.reward_type.name}, cantidad={reward.besito_amount} besitos")
+        log_detail(
+            f"Recompensa creada: ID={reward.id}, tipo={reward.reward_type.name}, cantidad={reward.besito_amount} besitos"
+        )
 
         # Crear misión con tipo REACTION_COUNT
         mission = Mission(
@@ -74,7 +79,7 @@ class TestMissionE2E:
             target_value=5,
             frequency=MissionFrequency.ONE_TIME,
             reward_id=reward.id,
-            is_active=True
+            is_active=True,
         )
         db_session.add(mission)
         db_session.commit()
@@ -88,11 +93,9 @@ class TestMissionE2E:
         log_detail(f"  - Recompensa: {reward.besito_amount} besitos")
 
         # Asegurar que el usuario tiene balance de besitos inicial
+        # DESIRED: use telegram_id (TG BigInt) for user_id per contract
         balance = BesitoBalance(
-            user_id=sample_user.id,
-            balance=0,
-            total_earned=0,
-            total_spent=0
+            user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
         )
         db_session.add(balance)
         db_session.commit()
@@ -113,20 +116,22 @@ class TestMissionE2E:
             log_step(f"REACCIÓN #{reaction_num} - Usuario reacciona a un mensaje")
 
             completed_missions = mission_service.increment_progress(
-                user_id=sample_user.id,
-                mission_type=MissionType.REACTION_COUNT,
-                amount=1
+                user_id=sample_user.telegram_id, mission_type=MissionType.REACTION_COUNT, amount=1
             )
 
             log_detail(f"MissionType disparado: {MissionType.REACTION_COUNT.name}")
-            log_detail(f"Cantidad incrementada: +1")
+            log_detail("Cantidad incrementada: +1")
 
             # Ver estado actual del progreso
             all_missions = mission_service.get_missions_by_type(MissionType.REACTION_COUNT)
             for m in all_missions:
-                progress = mission_service.get_user_progress(sample_user.id, m.id)
+                progress = mission_service.get_user_progress(sample_user.telegram_id, m.id)
                 if progress:
-                    status = "✓ COMPLETADA" if progress.is_completed else f"en progreso ({progress.current_value}/{m.target_value})"
+                    status = (
+                        "✓ COMPLETADA"
+                        if progress.is_completed
+                        else f"en progreso ({progress.current_value}/{m.target_value})"
+                    )
                     log_detail(f"Misión '{m.name}': {status}")
 
             if completed_missions:
@@ -142,32 +147,34 @@ class TestMissionE2E:
                         if reward_obj.reward_type == RewardType.BESITOS:
                             # Credit los besitos
                             besito_service.credit_besitos(
-                                user_id=sample_user.id,
+                                user_id=sample_user.telegram_id,
                                 amount=reward_obj.besito_amount,
                                 source=TransactionSource.MISSION,
-                                reference_id=cm.mission.id
+                                reference_id=cm.mission.id,
                             )
                             log_detail(f"Besitos otorgados: +{reward_obj.besito_amount}")
 
                             # Verificar balance actualizado
-                            new_balance = besito_service.get_balance(sample_user.id)
+                            new_balance = besito_service.get_balance(sample_user.telegram_id)
                             log_detail(f"Balance actual: {new_balance} besitos")
 
         # === ASSERT: Verificar progreso final ===
         log_step("VERIFICANDO RESULTADOS FINALES")
 
-        progress = mission_service.get_user_progress(sample_user.id, mission.id)
+        progress = mission_service.get_user_progress(sample_user.telegram_id, mission.id)
         assert progress is not None, "El progreso debería existir"
         assert progress.current_value == 5, f"Progreso debería ser 5, got {progress.current_value}"
         assert progress.is_completed is True, "La misión debería estar completada"
-        assert progress.completed_at is not None, "La fecha de completación debería estar registrada"
+        assert progress.completed_at is not None, (
+            "La fecha de completación debería estar registrada"
+        )
 
         log_detail(f"✓ Progreso verificado: {progress.current_value}/5")
         log_detail(f"✓ Completada: {progress.is_completed}")
         log_detail(f"✓ Fecha de completación: {progress.completed_at}")
 
         # === ASSERT: Verificar besitos ===
-        user_balance = besito_service.get_balance(sample_user.id)
+        user_balance = besito_service.get_balance(sample_user.telegram_id)
 
         log_step("RESUMEN FINAL")
         print(f"  ✓ Misión completada: {mission.name}")
@@ -186,7 +193,7 @@ class TestMissionE2E:
             description="10 besitos",
             reward_type=RewardType.BESITOS,
             besito_amount=10,
-            is_active=True
+            is_active=True,
         )
         db_session.add(reward)
         db_session.commit()
@@ -199,7 +206,7 @@ class TestMissionE2E:
             target_value=3,
             frequency=MissionFrequency.ONE_TIME,
             reward_id=reward.id,
-            is_active=True
+            is_active=True,
         )
         db_session.add(mission)
         db_session.commit()
@@ -208,7 +215,9 @@ class TestMissionE2E:
         log_detail(f"Misión: {mission.name}, target: {mission.target_value}")
 
         # Balance inicial
-        balance = BesitoBalance(user_id=sample_user.id, balance=0, total_earned=0, total_spent=0)
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
+        )
         db_session.add(balance)
         db_session.commit()
 
@@ -219,22 +228,20 @@ class TestMissionE2E:
             log_detail(f"Reacción #{reaction_num}")
 
             mission_service.increment_progress(
-                user_id=sample_user.id,
-                mission_type=MissionType.REACTION_COUNT,
-                amount=1
+                user_id=sample_user.telegram_id, mission_type=MissionType.REACTION_COUNT, amount=1
             )
 
-            progress = mission_service.get_user_progress(sample_user.id, mission.id)
+            progress = mission_service.get_user_progress(sample_user.telegram_id, mission.id)
             log_detail(f"Progreso actual: {progress.current_value}/{mission.target_value}")
 
         # Verificar que NO está completada
-        progress = mission_service.get_user_progress(sample_user.id, mission.id)
+        progress = mission_service.get_user_progress(sample_user.telegram_id, mission.id)
         assert progress.current_value == 2
         assert progress.is_completed is False
         assert progress.completed_at is None
 
         # Verificar que NO se otorgaron besitos
-        user_balance = besito_service.get_balance(sample_user.id)
+        user_balance = besito_service.get_balance(sample_user.telegram_id)
         assert user_balance == 0, "No debe dar besitos si no se completa"
 
         log_step("RESULTADO: Progreso parcial NO completa misión")
@@ -253,7 +260,7 @@ class TestMissionE2E:
             mission_type=MissionType.REACTION_COUNT,
             target_value=1,
             frequency=MissionFrequency.RECURRING,
-            is_active=True
+            is_active=True,
         )
         db_session.add(mission)
         db_session.commit()
@@ -265,13 +272,11 @@ class TestMissionE2E:
         # Completar la misión
         log_step("Primera reacción - Completando misión")
         mission_service.increment_progress(
-            user_id=sample_user.id,
-            mission_type=MissionType.REACTION_COUNT,
-            amount=1
+            user_id=sample_user.telegram_id, mission_type=MissionType.REACTION_COUNT, amount=1
         )
 
         # Verificar completada
-        progress1 = mission_service.get_user_progress(sample_user.id, mission.id)
+        progress1 = mission_service.get_user_progress(sample_user.telegram_id, mission.id)
         log_detail(f"Primera completada: {progress1.is_completed}")
         log_detail(f"Progreso: {progress1.current_value}/{mission.target_value}")
         assert progress1.is_completed is True
@@ -280,16 +285,16 @@ class TestMissionE2E:
         # para misiones recurrentes
         # Verificar el comportamiento de reinicio
         log_step("Segunda reacción - Verificando reinicio automático")
-        completed = mission_service.increment_progress(
-            user_id=sample_user.id,
-            mission_type=MissionType.REACTION_COUNT,
-            amount=1
+        mission_service.increment_progress(
+            user_id=sample_user.telegram_id, mission_type=MissionType.REACTION_COUNT, amount=1
         )
 
         # Obtener progreso actualizado
-        progress2 = mission_service.get_user_progress(sample_user.id, mission.id)
+        progress2 = mission_service.get_user_progress(sample_user.telegram_id, mission.id)
         log_detail(f"Progreso después de segunda reacción: {progress2.current_value}")
-        log_detail(f"¿Se reinició?: {'SÍ' if progress2.current_value == 1 and progress2.is_completed else 'NO'}")
+        log_detail(
+            f"¿Se reinició?: {'SÍ' if progress2.current_value == 1 and progress2.is_completed else 'NO'}"
+        )
 
         log_step("RESULTADO: Misión recurrente procesada")
         log_detail(f"Progreso actual: {progress2.current_value}")

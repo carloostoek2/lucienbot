@@ -20,7 +20,7 @@ Esta sección funciona como control simple de avance. Se mantiene actualizada al
 | Pre-GSD (Fase 2) | Gestión de Canales (Fundacional) | Reporte generado + pilots Alta + expansión de protección (recs open para 07.1) | Jun 2026 | Primera revisión + expansión post-revisión profunda (explore+impact subagents + code audit). 6 Pasos + gold pilots (SQLite+TestSession+patch) contra contrato deseado. **Pilotos iniciales:** approve_all DB-only, scheduler error+rollback+continue, inactive skip (4 tests en TestSchedulerPendingRequestsJob). **Expansión agregada:** 2 gold pilots más (welcome fail after commit sticks; get_ready/create for inactive+VIP documents no-guard); 3 unit contracts (create inactive/VIP, get_ready includes inactive). Total ~7 tests en job class + units fortalecidos. Brechas #2/#3/#4 mejor cubiertas; NEW gaps (dups, ghosts, post-commit resilience, handler cov) documentados. ID/DT/CLAUDEs reforzados previamente. **Siguiente: Fase 3 Suscripciones VIP (pre-GSD formal) [completada en iter posterior; ver fila 3].** | Fase 3: Suscripciones VIP (pre-GSD formal) [✅ completada] |
 | 3 | Suscripciones VIP (pre-GSD formal) | ✅ Completada revisión Fase 2 (reporte + tests Alta + pilots + ID contract fixes en commit 00fd7e8) | Jun 2026 | Revisión completa por 6 pasos de docs/fase_testing_review_process.md (Paso1-6 + agents explore+impact pre any change + GSD pre every edit). Promesa ROADMAP Phase3 success 1-6 (create tariff/token, redeem access, reject bad tokens, expire remove ch, 24h reminder). Última sesión (commit 00fd7e8): actualización pruebas para contratos VIP y cronología con IDs correctos (telegram_id vs .id en fixtures + tests VIP para alinear con handlers reales, modelos FK a users.telegram_id y evitar skips silenciosos en redeem/clear_vip_entry). Componentes: VIPService (redeem w/ for_update+extend+clear entry+tx, get_expir*/has_other/expire/mark (some naive dt), entry helpers, owns_session/close); scheduler bits (_process_expiring/expired use svc get but direct mutate bypass + raw User); handlers (vip_* admin ok 1svc, common multi-svc+TG invite on redeem); Models (Sub/Token/Tariff w/ user_id/redeemed_by_id=TG BigInt FK, ch_id=PK int; User vip_entry_*); Cross (ch VIP type, ritual entry state clear on redeem/expire, users, reward tariff, bot startup). Tests: unit/test_vip_service (tariff/token/sub + rich TestVIPServiceExpirationSupport + ritual clear + richer expiring + ID fixes); integ lifecycle gold (tmp SQLite+TestSession+patch for sched, fresh TG, explicit, 7+ scenarios + multi+error continue); flows/ritual/complete/cycle (db_session + samples); cross invariants (I4/I5 token/VIP access); strengthened ID contract. Brechas (Alta prioritized: ID duality fixtures+tests (PK vs TG in sub/token) ✅ fixed en esta iter, sched bypass direct vs svc, handler 1svc viol in common, DT naive/aware, contract gaps ritual-during+multi-ch+partial atomic+error sched continue; Media: hygiene loose asserts, doc drift). Prior Top10 4/5 partially addressed prior; this adds ID contract fix + Alta tests + pilots. | Fase 4 Gamificación |
 | 4 | Gamificación | ✅ Revisión Fase 2 + pilots follow-up completados (ID contract + daily atomic gold + concurrent unit; gates 127p 0reg) | Jun 2026 | **Investigación exhaustiva + 6 pasos completados (ver sección detallada abajo)**. Promesa ROADMAP/BESI-01-04 + success 1-4. Componentes: besito (credit/debit for_update+internal commit+never-neg+logs), daily_gift (claim+24h limit+credit cross), broadcast (check_and_register_reaction prod path: flush+Unique+credit commit + post-commit mission tx separado intencional). Handlers: user 1svc exacto + close + TG id; admin stats 2svc. Models: TG BigInt user_id (balances/tx/claims/reactions), UniqueConstraint reacción, ref_id, aware DT. Cross: todos sources enum (REACTION/DAILY/MISSION/PURCHASE/GAME/TRIVIA/STREAK/ADMIN/ANON). **Tests existentes**: unit besito/daily/broadcast_reaction (5 contrato gold: dup None, mission-fail NO rollback, early emoji, etc); integ gold SQLite+TestSession reaction_full_chain + cross_atomic (5+ partials post-credit survive) + invariants (I1-3 besito + I6 reaction); handler integ. Cobertura Top10 items1-3/8/10 fuerte. **Brechas clave (16 clasificadas, Alta prior)**: 1. ID duality fixtures (sample_balance .id PK vs .telegram_id TG BigInt contrato real handlers; afecta units/golds vs prod). 2. Atomic daily_claim: claim add + credit (commit interno besito) + outer commit (posible besitos sin claim row o viceversa en fail). 3. Concurrent dup reaction no cubierto (unit dup+constraint + TODO explícito; Top10 item3). 4. Never-neg TOCTOU en débitos cross (store check+debit, story/streak/anon handler). 5. check_and docstring "una sola tx" vs impl (credit commit + mission nueva tx post). 6. Broadcast owns_session ausente (close always). 7. Top10: solo admin limit5 (no user-facing?), order por balance actual no "generosos"/earned, no det/tiebreaker, tests loose. 8. Handler 1svc viol (admin stats Besito+Daily; anon multi+direct debit en handler). 9. Límite daily (solo 24h/user; naive UTC force; no global/concurrent/tz edge). 10. Hugs legacy (BESI-02 promesa, 0 impl/tests código src). 11. Scheduler daily: 0 (claim on-demand). 12. Dupe total_circulación (besito py sum vs analytics direct). 13. DT drift naive (daily). 14. >50L funcs (check_and~97L etc vs rules). 15. db_session units vs gold SQLite para internal commits (detach post-credit). 16. No full e2e handler callbacks + keyboard reaction/gamif (make_callback). **Alta recs (tests pilots low-risk primero)**: gold integ daily atomic partial (SQLite+TS, fresh 777xx TG telegram_id, explicit, strict re-query); concurrent dup reaction (2 calls); ID contract fix en fixtures + *todos* golds (sample_balance etc use .telegram_id, asserts TG); cross never-neg atomic full paths (store/story/streak/anon); top determinism + user visibility? ; handler multi-svc tests. Fortalecer units + migrate db_session donde commits internos. GSD+impact pre every; ruff/pytest -k "besito|daily|reaction|gamif|TestBesito|TestDaily|TestCheckAndRegister|TestFullReaction|TestCrossServiceAtomicity|TestBesitoBalanceInvariants" gates zero reg. **Referencias**: explore agent full report (16 brechas + exact file:line + quotes + flows); process.md; Top10 history refactor_testing s.3. | Fase 5 Misiones |
-| 5 | Misiones | Pendiente | - | Misiones diarias y únicas, progreso en tiempo real, recompensas automáticas, panel de gestión admin (MISS-01..04 + ADMIN-03). Fase 5 en git. **Cobertura cross vía Top 10** (misma área reacción/misión/reward + item 8 atomicity cross-service + item 10 invariants de reference_id no duplicado en misión + backpack tests que tocan recompensas de misiones). | Fase 6 Tienda + Promociones + Narrativa |
+| 5 | Misiones | ✅ Revisión Fase 2 + pilots Alta #1-5 + ID contract follow-up completados | Jun 2026 | **Revisión sistemática + Alta pilots per recs #1-5 (dup guards both paths, recurring cooldown/reset, gold partial+catchup, ID TG fix, isolated side gold).** Promesa MISS-01..04 + ADMIN-03. Cross Top10 + new deterministic gold pilots protect dup/ref/cooldown/pending/side-effect contracts. Fase 5 pre-GSD. See Pilots Follow-up subsection. | Fase 6 Tienda + Promociones + Narrativa |
 | 6 | Tienda + Promociones + Narrativa | Pendiente | - | Tienda de paquetes (compra con besitos, entrega contenido), códigos promocionales y sistema de narrativa interactiva con arquetipos (STOR-01-04 + PROM-01-03 + NARR-01-04 + ADMIN-04/05). Fase 6 en git (bundle de dominios). Revisiones/follow-ups posteriores en fases 12 (mejorar tienda) y 13 (Mapa del Deseo / promos VIP). | Fase 7 VIP Invite Links |
 | 7 | VIP Invite Links Dinámicos | Pendiente | - | Reemplazar links de invitación estáticos por links de un solo uso generados dinámicamente (member_limit=1, expira tras primer uso) al canjear token VIP (VIP-07). Completada en commit d66b8b7. Depende de Fase 3/7 VIP. Inmediatamente anterior a Alembic (07.1 depende de Phase 7). | 07.1 Integración Alembic |
 | 07.1 | Integración Alembic | Pendiente | - | - | - |
@@ -447,4 +447,147 @@ See /tmp/grok-impl-summary-ae9b25c5.md for updated details (exact post-revert fi
 **Refs:** GSD log .planning/quick/gsd-fase-4-... (pre every), impact subagent, fases brechas/recs, process.md gold patterns, prior VIP ID precedent. Tests ejecutables: pytest -k "TestDailyGiftClaimAtomicity or concurrent_duplicate or (besito and not coverage)" etc.
 
 (End of Fase 4 pilots append. 3 Alta pilots + ID completados; gates clean; docs actualizados.)
+
+---
+
+## Fase 5: Misiones
+
+**Estado en Hoja de Ruta:** En progreso (revisión 6 pasos + análisis iniciados Jun 2026)
+
+**Promesa principal de la fase (según .planning/ROADMAP.md Phase 5 + .planning/REQUIREMENTS.md):**
+- Goal: Sistema de misiones con progreso, recompensas y panel de gestión.
+- Requirements: MISS-01, MISS-02, MISS-03, MISS-04, ADMIN-03.
+- Criterios de éxito clave:
+  1. Misiones diarias y únicas disponibles (MissionType: REACTION_COUNT, DAILY_GIFT_STREAK, DAILY_GIFT_TOTAL, STORE_PURCHASE, VIP_ACTIVE...).
+  2. Progreso visible en tiempo real (current_value, percentage, is_completed).
+  3. Recompensas automáticas al completar misión (RewardType: BESITOS / PACKAGE / VIP_ACCESS).
+  4. Registro de recompensas pendientes y reclamadas (UserRewardHistory + catch-up).
+  5. Custodio puede crear/editar/gestionar misiones y asociar recompensas (ADMIN-03, wizard admin).
+- Frecuencias: ONE_TIME (se completa una vez) / RECURRING (reinicia; soporta cooldown_hours).
+- Fuentes: ROADMAP "Misiones, progreso, recompensas", REQS MISS-*, fases_refactor_testing stub, código real.
+
+**Componentes principales involucrados (con file:line clave de investigación):**
+- **Services**:
+  - `services/mission_service.py`: MissionService (owns/closes SessionLocal; create/get/get_available/get_by_type; get_or_create_progress + _get_or_create_progress_locked(with_for_update); increment_progress (sync, loop por tipo, locked, early dup last_reference_id + skip, commit por mission, retorna completed); increment_progress_and_deliver + _increment_one_mission_and_deliver (async preferred path: locked, dup guard, recurring reset via _prepare_recurring_cycle_reset pure, _apply_progress_increment pure que también guarda last_ref + marca complete, commit, if newly_completed + reward → _deliver_mission_reward_if_allowed); apply_daily_gift_mission_updates (streak calc + set + TOTAL increment con ref=claim.id); apply_vip_active_mission_updates (set to target + deliver); get_user_active_missions (async, llama _catch_up_pending_rewards, filtra ONE_TIME completadas); get_available_rewards_for_user; deliver_pending_rewards + helpers (_is_reward_delivered..., get_users_with_pending...); _catch_up...; puros: calculate_daily_gift_streak_from_dates, _prepare..., _apply..., _recurring_cooldown_blocks; side effects: run_mission_side_effects_isolated (best-effort, retry max_attempts con SessionLocal aisladas, rollback on err, logging), _run_mission_increment_on_session, run_daily_gift_mission_side_effects, run_vip_mission_side_effects (best effort isolated).
+  - `services/reward_service.py`: deliver_reward (dispatch por tipo + claims para idemp/resume: _DELIVERY_CLAIM_MARKER, _finalize...); _deliver_besitos/_package/_vip_access; log_reward_delivery; observers (on_besitos_awarded...); get_reward etc. (thin delegates en MissionService para admin wizard).
+- **Handlers** (1 service rule):
+  - `handlers/mission_user_handlers.py`: show_my_missions, detail, etc. usan `with get_service(MissionService) as ...` (get_user_active_missions).
+  - `handlers/mission_admin_handlers.py`: post Item 27 hardening: todos los entrypoints (wizard multi-step, list, detail, delete, stats) con `with get_service(MissionService) as mission_service:`, delegates get_all_rewards_for_mission_wizard / get_reward_for... (thin en svc), puros (compute_*/build_* verb+context+result, <=50 LOC via inspect, import direct), logging estándar "mission_admin_handlers | ... | user_id=... | ...".
+  - reward_user/admin, common_handlers (algunos flows con MissionService).
+- **Models** (`models/models.py`):
+  - Mission: id, name, description, mission_type (StrEnum), target_value, frequency (ONE_TIME/RECURRING), start/end_date, cooldown_hours, is_active, created_by, reward_id FK → Reward, relations.
+  - UserMissionProgress: user_id (BigInt, TG id), mission_id FK, current_value/target_value, is_completed, last_reference_id (anti-dupe clave), started/completed/last_updated (aware).
+  - Reward: id, name, reward_type, besito_amount / package_id / tariff_id, is_active...
+  - UserRewardHistory (para MISS-04 + backpack).
+  - Enums: MissionType, MissionFrequency, RewardType.
+- **Cross / entry points**: broadcast_service (check_and_register → MissionService.increment_progress(sync) + run_mission_side_effects_isolated post commit intencional); store_service (post purchase side effects); daily_gift claim → run_...; VIP redeem/grant → vip side effects; bot.py / common; get_service central (handlers/CLAUDE + services/CLAUDE). ID contract: user_id siempre TG BigInt (como balances/VIP). DT: aware UTC + cooldown calc.
+- **Otros**: pending reward catch-up en vistas UI; best-effort side effects para no romper atomicidad del caller (ej: reacción besitos commit primero, misión post).
+
+**Tests existentes relevantes (clasificación per process §3/6/7: det/gold/contract/edge):**
+- **Unit**: `tests/unit/test_mission_service.py` (create, get_mission/available/all/by_type, progress get_or_create; db_session + sample_mission; básico CRUD + queries). `tests/unit/test_mission_side_effects.py` (calculate_daily_gift_streak_from_dates puro + edges; run_mission_side_effects_isolated retry success). `tests/unit/test_reward_service.py`.
+- **Integ / cross (Top 10 fuerte)**: `tests/integration/test_cross_service_atomicity.py` (reaction credit + mission progress + reward fail parciales; REACTION survives); `tests/integration/test_invariants.py` (I7 reference_id no duplica en misión); `tests/integration/test_reaction_full_chain.py` / `test_reaction_mission_flow.py`; `tests/integration/test_mission_e2e.py` (reacción → misión completa → besitos recompensa; setup + logs).
+- **Handlers**: `tests/handlers/test_mission_user_handlers.py`, `tests/handlers/test_mission_admin_handlers.py` (post Item27: 1svc ports + TestMissionAdminPureHelpers puros), `test_reward_user_handlers.py`, `test_callbackdata_mission_admin.py`.
+- **Otros/cross**: backpack tests (recompensas de misiones en historial post-deliver); conftest samples.
+- **Calidad**: Cobertura cross buena vía Top10 (atomicidad post-credit + invariant ref). Básicos unit + side effects puros. Algunos integ con prints/logs (legacy style). Gold SQLite+TestSession en cross. Faltan pilots fuertes en paths de misión puros (increment/recurring). ID/DT hygiene probable skew (como fases previas). Deterministic creation parcial (depende samples en varios).
+
+**Brechas identificadas (análisis contra contrato deseado per §4: cobertura contratos, patrón SQLite gold, idemp/atomic best-effort, invariants ref, edges, cross, 1svc, logging, <=50, DT/ID):**
+
+| # | Brecha | Severidad | Tipo de test recomendado | Prioridad | Notas / file:line |
+|---|--------|-----------|---------------------------|-----------|-------------------|
+| 1 | Dup prevention (last_reference_id) incompleto en tests: guards en increment_progress + _increment_one + _apply (antes y dentro), skip en broadcast; pero unit delgado para ambos paths (sync vs and_deliver), todos los tipos, y "no re-complete + no re-entrega recompensa". | Alta | Fortalecer unit + nuevo contrato | Alta | mission_service:498 (if last==ref continue), 552, 560 (_apply); broadcast:277; Top10 I7 en invariants cubre algo pero no todos paths/freq. Riesgo "doble crédito misión". |
+| 2 | RECURRING cooldown + reset: _recurring_cooldown_blocks (hours_since), reset en increment para recurring completed, apply_daily/vip; sin tests det para "bloquea antes cooldown", "permite después", "reset solo en re-complete", "claim_ref vs completed_at". | Alta | Unit puro + integ gold | Alta | m:80 (_recurring_cooldown_blocks), 557 (reset), 718 (streak set), 492; cooldown_hours en modelo. "sacosita" misiones se reinician mal. |
+| 3 | Partial deliver + catch-up / pending: progress commit → deliver separado (intencional); _deliver_if_allowed, catch_up en get_active/get_rewards, deliver_pending, get_users_with_pending, _is_reward_delivered, claims; cobertura thin para fail paths + reintento + one_time vs recurring cycles. | Alta | Nuevo/fort gold (SQLite+TS) | Alta | m:435 (_catch_up), 672+, 795 (deliver_pending), 762; reward claims. Cross atomicity cubre "survive" pero no full pending matrix. |
+| 4 | Gold pattern para side effects aislados: run_*_isolated + _run usan SessionLocal + retry + rollback; current tests usan mocks o db_session. Falta piloto explícito con file SQLite + TestSession + visibility post commit + error continue. | Alta | Pilot gold integ (extend cross o nuevo) | Alta | m:967 (isolated), 1016 (daily), 1033 (vip); broadcast 383; precedent reaction_full + cross. |
+| 5 | ID duality fixtures/progress: user_id BigInt TG en modelo/progress (como VIP/gamif); samples/fixtures/tests pueden usar .id PK (systemic previo). Afecta mission progress tests + cross. | Alta | Fortalecer fixtures + asserts (como 00fd7e8 + Fase4) | Alta | models:653; mission progress rows; conftest samples; handlers usan from_user.id TG. |
+| 6 | Cobertura tipos de misión incompletos: REACTION fuerte vía broadcast/cross; DAILY_GIFT (streak set + TOTAL), VIP_ACTIVE (set to target), STORE_PURCHASE vía side; tests débiles o indirectos. | Media | Fort unit + integ por tipo | Media | m:702 (daily), 740 (vip), store call; e2e solo reaction. |
+| 7 | Handler user flows + catch_up: get_user_active_missions + catch_up probados indirecto; sin handler e2e det para menú misiones, % progreso, pending reward UI. | Media | Handler integ / e2e | Media | mission_user_handlers:29+; precedent admin pure + user tests. |
+| 8 | DT / naive en cooldowns + timestamps: cooldown calc fuerza/reemplaza tz; tests/fixtures mix (prev drift en otras fases); asserts < horas. | Media | Fort + estandarizar | Media | m:93 (tz force), 323 (daily claims tz); similar a canales/VIP/gamif. |
+| 9 | Determinismo en tests de misión: varios dependen de samples pre-existentes o estado; no siempre crean misión+reward explícito + fresh TG por test. | Media | Fort existing + nuevos det | Media | e2e / unit mission; precedent golds usan explicit 7770 + create. |
+| 10 | Side effect contract explícito (best-effort post credit): "MUST NOT rollback caller", retry, logging; documentado en código pero tests de contrato limitados. | Media | Unit contrato + docstring | Media | m:977 docstring + logs; broadcast doc "post commit mission tx separado". Top10 ya nota. |
+
+**Nuevas brechas/gaps identificados durante map (no solo stub previo):**
+- Dos paths de increment (sync usado en broadcast vs async and_deliver) con lógica duplicada parcial (guards en ambos) → riesgo drift.
+- set_progress usado en daily/vip (no siempre pasa por increment guard?).
+- No test explícito "one_time completada se salta en get_active + no re-deliver".
+- Backpack + history visibility post deliver desde catch_up.
+- Admin wizard delegates thin + puros ya cubiertos por Item27 tests.
+
+**Recomendaciones (priorizadas; por tipo + esfuerzo + riesgo "sacositas"; per §5 + calidad §6: det, gold SQLite+TS para flows con commits internos + side, contrato deseado explícito "DESIRED CONTRACT", >=1 edge/error, strict re-query, GSD pre every edit, ruff/pytest targeted zero reg, finally dispose/close; "Inicio de Bajo Riesgo": pilots + docs primero; impact-analyzer pre cambios a fixtures/tests; copy golds al pie):**
+
+- **Alta (mitiga dup/recompensa doble, misiones reinician mal, partials fantasmas, ID skew; esfuerzo medio; pilots primero extend existing):**
+  1. Unit + contrato dup/ref guard + both increment paths (extend test_mission_service.py + side_effects; tests para last_ref skip en REACTION/DAILY etc, no re-complete; DESIRED CONTRACT docstrings).
+  2. Recurring cooldown/reset pilots (unit puro + small integ gold; block before hours, allow after, reset on recurring complete).
+  3. Gold pilot partial + catch_up/pending (extend test_cross_service_atomicity.py o mission_e2e con SQLite file + TestSession; progress marcado + reward pending o entregada; retry catch_up; strict; fresh TG 7770xxxx).
+  4. ID contract misión (Alta): fix fixtures sample progress/user_id = telegram_id + update calls/asserts en tests misión/cross (como VIP + Fase4 gamif).
+  5. Pilot isolated side effect gold (visibilidad post commit aislado + error path continue; patrón exacto reaction_full_chain).
+
+- **Media (deuda testing + doc + DT + cobertura tipos; esfuerzo bajo-medio):**
+  - Fortalecer/ext unit por tipo (STREAK set, VIP set, PURCHASE side).
+  - Handler user: tests det para active missions + % + catch_up side (make factories si hay).
+  - DT estandarizar + tests (cooldown aware + completed_at).
+  - Más det en todos (explicit create Mission + Reward + Progress por test; no samples reuse).
+  - Expandir invariants para misiones (one_time no re, cooldown enforced, ref solo para same cycle).
+  - Fortalecer e2e legacy (quitar prints, strict asserts, gold pattern donde multi commit).
+  - Docstring "DESIRED CONTRACT" en runners y _deliver_if_allowed.
+
+- **Baja (posterior):** handler e2e completo menú, admin ya cubierto por 27, >50L (ya hardened), scheduler daily no (on demand).
+
+- **General**: Todos nuevos/fort: deterministic (crear datos explícitos + fresh TG telegram_id), gold SQLite+TestSession para flows con commit interno + reward + side, "DESIRED CONTRACT" en docstrings, strict == re-query, @mark.unit, ruff format/check --fix, pytest -k "mission or Mission or reaction_mission or cross_atomic or invariants" clean zero reg broader. Prior "Inicio de Bajo Riesgo" (update docs + 2-3 pilots gold en existing files). Re-run Tier1 targeted + smoke (no reg en cross gamif). Update refactor_testing.md s.3/5/8 handoff + this. GSD pre every (logs + wc). Subagents (explore/impact pre edits a tests). 0 cambios prod (solo tests+docs).
+
+- **Post gates**: ruff on touched; pytest targeted (incl -k "TestMission or mission_e2e or cross or invariants"); broader smoke (gamif/vip/channel) 0 reg esperada.
+
+**Registro (Paso 6)**: Esta sección + Hoja row actualizada con findings de map (Paso1-2 completos). Sigue template process §5. Cobertura cross Top10 reconocida pero revisión sistemática por fase ahora en marcha.
+
+**Siguiente acción:** Completar inventario tests detallado + Paso 4 brechas full + 5 recs si falta; pilots Alta (GSD pre + impact pre edits + gates); actualizar refactor_testing.md con "Fase5 review started + cómo retomar"; avanzar Fase 6 cuando lista.
+
+**Referencias (obligatorias + consultadas):**
+- Mandatory: docs/fase_testing_review_process.md (full 6 pasos + template + gold patterns + agents + inicio bajo riesgo), fases_refactor_testing.md (Hoja + stub + prev fases), .planning/ROADMAP.md (Phase 5), .planning/REQUIREMENTS.md (MISS/ADMIN), refactor_testing.md (Top10 items 8/9/10 + handoff), services/mission_service.py + reward_service.py, handlers/mission_* + reward_* + common, models/models.py (Mission/Progress/Reward enums), tests/*(mission|reward|cross|invariants|reaction*)* + handler tests + conftest, CLAUDE.md root + services/CLAUDE.md + handlers/CLAUDE.md + models/CLAUDE.md, architecture.md, rules.md, AGENTS.md.
+- Prior hardening: .planning/phases/27-mission-admin-long-funcs (1svc + puros + logging + tests), 23/25 (reward decoupling), 8/9/10 Top10 (atomic + invariants + backpack), 20/22 reward-gamif.
+- GSD log: .planning/quick/gsd-fase-5-misiones-review.log (pre entries).
+- Explore/impact si se lanzan en pilots.
+
+(Sección agregada post map inicial. Revisión Fase 5 continuando.)
+
+---
+
+*Documento actualizado: Hoja Fase 5 marcada + sección detallada iniciada para revisión por fases de testing.*
+
+---
+
+## Pilots Follow-up Fase 5 (Completado)
+
+**Fecha / Trigger:** Post Fase5 6-pasos review (brechas Alta #1-5 in fases); "adelante con la fase 5" per task + hoja.
+
+**Pilots Alta implementados (smallest extend existing, gold patterns, GSD pre always, fresh TG telegram_id, strict, DESIRED CONTRACT, deterministic explicit no sample reuse for asserts, 0 prod):**
+
+- **#1 dup/ref guard unit+contrato (brecha #1 Alta)**: extend test_mission_service.py (new async test in TestMissionIncrement: dup last_ref skip on sync increment + async and_deliver paths, diff types REACTION/DAILY, no re-complete ONE_TIME) + test_mission_side_effects.py (new test: guard prevents re-deliver on and_deliver path). DESIRED CONTRACT docstrings, .telegram_id, explicit create Mission+Reward.
+
+- **#2 recurring cooldown/reset (brecha #2 Alta)**: unit+integ pilot in test_mission_service.py (new async test: block before cooldown_hours via inc_and_deliver, allow after mutate time, reset+recomplete only on recurring). Uses explicit, aware DT, public API + helper guard. DESIRED CONTRACT.
+
+- **#3 gold partial deliver + catch_up/pending (brecha #3 Alta)**: new gold test_mission_partial_deliver_catch_up_pending_gold in TestCrossServiceAtomicity (extend cross gold file). tmp+TestSession, fresh 77709005, explicit User/Mission/Reward( inactive to force pending)/Progress, close/reopen, strict re-query progress marked + hist==0 then deliver_pending==1 + hist==1. try/finally. DESIRED.
+
+- **#4 ID contract misión (brecha #5 Alta)**: sample_mission_progress (conftest) user_id=.telegram_id + DESIRED doc. Updated calls/asserts/user_id filters + balance creates in relevant: test_mission_service.py (~12 sites), test_mission_e2e.py (loops/asserts/balances), test_invariants.py (I7). Aligned w/ VIP 00fd7e8 + Fase4.
+
+- **#5 isolated side effect gold (brecha #4/#10 Alta)**: full gold in named test_isolated_side_effect_visibility_and_error_continue_gold (TestCross). tmp+TestSession, explicit 77709006 User/M/R/P, reopen, patch.object (error-continue) + real runner success call (for visibility after isolated commits), exact hist==1 / cnt==0 (post-complete setup), suppress close + dispose in finally, DESIRED CONTRACT doc. Orphan stray block in Daily class fully excised.
+
+**Gates ejecutados (post cada batch + final):**
+- GSD: PRE logs (echo >> ) antes de CADA search_replace/ruff/pytest (63+ entries); pre for pilot X. wc tracked. No edit w/o pre.
+- Ruff: format aplicado; check --fix (N806 tolerated as golds precedent; hygiene).
+- Pytest: targeted -k "mission or Mission or cross or invariants" --tb=line -q (184 passed); broader smoke (706 passed, 0 attributable reg on gamif/vip/etc).
+- Deterministic explicit per test; strict == ; fresh 7770; N806 tolerated only for TestSession (precedent); try/finally hygiene.
+- 0 prod changes; 0 warnings new from pilots.
+
+**Archivos tocados (solo tests + docs):** tests/conftest.py, tests/unit/test_mission_service.py, tests/unit/test_mission_side_effects.py, tests/integration/test_cross_service_atomicity.py, tests/integration/test_mission_e2e.py, tests/integration/test_invariants.py, fases_refactor_testing.md (Hoja row update + append follow-up), .planning/quick/gsd-fase-5-misiones-review.log (63+ appends), /tmp/grok-impl-summary-ad3cd412.md .
+
+**Decisiones / Wontfix:** Extend not new files (smallest + precedent Fase4); N806/E501 legacy tolerated (precedent); no prod (contracts already good, pilots protect); sample reuse avoided for pilots' asserts; invariants/other .id untouched if non-mission-progress. Pilot5 full gold implemented in named test.
+
+**Handoff / Siguiente:** Fase 5 Alta pilots #1-5 + ID done (brechas Alta covered, cross Top10 strengthened; pilot5 now full gold). Update refactor_testing.md s.3/5/8 handoff + "Fase5 pilots". Hoja updated. **Próximo:** Fase 6 Tienda+Prom+Narr per hoja.
+
+**Refs:** GSD log .planning/quick/gsd-fase-5-misiones-review.log (pre every), fases brechas/recs #1-5, process.md gold patterns (cross/reaction/vip), prior Fase4/VIP ID precedent, explicit gold patterns copied. Tests: pytest -k "test_increment_dup_ref or test_recurring_cooldown or test_mission_partial_deliver or test_isolated_side_effect or (mission and not coverage)" etc.
+
+(End of Fase 5 pilots append. 5 Alta pilots + ID + full strict gold in named pilot5 (with patch + exact== + close hygiene) + orphan excised + pilot2 exact helper; gates 184/706 clean; docs accurate. IMPL_ID: ad3cd412)
+
+---
+
+
 

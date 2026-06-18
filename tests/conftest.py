@@ -266,9 +266,10 @@ def sample_mission(db_session: Session):
 
 @pytest.fixture
 def sample_mission_progress(db_session: Session, sample_user, sample_mission):
-    """Crea un progreso de misión de prueba."""
+    """Crea un progreso de misión de prueba.
+    DESIRED CONTRACT: user_id stores TG BigInt (telegram_id value) per models (UserMissionProgress.user_id BigInteger FK to users.telegram_id), real handler flows (from_user.id), MissionService calls, and prior ID contract fixes (VIP commit 00fd7e8, Fase4 gamif). Matches sample_user.telegram_id; never the internal PK .id. Used for dup guard, recurring, catch-up pilots."""
     progress = UserMissionProgress(
-        user_id=sample_user.id,
+        user_id=sample_user.telegram_id,
         mission_id=sample_mission.id,
         target_value=sample_mission.target_value,
         current_value=5,
