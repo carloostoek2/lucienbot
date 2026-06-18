@@ -306,7 +306,7 @@ async def toggle_package(callback: CallbackQuery, callback_data: TogglePackageCa
         await package_detail(callback, PackageDetailCallback(package_id=package_id))
 
 
-@router.callback_query(DeletePackageCallback.filter(not F.confirmed))
+@router.callback_query(DeletePackageCallback.filter(~F.confirmed))
 async def delete_package_confirm(callback: CallbackQuery, callback_data: DeletePackageCallback):
     """Confirma eliminación de paquete"""
     if not is_admin(callback.from_user.id):
