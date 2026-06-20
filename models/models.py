@@ -1108,6 +1108,7 @@ class UserStoryProgress(Base):
     """Progreso de cada usuario en la narrativa"""
 
     __tablename__ = "user_story_progress"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_story_progress_user_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
@@ -1211,6 +1212,9 @@ class UserStoryAchievement(Base):
     """Logros desbloqueados por cada usuario"""
 
     __tablename__ = "user_story_achievements"
+    __table_args__ = (
+        UniqueConstraint("user_id", "achievement_id", name="uq_user_story_achievement"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
@@ -1222,6 +1226,8 @@ class UserStoryAchievement(Base):
     # Recompensa entregada
     reward_delivered = Column(Boolean, default=False)
     reward_delivered_at = Column(DateTime(timezone=True), nullable=True)
+
+    achievement = relationship("StoryAchievement")
 
 
 # ============================================================

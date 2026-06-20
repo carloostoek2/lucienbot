@@ -1270,6 +1270,10 @@ Lucien prefiere no preguntar por qué tardó tanto.</i>"""
     def story_payment_failed() -> str:
         return "No se pudo procesar el pago"
 
+    @staticmethod
+    def story_invalid_choice() -> str:
+        return "Esa opcion no esta disponible desde su posicion actual"
+
     # ==================== MOCHILA / BACKPACK ====================
 
     @staticmethod

@@ -19,6 +19,12 @@ from models.models import NodeType, ArchetypeType
 pytestmark = [pytest.mark.unit]
 
 
+@pytest.fixture(autouse=True)
+def _admin_user_for_wizard_tests(monkeypatch):
+    """Los pasos FSM re-verifican is_admin; los fixtures de test no son custodios reales."""
+    monkeypatch.setattr("handlers.story_admin_handlers.is_admin", lambda _uid: True)
+
+
 class TestAdminNarrativeMenu:
     """Tests para admin_narrative_menu — menu de administracion de narrativa."""
 
@@ -170,7 +176,7 @@ class TestCreateNodeWizard:
         assert state == NodeWizardStates.waiting_chapter
 
     async def test_process_node_chapter_accepts_valid(self, make_message, make_fsm_context):
-        """Capitulo valido guarda y avanza a waiting_requirements."""
+        """Capitulo valido guarda y avanza a waiting_order."""
         msg = make_message(text="3")
         fsm = await make_fsm_context()
 
@@ -181,7 +187,7 @@ class TestCreateNodeWizard:
         data = await fsm.get_data()
         assert data["chapter"] == 3
         state = await fsm.get_state()
-        assert state == NodeWizardStates.waiting_requirements
+        assert state == NodeWizardStates.waiting_order
         msg.answer.assert_called_once()
 
     async def test_select_archetype_requirement_none(self, make_callback, make_fsm_context):
@@ -198,8 +204,22 @@ class TestCreateNodeWizard:
         data = await fsm.get_data()
         assert data["required_archetype"] is None
         state = await fsm.get_state()
-        assert state == NodeWizardStates.waiting_cost
+        assert state == NodeWizardStates.waiting_vip
         cb.answer.assert_called_once()
+
+    async def test_select_node_vip_advances_to_cost(self, make_callback, make_fsm_context):
+        """Seleccion VIP avanza al paso de costo."""
+        cb = make_callback(data="node_vip_yes")
+        fsm = await make_fsm_context()
+
+        from handlers.story_admin_handlers import select_node_vip, NodeWizardStates
+        await fsm.set_state(NodeWizardStates.waiting_vip)
+        await select_node_vip(cb, fsm)
+
+        data = await fsm.get_data()
+        assert data["required_vip"] is True
+        state = await fsm.get_state()
+        assert state == NodeWizardStates.waiting_cost
 
     async def test_node_cost_zero_sets_and_shows_confirmation(self, make_callback, make_fsm_context):
         """node_cost_zero establece costo 0 y muestra confirmacion."""
@@ -280,7 +300,10 @@ class TestCreateNodeWizard:
             content="Content here",
             node_type=NodeType.NARRATIVE,
             chapter=1,
+            order_in_chapter=0,
+            is_starting_node=False,
             required_archetype=None,
+            required_vip=False,
             cost_besitos=0,
             created_by=123456789,
         )
@@ -741,7 +764,7 @@ class TestChoiceWizard:
         data = await fsm.get_data()
         assert data["choice_archetype"] is None
         state = await fsm.get_state()
-        assert state == ChoiceWizardStates.confirming
+        assert state == ChoiceWizardStates.waiting_points_amount
         cb.message.edit_text.assert_called_once()
         cb.answer.assert_called_once()
 
@@ -763,13 +786,22 @@ class TestChoiceWizard:
             choice_text="Ir a la izquierda",
             choice_next_node_id=5,
             choice_archetype=None,
+            choice_archetype_points=0,
+            choice_additional_cost=10,
         )
 
         from handlers.story_admin_handlers import confirm_create_choice, ChoiceWizardStates
         await fsm.set_state(ChoiceWizardStates.confirming)
         await confirm_create_choice(cb, fsm)
 
-        mock_story.create_choice.assert_called_once()
+        mock_story.create_choice.assert_called_once_with(
+            node_id=1,
+            text="Ir a la izquierda",
+            next_node_id=5,
+            choice_archetype=None,
+            archetype_points=0,
+            additional_cost=10,
+        )
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
         assert "agregada" in text.lower()
@@ -965,7 +997,7 @@ class TestAchievementWizard:
         data = await fsm.get_data()
         assert data["achievement_icon"] == "🌹"
         state = await fsm.get_state()
-        assert state == AchievementWizardStates.confirming
+        assert state == AchievementWizardStates.waiting_reward
         msg.answer.assert_called_once()
 
     @patch("handlers.story_admin_handlers.get_service")
@@ -988,6 +1020,9 @@ class TestAchievementWizard:
             achievement_name="El Primer Paso",
             achievement_description="Descripcion",
             achievement_icon="🌹",
+            reward_besitos=25,
+            required_chapter=2,
+            required_archetype=None,
         )
 
         from handlers.story_admin_handlers import confirm_create_achievement, AchievementWizardStates
@@ -998,6 +1033,10 @@ class TestAchievementWizard:
             name="El Primer Paso",
             description="Descripcion",
             icon="🌹",
+            required_node_id=None,
+            required_chapter=2,
+            required_archetype=None,
+            reward_besitos=25,
             created_by=123456789,
         )
         cb.message.edit_text.assert_called_once()

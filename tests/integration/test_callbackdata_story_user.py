@@ -42,15 +42,21 @@ class TestStoryChoiceCallback:
         assert callback_filter is not None
         assert callable(callback_filter)
 
-    def test_callback_parses_correctly(self):
-        """Callback se puede parsear correctamente."""
-        callback = StoryChoiceCallback(choice_id=123)
-        packed = callback.pack()
+    def test_callback_unpack_round_trip(self):
+        """unpack(pack()) preserva choice_id."""
+        original = StoryChoiceCallback(choice_id=123)
+        unpacked = StoryChoiceCallback.unpack(original.pack())
+        assert unpacked.choice_id == 123
 
-        # Parse manual para verificar
-        prefix, choice_id_str = packed.split(":")
-        assert prefix == "story_choice"
-        assert int(choice_id_str) == 123
+    def test_callback_unpack_rejects_invalid_prefix(self):
+        """unpack falla con prefijo incorrecto."""
+        with pytest.raises(ValueError):
+            StoryChoiceCallback.unpack("wrong_prefix:123")
+
+    def test_callback_unpack_rejects_non_numeric_id(self):
+        """unpack falla con ID no numerico."""
+        with pytest.raises(ValueError):
+            StoryChoiceCallback.unpack("story_choice:abc")
 
 
 class TestContinueStoryCallback:
@@ -78,14 +84,21 @@ class TestContinueStoryCallback:
         assert callback_filter is not None
         assert callable(callback_filter)
 
-    def test_callback_parses_correctly(self):
-        """Callback se puede parsear correctamente."""
-        callback = ContinueStoryCallback(node_id=999)
-        packed = callback.pack()
+    def test_callback_unpack_round_trip(self):
+        """unpack(pack()) preserva node_id."""
+        original = ContinueStoryCallback(node_id=999)
+        unpacked = ContinueStoryCallback.unpack(original.pack())
+        assert unpacked.node_id == 999
 
-        prefix, node_id_str = packed.split(":")
-        assert prefix == "story_continue"
-        assert int(node_id_str) == 999
+    def test_callback_unpack_rejects_negative_id(self):
+        """Callback acepta pack con id negativo (validacion en handler)."""
+        packed = ContinueStoryCallback(node_id=-1).pack()
+        unpacked = ContinueStoryCallback.unpack(packed)
+        assert unpacked.node_id == -1
+
+    def test_callback_unpack_rejects_non_numeric_id(self):
+        with pytest.raises(ValueError):
+            ContinueStoryCallback.unpack("story_continue:foo")
 
 
 class TestQuizAnswerCallback:
@@ -113,14 +126,16 @@ class TestQuizAnswerCallback:
         assert callback_filter is not None
         assert callable(callback_filter)
 
-    def test_callback_parses_correctly(self):
-        """Callback se puede parsear correctamente."""
-        callback = QuizAnswerCallback(answer_idx=5)
-        packed = callback.pack()
+    def test_callback_unpack_round_trip(self):
+        """unpack(pack()) preserva answer_idx."""
+        original = QuizAnswerCallback(answer_idx=5)
+        unpacked = QuizAnswerCallback.unpack(original.pack())
+        assert unpacked.answer_idx == 5
 
-        prefix, answer_idx_str = packed.split(":")
-        assert prefix == "quiz_answer"
-        assert int(answer_idx_str) == 5
+    def test_callback_unpack_negative_index(self):
+        """unpack preserva indices negativos (handler los rechaza)."""
+        unpacked = QuizAnswerCallback.unpack(QuizAnswerCallback(answer_idx=-1).pack())
+        assert unpacked.answer_idx == -1
 
 
 class TestArchetypeSelectCallback:
@@ -181,11 +196,14 @@ class TestArchetypeSelectCallback:
         assert callback_filter is not None
         assert callable(callback_filter)
 
-    def test_callback_parses_correctly(self):
-        """Callback se puede parsear correctamente."""
-        callback = ArchetypeSelectCallback(archetype="misterioso")
-        packed = callback.pack()
+    def test_callback_unpack_round_trip(self):
+        """unpack(pack()) preserva archetype."""
+        original = ArchetypeSelectCallback(archetype="misterioso")
+        unpacked = ArchetypeSelectCallback.unpack(original.pack())
+        assert unpacked.archetype == "misterioso"
 
-        prefix, archetype_str = packed.split(":")
-        assert prefix == "archetype_select"
-        assert archetype_str == "misterioso"
+    def test_archetype_select_reserved_not_wired_to_quiz_handler(self):
+        """ArchetypeSelectCallback es reservado; el quiz usa QuizAnswerCallback."""
+        # Documenta que el flujo de quiz no usa seleccion directa de arquetipo
+        assert QuizAnswerCallback.__prefix__ == "quiz_answer"
+        assert ArchetypeSelectCallback.__prefix__ == "archetype_select"

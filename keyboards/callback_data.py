@@ -487,6 +487,12 @@ class StoryNewArchetypeCallback(CallbackData, prefix="story_new_archetype"):
     archetype: str  # ArchetypeType enum value
 
 
+class StoryArchetypeEditCallback(CallbackData, prefix="story_arch_edit"):
+    """Editar arquetipo existente"""
+
+    archetype: str  # ArchetypeType enum value
+
+
 class StoryChoiceCallback(CallbackData, prefix="story_choice"):
     """Seleccionar opción de historia"""
 
@@ -511,6 +517,12 @@ class ArchetypeSelectCallback(CallbackData, prefix="archetype_select"):
     archetype: str
 
 
+class StoryNodeListPageCallback(CallbackData, prefix="story_node_list"):
+    """Paginación de listado de nodos admin"""
+
+    page: int = 0
+
+
 class StoryNodeDetailCallback(CallbackData, prefix="story_node_detail"):
     """Detalle de nodo de historia"""
 
@@ -532,6 +544,12 @@ class StoryNodeDeleteCallback(CallbackData, prefix="story_node_delete"):
 
 class StoryAddChoicesCallback(CallbackData, prefix="story_add_choices"):
     """Agregar opciones a nodo"""
+
+    node_id: int
+
+
+class StoryAchievementNodeCallback(CallbackData, prefix="story_ach_node"):
+    """Nodo requerido para logro (0 = ninguno)"""
 
     node_id: int
 
