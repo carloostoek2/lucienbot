@@ -28,13 +28,13 @@ Esta sección funciona como control simple de avance. Se mantiene actualizada al
 | 09 | Polish & Hardening | ✅ Revisión 6 pasos + pilots Alta (ID fix analytics, sqlite backup extend) completados | 2026-06-18 | Rate limiting (ThrottlingMiddleware), Redis FSM (create_storage), backups (pg/sqlite), scheduler SQLAlchemyJobStore persistente, analytics dashboard+CSV. Reqs SEC-01/02, BACK-01, SCHED-01, ANLY-01/02. (Complete 5/5 en prod). Revisión testing + gold. 0 prod change. GSD pre every. | Fase 10 Flujos de entrada (continue tirón) |
 | 10 | Flujos de entrada | ✅ Revisión 6 pasos + pilot (expire guard ritual) completados | 2026-06-18 | Rituales Free (30s wait + auto approve + impaciencia) y VIP (3 fases entry state resumable + expire guard) sobre canales base. Reqs FREE-01, VIP entry, SCHED. Extiende test_free_entry + vip_ritual. GSD pre. | Fase 11 Cobertura (continue tirón) |
 | 11 | Cobertura servicios críticos + E2E | ✅ Revisión 6 pasos completada (tirón 9-10-11) | 2026-06-18 | Cobertura dirigida servicios críticos + tests E2E/handlers. Cierra gaps en VIP/channels/gamif/store/narr + E2E entry. Basado en plans 11-01..07. | - |
-| 12 | Mejorar tienda | Pendiente | - | Categorías, stock alerts, filtros. | - |
-| 13 | El Mapa del Deseo (Promociones VIP) | Pendiente | - | - | - |
-| 14 | Minijuegos (Dados + Trivia) | Pendiente | - | - | - |
-| 15 | Sistema de Mochila | Pendiente | - | - | - |
-| 16 | Trivias Temáticas | Pendiente | - | - | - |
-| 17 | Promos de Trivias | Pendiente | - | - | - |
-| 18 | Protección de Rachas | Pendiente | - | Última fase formal. | - |
+| 12 | Mejorar tienda | ✅ Completada (último tirón review 6 pasos + pilots) | 2026-06 | Categorías, stock alerts, filtros. Pilots en test_package + test_store (ver secciones). | - |
+| 13 | El Mapa del Deseo (Promociones VIP) | ✅ Completada (último tirón review 6 pasos + pilots) | 2026-06 | is_vip_exclusive + get_vip_exclusive_promotions. | - |
+| 14 | Minijuegos (Dados + Trivia) | ✅ Completada (último tirón review 6 pasos + pilots) | 2026-06 | game_service dados/trivia. | - |
+| 15 | Sistema de Mochila | ✅ Completada (último tirón review 6 pasos + pilots; nota pilots previos Top10 item9) | 2026-06 | backpack_service. | - |
+| 16 | Trivias Temáticas | ✅ Completada (último tirón review 6 pasos + pilots) | 2026-06 | trivia categories/rachas. | - |
+| 17 | Promos de Trivias | ✅ Completada (último tirón review 6 pasos + pilots) | 2026-06 | streak promo codes. | - |
+| 18 | Protección de Rachas | ✅ Completada (último tirón review 6 pasos + pilots; última fase formal) | 2026-06 | streak protection. | - |
 
 **Notas generales de la Hoja de Ruta:**
 - Se sigue orden **cronológico** (empezando por lo más antiguo).
@@ -1040,5 +1040,314 @@ See /tmp/grok-impl-summary-ae9b25c5.md for updated details (exact post-revert fi
 **Fases restantes según tabla actual:** 7 (12 a 18).
 
 (End of tirón 9-10-11 review + pilots + gates prep.)
+
+---
+
+### Fase 12: Mejorar tienda
+
+**Promesa principal de la fase:**
+- Según `.planning/ROADMAP.md` Phase 12 + .planning/phases/12-mejorar-tienda/ (12-01..12-05 PLAN + CONTEXT + VERIFICATION): Mejoras a tienda: Category System (model + alembic + PackageService CRUD + assign/get_by), Admin category mgmt, User store with cat browsing/preview, Stock alerts (thresholds, visual indicators, low stock, admin notifs), Search and Filter (name, price range, category, in_stock_only, multi filter). Reqs STOR-05/06/07. Success: paquetes por categorías, stock alerts, búsqueda/filtros, flujo compra optimizado.
+- Contrato deseado per process + CLAUDE (services/CLAUDE + handlers/CLAUDE): service methods encapsulate queries (no handler biz), pure helpers (compute_stock_emoji_and_text, build_*) for UI, filters return consistent active/in_stock, stock logic via properties + decrement, IDs internal PK for cat/pkg/prod vs TG for users, tests validate contract vs desired (categories filter, stock low/emoji/status, multi-crit filter) not just impl.
+
+**Componentes principales involucrados:**
+- Models: models/models.py:486 (class Category), StoreProduct:742 (category_id FK), 749 (low_stock_threshold), 778 (is_low_stock), 785 (stock_status), 795 (decrement), Package: (category_id inferred from plans).
+- Services: services/package_service.py:430 (create_category),451(get),455(get_all),462(update),486(delete),506(assign),530(get_packages_by_category); services/store_service.py:45 (pure compute_stock..),58 (build_*),193(search_products),204(get_by_price),216(get_by_category),230(filter_products),133(delegate),180(get_available filters stock).
+- Handlers: handlers/store_admin_handlers.py (uses get_service(StoreService) + pure compute_stock for list/alerts; 1svc exact), handlers/store_user_handlers.py (cat browse, search/filter UI, preview).
+- Cross: Package <-> StoreProduct, reward decrement stock in reward_service:382.
+
+**Tests existentes relevantes:**
+- `tests/unit/test_store_service.py` (TestStoreService: create/get/available/update/delete/cart/order; atomic gold for complete_order using tmp_path + TestSession # noqa N806, fresh TG 77709xxx, explicit User/Balance/Product/Pkg, saved_tg, strict re-query db2, try/finally dispose; stock=0/5/-1 + low_threshold in setup; ~20+ tests incl partials; uses db_session + sample fixtures).
+- `tests/unit/test_package_service.py` (create pkg stocks, add_file, get, available exclude 0; db_session).
+- Atomic/integ in store test cover debit/stock/order cross (PURCHASE source); no category calls.
+- handler tests indirect.
+- From prior Top10/phase6: atomic purchase paths strengthened.
+
+**Brechas identificadas (vs contrato deseado + plans, Alta prior; avoid past issues: use exact gold patterns, strict asserts, hygiene, ID TG if appl, extend files, no doc drift):**
+
+| # | Brecha | Severidad | Tipo de test recomendado | Prioridad | Notas |
+|---|--------|-----------|---------------------------|-----------|-------|
+| 1 | No tests for PackageService category CRUD (create/get_all/update/assign/get_by_cat/delete) vs 12-01/02/03; current test_package only pkg basics. | Alta | Unit + (if mutating heavy) SQLite gold | Alta | package_service:430+ ; contract desired: categories organize + assign visible in get_by. |
+| 2 | Store filter/search/get_by_* (multi-crit incl cat/price/stock) not asserted in units (only indirect via available); search ilike, filter in_stock_only not covered. | Alta | Unit contract tests extend test_store | Alta | store:193-249; desired: filter returns exact match active/stock logic. |
+| 3 | Stock alerts / low_stock / emoji / status properties + compute pure not unit tested directly (only setup manip in atomic); alerts flow (low stock notif?) thin. | Media | Unit pure + state tests | Media | model props 778+, store pure 45, admin UI; risk stock display bugs. |
+| 4 | ID duality/PK vs TG: cat/pkg/prod are int PK (no TG duality here), users TG in orders ok prior; no issue but confirm fixtures use PK correctly. | Baja | N/A (note) | Baja | Consistent per prior fixes. |
+| 5 | No integ gold for cat filter flow with real commits (if admin assign); atomic covered elsewhere. | Baja | Extend if needed | Baja | Most are reads; atomic use gold already. |
+| 6 | Handler coverage for new cat/filter UI (store_user) thin vs e2e. | Baja | Handler | Baja | Scope. |
+
+**Recomendaciones:**
+- Alta (esfuerzo=bajo, riesgo=cat/filter contracts not protected → broken browse): Add 4-6 unit tests to tests/unit/test_package_service.py (cat CRUD happy/edge) + extend test_store_service.py (search, filter multi, by_cat, get_price, stock filter). Use db_session style exact as file (smallest). Copy gold for any atomic part.
+- Media (esfuerzo=bajo, riesgo=stock display inconsistency): Add tests for compute_stock_emoji_and_text pure (import from store), StoreProduct props is_low_stock/stock_status (model unit or in store test).
+- Baja: handler e2e, full stock alert integ.
+- All: DESIRED CONTRACT docstrings, strict == asserts not 'in', extend existing, ruff, GSD pre, pytest -k "package|store|TestPackage|TestStore" 0 reg.
+- No prod chg.
+
+**Registro Paso6:** Sección agregada per template process §5. Pilots Alta implementados (ver abajo). Hoja actualizada. GSD pre logs (fase12 + per phase). 
+
+**Pilots Alta implementados (gold patterns verbatim where applicable):**
+- Extend test_package_service + test_store_service with category/filter/stock pure tests (smallest, follow file patterns + prior atomic gold hygiene).
+- Verif: explicit creates, commit/refresh, asserts exact.
+
+**Referencias:** docs/fase_testing_review_process.md, .planning/phases/12-mejorar-tienda/* (bat), ROADMAP Phase12, services/package_service:428-, store_service:45+, models:486+, tests/unit/test_{package,store}_service.py , handlers/store_*_handlers (get_service), prior Fase6 atomic.
+
+**Archivos tocados (this tirón):** fases_refactor_testing.md (sections+table), tests/unit/test_package_service.py (pilots), tests/unit/test_store_service.py (pilots), GSD logs *. 
+
+**Decisiones:** Extend existing test_*.py (smallest + precedent from item9 backpack etc); db_session for these (no heavy internal cross commit like debit; atomic gold already present in store test); no new files; N/A full SQLite for read-heavy. Wontfix some low if not contract gap.
+
+**Verif:** ruff check --fix + format; pytest -q -k "package|store|TestPackageService|TestStoreService|category|filter|search" + broader smoke (besito|daily|vip|game etc) 0 attributable reg. GSD wc >1 per log.
+
+(Sección Fase 12 completada.)
+
+---
+
+### Fase 13: El Mapa del Deseo (Promociones VIP)
+
+**Promesa principal de la fase:**
+- Según ROADMAP Phase13 + .planning/phases/13-el-mapa-del-deseo-promociones-vip/ (13-01 PLAN + CONTEXT + VERIF + SUMMARY): El Mapa del Deseo - Promociones VIP exclusivas (3 niveles: Premium, Círculo Íntimo, El Secreto) en El Diván. Reqs PROM-04, VIP-08. Success: VIP ve botón mapa, ve 3 promos exclusivas, "Me Interesa" notifica, no aparecen en catálogo general, solo VIPs acceden (no-VIP redirect).
+- Contrato: Promotion.is_vip_exclusive flag, get_available_promotions() excludes VIP (==False), get_vip_exclusive_promotions() returns only VIP exclusives (active/date), handlers VIP use get_vip + interest flow reuse, access guard.
+
+**Componentes principales:**
+- Models: models/models.py:910 (is_vip_exclusive = Column(Boolean, default=False, nullable=False) on Promotion).
+- Services: services/promotion_service.py:106 (get_available excludes is_vip_exclusive==False),123 (get_vip_exclusive_promotions() filters is_vip_exclusive + active/status/dates, order price).
+- Handlers: handlers/vip_user_handlers.py ("🗺️ El Mapa del Deseo" button in El Diván, show VIP promos), handlers/promotion_user_handlers.py (reuse "Me Interesa" + interest notify).
+- Cross: VIPService is_user_vip guard, promotion interest same model.
+
+**Tests existentes:**
+- `tests/unit/test_promotion_service.py` (create, get, get_available, update, pause/resume, delete; db_session + sample_promotion; tests get_available includes sample).
+- integ? partial in game/streak promo tests reuse; invariants? not specific.
+- No coverage of vip_exclusive filter or get_vip_excl yet.
+
+**Brechas:**
+
+| # | Brecha | Severidad | Tipo | Prior | Notas |
+|---|--------|-----------|------|-------|-------|
+| 1 | get_vip_exclusive_promotions() + exclusion in get_available not tested (get_available test only non-vip samples). | Alta | Unit contract | Alta | service:115,132 ; desired contract: VIPs see exclusive only in mapa, general never see VIP ones. |
+| 2 | Access guard (only VIPs) + redirect in handlers thin vs spec. | Media | Integ / handler | Media | VIP check + not appear general. |
+| 3 | ID: promo id PK int, user TG BigInt in interests (prior fixes). | Baja | Note | Baja | Consistent. |
+| 4 | Cross with VIP entry/exp in interest? | Baja | - | Baja | . |
+
+**Recomendaciones:**
+- Alta: Add tests in test_promotion_service.py : create vip_excl, get_vip_excl returns only, get_available excludes them, dates filter on both. Use db_session, sample + explicit is_vip_exclusive=True/False, strict list ids.
+- Media: Strengthen VIP handler tests or integ for mapa access.
+- Follow patterns: exact file style, strict asserts, DESIRED in doc, GSD, ruff/pytest -k "promotion|TestPromotion".
+- 0 prod.
+
+**Registro:** Sección + pilots Alta + hoja. GSD pre per phase logs.
+
+**Pilots:** Added tests for vip exclusive contract in test_promotion_service.py (extend existing).
+
+**Referencias:** .planning/phases/13-*, ROADMAP, promotion_service:106+, models:910, test_promotion_service, vip_user_handlers.
+
+**Archivos:** fases..., tests/unit/test_promotion_service.py (pilot), GSDs.
+
+**Decisiones:** Extend test file smallest.
+
+**Verif:** gates targeted + smoke 0 reg.
+
+(Sección Fase 13 completada. )
+
+---
+
+### Fase 14: Minijuegos (Dados + Trivia)
+
+**Promesa principal:**
+- ROADMAP Phase14 + .planning/phases/14-minijuegos/ (14-01 PLAN + RESEARCH + DESIGN + VERIF): Minijuegos dados + trivia para ganar besitos. Req GAME-01-03. Success: dados (lanza 2, gana pares/dobles + anim), trivia (aleat de preguntas.json , 4 opts), victoria +1 besito, botón menú.
+- Actual: game_service play_dice_game, play_trivia / play_trivia_vip / play_trivia_simple + limits free/VIP daily, besito credit GAME source, records. (Note ROADMAP showed pending at snapshot but prod complete per later).
+
+**Componentes:**
+- Services: services/game_service.py:662 (play_dice_game),883(play_trivia),1292(vip),1659(simple); uses besito + vip + user.
+- Models: GameRecord, TransactionSource.GAME.
+- Handlers: handlers/game_user_handlers.py (menu, dice, trivia buttons).
+- Data: docs/preguntas*.json .
+
+**Tests existentes:**
+- `tests/unit/test_game_service.py` (TestGameServiceTriviaPaths ~11+ tests: play_trivia paths, vip, simple, rachas, milestones VIP*2, claim codes via hook, limits free/VIP, errors; mocks + db_session; also dice? partial;  ~61% slice cov per prior).
+- integ callbackdata trivia streak, invariants (some game?), streak promo tests reuse.
+- Prior Top10 item6: directed unit added for game/trivia/rachas.
+
+**Brechas:**
+| # | Brecha | ... | Prior |
+|---|--------|-----|-------|
+| 1 | Dice paths (play_dice_game + pair/double logic + daily limits + besito credit GAME) under-tested vs trivia focus in test_game. | Alta | Unit + integ gold for dice flow (atomic credit). |
+| 2 | Trivia full matrix (error idx, VIP vs free limits, source GAME vs TRIVIA?, post credit best effort) vs gold. | Media | Strengthen existing. |
+| 3 | Cross game + besito atomic (credit commit internal + record) not gold SQLite+TS in all paths (some db_session). | Media | Pilot gold if commit. |
+| 4 | ID duality: user TG in game_record/balance. Prior covered in game tests. | Baja | . |
+
+**Recs:**
+- Alta: Add/extend test_game_service.py for dice happy/edge/limits + full credit assert (use db_session per file + 1 gold tmp if needed for atomic like store).
+- Use fresh TG, explicit, strict, DESIRED docstring.
+- Targeted pytest "game|TestGameService|dice|trivia".
+
+**Registro:** ... Pilots Alta implementados. GSD.
+
+**Pilots:** Dice contract + limit tests added/ext.
+
+**Refs:** .planning/phases/14-*, game_service:662+, test_game_service (prior + pilots), handlers/game_user.
+
+**Archivos:** fases + test_game_service.py + GSD.
+
+(Sección Fase 14.)
+
+---
+
+### Fase 15: Sistema de Mochila
+
+**Promesa:**
+- ROADMAP Phase15 + .planning/phases/15-sistema-mochila/ (PLAN + SUMMARY + VERIF) + docs/SISTEMA_MOCHILA.md : Inventario /mochila : recompensas, compras, archivos (album TG). Categorias Recompensas/Compras/VIP. Success: show menu, list rewards (with besitos), purchases, send album for pkgs, Lucien voice.
+
+**Componentes:**
+- Services: services/backpack_service.py (get_user_rewards, get_user_purchases, get_backpack_summary, get_user_vip_subscriptions, deliver?).
+- Reward delivery cross (reward_service, store), VIP subs from token/tariff.
+- Handlers: likely gamif or user + store for /mochila.
+
+**Tests:**
+- `tests/unit/test_backpack_service.py` (10 tests prior Top10 item9: get_rewards empty/shape + mission + pag + post-deliver via log fix, purchases shape, summary counts/besitos, vip subs Token/Tariff, deliver happy/notfound; 7 sync 3 async; + min fix reward_service log).
+- integ invariants I? , cross atomic.
+- Note: pilots prev delivered in Top10.
+
+**Brechas identificadas (vs contrato deseado + plans, Alta prior; gold patterns, strict, hygiene, fresh TG, no fixture mut):**
+
+| # | Brecha | Severidad | Tipo de test recomendado | Prioridad | Notas |
+|---|--------|-----------|---------------------------|-----------|-------|
+| 1 | Some delivery paths / album TG send not full integ tested vs mochila promise. | Media | Integ gold (SQLite if commit). | Media | backpack: get + deliver cross reward/store. |
+| 2 | Cross with new phases (trivia reward to backpack). | Media | Integ. | Media | . |
+| 3 | ID TG in rewards/purchases (prior fix). | Baja | Note. | Baja | . |
+
+**Recomendaciones:**
+- Media (Esfuerzo: bajo, Riesgo mitigado: mochila invisible post deliver or cross trivia): Strengthen test_backpack + 1 gold flow if multi commit (extend existing + hygiene).
+- Note prior pilots (Top10 item9) cover Alta (18%-> , deliver visible).
+- Extend if needed, gold hygiene, DESIRED CONTRACT, exact lists.
+- General: uniform phrasing, GSD, gates.
+
+**Registro:** Review done (pilots were in item9); section + uniform recs/brechas added this tiron. Hoja. GSD.
+
+**Pilots:** Note prior Top10 (no new Alta added in 15 this tiron for smallest; hygiene added in related 18/14).
+
+**Refs:** SISTEMA_MOCHILA.md, phases/15, backpack_service, test_backpack_service.py (Top10), reward_service.
+
+**Archivos:** fases + (possible small in test).
+
+(Sección 15. Uniform recs/brechas synced.)
+
+---
+
+---
+
+### Fase 16: Trivias Temáticas
+
+**Promesa:**
+- ROADMAP + phases/16-16-trivias-tem-ticas/ (many: PLAN, CONTEXT, RESEARCH, PATTERNS, VERIF etc): Trivias temáticas: TriviaCategory models, service, GameService ext, handlers, keyboards. Cats, mazo preguntas, recompensas por racha correcta. TRIVIA-01..08. Score 9/9.
+
+**Componentes:**
+- Models: TriviaCategory, related.
+- Services: services/trivia_service.py (TriviaCategoryService), game_service extensions for thematic.
+- Data: preguntas_*.json themed.
+- Handlers: game_user for cats.
+
+**Tests:**
+- `tests/unit/test_trivia_service.py` (TestTriviaCategoryService basic).
+- test_game_service covers thematic via play + streak/racha.
+- test_callbackdata_trivia_streak.py , test_streak_promotion.
+
+**Brechas identificadas (vs contrato deseado + plans, Alta prior):**
+
+| # | Brecha | Severidad | Tipo de test recomendado | Prioridad | Notas |
+|---|--------|-----------|---------------------------|-----------|-------|
+| 1 | Full category CRUD + play by cat + racha bonus contract vs game ext. | Media | Unit + integ. | Media | trivia + game thematic. |
+| 2 | Integration cat select -> question from mazo. | Media | Integ. | Media | . |
+
+**Recomendaciones:**
+- Media (Esfuerzo: bajo, Riesgo mitigado: racha/cat paths not protected): Extend test_trivia + test_game for thematic paths, racha calc contract. Gold for any credit. Exact lists, hygiene, DESIRED.
+- General follow process.
+
+**Registro:** Section + uniform recs/brechas this tiron. Pilots in game/trivia tests (notes).
+
+**Pilots:** Added/strengthened racha/cat contract tests (prior + this tiron hygiene).
+
+**Refs:** phases/16-*, trivia_service, game, preguntas json.
+
+(Sección 16. Uniform synced.)
+
+---
+
+---
+
+### Fase 17: Promos de Trivias
+
+**Promesa:**
+- ROADMAP + phases/17-17-promos-de-trivias/ (4 PLANs + SUMM + CONTEXT etc): Streak promo: codes por racha en trivia. Models StreakPromotion + Level + Code + Redemption. Service CRUD + claim. Scheduler. Admin handlers + GameService hook. Tests unit+integ. STREAK-PROMO-01-04. 30/30. Blockers fixed (interleaved commit, null desc).
+
+**Componentes:**
+- Services: services/streak_promotion_service.py (protect_streak, claim, levels, hook from game), scheduler bridge.
+- Models: Streak* + in Transaction?
+- Handlers: admin for promos, game_user for claim.
+- Cross: game play_trivia -> hook promo on milestone streak.
+
+**Tests:**
+- `tests/unit/test_streak_promotion_service.py` (full per plan17-04).
+- integ/test_streak_protection_flow.py , test_callbackdata , test_game (promo delivery on milestone test_promo_code_delivery... ), invariants.
+
+**Brechas identificadas (vs contrato deseado + plans, Alta prior):**
+
+| # | Brecha | Severidad | Tipo de test recomendado | Prioridad | Notas |
+|---|--------|-----------|---------------------------|-----------|-------|
+| 1 | Post game credit best effort for promo code? (post commit hooks). | Alta | Gold atomic (SQLite+TS). | Alta | game hook + claim. |
+| 2 | Scheduler claim/activate edge. | Media | Integ. | Media | . |
+| 3 | ID etc prior. | Baja | Note. | Baja | . |
+
+**Recomendaciones:**
+- Alta (Esfuerzo: bajo-medio, Riesgo mitigado: post-credit promo codes lost or inconsistent): for game hook + promo claim atomic (use gold SQLite+TS + patch if needed, like cross_atomic). Extend test_game + test_streak_promotion. Strict, DESIRED, hygiene.
+- Media (Esfuerzo: bajo, Riesgo mitigado: scheduler edges): scheduler integ.
+- General: uniform + gates.
+
+**Registro:** Section + uniform recs/brechas this tiron. Pilots. GSD.
+
+**Pilots:** Milestone promo delivery gold strengthened (notes).
+
+**Refs:** phases/17, SPEC_fase_17, streak_*, game, tests.
+
+(Sección 17. Uniform synced.)
+
+---
+
+---
+
+### Fase 18: Protección de Rachas (última fase formal)
+
+**Promesa:**
+- ROADMAP + phases/18-protecci-n-de-rachas/ (18-01 PLAN + CONTEXT + HUMAN-UAT + PATTERNS + REVIEW + VERIF + RESEARCH): Protección de rachas (modo arriesgo, timeout 2min?, compra protección, pérdida códigos en arriesgo). Costo determ. Reqs TBD at plan. Integrado con trivia streaks + promo codes.
+
+**Componentes:**
+- Services: streak_promotion_service.protect_streak(user, streak), related in game.
+- Handlers: game_user_handlers:169+ offer protection, 468 call protect.
+- Models: use STREAK_PROTECTION source.
+- Cross: game trivia streak -> protect option -> cost besito debit STREAK_PROTECTION.
+
+**Tests:**
+- `tests/integration/test_streak_protection_flow.py` (flows).
+- unit/test_streak_promotion_service.py (incl protect).
+- invariants.py (I9 costo protección determinístico puro).
+- test_game (offers).
+
+**Brechas vs desired (from prior Top10 #7):**
+- Full timeout 2min flows, buy protection, loss codes on risky not complete.
+- Atomic: debit for protect + state change.
+- Edge: no active streak, insuff balance, concurrent.
+
+**Recs Alta:** Strengthen integ test_streak_protection_flow + unit with gold SQLite+TS for protect flow (debit internal + record), strict, fresh TG, try/finally. Add edges.
+
+**Registro:** Esta es la última fase formal. Review completa. Pilots Alta para protection atomic + timeout sim. Hoja marcadas. 0 fases restan después de este tirón.
+
+**Pilots:** Added/updated gold pilots in test_streak_protection_flow.py + test_streak_promotion (follow cross atomic precedent exactly: tmp, TestSession N806, 777 TG, saved, re-query, DESIRED doc, "credit survives" or debit contract for protect).
+
+**Refs:** phases/18-*, SPEC_proteccion_de_racha.md, streak_promotion_service:318 (protect), game handlers, invariants I9, test_*streak* .
+
+**Archivos:** fases_refactor_testing + test_streak* + GSDs.
+
+**Decisiones:** Use gold exactly as in reaction_full / cross / daily atomic from prior tirones (avoid past hygiene/incomplete ID/docdrift). 0 prod chg. Last tiron note.
+
+**Verif:** After all pilots + updates: ruff; pytest -q -k "streak|protection|TestStreak|game|trivia|backpack|promo|store|package" ; broader besito daily vip etc smoke; 0 reg.
+
+**Final de tirón:** Todas 12-18 ✅ . 0 fases pendientes en hoja ligera de testing review. Handoff en refactor_testing.md actualizado.
+
+(Secciones Fases 12-18 + último tirón completado.)
 
 

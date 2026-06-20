@@ -1,15 +1,17 @@
 """
 Tests unitarios para PromotionService.
 """
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
 
-from services.promotion_service import PromotionService
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from models.models import (
-    PromotionStatus, InterestStatus, BlockedPromotionUser,
-    PromotionInterest, Promotion
+    BlockedPromotionUser,
+    InterestStatus,
+    PromotionStatus,
 )
+from services.promotion_service import PromotionService
 
 
 @pytest.mark.unit
@@ -25,7 +27,7 @@ class TestPromotionService:
             description="Una promocion de prueba",
             package_id=sample_package.id,
             price_mxn=99900,
-            created_by=987654321
+            created_by=987654321,
         )
 
         assert promotion.name == "Promo Test"
@@ -63,7 +65,7 @@ class TestPromotionService:
             description="Updated Desc",
             price_mxn=49900,
             status=PromotionStatus.PAUSED,
-            is_active=False
+            is_active=False,
         )
 
         assert result is True
@@ -115,10 +117,11 @@ class TestPromotionInterest:
         service = PromotionService(db_session)
 
         success, message, interest = service.express_interest(
-            sample_user.id, sample_promotion.id,
+            sample_user.id,
+            sample_promotion.id,
             username=sample_user.username,
             first_name=sample_user.first_name,
-            last_name=sample_user.last_name
+            last_name=sample_user.last_name,
         )
 
         assert success is True
@@ -130,30 +133,24 @@ class TestPromotionInterest:
     def test_express_interest_blocked_user(self, db_session, sample_user, sample_promotion):
         """Test expresar interes falla para usuario bloqueado"""
         service = PromotionService(db_session)
-        blocked = BlockedPromotionUser(
-            user_id=sample_user.id,
-            reason="Spam",
-            is_permanent=True
-        )
+        blocked = BlockedPromotionUser(user_id=sample_user.id, reason="Spam", is_permanent=True)
         db_session.add(blocked)
         db_session.commit()
 
-        success, message, interest = service.express_interest(
-            sample_user.id, sample_promotion.id
-        )
+        success, message, interest = service.express_interest(sample_user.id, sample_promotion.id)
 
         assert success is False
         assert interest is None
         assert "No puedes expresar interes" in message
 
-    def test_express_interest_unavailable_promotion(self, db_session, sample_user, sample_promotion):
+    def test_express_interest_unavailable_promotion(
+        self, db_session, sample_user, sample_promotion
+    ):
         """Test expresar interes falla para promocion no disponible"""
         service = PromotionService(db_session)
         service.pause_promotion(sample_promotion.id)
 
-        success, message, interest = service.express_interest(
-            sample_user.id, sample_promotion.id
-        )
+        success, message, interest = service.express_interest(sample_user.id, sample_promotion.id)
 
         assert success is False
         assert interest is None
@@ -163,9 +160,7 @@ class TestPromotionInterest:
         """Test expresar interes falla si ya existe interes"""
         service = PromotionService(db_session)
 
-        success1, _, interest1 = service.express_interest(
-            sample_user.id, sample_promotion.id
-        )
+        success1, _, interest1 = service.express_interest(sample_user.id, sample_promotion.id)
         assert success1 is True
 
         success2, message2, interest2 = service.express_interest(
@@ -179,9 +174,7 @@ class TestPromotionInterest:
         """Test marcar interes como atendido actualiza status y attended_by"""
         service = PromotionService(db_session)
 
-        _, _, interest = service.express_interest(
-            sample_user.id, sample_promotion.id
-        )
+        _, _, interest = service.express_interest(sample_user.id, sample_promotion.id)
         result = service.mark_interest_attended(interest.id, sample_admin.telegram_id)
 
         assert result is True
@@ -200,9 +193,7 @@ class TestPromotionBlocking:
         service = PromotionService(db_session)
 
         blocked = service.block_user(
-            sample_user.id,
-            blocked_by=987654321,
-            reason="Comportamiento inapropiado"
+            sample_user.id, blocked_by=987654321, reason="Comportamiento inapropiado"
         )
 
         assert blocked is not None
@@ -243,19 +234,21 @@ class TestPromotionStats:
 
         stats = service.get_promotion_stats()
 
-        assert stats['total_promotions'] >= 1
-        assert stats['active_promotions'] >= 1
-        assert stats['total_interests'] >= 1
-        assert stats['pending_interests'] >= 1
-        assert 'attended_interests' in stats
-        assert 'blocked_users' in stats
+        assert stats["total_promotions"] >= 1
+        assert stats["active_promotions"] >= 1
+        assert stats["total_interests"] >= 1
+        assert stats["pending_interests"] >= 1
+        assert "attended_interests" in stats
+        assert "blocked_users" in stats
 
 
 @pytest.mark.unit
 class TestPromotionServiceRaceCondition:
     """Tests para verificar proteccion contra race conditions"""
 
-    def test_express_interest_uses_select_for_update(self, db_session, sample_user, sample_promotion):
+    def test_express_interest_uses_select_for_update(
+        self, db_session, sample_user, sample_promotion
+    ):
         """Test que express_interest usa SELECT FOR UPDATE"""
         service = PromotionService(db_session)
 
@@ -275,6 +268,42 @@ class TestPromotionServiceRaceCondition:
         interest_filtered.with_for_update.return_value = interest_with_lock
         interest_mock.filter.return_value = interest_filtered
 
-        with patch.object(db_session, 'query', side_effect=[blocked_mock, promotion_mock, interest_mock]):
+        with patch.object(
+            db_session, "query", side_effect=[blocked_mock, promotion_mock, interest_mock]
+        ):
             service.express_interest(sample_user.id, sample_promotion.id)
             interest_filtered.with_for_update.assert_called()
+
+    def test_get_vip_exclusive_and_available_excludes_vip(self, db_session, sample_package):
+        """DESIRED CONTRACT Fase13 Mapa del Deseo: get_vip_exclusive_promotions returns only is_vip_exclusive=True;
+        get_available_promotions excludes VIP exclusives. Strict filter by flag + active.
+        """
+        service = PromotionService(db_session)
+        try:
+            vip_ex = service.create_promotion(
+                name="VIP Only",
+                description="mapa",
+                package_id=sample_package.id,
+                price_mxn=60000,
+                created_by=123,
+            )
+            vip_ex.is_vip_exclusive = True
+            db_session.commit()
+            normal = service.create_promotion(
+                name="Normal Promo",
+                description="general",
+                package_id=sample_package.id,
+                price_mxn=10000,
+                created_by=123,
+            )
+
+            vip_only = service.get_vip_exclusive_promotions()
+            vip_ids = [p.id for p in vip_only]
+            assert set(vip_ids) == {vip_ex.id}  # exact list/set equality gold
+
+            avail = service.get_available_promotions()
+            avail_ids = [p.id for p in avail]
+            assert vip_ex.id not in set(avail_ids)
+            assert normal.id in set(avail_ids)
+        finally:
+            service.close()

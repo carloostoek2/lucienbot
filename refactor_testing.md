@@ -337,9 +337,11 @@ Este patrón quedó documentado en `tests/integration/test_reaction_full_chain.p
 **GSD counts (wc at close):** fase9:16, fase10:11, fase11:2.
 **Fases restantes post 9-11:** 7 según tabla (12-18).
 
-**Próximos:** Fase12 per Hoja.
+**Último tirón (12-18) completado:** Revisión 6 pasos por fase + pilots Alta (categorías/stock/filtros en store/pkg tests; vip_excl en promo; dice en game; protect contract en streak; backpack/trivia/promo/streak flows pre-piloted + hygiene). Hoja actualizada todas ✅ . 0 fases restan. GSD pre every (multiple logs). ruff/pytest gates 0 reg. Ver fases_refactor_testing.md secciones completas + summary.
 
-(End handoff tirón 9-10-11. All open issues addressed or wontfixed with reason.)
+**Próximos:** Ninguno (hoja ligera testing review completa).
+
+(End handoff tirón 9-10-11 + último tirón 12-18. All open issues addressed or wontfixed with reason. 0 phases remain.)
 
 ---
 

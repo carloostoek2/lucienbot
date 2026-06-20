@@ -13,6 +13,7 @@ from models.database import Base
 from models.models import (
     BesitoBalance,
     BesitoTransaction,
+    Category,
     Order,
     OrderStatus,
     Package,
@@ -613,7 +614,9 @@ class TestStorePurchaseAtomicGold:
             def spy_query(model):
                 if model is StoreProduct:
                     mock_q = MagicMock()
-                    mock_q.filter.return_value.with_for_update.return_value.first.return_value = None
+                    mock_q.filter.return_value.with_for_update.return_value.first.return_value = (
+                        None
+                    )
                     return mock_q
                 return real_query(model)
 
@@ -697,7 +700,9 @@ class TestStorePurchaseAtomicGold:
             engine.dispose()
 
     @pytest.mark.asyncio
-    async def test_complete_order_deliver_tuple_failure_still_commits(self, tmp_path: Path, mock_bot):
+    async def test_complete_order_deliver_tuple_failure_still_commits(
+        self, tmp_path: Path, mock_bot
+    ):
         """deliver (False, msg) post-commit does not roll back DB phase."""
         engine, TestSession = self._create_engine_and_session(tmp_path)  # noqa: N806
         db = TestSession()
@@ -935,3 +940,100 @@ class TestStorePurchaseAtomicGold:
         finally:
             db.close()
             engine.dispose()
+
+    def test_search_products(self, db_session):
+        """DESIRED CONTRACT Fase12: search by name/desc ilike returns matches, filters active.
+        Fresh explicit data, exact list equality (gold precedent strict ==/lists).
+        """
+        pkg = Package(name="SearchPkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        prod = StoreProduct(
+            name="UniqueSearchNameXYZ123",
+            description="desc",
+            package_id=pkg.id,
+            price=100,
+            stock=5,
+            is_active=True,
+        )
+        db_session.add(prod)
+        inactive = StoreProduct(
+            name="UniqueSearchNameXYZ123",
+            description="desc",
+            package_id=pkg.id,
+            price=100,
+            stock=5,
+            is_active=False,
+        )
+        db_session.add(inactive)
+        db_session.commit()
+        service = StoreService(db_session)
+        try:
+            results = service.search_products("UniqueSearchNameXYZ123")
+            assert [p.id for p in results] == [prod.id]  # exact, only active
+            no = service.search_products("NONEXISTENTQUERYZZZ999")
+            assert no == []
+        finally:
+            service.close()
+
+    def test_filter_products_and_by_category(self, db_session):
+        """DESIRED: filter multi-crit (cat, price, in_stock) + get_by_category via pkg.cat. Exact lists (no fixture mut, fresh)."""
+        cat = Category(name="FilterCatX", is_active=True)
+        db_session.add(cat)
+        db_session.commit()
+        db_session.refresh(cat)
+        pkg = Package(name="FilterPkgX", is_active=True, category_id=cat.id)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        prod = StoreProduct(name="FProd", package_id=pkg.id, price=1234, stock=3, is_active=True)
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+        service = StoreService(db_session)
+        try:
+            by_cat = service.get_products_by_category(cat.id)
+            assert [p.id for p in by_cat] == [prod.id]
+            filtered = service.filter_products(
+                category_id=cat.id, min_price=1000, max_price=2000, in_stock_only=True
+            )
+            assert [p.id for p in filtered] == [prod.id]
+            out_price = service.filter_products(min_price=9999)
+            assert [p.id for p in out_price] == []
+        finally:
+            service.close()
+
+    def test_stock_helpers_and_low_stock(self, db_session):
+        """DESIRED: compute pure stock emoji/text + product props is_low_stock/stock_status. Fresh prod."""
+        from services.store_service import compute_stock_emoji_and_text
+
+        pkg = Package(name="StockPkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        prod = StoreProduct(
+            name="SProd",
+            package_id=pkg.id,
+            price=10,
+            stock=2,
+            is_active=True,
+            low_stock_threshold=5,
+        )
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+        service = StoreService(db_session)
+        try:
+            assert compute_stock_emoji_and_text(-1) == ("♾️", "∞")
+            assert compute_stock_emoji_and_text(0) == ("🚨", "AGOTADO")
+            assert compute_stock_emoji_and_text(3, is_low_stock=True) == ("⚠️", "3")
+            assert compute_stock_emoji_and_text(10) == ("📦", "10")
+            assert prod.is_low_stock is True
+            assert prod.stock_status == "low"
+            prod.stock = -1
+            db_session.commit()
+            db_session.refresh(prod)
+            assert prod.stock_status == "unlimited"
+        finally:
+            service.close()

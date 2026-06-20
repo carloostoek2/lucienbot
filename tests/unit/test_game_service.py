@@ -37,6 +37,7 @@ from unittest.mock import patch
 import pytest
 
 from models.models import (
+    BesitoBalance,
     GameRecord,
     Subscription,
     Token,
@@ -623,6 +624,47 @@ class TestGameServiceLimitsAndConcurrent:
             for rec in caplog.records
         )
         assert found, "game award observer not invoked or did not log per Item 6 contract"
+
+    def test_play_dice_game_contract(self, db_session):
+        """DESIRED CONTRACT Fase14 Minijuegos: play_dice_game exact keys + win credit delta (pairs/doubles).
+        Fresh explicit + patch force win + re-query + hygiene (gold).
+        """
+        from unittest.mock import patch
+
+        tg = 77714001
+        u = User(telegram_id=tg, username="diceu", role=UserRole.USER)
+        db_session.add(u)
+        db_session.commit()
+        db_session.refresh(u)
+        bal = BesitoBalance(user_id=tg, balance=10, total_earned=10, total_spent=0)
+        db_session.add(bal)
+        db_session.commit()
+        service = GameService(db_session)
+        try:
+            with patch.object(service, "roll_dice", return_value=(2, 2)):
+                res = service.play_dice_game(tg)
+            expected_keys = {
+                "dice1",
+                "dice2",
+                "sum",
+                "won",
+                "win_type",
+                "is_near_miss",
+                "near_miss_type",
+                "besitos",
+                "remaining_after",
+                "message_parts",
+                "limit_reached",
+                "message",
+            }
+            assert set(res.keys()) == expected_keys
+            assert res["won"] is True
+            assert res["win_type"] == "doubles"
+            assert res["besitos"] > 0
+            rebal = db_session.query(BesitoBalance).filter_by(user_id=tg).first()
+            assert rebal.balance == 10 + res["besitos"]
+        finally:
+            service.close()
 
 
 # Decision notes (per refactor_testing.md + item5 precedent):
