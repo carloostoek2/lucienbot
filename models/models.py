@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -25,6 +26,11 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from models.database import Base
+
+
+def str_enum_values(enum_cls: type[enum.StrEnum]) -> list[str]:
+    """Persist StrEnum .value in DB (matches Alembic lowercase enum definitions)."""
+    return [member.value for member in enum_cls]
 
 
 class ChannelType(enum.StrEnum):
@@ -722,8 +728,73 @@ class UserRewardHistory(Base):
 
 
 # ============================================================
-# FASE 4: TIENDA
+# FASE 4: TIENDA + FULFILLMENT CATALOG
 # ============================================================
+
+
+class DeliveryMode(enum.StrEnum):
+    """Modo de entrega de producto en tienda."""
+
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class FulfillmentKind(enum.StrEnum):
+    """Tipo de cumplimiento post-compra."""
+
+    PACKAGE = "package"
+    PACKAGE_DEFERRED = "package_deferred"
+    USER_INPUT_THEN_MANUAL = "user_input_manual"
+    PRIVILEGE_EARLY_ACCESS = "early_access"
+    PRIVILEGE_DISCOUNT = "discount"
+    STORY_UNLOCK = "story_unlock"
+    VIP_GRANT = "vip_grant"
+    WAITLIST_ENTRY = "waitlist"
+    CHANNEL_HONOR = "channel_honor"
+    SCHEDULED_CHAT = "scheduled_chat"
+
+
+class FulfillmentStatus(enum.StrEnum):
+    """Estado de cumplimiento de una línea de orden."""
+
+    PENDING_INPUT = "pending_input"
+    PENDING_FULFILLMENT = "pending"
+    AUTO_IN_PROGRESS = "auto_running"
+    FULFILLED = "fulfilled"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class PrivilegeType(enum.StrEnum):
+    """Tipo de privilegio de tienda."""
+
+    EARLY_ACCESS = "early_access"
+    DISCOUNT = "discount"
+
+
+class WaitlistStatus(enum.StrEnum):
+    """Estado de entrada en lista de espera."""
+
+    ACTIVE = "active"
+    FULFILLED = "fulfilled"
+    EXPIRED = "expired"
+
+
+class StoreTier(Base):
+    """Tiers del catálogo Kinky (IMPULSO → MÍTICO)."""
+
+    __tablename__ = "store_tiers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(50), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    tagline = Column(Text, nullable=True)
+    price_min = Column(Integer, nullable=False, default=0)
+    price_max = Column(Integer, nullable=False, default=0)
+    order_index = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+
+    products = relationship("StoreProduct", back_populates="tier")
 
 
 class StoreProduct(Base):
@@ -735,11 +806,29 @@ class StoreProduct(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
 
-    # Relacion con paquete
-    package_id = Column(Integer, ForeignKey("packages.id"), nullable=False)
+    # Relacion con paquete (nullable para kinds MANUAL sin paquete fijo)
+    package_id = Column(Integer, ForeignKey("packages.id"), nullable=True)
 
     # Categoría
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
+
+    # Fulfillment catalog
+    delivery_mode = Column(
+        Enum(DeliveryMode, values_callable=str_enum_values),
+        default=DeliveryMode.AUTO,
+        nullable=False,
+    )
+    fulfillment_kind = Column(
+        Enum(FulfillmentKind, values_callable=str_enum_values),
+        default=FulfillmentKind.PACKAGE,
+        nullable=False,
+    )
+    tier_id = Column(Integer, ForeignKey("store_tiers.id"), nullable=True, index=True)
+    story_node_id = Column(Integer, ForeignKey("story_nodes.id"), nullable=True)
+    tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=True)
+    fulfillment_config = Column(Text, nullable=True)  # JSON serializado
+    monthly_stock_cap = Column(Integer, nullable=True)
+    sort_order = Column(Integer, default=0)
 
     # Precio en besitos
     price = Column(Integer, nullable=False)
@@ -757,6 +846,9 @@ class StoreProduct(Base):
     # Relaciones
     package = relationship("Package")
     category = relationship("Category")
+    tier = relationship("StoreTier", back_populates="products")
+    story_node = relationship("StoryNode")
+    tariff = relationship("Tariff")
     cart_items = relationship("CartItem", back_populates="product", cascade="all, delete-orphan")
     order_items = relationship("OrderItem", back_populates="product")
 
@@ -866,6 +958,88 @@ class OrderItem(Base):
     # Relaciones
     order = relationship("Order", back_populates="items")
     product = relationship("StoreProduct", back_populates="order_items")
+    fulfillment = relationship(
+        "OrderFulfillment",
+        back_populates="order_item",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderFulfillment(Base):
+    """Cumplimiento post-compra por línea de orden (1:1 con OrderItem)."""
+
+    __tablename__ = "order_fulfillments"
+    __table_args__ = (
+        UniqueConstraint("order_item_id", name="uq_order_fulfillment_order_item"),
+        Index("ix_order_fulfillments_status", "status"),
+        Index("ix_order_fulfillments_user_status", "user_id", "status"),
+        Index("ix_order_fulfillments_product_created", "product_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_item_id = Column(Integer, ForeignKey("order_items.id"), nullable=False, unique=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
+    fulfillment_kind = Column(Enum(FulfillmentKind, values_callable=str_enum_values), nullable=False)
+    status = Column(
+        Enum(FulfillmentStatus, values_callable=str_enum_values),
+        default=FulfillmentStatus.PENDING_FULFILLMENT,
+    )
+    user_input = Column(Text, nullable=True)
+    admin_notes = Column(Text, nullable=True)
+    fulfilled_by = Column(BigInteger, nullable=True)
+    fulfilled_at = Column(DateTime(timezone=True), nullable=True)
+    auto_result = Column(Text, nullable=True)  # JSON serializado
+    retry_count = Column(Integer, default=0)
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    order_item = relationship("OrderItem", back_populates="fulfillment")
+    product = relationship("StoreProduct")
+    privileges = relationship("StorePrivilege", back_populates="fulfillment")
+    waitlist_entry = relationship(
+        "StoreWaitlistEntry", back_populates="fulfillment", uselist=False
+    )
+
+
+class StorePrivilege(Base):
+    """Privilegio temporal otorgado por compra (early access, descuento)."""
+
+    __tablename__ = "store_privileges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
+    order_fulfillment_id = Column(Integer, ForeignKey("order_fulfillments.id"), nullable=False)
+    privilege_type = Column(Enum(PrivilegeType, values_callable=str_enum_values), nullable=False)
+    config = Column(Text, nullable=True)  # JSON serializado
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    fulfillment = relationship("OrderFulfillment", back_populates="privileges")
+    product = relationship("StoreProduct")
+
+
+class StoreWaitlistEntry(Base):
+    """Entrada en lista de espera (La Lista)."""
+
+    __tablename__ = "store_waitlist_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
+    order_fulfillment_id = Column(Integer, ForeignKey("order_fulfillments.id"), nullable=False)
+    position = Column(Integer, nullable=False)
+    joined_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(
+        Enum(WaitlistStatus, values_callable=str_enum_values),
+        default=WaitlistStatus.ACTIVE,
+    )
+
+    fulfillment = relationship("OrderFulfillment", back_populates="waitlist_entry")
+    product = relationship("StoreProduct")
 
 
 # ============================================================

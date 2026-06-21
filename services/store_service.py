@@ -74,28 +74,36 @@ def build_purchase_notification_text(
     )
 
 
-def build_purchase_admin_keyboard(user_link: str) -> InlineKeyboardMarkup:
-    """Construye el teclado de notificación de compra para admins (contacto + navegación al menú principal).
-
-    Función auxiliar de UI. Los labels de botones se obtienen de LucienVoice para evitar
-    strings en español user-facing dentro de services/ (auditoría de voz).
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def build_purchase_admin_keyboard(
+    user_link: str, *, queue_link: bool = True
+) -> InlineKeyboardMarkup:
+    """Construye el teclado de notificación de compra para admins."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=LucienVoice.store_admin_purchase_contact_button(),
+                url=user_link,
+            )
+        ],
+    ]
+    if queue_link:
+        rows.append(
             [
                 InlineKeyboardButton(
-                    text=LucienVoice.store_admin_purchase_contact_button(),
-                    url=user_link,
+                    text=LucienVoice.fulfillment_admin_queue_button(),
+                    callback_data="fulfill_admin_menu",
                 )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=LucienVoice.store_admin_purchase_back_button(),
-                    callback_data="back_to_admin",
-                )
-            ],
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=LucienVoice.store_admin_purchase_back_button(),
+                callback_data="back_to_admin",
+            )
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 class StoreService:
@@ -142,13 +150,30 @@ class StoreService:
         self,
         name: str,
         description: str,
-        package_id: int,
+        package_id: int | None,
         price: int,
         stock: int = -1,
         created_by: int = None,
+        *,
+        tier_id: int | None = None,
+        delivery_mode=None,
+        fulfillment_kind=None,
+        fulfillment_config: str | None = None,
+        monthly_stock_cap: int | None = None,
+        story_node_id: int | None = None,
+        tariff_id: int | None = None,
     ) -> StoreProduct:
-        """Crea un nuevo producto en la tienda"""
+        """Crea un nuevo producto en la tienda."""
+        from models.models import DeliveryMode, FulfillmentKind
+
         db = self._get_db()
+        kind = fulfillment_kind or FulfillmentKind.PACKAGE
+        if kind in (FulfillmentKind.PACKAGE, FulfillmentKind.PACKAGE_DEFERRED) and not package_id:
+            raise ValueError("package_id required for PACKAGE fulfillment kinds")
+        if kind == FulfillmentKind.VIP_GRANT and not tariff_id:
+            raise ValueError("tariff_id required for VIP_GRANT fulfillment kind")
+        if kind == FulfillmentKind.STORY_UNLOCK and not story_node_id:
+            raise ValueError("story_node_id required for STORY_UNLOCK fulfillment kind")
         product = StoreProduct(
             name=name,
             description=description,
@@ -157,6 +182,13 @@ class StoreService:
             stock=stock,
             created_by=created_by,
             is_active=True,
+            tier_id=tier_id,
+            delivery_mode=delivery_mode or DeliveryMode.AUTO,
+            fulfillment_kind=kind,
+            fulfillment_config=fulfillment_config,
+            monthly_stock_cap=monthly_stock_cap,
+            story_node_id=story_node_id,
+            tariff_id=tariff_id,
         )
         db.add(product)
         db.commit()
@@ -260,12 +292,38 @@ class StoreService:
 
     def update_product(self, product_id: int, **kwargs) -> bool:
         """Actualiza un producto"""
+        from models.models import FulfillmentKind
+
         db = self._get_db()
         product = self.get_product(product_id)
         if not product:
             return False
 
-        if "package_id" in kwargs:
+        new_kind = kwargs.get("fulfillment_kind", product.fulfillment_kind)
+        new_package_id = kwargs.get("package_id", product.package_id)
+        new_tariff_id = kwargs.get("tariff_id", product.tariff_id)
+        new_story_node_id = kwargs.get("story_node_id", product.story_node_id)
+
+        if new_kind in (FulfillmentKind.PACKAGE, FulfillmentKind.PACKAGE_DEFERRED) and not new_package_id:
+            logger.warning(
+                f"store_service | update_product | product_id={product_id} | "
+                f"result=package_id_required_for_kind"
+            )
+            return False
+        if new_kind == FulfillmentKind.VIP_GRANT and not new_tariff_id:
+            logger.warning(
+                f"store_service | update_product | product_id={product_id} | "
+                f"result=tariff_id_required_for_kind"
+            )
+            return False
+        if new_kind == FulfillmentKind.STORY_UNLOCK and not new_story_node_id:
+            logger.warning(
+                f"store_service | update_product | product_id={product_id} | "
+                f"result=story_node_id_required_for_kind"
+            )
+            return False
+
+        if "package_id" in kwargs and kwargs["package_id"] is not None:
             new_package_id = kwargs["package_id"]
             package = self.package_service.get_package(new_package_id)
             if not package:
@@ -289,6 +347,13 @@ class StoreService:
             "stock",
             "is_active",
             "low_stock_threshold",
+            "fulfillment_kind",
+            "fulfillment_config",
+            "monthly_stock_cap",
+            "delivery_mode",
+            "tier_id",
+            "tariff_id",
+            "story_node_id",
         ]
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(product, field):
@@ -439,6 +504,121 @@ class StoreService:
 
     # ==================== COMPRA DIRECTA ====================
 
+    def _check_monthly_cap_for_product(self, product_id: int) -> str | None:
+        from services.fulfillment_service import FulfillmentService
+
+        fulfill = FulfillmentService(self._get_db())
+        if not fulfill.is_monthly_cap_available(product_id):
+            product = self.get_product(product_id)
+            return LucienVoice.store_monthly_cap_reached(product.name if product else "")
+        return None
+
+    def get_shop_balance_display(self, user_id: int) -> int:
+        """Thin delegate: saldo besitos para UI de catálogo."""
+        return BesitoService(db=self.db).get_balance(user_id)
+
+    def get_product_preview_context(self, product_id: int) -> dict:
+        """Thin delegate: contexto de preview (file_count, can_preview)."""
+        product = self.get_product(product_id)
+        if not product or not product.package_id:
+            return {"file_count": 0, "can_preview": False}
+        pkg = self.package_service.get_package(product.package_id)
+        if not pkg:
+            return {"file_count": 0, "can_preview": False}
+        files = self.package_service.get_package_files(product.package_id)
+        return {"file_count": len(files), "can_preview": len(files) > 0}
+
+    def get_categories_for_shop(self, active_only: bool = True) -> list:
+        """Thin delegate: categorías para navegación tienda."""
+        return self.package_service.get_all_categories(active_only=active_only)
+
+    def get_category_for_shop(self, category_id: int):
+        """Thin delegate: categoría por id."""
+        return self.package_service.get_category(category_id)
+
+    def get_preview_files_for_product(self, product_id: int, limit: int = 1) -> list:
+        """Thin delegate: archivos de preview del paquete."""
+        product = self.get_product(product_id)
+        if not product or not product.package_id:
+            return []
+        files = self.package_service.get_package_files(product.package_id)
+        return files[:limit]
+
+    def get_effective_price(self, user_id: int, list_price: int) -> int:
+        """Precio efectivo tras descuento activo (una sola aplicación en complete_order)."""
+        return self._apply_discount_to_order_total(user_id, list_price)
+
+    def get_product_detail_context(self, product_id: int, user_id: int) -> dict | None:
+        """Contexto unificado para detalle de producto (1 llamada handler)."""
+        from services.fulfillment_service import FulfillmentService
+
+        product = self.get_product(product_id)
+        if not product:
+            return None
+        preview = self.get_product_preview_context(product_id)
+        tier_name = product.tier.name if product.tier else ""
+        effective_price = self.get_effective_price(user_id, product.price)
+        cap_available = FulfillmentService(self._get_db()).is_monthly_cap_available(product_id)
+        return {
+            "product": product,
+            "balance": self.get_shop_balance_display(user_id),
+            "tier_name": tier_name,
+            "effective_price": effective_price,
+            "monthly_cap_available": cap_available,
+            **preview,
+        }
+
+    async def submit_purchase_input(
+        self, bot, fulfillment_id: int, user_id: int, text: str
+    ) -> tuple[bool, str]:
+        """Thin delegate: envía input de compra al FulfillmentService."""
+        from services.fulfillment_service import FulfillmentService
+
+        return await FulfillmentService(self._get_db()).submit_user_input(
+            bot, fulfillment_id, user_id, text
+        )
+
+    async def purchase_and_complete(
+        self, bot, user_id: int, product_id: int, quantity: int = 1
+    ) -> tuple[Order | None, list[dict], str | None]:
+        """Encapsula direct_purchase + complete_order en una sesión."""
+        order, error = self.direct_purchase(user_id, product_id)
+        if error:
+            return None, [], error
+        success, msg = await self.complete_order(bot, order.id)
+        if not success:
+            return order, [], msg
+        from services.fulfillment_service import FulfillmentService
+
+        summaries = []
+        fulfill_svc = FulfillmentService(self._get_db())
+        for item in order.items:
+            row = fulfill_svc.get_fulfillment_for_order_item(item.id)
+            if row:
+                summaries.append(
+                    {
+                        "kind": row.fulfillment_kind.value,
+                        "status": row.status.value,
+                        "product_name": item.product_name,
+                        "fulfillment_id": row.id,
+                    }
+                )
+        return order, summaries, None
+
+    def get_all_tiers(self, active_only: bool = True) -> list:
+        from models.models import StoreTier
+
+        q = self._get_db().query(StoreTier)
+        if active_only:
+            q = q.filter(StoreTier.is_active)
+        return q.order_by(StoreTier.order_index).all()
+
+    def get_products_by_tier(self, tier_id: int, active_only: bool = True) -> list[StoreProduct]:
+        q = self._get_db().query(StoreProduct).filter(StoreProduct.tier_id == tier_id)
+        if active_only:
+            q = q.filter(StoreProduct.is_active)
+        return q.order_by(StoreProduct.sort_order, StoreProduct.price).all()
+
     def direct_purchase(self, user_id: int, product_id: int) -> tuple:
         """
         Crea una orden directa para un producto sin usar carrito.
@@ -453,6 +633,10 @@ class StoreService:
         if not product.is_available:
             return None, LucienVoice.store_product_unavailable(product.name)
 
+        cap_err = self._check_monthly_cap_for_product(product_id)
+        if cap_err:
+            return None, cap_err
+
         # Verificar stock
         if product.stock != -1 and product.stock < 1:
             return None, LucienVoice.store_stock_insufficient(product.name, product.stock)
@@ -462,12 +646,14 @@ class StoreService:
             db=self.db
         )  # local, on-demand; owns=False (db shared); balance check for atomic pre-purchase
         balance = besito_service.get_balance(user_id)
-        if balance < product.price:
-            return None, LucienVoice.store_balance_insufficient(product.price, balance)
+        list_price = product.price
+        effective_price = self.get_effective_price(user_id, list_price)
+        if balance < effective_price:
+            return None, LucienVoice.store_balance_insufficient(effective_price, balance)
 
-        # Crear la orden
+        # Crear la orden (total_price = precio lista; descuento en complete_order)
         order = Order(
-            user_id=user_id, total_items=1, total_price=product.price, status=OrderStatus.PENDING
+            user_id=user_id, total_items=1, total_price=list_price, status=OrderStatus.PENDING
         )
         db.add(order)
         db.flush()
@@ -478,8 +664,8 @@ class StoreService:
             product_id=product.id,
             product_name=product.name,
             quantity=1,
-            unit_price=product.price,
-            total_price=product.price,
+            unit_price=list_price,
+            total_price=list_price,
         )
         db.add(order_item)
 
@@ -517,6 +703,10 @@ class StoreService:
                     product.name if product else "Desconocido"
                 )
 
+            cap_err = self._check_monthly_cap_for_product(product.id)
+            if cap_err:
+                return None, cap_err
+
             # Verificar stock
             if product.stock != -1 and product.stock < cart_item.quantity:
                 return None, LucienVoice.store_stock_insufficient(product.name, product.stock)
@@ -539,10 +729,11 @@ class StoreService:
             db=self.db
         )  # local, on-demand; owns=False (db shared); balance check for atomic pre-purchase (carrito total)
         balance = besito_service.get_balance(user_id)
-        if balance < total_price:
-            return None, LucienVoice.store_balance_insufficient(total_price, balance)
+        effective_total = self.get_effective_price(user_id, total_price)
+        if balance < effective_total:
+            return None, LucienVoice.store_balance_insufficient(effective_total, balance)
 
-        # Crear la orden
+        # Crear la orden (precio lista; descuento aplicado una vez en complete_order)
         order = Order(
             user_id=user_id,
             total_items=total_items,
@@ -570,12 +761,34 @@ class StoreService:
         logger.info(f"Orden creada: {order.id} para usuario {user_id}")
         return order, None
 
-    def _decrement_stock_for_order(
-        self, db: Session, order: Order
-    ) -> tuple[list[int], list[int]]:
-        """Decrementa stock con FOR UPDATE. Retorna (low_stock_product_ids, package_ids_a_entregar)."""
+    def _verify_monthly_caps_for_order(self, db: Session, order: Order) -> None:
+        """Reserva cupo mensual bajo FOR UPDATE contando OrderItems COMPLETED + orden actual."""
+        from collections import defaultdict
+
+        from services.fulfillment_service import FulfillmentService
+
+        fulfill = FulfillmentService(db)
+        pending_qty: dict[int, int] = defaultdict(int)
+        for order_item in order.items:
+            pending_qty[order_item.product_id] += order_item.quantity
+        for product_id, qty in pending_qty.items():
+            product = (
+                db.query(StoreProduct)
+                .filter(StoreProduct.id == product_id)
+                .with_for_update()
+                .first()
+            )
+            if product and product.monthly_stock_cap:
+                count = fulfill.count_monthly_completed_order_items(product_id, db=db)
+                if count + qty > product.monthly_stock_cap:
+                    raise _OrderAtomicError(
+                        f"monthly_cap_exceeded | product_id={product.id}"
+                    )
+
+    def _decrement_stock_for_order(self, db: Session, order: Order) -> list[int]:
+        """Decrementa stock con FOR UPDATE. Retorna low_stock_product_ids."""
+        self._verify_monthly_caps_for_order(db, order)
         low_stock_products = []
-        package_ids = []
         for order_item in order.items:
             product = (
                 db.query(StoreProduct)
@@ -598,29 +811,18 @@ class StoreService:
                         f"STOCK_ALERT: Product {product.id} ({product.name}) - "
                         f"Stock: {product.stock}, Threshold: {product.low_stock_threshold}"
                     )
-            if product.package:
-                package_ids.extend([product.package_id] * order_item.quantity)
-        return low_stock_products, package_ids
+        return low_stock_products
 
-    async def _deliver_order_packages_best_effort(
-        self, bot, order_id: int, user_id: int, package_ids: list[int]
-    ) -> None:
-        """Entrega paquetes post-commit; fallos TG no revierten cobro ni stock."""
-        for package_id in package_ids:
-            try:
-                success, msg = await self.package_service.deliver_package_to_user(
-                    bot=bot, user_id=user_id, package_id=package_id
-                )
-                if not success:
-                    logger.error(
-                        f"store | deliver_failed | order_id={order_id} | "
-                        f"user_id={user_id} | package_id={package_id} | msg={msg}"
-                    )
-            except Exception as e:
-                logger.error(
-                    f"store | deliver_failed | order_id={order_id} | "
-                    f"user_id={user_id} | package_id={package_id} | error={e}"
-                )
+    def _apply_discount_to_order_total(self, user_id: int, total_price: int) -> int:
+        """Aplica descuento activo de StorePrivilege antes del debit."""
+        from services.fulfillment_service import FulfillmentService
+
+        fulfill = FulfillmentService(self._get_db())
+        pct = fulfill.get_active_discount_pct(user_id)
+        if pct <= 0:
+            return total_price
+        discounted = max(0, total_price - (total_price * pct // 100))
+        return discounted
 
     def _has_purchase_for_order(self, db: Session, user_id: int, order_id: int) -> bool:
         """Idempotencia: PURCHASE con reference_id=order_id ya registrado."""
@@ -635,16 +837,71 @@ class StoreService:
             is not None
         )
 
+    def _order_needs_fulfillment_processing(self, order_id: int) -> bool:
+        from models.models import FulfillmentStatus, OrderFulfillment
+
+        db = self._get_db()
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if not order:
+            return False
+        item_ids = [item.id for item in order.items]
+        if not item_ids:
+            return False
+        rows = (
+            db.query(OrderFulfillment)
+            .filter(OrderFulfillment.order_item_id.in_(item_ids))
+            .all()
+        )
+        if len(rows) < len(item_ids):
+            return True
+        incomplete = {
+            FulfillmentStatus.PENDING_INPUT,
+            FulfillmentStatus.PENDING_FULFILLMENT,
+            FulfillmentStatus.AUTO_IN_PROGRESS,
+            FulfillmentStatus.FAILED,
+        }
+        return any(row.status in incomplete for row in rows)
+
+    def _get_order_charge_amount(self, user_id: int, order: Order) -> int:
+        """Monto realmente debitado (lee PURCHASE tx si existe)."""
+        db = self._get_db()
+        tx = (
+            db.query(BesitoTransaction)
+            .filter(
+                BesitoTransaction.user_id == user_id,
+                BesitoTransaction.source == TransactionSource.PURCHASE,
+                BesitoTransaction.reference_id == order.id,
+            )
+            .first()
+        )
+        if tx is not None:
+            return abs(tx.amount)
+        return self._apply_discount_to_order_total(user_id, order.total_price)
+
     async def _complete_order_post_commit_side_effects(
         self,
         bot,
         order: Order,
         user_id: int,
         low_stock_products: list[int],
-        package_ids: list[int],
+        *,
+        is_retry: bool = False,
     ) -> None:
-        """Post-commit best-effort: entrega TG, alertas stock, notif admins, misiones."""
-        await self._deliver_order_packages_best_effort(bot, order.id, user_id, package_ids)
+        """Post-commit best-effort: fulfillment, alertas stock, notif admins, misiones."""
+        from services.fulfillment_service import FulfillmentService
+
+        fulfill_svc = FulfillmentService(self._get_db())
+        try:
+            fulfill_svc.create_fulfillments_for_order(order.id)
+            await fulfill_svc.process_order_fulfillments(
+                bot, order.id, skip_notifications=is_retry
+            )
+        except Exception as exc:
+            logger.error(
+                f"store | fulfillment_post_commit_failed | order_id={order.id} | error={exc}"
+            )
+        if is_retry:
+            return
         for product_id in low_stock_products:
             await self.notify_stock_alert(bot, product_id)
         try:
@@ -681,7 +938,12 @@ class StoreService:
         user_id = order.user_id
 
         if order.status == OrderStatus.COMPLETED:
-            return True, LucienVoice.store_purchase_completed(order.total_price)
+            charge_amount = self._get_order_charge_amount(user_id, order)
+            if self._order_needs_fulfillment_processing(order.id):
+                await self._complete_order_post_commit_side_effects(
+                    bot, order, user_id, [], is_retry=True
+                )
+            return True, LucienVoice.store_purchase_completed(charge_amount)
 
         if order.status != OrderStatus.PENDING:
             return False, LucienVoice.store_order_already_processed()
@@ -691,18 +953,24 @@ class StoreService:
             order.completed_at = order.completed_at or datetime.now(UTC)
             db.commit()
             logger.info(f"store | complete_order_idempotent | order_id={order.id}")
-            return True, LucienVoice.store_purchase_completed(order.total_price)
+            charge_amount = self._get_order_charge_amount(user_id, order)
+            if self._order_needs_fulfillment_processing(order.id):
+                await self._complete_order_post_commit_side_effects(
+                    bot, order, user_id, [], is_retry=True
+                )
+            return True, LucienVoice.store_purchase_completed(charge_amount)
 
         besito_service = BesitoService(
             db=self.db
         )  # local, on-demand; owns=False (db shared); balance check + debit for atomic complete_order
-        if besito_service.get_balance(user_id) < order.total_price:
+        charge_amount = self._apply_discount_to_order_total(user_id, order.total_price)
+        if besito_service.get_balance(user_id) < charge_amount:
             return False, "Saldo insuficiente"
 
         try:
             if not besito_service.debit_besitos(
                 user_id=user_id,
-                amount=order.total_price,
+                amount=charge_amount,
                 source=TransactionSource.PURCHASE,
                 description=f"Compra en tienda - Orden #{order.id}",
                 reference_id=order.id,
@@ -711,9 +979,13 @@ class StoreService:
                 db.rollback()
                 return False, "Error al procesar el pago"
 
-            low_stock_products, package_ids = self._decrement_stock_for_order(db, order)
+            low_stock_products = self._decrement_stock_for_order(db, order)
             order.status = OrderStatus.COMPLETED
             order.completed_at = datetime.now(UTC)
+            if charge_amount < order.total_price:
+                from services.fulfillment_service import FulfillmentService
+
+                FulfillmentService(db).consume_active_discount(user_id, db=db)
             db.commit()
         except _OrderAtomicError as e:
             db.rollback()
@@ -725,10 +997,10 @@ class StoreService:
             return False, "Error al procesar el pago"
 
         await self._complete_order_post_commit_side_effects(
-            bot, order, user_id, low_stock_products, package_ids
+            bot, order, user_id, low_stock_products, is_retry=False
         )
         logger.info(f"Orden completada: {order.id}")
-        return True, LucienVoice.store_purchase_completed(order.total_price)
+        return True, LucienVoice.store_purchase_completed(charge_amount)
 
     def cancel_order(self, order_id: int) -> bool:
         """Cancela una orden pendiente"""
@@ -904,20 +1176,38 @@ class StoreService:
 
         user_link = f"tg://user?id={order.user_id}"
 
-        # Preparar items para el helper puro (tuplas simples para mantener pureza)
-        items_for_text: list[tuple[str, int, int]] = []
+        from services.fulfillment_service import FulfillmentService
+
+        fulfill_svc = FulfillmentService(db)
+        items_for_text: list[tuple[str, int, int, str]] = []
         for it in (order.items or []):
-            items_for_text.append((it.product_name, it.quantity, it.total_price))
+            row = fulfill_svc.get_fulfillment_for_order_item(it.id)
+            kind = row.fulfillment_kind.value if row else "package"
+            items_for_text.append((it.product_name, it.quantity, it.total_price, kind))
 
         date_val = order.completed_at or order.created_at
         date_str = date_val.strftime("%Y-%m-%d %H:%M") if date_val else "?"
 
-        text = build_purchase_notification_text(
+        purchase_tx = (
+            db.query(BesitoTransaction)
+            .filter(
+                BesitoTransaction.user_id == order.user_id,
+                BesitoTransaction.source == TransactionSource.PURCHASE,
+                BesitoTransaction.reference_id == order.id,
+            )
+            .first()
+        )
+        charged_amount = (
+            abs(purchase_tx.amount)
+            if purchase_tx
+            else self._get_order_charge_amount(order.user_id, order)
+        )
+        text = LucienVoice.store_admin_purchase_notification_enriched(
             user_display=user_display,
             username=username,
             user_id=order.user_id,
             items=items_for_text,
-            total_price=order.total_price,
+            total_price=charged_amount,
             date_str=date_str,
             order_id=order.id,
         )

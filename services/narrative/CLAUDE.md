@@ -26,6 +26,7 @@ Narrativa interactiva con arquetipos y nodos de historia.
 - resolve_next_narrative_node(node_id)
 - is_user_vip(user_id)  # delega a VIPService
 - get_user_progress(user_id) / get_visited_node_count(user_id)
+- grant_node_access(user_id, node_id, reference_fulfillment_id=None) — sin debit; idempotente; no avanza historia principal
 - calculate_archetype(progress) / calculate_archetype_from_quiz(answers)
 - get_archetype_quiz_questions() / assign_archetype_to_user(...)
 - get_story_stats()

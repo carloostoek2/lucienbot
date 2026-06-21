@@ -36,6 +36,7 @@ from .reward_user_handlers import router as reward_user_router
 from .store_admin_handlers import router as store_admin_router
 
 # Fase 4 - Tienda
+from .fulfillment_admin_handlers import router as fulfillment_admin_router
 from .store_user_handlers import router as store_user_router
 from .story_admin_handlers import router as story_admin_router
 
@@ -75,6 +76,7 @@ __all__ = [
     # Fase 4 - Tienda
     "store_user_router",
     "store_admin_router",
+    "fulfillment_admin_router",
     # Fase 5 - Promociones
     "promotion_user_router",
     "promotion_admin_router",

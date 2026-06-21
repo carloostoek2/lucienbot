@@ -26,6 +26,7 @@ from .reward_service import RewardService
 from .scheduler_service import SchedulerService
 
 # Fase 4 - Tienda
+from .fulfillment_service import FulfillmentService
 from .store_service import StoreService
 
 # Phase 17 - Promociones por Racha
@@ -58,6 +59,7 @@ __all__ = [
     "RewardService",
     # Fase 4 - Tienda
     "StoreService",
+    "FulfillmentService",
     # Fase 15 - Mochila
     "BackpackService",
     # Fase 16 - Trivias Especiales

@@ -489,6 +489,18 @@ class SchedulerService:
             replace_existing=True,
             name="Retry pending mission reward deliveries",
         )
+        from services.fulfillment_service import reset_monthly_store_caps_job
+
+        self._scheduler.add_job(
+            reset_monthly_store_caps_job,
+            trigger="cron",
+            day=1,
+            hour=0,
+            minute=0,
+            id="reset_monthly_store_caps",
+            replace_existing=True,
+            name="Reset monthly store caps",
+        )
         self._scheduler.start()
         self.running = True
         logger.info("Scheduler started (APScheduler + SQLAlchemyJobStore)")

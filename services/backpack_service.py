@@ -142,23 +142,85 @@ class BackpackService:
                     pkg = db.query(Package).filter(Package.id == product.package_id).first()
                     package_name = pkg.name if pkg else None
 
-                result.append(
-                    {
-                        "order_id": order.id,
-                        "product_id": product.id,
-                        "product_name": item.product_name,
-                        "package_id": product.package_id,
-                        "package_name": package_name,
-                        "quantity": item.quantity,
-                        "total_price": item.total_price,
-                        "purchased_at": order.completed_at,
-                    }
-                )
+                entry = {
+                    "order_id": order.id,
+                    "order_item_id": item.id,
+                    "product_id": product.id,
+                    "product_name": item.product_name,
+                    "package_id": product.package_id,
+                    "package_name": package_name,
+                    "quantity": item.quantity,
+                    "total_price": item.total_price,
+                    "purchased_at": order.completed_at,
+                }
+                entry.update(self._enrich_purchase_fulfillment(item.id))
+                result.append(entry)
 
         logger.info(
             f"backpack_service | get_user_purchases | user_id={user_id} | result=success: {len(result)}"
         )
         return result
+
+    def _enrich_purchase_fulfillment(self, order_item_id: int) -> dict:
+        from services.fulfillment_service import FulfillmentService
+
+        return FulfillmentService(self._get_db()).build_purchase_enrichment(order_item_id)
+
+    def get_fulfillment_detail(self, user_id: int, fulfillment_id: int) -> dict | None:
+        from models.models import OrderFulfillment
+
+        row = (
+            self._get_db()
+            .query(OrderFulfillment)
+            .filter(
+                OrderFulfillment.id == fulfillment_id,
+                OrderFulfillment.user_id == user_id,
+            )
+            .first()
+        )
+        if not row:
+            return None
+        base = self._enrich_purchase_fulfillment(row.order_item_id)
+        base["product_name"] = row.product.name if row.product else ""
+        return base
+
+    async def retry_fulfillment_delivery(
+        self, bot, user_id: int, fulfillment_id: int
+    ) -> tuple[bool, str]:
+        from services.fulfillment_service import FulfillmentService
+
+        return await FulfillmentService(self._get_db()).retry_fulfillment_delivery(
+            bot, user_id, fulfillment_id
+        )
+
+    def get_fulfillment_input_prompt(
+        self, user_id: int, fulfillment_id: int
+    ) -> tuple[bool, str]:
+        from services.fulfillment_service import FulfillmentService
+
+        return FulfillmentService(self._get_db()).get_user_input_prompt_message(
+            user_id, fulfillment_id
+        )
+
+    async def submit_fulfillment_input(
+        self, bot, user_id: int, fulfillment_id: int, text: str
+    ) -> tuple[bool, str]:
+        from services.fulfillment_service import FulfillmentService
+
+        return await FulfillmentService(self._get_db()).submit_user_input(
+            bot, fulfillment_id, user_id, text
+        )
+
+    def get_vip_activation_link(self, user_id: int, fulfillment_id: int) -> tuple[bool, str]:
+        from services.fulfillment_service import FulfillmentService
+
+        return FulfillmentService(self._get_db()).get_vip_activation_link(
+            user_id, fulfillment_id
+        )
+
+    def get_vip_subscriptions_for_backpack(self, user_id: int) -> list[dict]:
+        """Thin delegate: suscripciones VIP para vista mochila."""
+        return self.get_user_vip_subscriptions(user_id)
 
     def get_user_vip_subscriptions(self, user_id: int) -> list[dict]:
         """
@@ -249,6 +311,24 @@ class BackpackService:
             "besitos_balance": besitos_balance,
         }
 
+    def user_has_package_entitlement(self, user_id: int, package_id: int) -> bool:
+        """True si el usuario tiene derecho al paquete (recompensa o compra fulfilled)."""
+        for reward in self.get_user_rewards(user_id, limit=200):
+            if reward.get("package_id") == package_id:
+                return True
+        package_kinds = {"package", "package_deferred"}
+        for purchase in self.get_user_purchases(user_id, limit=200):
+            if purchase.get("fulfillment_status") != "fulfilled":
+                continue
+            if purchase.get("fulfillment_kind") not in package_kinds:
+                continue
+            pid = purchase.get("package_id") or (purchase.get("auto_result") or {}).get(
+                "package_id"
+            )
+            if pid == package_id:
+                return True
+        return False
+
     async def deliver_package_content(self, bot, user_id: int, package_id: int) -> tuple[bool, str]:
         """
         Envía el contenido de un paquete al usuario.
@@ -261,6 +341,12 @@ class BackpackService:
         Returns:
             Tuple (éxito, mensaje)
         """
+        if not self.user_has_package_entitlement(user_id, package_id):
+            logger.warning(
+                f"backpack_service | deliver_package_content | user_id={user_id} | "
+                f"package_id={package_id} | result=unauthorized"
+            )
+            return False, LucienVoice.package_not_found()
         package_service = PackageService(self.db)
         package = package_service.get_package(package_id)
 

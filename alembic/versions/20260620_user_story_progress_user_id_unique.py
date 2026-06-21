@@ -32,16 +32,17 @@ def upgrade() -> None:
         )
         """
     )
-    op.create_unique_constraint(
-        "uq_user_story_progress_user_id",
-        "user_story_progress",
-        ["user_id"],
-    )
+    # SQLite: ALTER CONSTRAINT not supported — use batch copy-and-move.
+    with op.batch_alter_table("user_story_progress", schema=None) as batch_op:
+        batch_op.create_unique_constraint(
+            "uq_user_story_progress_user_id",
+            ["user_id"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_user_story_progress_user_id",
-        "user_story_progress",
-        type_="unique",
-    )
+    with op.batch_alter_table("user_story_progress", schema=None) as batch_op:
+        batch_op.drop_constraint(
+            "uq_user_story_progress_user_id",
+            type_="unique",
+        )

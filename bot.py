@@ -48,6 +48,7 @@ from handlers import (
     promotion_user_router,
     reward_admin_router,
     reward_user_router,
+    fulfillment_admin_router,
     store_admin_router,
     # Fase 4 - Tienda
     store_user_router,
@@ -335,6 +336,7 @@ async def main():
     # Fase 4 - Tienda
     dp.include_router(store_user_router)
     dp.include_router(store_admin_router)
+    dp.include_router(fulfillment_admin_router)
     # Fase 5 - Promociones
     dp.include_router(promotion_user_router)
     dp.include_router(promotion_admin_router)

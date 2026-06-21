@@ -955,3 +955,65 @@ class BackpackDeliverCallback(CallbackData, prefix="backpack_deliver"):
     """Entregar contenido de paquete"""
 
     package_id: int
+
+
+class BackpackFulfillmentRetryCallback(CallbackData, prefix="bp_fulfill_retry"):
+    """Reintentar entrega de fulfillment PACKAGE."""
+
+    fulfillment_id: int
+
+
+class BackpackActivateVipCallback(CallbackData, prefix="bp_activate_vip"):
+    """Activar VIP desde token de fulfillment."""
+
+    fulfillment_id: int
+
+
+class BackpackReadChapterCallback(CallbackData, prefix="bp_read_chapter"):
+    """Leer capítulo desbloqueado por fulfillment STORY_UNLOCK."""
+
+    fulfillment_id: int
+
+
+class BackpackViewWaitlistCallback(CallbackData, prefix="bp_view_waitlist"):
+    """Ver posición en lista de espera."""
+
+    fulfillment_id: int
+
+
+class BackpackSubmitInputCallback(CallbackData, prefix="bp_submit_input"):
+    """Inicia FSM para enviar input pendiente desde mochila."""
+
+    fulfillment_id: int
+
+
+class StoreTierCallback(CallbackData, prefix="store_tier"):
+    """Navegación catálogo por tier."""
+
+    tier_id: int
+
+
+class FulfillmentAdminQueueCallback(CallbackData, prefix="fulfill_admin_q"):
+    """Filtro cola admin fulfillment."""
+
+    status: str = "all"
+
+
+class FulfillmentAdminItemCallback(CallbackData, prefix="fulfill_admin_item"):
+    """Detalle item cola admin."""
+
+    fulfillment_id: int
+    filter_status: str = "pending"
+
+
+class FulfillmentAdminMarkCallback(CallbackData, prefix="fulfill_admin_mark"):
+    """Marcar fulfillment cumplido."""
+
+    fulfillment_id: int
+
+
+class FulfillmentAdminDeliverCallback(CallbackData, prefix="fulfill_admin_deliver"):
+    """Entregar paquete desde cola admin."""
+
+    fulfillment_id: int
+    package_id: int

@@ -885,6 +885,32 @@ En circulación: {e.get("circulation", 0)}   •   Tasa de gasto: {e.get("burn_r
     # ==================== NOTIFICACIONES A CUSTODIOS (ADMIN) ====================
 
     @staticmethod
+    def store_admin_purchase_notification_enriched(
+        user_display: str,
+        username: str,
+        user_id: int,
+        items: list[tuple[str, int, int, str]],
+        total_price: int,
+        date_str: str,
+        order_id: int,
+    ) -> str:
+        safe_display = html.escape(user_display)
+        safe_username = html.escape(username)
+        lines = [
+            "🛍️ <b>Nueva compra en tienda</b>",
+            f"Orden #{order_id} · {date_str}",
+            f"Visitante: <b>{safe_display}</b> ({safe_username})",
+            f"ID: {user_id}",
+            "",
+            "<b>Productos:</b>",
+        ]
+        for name, qty, subtotal, kind in items:
+            safe_name = html.escape(name)
+            lines.append(f"• {safe_name} x{qty} — {subtotal} besitos · <i>{kind}</i>")
+        lines.extend(["", f"<b>Total:</b> {total_price} besitos"])
+        return "\n".join(lines)
+
+    @staticmethod
     def store_admin_purchase_notification(
         user_display: str,
         username: str,
@@ -1049,6 +1075,618 @@ ser revelados correctamente.</i>"""
     def store_purchase_completed(total_price: int) -> str:
         return f"Compra completada! Se debitaron {total_price} besitos."
 
+    @staticmethod
+    def store_tier_menu_intro() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Permítame presentarle el Gabinete de Tesoros de Diana,
+organizado por el peso del deseo…</i>
+
+Seleccione un nivel para explorar."""
+
+    @staticmethod
+    def store_tier_intro_for_slug(slug: str) -> str:
+        intros = {
+            "impulso": "Vende curiosidad · Compra sin pensar",
+            "deseo": "Vende acceso · El corazón del catálogo",
+            "exclusivo": "Vende completitud · Vale guardar para esto",
+            "reservado": "Vende poder · Solo para los que llegaron lejos",
+            "mitico": "Vende leyenda · Stock limitado · Solo existe este mes",
+        }
+        tag = intros.get(slug, "")
+        return f"""🎩 <b>Lucien:</b>
+
+<i>{tag}</i>"""
+
+    @staticmethod
+    def store_tier_impulso_intro() -> str:
+        return LucienVoice.store_tier_intro_for_slug("impulso")
+
+    @staticmethod
+    def store_tier_deseo_intro() -> str:
+        return LucienVoice.store_tier_intro_for_slug("deseo")
+
+    @staticmethod
+    def store_tier_exclusivo_intro() -> str:
+        return LucienVoice.store_tier_intro_for_slug("exclusivo")
+
+    @staticmethod
+    def store_tier_reservado_intro() -> str:
+        return LucienVoice.store_tier_intro_for_slug("reservado")
+
+    @staticmethod
+    def store_tier_mitico_intro() -> str:
+        return LucienVoice.store_tier_intro_for_slug("mitico")
+
+    @staticmethod
+    def store_product_detail(name: str, desc: str, price: int, tier: str = "") -> str:
+        safe_name = html.escape(name)
+        safe_desc = html.escape(desc) if desc else ""
+        tier_line = f"\n<i>Nivel {html.escape(tier)}</i>\n" if tier else "\n"
+        return f"""🎩 <b>Lucien:</b>
+{tier_line}
+<b>{safe_name}</b>
+{safe_desc}
+
+💋 <b>{price}</b> besitos"""
+
+    @staticmethod
+    def store_monthly_cap_reached(product_name: str) -> str:
+        safe_name = html.escape(product_name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Este mes, <b>{safe_name}</b> ya encontró dueño…</i>
+
+Permítame consultar con Diana cuándo volverá a estar disponible."""
+
+    @staticmethod
+    def fulfillment_package_delivered(name: str) -> str:
+        safe_name = html.escape(name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Su adquisición <b>{safe_name}</b> ya viaja hacia usted…</i>"""
+
+    @staticmethod
+    def fulfillment_package_failed_retry_mochila() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Hubo un inconveniente al entregar su tesoro.</i>
+
+Revise <b>Sus tesoros adquiridos</b> en la mochila para reintentar."""
+
+    @staticmethod
+    def fulfillment_vip_grant_message(tariff: str, token_url: str) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Diana le concede acceso VIP: <b>{tariff}</b></i>
+
+👉 <a href="{token_url}">Activar su privilegio</a>"""
+
+    @staticmethod
+    def fulfillment_story_unlocked(node_title: str) -> str:
+        safe_title = html.escape(node_title)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Un fragmento exclusivo se abre ante usted: <b>{safe_title}</b></i>"""
+
+    @staticmethod
+    def fulfillment_early_access_granted(hours: int) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Usted verá el próximo lanzamiento {hours}h antes que nadie.</i>"""
+
+    @staticmethod
+    def fulfillment_discount_granted(pct: int, expires: str) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Un {pct}% de ventaja le acompaña hasta el {expires}.</i>"""
+
+    @staticmethod
+    def fulfillment_waitlist_joined(position: int) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Su posición en La Lista: <b>#{position}</b></i>"""
+
+    @staticmethod
+    def fulfillment_manual_queued(product_name: str) -> str:
+        safe_name = html.escape(product_name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Excelente elección. Su solicitud de <b>{safe_name}</b> ya viaja hacia Diana…</i>
+
+Lucien le avisará cuando esté lista en su mochila."""
+
+    @staticmethod
+    def fulfillment_awaiting_input(prompt: str) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+{prompt}
+
+<i>Escriba su respuesta en este chat.</i>"""
+
+    @staticmethod
+    def fulfillment_input_prompt_question() -> str:
+        return "<i>Diana escucha con atención quien se atreve a preguntar…</i>"
+
+    @staticmethod
+    def fulfillment_input_prompt_director() -> str:
+        return "<i>Proponga el tema de la próxima sesión…</i>"
+
+    @staticmethod
+    def fulfillment_input_prompt_credits() -> str:
+        return "<i>Indique el nombre que desea en los créditos…</i>"
+
+    @staticmethod
+    def fulfillment_input_prompt_for_key(prompt_key: str) -> str:
+        mapping = {
+            "fulfillment_input_prompt_question": LucienVoice.fulfillment_input_prompt_question,
+            "fulfillment_input_prompt_director": LucienVoice.fulfillment_input_prompt_director,
+            "fulfillment_input_prompt_credits": LucienVoice.fulfillment_input_prompt_credits,
+            "question": LucienVoice.fulfillment_input_prompt_question,
+            "session_theme": LucienVoice.fulfillment_input_prompt_director,
+            "credit_name": LucienVoice.fulfillment_input_prompt_credits,
+        }
+        fn = mapping.get(prompt_key, LucienVoice.fulfillment_input_prompt_question)
+        return fn()
+
+    @staticmethod
+    def fulfillment_input_invalid_length(min_len: int, max_len: int) -> str:
+        return f"Permítame pedirle entre {min_len} y {max_len} caracteres."
+
+    @staticmethod
+    def fulfillment_input_received_queued() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Su mensaje fue registrado. Diana fue notificada.</i>"""
+
+    @staticmethod
+    def fulfillment_input_already_submitted() -> str:
+        return "Su respuesta ya fue registrada."
+
+    @staticmethod
+    def fulfillment_input_cancelled() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Entendido. Puede enviar su mensaje más tarde desde la mochila.</i>"""
+
+    @staticmethod
+    def fulfillment_input_submit_button() -> str:
+        return "🌸 Enviar a Diana"
+
+    @staticmethod
+    def fulfillment_admin_queue_menu() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Cola de entregas del reino — seleccione un filtro.</i>"""
+
+    @staticmethod
+    def fulfillment_admin_queue_item(
+        product_name: str,
+        order_id: int,
+        user_id: int,
+        status: str,
+        user_input: str | None = None,
+    ) -> str:
+        safe_name = html.escape(product_name)
+        safe_input = html.escape(user_input) if user_input else None
+        input_block = f"\n\n📝 <i>Su mensaje:</i>\n«{safe_input}»" if safe_input else ""
+        return f"""🎩 <b>Lucien:</b>
+
+<b>{safe_name}</b> · Orden #{order_id}
+Visitante id: {user_id}
+Estado: {status}{input_block}"""
+
+    @staticmethod
+    def fulfillment_admin_new_manual_order(
+        product_name: str,
+        order_id: int,
+        user_id: int,
+        kind: str,
+        status: str,
+        user_input: str | None,
+    ) -> str:
+        return LucienVoice.fulfillment_admin_queue_item(
+            product_name, order_id, user_id, f"{kind} / {status}", user_input
+        )
+
+    @staticmethod
+    def fulfillment_admin_mark_fulfilled_confirm() -> str:
+        return "¿Confirma marcar como cumplido?"
+
+    @staticmethod
+    def fulfillment_admin_notes_required() -> str:
+        return "Las notas son obligatorias al marcar cumplido."
+
+    @staticmethod
+    def fulfillment_admin_input_required() -> str:
+        return "Aguarde el mensaje del visitante antes de marcar cumplido."
+
+    @staticmethod
+    def fulfillment_admin_invalid_status() -> str:
+        return "Este ítem no puede marcarse cumplido en su estado actual."
+
+    @staticmethod
+    def fulfillment_admin_package_mismatch() -> str:
+        return "El paquete indicado no corresponde al producto."
+
+    @staticmethod
+    def fulfillment_admin_deliver_invalid_kind() -> str:
+        return "Solo se puede entregar paquete en ítems PACKAGE o PACKAGE_DEFERRED."
+
+    @staticmethod
+    def fulfillment_admin_queue_empty() -> str:
+        return "Cola vacía"
+
+    @staticmethod
+    def fulfillment_admin_item_not_found() -> str:
+        return "Item no encontrado"
+
+    @staticmethod
+    def fulfillment_admin_filter_pending_input() -> str:
+        return "⏳ Pendiente input"
+
+    @staticmethod
+    def fulfillment_admin_filter_pending_diana() -> str:
+        return "🌸 Pendiente Diana"
+
+    @staticmethod
+    def fulfillment_admin_filter_failed() -> str:
+        return "❌ Fallidos"
+
+    @staticmethod
+    def fulfillment_admin_filter_fulfilled() -> str:
+        return "✅ Cumplidos"
+
+    @staticmethod
+    def fulfillment_retry_not_allowed() -> str:
+        return "Solo puede reintentar entregas fallidas."
+
+    @staticmethod
+    def fulfillment_retry_limit_reached() -> str:
+        return "Límite de reintentos alcanzado."
+
+    @staticmethod
+    def fulfillment_retry_cooldown() -> str:
+        return "Espere un momento antes de reintentar."
+
+    @staticmethod
+    def fulfillment_package_failed_retry_mochila_plain() -> str:
+        return "Inconveniente en entrega. Puede reintentar desde la mochila."
+
+    @staticmethod
+    def backpack_fulfillment_toast_success(msg: str) -> str:
+        import re
+
+        return re.sub(r"<[^>]+>", "", msg).strip()
+
+    @staticmethod
+    def fulfillment_admin_wizard_select_tier() -> str:
+        return "Seleccione el tier del producto:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_delivery_mode() -> str:
+        return "Modo de entrega: AUTO o MANUAL"
+
+    @staticmethod
+    def fulfillment_admin_wizard_fulfillment_kind() -> str:
+        return "Tipo de fulfillment:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_start() -> str:
+        return (
+            "🎩 Lucien:\n\n"
+            "Vamos a crear un nuevo producto...\n\n"
+            "Paso 1 de 5: Nombre del producto\n\n"
+            "Indica un nombre descriptivo:\n"
+            "Ejemplo: Pack Fotos Exclusivas Marzo"
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_name_too_short() -> str:
+        return "El nombre debe tener al menos 3 caracteres."
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_description() -> str:
+        return (
+            "🎩 Lucien:\n\n"
+            "Paso 2 de 5: Descripcion\n\n"
+            "Escribe una descripcion (opcional):\n"
+            "Ejemplo: Un pack de 10 fotos exclusivas\n\n"
+            "O envia /skip para omitir."
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_price() -> str:
+        return "Paso: Precio\n\nIndica el precio en besitos:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_price_with_example() -> str:
+        return (
+            "🎩 Lucien:\n\n"
+            "Paso 4 de 5: Precio\n\n"
+            "Indica el precio en besitos:\n"
+            "Ejemplo: 100"
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_tariff_id() -> str:
+        return "Paso: Tariff ID\n\nIndica el ID de tarifa VIP:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_story_node_id() -> str:
+        return "Paso: Story Node ID\n\nIndica el ID del nodo narrativo:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_fulfillment_config() -> str:
+        return (
+            "Paso: Fulfillment config\n\n"
+            "Indica JSON de configuración o usa omitir para valores por defecto:"
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_monthly_cap() -> str:
+        return "Paso: Cupo mensual\n\nIndica unidades máximas por mes (MX) o sin límite:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_no_packages() -> str:
+        return "No hay paquetes disponibles."
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_select_package() -> str:
+        return "Paso: Seleccionar paquete"
+
+    @staticmethod
+    def fulfillment_admin_wizard_invalid_tariff_id() -> str:
+        return "Indica un tariff_id numérico válido."
+
+    @staticmethod
+    def fulfillment_admin_wizard_invalid_story_node_id() -> str:
+        return "Indica un story_node_id numérico válido."
+
+    @staticmethod
+    def fulfillment_admin_wizard_invalid_json() -> str:
+        return "JSON inválido. Revise el formato o use Omitir."
+
+    @staticmethod
+    def fulfillment_admin_wizard_invalid_price() -> str:
+        return "Por favor indica un numero valido mayor a 0."
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_stock() -> str:
+        return "🎩 Lucien:\n\nPaso 5 de 5: Stock\n\nConfigura el stock disponible:"
+
+    @staticmethod
+    def fulfillment_admin_wizard_step_limited_stock() -> str:
+        return (
+            "🎩 Lucien:\n\n"
+            "Indica la cantidad de unidades disponibles:\n"
+            "Ejemplo: 50"
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_invalid_stock() -> str:
+        return "Indica un numero valido (0 o mayor)."
+
+    @staticmethod
+    def fulfillment_admin_wizard_invalid_monthly_cap() -> str:
+        return "Indica un entero >= 1 o use Sin límite."
+
+    @staticmethod
+    def fulfillment_admin_wizard_confirmation_summary(
+        name: str,
+        description: str,
+        tier: str,
+        delivery: str,
+        kind: str,
+        price: int,
+        stock_text: str,
+        cap_text: str,
+    ) -> str:
+        safe_name = html.escape(name)
+        safe_description = html.escape(description)
+        return (
+            f"🎩 Lucien:\n\n"
+            f"Resumen del producto:\n\n"
+            f"📦 {safe_name}\n"
+            f"📝 {safe_description}\n"
+            f"✨ Tier: {tier}\n"
+            f"🚚 Modo: {delivery}\n"
+            f"🎯 Kind: {kind}\n"
+            f"💰 Precio: {price} besitos\n"
+            f"📊 Stock: {stock_text}\n"
+            f"📅 Cupo mensual: {cap_text}\n\n"
+            f"Crear este producto?"
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_product_created(name: str, price: int) -> str:
+        safe_name = html.escape(name)
+        return (
+            f"🎩 Lucien:\n\n"
+            f"✅ Producto creado exitosamente!\n\n"
+            f"📦 {safe_name}\n"
+            f"💰 {price} besitos\n\n"
+            f"El producto ya esta disponible en la tienda."
+        )
+
+    @staticmethod
+    def fulfillment_admin_wizard_product_create_error() -> str:
+        return "Error al crear el producto."
+
+    @staticmethod
+    def fulfillment_admin_wizard_cap_unlimited_label() -> str:
+        return "Sin límite"
+
+    @staticmethod
+    def store_need_more_besitos_hint() -> str:
+        return "\n\n<i>¿Necesitas mas besitos?</i>\n"
+
+    @staticmethod
+    def store_confirm_purchase_prompt() -> str:
+        return "<i>¿Confirmar compra?</i>\n\n"
+
+    @staticmethod
+    def store_after_purchase_balance_line(remaining: int) -> str:
+        return f"📊 Después de compra: {remaining} besitos"
+
+    @staticmethod
+    def store_search_prompt() -> str:
+        return "<i>¿Que tesoro buscas?</i>\n\n"
+
+    @staticmethod
+    def backpack_fulfillment_status_pending_input() -> str:
+        return "Aguardando su mensaje"
+
+    @staticmethod
+    def backpack_fulfillment_status_pending_diana() -> str:
+        return "En manos de Diana"
+
+    @staticmethod
+    def backpack_fulfillment_status_processing() -> str:
+        return "En proceso"
+
+    @staticmethod
+    def backpack_fulfillment_status_fulfilled() -> str:
+        return "Cumplido"
+
+    @staticmethod
+    def backpack_fulfillment_status_failed() -> str:
+        return "Inconveniente en entrega"
+
+    @staticmethod
+    def backpack_fulfillment_package_detail(name: str, status: str) -> str:
+        safe_name = html.escape(name)
+        return f"<b>{safe_name}</b>\nEstado: <i>{status}</i>"
+
+    @staticmethod
+    def backpack_fulfillment_pending_diana(name: str) -> str:
+        safe_name = html.escape(name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>El tesoro <b>{safe_name}</b> aguarda el toque de Diana…</i>"""
+
+    @staticmethod
+    def backpack_fulfillment_input_submitted(name: str) -> str:
+        safe_name = html.escape(name)
+        return f"<b>{safe_name}</b> — su mensaje ya fue enviado a Diana."
+
+    @staticmethod
+    def backpack_fulfillment_vip_token(tariff: str) -> str:
+        return f"VIP <b>{tariff}</b> — active su enlace cuando lo desee."
+
+    @staticmethod
+    def backpack_fulfillment_privilege_active(kind: str, expires: str) -> str:
+        return f"Privilegio <b>{kind}</b> activo hasta {expires}."
+
+    @staticmethod
+    def backpack_fulfillment_waitlist_position(position: int) -> str:
+        return f"Posición en La Lista: <b>#{position}</b>"
+
+    @staticmethod
+    def backpack_fulfillment_fulfilled(name: str) -> str:
+        safe_name = html.escape(name)
+        return f"<b>{safe_name}</b> — cumplido."
+
+    @staticmethod
+    def backpack_fulfillment_retry_button() -> str:
+        return "🔄 Reintentar entrega"
+
+    @staticmethod
+    def backpack_fulfillment_activate_vip_button() -> str:
+        return "👑 Activar VIP"
+
+    @staticmethod
+    def backpack_fulfillment_read_chapter_button() -> str:
+        return "📖 Leer capítulo"
+
+    @staticmethod
+    def backpack_fulfillment_waitlist_button() -> str:
+        return "📋 Ver posición en La Lista"
+
+    @staticmethod
+    def store_catalog_unavailable() -> str:
+        return "Catálogo no disponible"
+
+    @staticmethod
+    def store_admin_stock_alerts_empty() -> str:
+        return (
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>Todos los tesoros están bien abastecidos...</i>\n\n"
+            "No hay alertas de stock."
+        )
+
+    @staticmethod
+    def backpack_page_load_error() -> str:
+        return "Error al cargar página"
+
+    @staticmethod
+    def backpack_besitos_balance_message(balance: int) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Los besitos son la moneda del reino de Diana...</i>
+
+💋 <b>Su Balance</b>
+
+💰 <b>Besitos disponibles:</b> {balance}
+
+<i>Use sus besitos para adquirir tesoros en la tienda
+o completar misiones para ganar más.</i>"""
+
+    @staticmethod
+    def store_tier_menu_button() -> str:
+        return "✨ Ver por niveles"
+
+    @staticmethod
+    def store_acquire_button() -> str:
+        return "🌸 Adquirir este privilegio"
+
+    @staticmethod
+    def store_back_to_tier_button(tier_name: str) -> str:
+        return f"🔙 Volver al tier {tier_name}"
+
+    @staticmethod
+    def store_go_backpack_button() -> str:
+        return "🎒 Ir a la mochila"
+
+    @staticmethod
+    def store_continue_shopping_button() -> str:
+        return "🛍️ Seguir explorando"
+
+    @staticmethod
+    def fulfillment_admin_queue_button() -> str:
+        return "📬 Cola de entregas del reino"
+
+    @staticmethod
+    def fulfillment_admin_mark_fulfilled_button() -> str:
+        return "✅ Marcar cumplido (notas)"
+
+    @staticmethod
+    def fulfillment_admin_deliver_package_button() -> str:
+        return "📦 Entregar paquete"
+
+    @staticmethod
+    def fulfillment_admin_deliver_select_package() -> str:
+        return "Seleccione el paquete a entregar:"
+
+    @staticmethod
+    def fulfillment_admin_contact_visitor_button() -> str:
+        return "👤 Contactar visitante"
+
+    @staticmethod
+    def fulfillment_post_purchase_message_for_kind(kind: str, product_name: str) -> str:
+        fallbacks = {
+            "package": LucienVoice.fulfillment_package_delivered(product_name),
+            "vip_grant": LucienVoice.fulfillment_vip_grant_message("VIP", ""),
+            "story_unlock": LucienVoice.fulfillment_story_unlocked(product_name),
+            "early_access": LucienVoice.fulfillment_early_access_granted(24),
+            "user_input_manual": LucienVoice.fulfillment_awaiting_input(
+                LucienVoice.fulfillment_input_prompt_question()
+            ),
+        }
+        return fallbacks.get(
+            kind, LucienVoice.fulfillment_manual_queued(product_name)
+        )
+
     # ==================== SERVICIOS - PAQUETES ====================
 
     @staticmethod
@@ -1069,14 +1707,16 @@ ser revelados correctamente.</i>"""
 
     @staticmethod
     def package_delivery_intro(package_name: str, description: str = None) -> str:
+        safe_name = html.escape(package_name)
         desc = description or "Un obsequio del reino..."
+        safe_desc = html.escape(desc)
         return f"""🎩 <b>Lucien:</b>
 
 <i>Diana ha preparado algo especial para usted...</i>
 
-📦 <b>{package_name}</b>
+📦 <b>{safe_name}</b>
 
-<i>{desc}</i>
+<i>{safe_desc}</i>
 
 Enviando archivo(s)..."""
 
@@ -1399,14 +2039,35 @@ la tienda de Diana le espera.</i>
         for p in purchases:
             date_str = p["purchased_at"].strftime("%d/%m/%Y") if p.get("purchased_at") else "??/??"
             price = p.get("total_price", 0)
-            name = (
-                p["product_name"][:25] + "..." if len(p["product_name"]) > 25 else p["product_name"]
-            )
+            raw_name = p["product_name"]
+            name = raw_name[:25] + "..." if len(raw_name) > 25 else raw_name
+            name = html.escape(name)
 
+            status = p.get("status_display", "")
+            status_suffix = f" | {status}" if status else ""
             text += f"📦 <b>{name}</b>\n"
-            text += f"   💰 {price} 💋 | 📅 {date_str}\n\n"
+            text += f"   💰 {price} 💋 | 📅 {date_str}{status_suffix}\n\n"
 
         return text
+
+    @staticmethod
+    def backpack_purchase_detail(purchase: dict) -> str:
+        """Detalle de compra en mochila con estado fulfillment."""
+        date_str = (
+            purchase["purchased_at"].strftime("%d/%m/%Y")
+            if purchase.get("purchased_at")
+            else "N/A"
+        )
+        status = purchase.get("status_display", LucienVoice.backpack_fulfillment_status_processing())
+        product_name = html.escape(purchase.get("product_name", ""))
+        return f"""🎩 <b>Lucien:</b>
+
+<i>El tesoro adquirido espera por usted…</i>
+
+📦 <b>{product_name}</b>
+📅 {date_str} · 💋 {purchase.get("total_price", 0)} besitos
+
+Estado: <i>{status}</i>"""
 
     @staticmethod
     def backpack_vip_list(subscriptions: list) -> str:

@@ -102,6 +102,26 @@ class TestSchedulerTriggers:
             assert isinstance(trigger, IntervalTrigger)
             assert trigger.interval.total_seconds() == 30 * 60
 
+    def test_reset_monthly_store_caps_job_registered_on_start(self):
+        """start() registra job reset_monthly_store_caps el día 1."""
+        mock_bot = AsyncMock()
+        mock_bot.token = "test_token"
+        scheduler = SchedulerService(mock_bot)
+
+        with patch.object(scheduler._scheduler, "add_job") as mock_add_job:
+            import asyncio
+
+            asyncio.run(scheduler.start())
+
+            cap_call = None
+            for call in mock_add_job.call_args_list:
+                if call.kwargs.get("id") == "reset_monthly_store_caps":
+                    cap_call = call
+                    break
+
+            assert cap_call is not None, "reset_monthly_store_caps job not found"
+            assert cap_call.kwargs.get("day") == 1
+
 
 @pytest.mark.unit
 class TestPendingMissionRewardsJob:

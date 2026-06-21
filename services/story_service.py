@@ -281,6 +281,44 @@ class StoryService:
         progress = self.get_user_progress(user_id)
         return progress is not None
 
+    def grant_node_access(
+        self, user_id: int, node_id: int, *, reference_fulfillment_id: int
+    ) -> tuple[bool, str | None]:
+        """Desbloquea nodo por compra sin debit ni avance de historia principal."""
+        node = self.get_node(node_id)
+        if not node or not node.is_active:
+            return False, LucienVoice.story_fragment_unavailable()
+        from models.models import OrderFulfillment
+
+        fulfillment = (
+            self.db.query(OrderFulfillment)
+            .filter(OrderFulfillment.id == reference_fulfillment_id)
+            .first()
+        )
+        if fulfillment and fulfillment.auto_result:
+            try:
+                auto = json.loads(fulfillment.auto_result)
+                if auto.get("node_granted"):
+                    logger.info(
+                        f"story_service | grant_node_access | user_id={user_id} | "
+                        f"node_id={node_id} | result=idem"
+                    )
+                    return True, None
+            except (json.JSONDecodeError, TypeError):
+                pass
+        progress = self.get_or_create_progress(user_id)
+        visited = self._parse_visited_nodes(progress)
+        if node_id not in visited:
+            visited.append(node_id)
+            progress.visited_nodes = json.dumps(visited)
+        if fulfillment:
+            fulfillment.auto_result = json.dumps({"node_granted": True, "node_id": node_id})
+        self.db.commit()
+        logger.info(
+            f"story_service | grant_node_access | user_id={user_id} | node_id={node_id} | result=ok"
+        )
+        return True, None
+
     def _compute_access_cost(self, node: StoryNode, choice_id: int | None) -> int:
         """Costo total de acceso: nodo + recargo de elección."""
         total = node.cost_besitos
@@ -317,6 +355,30 @@ class StoryService:
                 amount += choice.additional_cost
         return amount
 
+    def _has_fulfillment_node_unlock(self, user_id: int, node_id: int) -> bool:
+        """True si STORY_UNLOCK fulfilled otorgó acceso a este nodo."""
+        from models.models import FulfillmentKind, FulfillmentStatus, OrderFulfillment
+
+        rows = (
+            self.db.query(OrderFulfillment)
+            .filter(
+                OrderFulfillment.user_id == user_id,
+                OrderFulfillment.fulfillment_kind == FulfillmentKind.STORY_UNLOCK,
+                OrderFulfillment.status == FulfillmentStatus.FULFILLED,
+            )
+            .all()
+        )
+        for row in rows:
+            if not row.auto_result:
+                continue
+            try:
+                auto = json.loads(row.auto_result)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if auto.get("node_id") == node_id:
+                return True
+        return False
+
     def can_access_node(
         self,
         user_id: int,
@@ -331,6 +393,9 @@ class StoryService:
         node = self.get_node(node_id)
         if not node or not node.is_active:
             return False, LucienVoice.story_fragment_unavailable()
+
+        if self._has_fulfillment_node_unlock(user_id, node_id):
+            return True, None
 
         progress = self.get_user_progress(user_id)
 

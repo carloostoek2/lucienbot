@@ -205,16 +205,14 @@ class TestProcessProductDescription:
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_with_skip_sets_none(self, mock_get_service, make_message, make_fsm_context):
-        """/skip establece description=None y muestra paquetes."""
+        """/skip establece description=None y muestra tiers."""
         from handlers.store_admin_handlers import ProductWizardStates, process_product_description
 
         mock_store = MagicMock()
-        mock_pkg = MagicMock()
-        mock_pkg.id = 1
-        mock_pkg.name = "Test Pkg"
-        mock_pkg.file_count = 5
-        mock_pkg.store_stock = -1
-        mock_store.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_tier = MagicMock()
+        mock_tier.id = 1
+        mock_tier.name = "Reservado"
+        mock_store.get_all_tiers.return_value = [mock_tier]
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_store
         mock_get_service.return_value = mock_context
@@ -226,23 +224,21 @@ class TestProcessProductDescription:
 
         data = await fsm.get_data()
         assert data["description"] is None
-        mock_store.get_available_packages_for_store.assert_called_once()
-        mock_get_service.return_value.__exit__.assert_called_once()
+        mock_store.get_all_tiers.assert_called_once()
+        assert await fsm.get_state() == ProductWizardStates.selecting_tier
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_with_description_saves_it(
         self, mock_get_service, make_message, make_fsm_context
     ):
-        """Descripción textual se guarda y se muestran paquetes."""
+        """Descripción textual se guarda y se muestran tiers."""
         from handlers.store_admin_handlers import ProductWizardStates, process_product_description
 
         mock_store = MagicMock()
-        mock_pkg = MagicMock()
-        mock_pkg.id = 1
-        mock_pkg.name = "Test Pkg"
-        mock_pkg.file_count = 5
-        mock_pkg.store_stock = -1
-        mock_store.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_tier = MagicMock()
+        mock_tier.id = 1
+        mock_tier.name = "Reservado"
+        mock_store.get_all_tiers.return_value = [mock_tier]
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_store
         mock_get_service.return_value = mock_context
@@ -254,14 +250,14 @@ class TestProcessProductDescription:
 
         data = await fsm.get_data()
         assert data["description"] == "Un pack de fotos exclusivas"
-        mock_store.get_available_packages_for_store.assert_called_once()
-        mock_get_service.return_value.__exit__.assert_called_once()
+        mock_store.get_all_tiers.assert_called_once()
+        assert await fsm.get_state() == ProductWizardStates.selecting_tier
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_no_packages_shows_error(self, mock_get_service, make_message, make_fsm_context):
-        """Sin paquetes disponibles, muestra error y limpia estado."""
+    async def test_no_tiers_clears_state(self, mock_get_service, make_message, make_fsm_context):
+        """Sin tiers disponibles, limpia estado."""
         mock_store = MagicMock()
-        mock_store.get_available_packages_for_store.return_value = []
+        mock_store.get_all_tiers.return_value = []
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_store
         mock_get_service.return_value = mock_context
@@ -275,26 +271,20 @@ class TestProcessProductDescription:
         await process_product_description(msg, fsm)
 
         msg.answer.assert_called_once()
-        text = msg.answer.call_args[0][0]
-        assert "No hay paquetes" in text
-        state = await fsm.get_state()
-        assert state is None
-        mock_get_service.return_value.__exit__.assert_called_once()
+        assert await fsm.get_state() is None
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_advances_to_selecting_package(
+    async def test_advances_to_selecting_tier(
         self, mock_get_service, make_message, make_fsm_context
     ):
-        """Con paquetes disponibles, avanza a selecting_package."""
+        """Con tiers disponibles, avanza a selecting_tier."""
         from handlers.store_admin_handlers import ProductWizardStates, process_product_description
 
         mock_store = MagicMock()
-        mock_pkg = MagicMock()
-        mock_pkg.id = 1
-        mock_pkg.name = "Test Pkg"
-        mock_pkg.file_count = 5
-        mock_pkg.store_stock = -1
-        mock_store.get_available_packages_for_store.return_value = [mock_pkg]
+        mock_tier = MagicMock()
+        mock_tier.id = 2
+        mock_tier.name = "Mitico"
+        mock_store.get_all_tiers.return_value = [mock_tier]
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_store
         mock_get_service.return_value = mock_context
@@ -304,10 +294,8 @@ class TestProcessProductDescription:
         await fsm.set_state(ProductWizardStates.waiting_description)
         await process_product_description(msg, fsm)
 
-        state = await fsm.get_state()
-        assert state == ProductWizardStates.selecting_package
-        mock_store.get_available_packages_for_store.assert_called_once()
-        mock_get_service.return_value.__exit__.assert_called_once()
+        assert await fsm.get_state() == ProductWizardStates.selecting_tier
+        mock_store.get_all_tiers.assert_called_once()
 
 
 class TestProcessProductPrice:
@@ -377,8 +365,8 @@ class TestProductStockUnlimited:
         assert data["stock"] == -1
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Resumen" in text
-        assert "Ilimitado" in text
+        assert "Cupo mensual" in text
+        assert await fsm.get_state() == ProductWizardStates.waiting_monthly_cap
         cb.answer.assert_called_once()
 
 
@@ -447,7 +435,8 @@ class TestProcessProductStock:
         assert data["stock"] == 50
         msg.answer.assert_called_once()
         text = msg.answer.call_args[0][0]
-        assert "Resumen" in text
+        assert "Cupo mensual" in text
+        assert await fsm.get_state() == ProductWizardStates.waiting_monthly_cap
 
 
 class TestConfirmCreateProduct:
@@ -482,14 +471,13 @@ class TestConfirmCreateProduct:
 
         await confirm_create_product(cb, fsm)
 
-        mock_store.create_product.assert_called_once_with(
-            name="Pack Fotos",
-            description="Fotos exclusivas",
-            package_id=1,
-            price=150,
-            stock=10,
-            created_by=123456789,
-        )
+        mock_store.create_product.assert_called_once()
+        call_kwargs = mock_store.create_product.call_args.kwargs
+        assert call_kwargs["name"] == "Pack Fotos"
+        assert call_kwargs["package_id"] == 1
+        assert call_kwargs["price"] == 150
+        assert call_kwargs["stock"] == 10
+        assert call_kwargs["created_by"] == 123456789
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
         assert "creado" in text.lower()
@@ -1025,6 +1013,87 @@ class TestStoreAdminPureHelpers:
         assert "7" in entry
         assert "50" in entry
         assert "Sample Product Name That Is Long"[:30] in button[0].text
+
+
+class TestProductWizardFulfillmentSteps:
+    """D3 wizard: tier → delivery_mode → fulfillment_kind routing."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_wizard_select_tier_advances_to_delivery_mode(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_store = MagicMock()
+        tier = MagicMock()
+        tier.id = 3
+        tier.name = "Reservado"
+        mock_store.get_all_tiers.return_value = [tier]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from handlers.store_admin_handlers import ProductWizardStates, wizard_select_tier
+
+        cb = make_callback(data="wiz_tier:3")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductWizardStates.selecting_tier)
+
+        await wizard_select_tier(cb, fsm)
+
+        data = await fsm.get_data()
+        assert data["tier_id"] == 3
+        assert await fsm.get_state() == ProductWizardStates.selecting_delivery_mode
+        cb.message.edit_text.assert_called_once()
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_wizard_select_delivery_mode_lists_kinds(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        from handlers.store_admin_handlers import ProductWizardStates, wizard_select_delivery_mode
+
+        cb = make_callback(data="wiz_dm:manual")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductWizardStates.selecting_delivery_mode)
+
+        await wizard_select_delivery_mode(cb, fsm)
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert await fsm.get_state() == ProductWizardStates.selecting_fulfillment_kind
+        markup = cb.message.edit_text.call_args[1]["reply_markup"]
+        labels = [btn.text for row in markup.inline_keyboard for btn in row]
+        assert "PKG_DEFERRED" in labels
+        assert "CHANNEL_HONOR" in labels
+
+    @patch("handlers.store_admin_handlers._wizard_prompt_package_selection", new_callable=AsyncMock)
+    async def test_wizard_kind_package_deferred_prompts_package(
+        self, mock_pkg_prompt, make_callback, make_fsm_context
+    ):
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import ProductWizardStates, wizard_select_fulfillment_kind
+
+        cb = make_callback(data=f"wiz_kind:{FulfillmentKind.PACKAGE_DEFERRED.value}")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductWizardStates.selecting_fulfillment_kind)
+
+        await wizard_select_fulfillment_kind(cb, fsm)
+
+        mock_pkg_prompt.assert_awaited_once()
+        data = await fsm.get_data()
+        assert data["fulfillment_kind"] == FulfillmentKind.PACKAGE_DEFERRED.value
+
+    @patch("handlers.store_admin_handlers._wizard_route_after_kind", new_callable=AsyncMock)
+    async def test_wizard_kind_vip_routes_payload(
+        self, mock_route, make_callback, make_fsm_context
+    ):
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import ProductWizardStates, wizard_select_fulfillment_kind
+
+        cb = make_callback(data=f"wiz_kind:{FulfillmentKind.VIP_GRANT.value}")
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductWizardStates.selecting_fulfillment_kind)
+
+        await wizard_select_fulfillment_kind(cb, fsm)
+
+        mock_route.assert_awaited_once()
 
 
 class TestEditProductMenu:

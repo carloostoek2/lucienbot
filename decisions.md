@@ -357,3 +357,21 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 - Docs: `services/channels/CLAUDE.md`, `30-channel-admin-hardening-SUMMARY.md`, HARDENING_ROADMAP Phase 30, `handlers/CLAUDE.md` patrón channel admin.
 - 0 impact gamificación/narrativa; sistema crítico #3 protegido y reforzado.
 - Handoff: "Phase 30 channel admin hardening closed (tests passing)."
+
+---
+
+## Store Fulfillment Catalog — grant_node_access + discount atomicity (Phase 31)
+
+**Motivo:**
+- Catálogo Kinky requiere post-commit fulfillment sin doble cobro de descuentos.
+- `grant_node_access` debe ser idempotente y sin debit besitos.
+
+**Decisión:**
+- Descuento `StorePrivilege` se aplica **una sola vez** en `complete_order` (FOR UPDATE + `consume_active_discount`).
+- Órdenes guardan precio lista; UI usa `get_effective_price`.
+- `StoryService.grant_node_access` otorga nodo sin debit ni avance de historia principal.
+- Fulfillment AUTO kinds (`early_access`, `waitlist`, etc.) entran `AUTO_IN_PROGRESS` aunque `delivery_mode=MANUAL`.
+- Re-entrada idempotente de `complete_order` re-dispara post-commit si fulfillments incompletos.
+
+**Resultado:**
+- Ventaja Kinky y La Lista despachan correctamente; caps mensuales re-verificados bajo lock.

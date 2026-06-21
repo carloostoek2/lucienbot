@@ -541,6 +541,77 @@ class TestStoryAccessGatesPhase6:
         assert can is False
         assert "arquetipo" in (reason or "").lower() or "archetype" in (reason or "").lower()
 
+    def test_can_access_node_story_unlock_bypasses_vip_gate(self, db_session, sample_user):
+        from models.models import (
+            DeliveryMode,
+            FulfillmentKind,
+            FulfillmentStatus,
+            Order,
+            OrderFulfillment,
+            OrderItem,
+            OrderStatus,
+            Package,
+            StoreProduct,
+        )
+
+        node = StoryNode(
+            title="Purchased VIP Node",
+            content="...",
+            node_type=NodeType.NARRATIVE,
+            required_vip=True,
+            is_active=True,
+        )
+        db_session.add(node)
+        db_session.commit()
+        pkg = Package(name="story pkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        product = StoreProduct(
+            name="Unlock",
+            price=10,
+            stock=-1,
+            package_id=pkg.id,
+            delivery_mode=DeliveryMode.AUTO,
+            fulfillment_kind=FulfillmentKind.STORY_UNLOCK,
+            story_node_id=node.id,
+            is_active=True,
+        )
+        db_session.add(product)
+        db_session.commit()
+        order = Order(
+            user_id=sample_user.id,
+            total_items=1,
+            total_price=10,
+            status=OrderStatus.COMPLETED,
+        )
+        db_session.add(order)
+        db_session.flush()
+        item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            product_name=product.name,
+            quantity=1,
+            unit_price=10,
+            total_price=10,
+        )
+        db_session.add(item)
+        db_session.flush()
+        row = OrderFulfillment(
+            order_item_id=item.id,
+            user_id=sample_user.id,
+            product_id=product.id,
+            fulfillment_kind=FulfillmentKind.STORY_UNLOCK,
+            status=FulfillmentStatus.FULFILLED,
+            auto_result=f'{{"node_id": {node.id}}}',
+        )
+        db_session.add(row)
+        db_session.commit()
+
+        service = StoryService(db_session)
+        can, reason = service.can_access_node(sample_user.id, node.id, is_vip=False)
+        assert can is True
+        assert reason is None
+
     def test_can_access_node_cost_besitos_insufficient_denies(self, db_session, sample_user):
         node = StoryNode(
             title="Paid Fragment",

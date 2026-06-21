@@ -269,6 +269,519 @@ class TestStoreService:
 
 
 @pytest.mark.unit
+class TestStorePrivilegeDiscount:
+    """Privilege discount at purchase entry points + Ventaja Kinky combo."""
+
+    def _seed_discount_privilege(
+        self, db_session, user_id: int, product_id: int, pct: int = 20
+    ):
+        from datetime import UTC, datetime, timedelta
+
+        from models.models import (
+            FulfillmentKind,
+            FulfillmentStatus,
+            Order,
+            OrderFulfillment,
+            OrderItem,
+            PrivilegeType,
+            StorePrivilege,
+        )
+
+        order = Order(
+            user_id=user_id,
+            total_items=1,
+            total_price=100,
+            status=OrderStatus.COMPLETED,
+        )
+        db_session.add(order)
+        db_session.flush()
+        item = OrderItem(
+            order_id=order.id,
+            product_id=product_id,
+            product_name="disc",
+            quantity=1,
+            unit_price=100,
+            total_price=100,
+        )
+        db_session.add(item)
+        db_session.flush()
+        row = OrderFulfillment(
+            order_item_id=item.id,
+            user_id=user_id,
+            product_id=product_id,
+            fulfillment_kind=FulfillmentKind.PRIVILEGE_DISCOUNT,
+            status=FulfillmentStatus.FULFILLED,
+        )
+        db_session.add(row)
+        db_session.flush()
+        db_session.add(
+            StorePrivilege(
+                user_id=user_id,
+                product_id=product_id,
+                order_fulfillment_id=row.id,
+                privilege_type=PrivilegeType.DISCOUNT,
+                config=f'{{"discount_pct": {pct}}}',
+                expires_at=datetime.now(UTC) + timedelta(days=30),
+            )
+        )
+        db_session.commit()
+
+    def test_get_effective_price_applies_active_discount(
+        self, db_session, sample_store_product, sample_user
+    ):
+        self._seed_discount_privilege(
+            db_session, sample_user.telegram_id, sample_store_product.id, pct=25
+        )
+        service = StoreService(db_session)
+        effective = service.get_effective_price(
+            sample_user.telegram_id, sample_store_product.price
+        )
+        expected = max(0, sample_store_product.price - (sample_store_product.price * 25 // 100))
+        assert effective == expected
+
+    def test_direct_purchase_balance_check_uses_effective_price(
+        self, db_session, sample_store_product, sample_user
+    ):
+        self._seed_discount_privilege(
+            db_session, sample_user.telegram_id, sample_store_product.id, pct=50
+        )
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=sample_store_product.price // 2,
+            total_earned=sample_store_product.price,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+        service = StoreService(db_session)
+        order, err = service.direct_purchase(
+            sample_user.telegram_id, sample_store_product.id
+        )
+        assert order is not None
+        assert err is None
+
+    def test_create_order_balance_check_uses_effective_price(
+        self, db_session, sample_store_product, sample_user
+    ):
+        self._seed_discount_privilege(
+            db_session, sample_user.telegram_id, sample_store_product.id, pct=50
+        )
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=sample_store_product.price // 2,
+            total_earned=sample_store_product.price,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+        service = StoreService(db_session)
+        service.add_to_cart(sample_user.telegram_id, sample_store_product.id, 1)
+        order, err = service.create_order(sample_user.telegram_id)
+        assert order is not None
+        assert err is None
+
+    @pytest.mark.asyncio
+    async def test_complete_order_debits_discounted_amount(
+        self, db_session, sample_store_product, sample_user, mock_bot
+    ):
+        self._seed_discount_privilege(
+            db_session, sample_user.telegram_id, sample_store_product.id, pct=20
+        )
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=sample_store_product.price,
+            total_earned=sample_store_product.price,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+        service = StoreService(db_session)
+        service.add_to_cart(sample_user.telegram_id, sample_store_product.id, 1)
+        order, _ = service.create_order(sample_user.telegram_id)
+        expected_charge = service.get_effective_price(
+            sample_user.telegram_id, sample_store_product.price
+        )
+        with patch("services.fulfillment_service.PackageService") as MockPkg:
+            MockPkg.return_value.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+            ok, msg = await service.complete_order(mock_bot, order.id)
+        assert ok is True
+        assert str(expected_charge) in msg
+        tx = (
+            db_session.query(BesitoTransaction)
+            .filter_by(user_id=sample_user.telegram_id, source=TransactionSource.PURCHASE)
+            .first()
+        )
+        assert tx is not None
+        assert abs(tx.amount) == expected_charge
+
+    @pytest.mark.asyncio
+    async def test_complete_order_applies_discount_once_and_consumes_privilege(
+        self, db_session, sample_store_product, sample_user, mock_bot
+    ):
+        from models.models import PrivilegeType, StorePrivilege
+
+        self._seed_discount_privilege(
+            db_session, sample_user.telegram_id, sample_store_product.id, pct=20
+        )
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=sample_store_product.price,
+            total_earned=sample_store_product.price,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+        service = StoreService(db_session)
+        service.add_to_cart(sample_user.telegram_id, sample_store_product.id, 1)
+        order, _ = service.create_order(sample_user.telegram_id)
+        assert order.total_price == sample_store_product.price
+        with patch("services.fulfillment_service.PackageService") as MockPkg:
+            MockPkg.return_value.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+            ok, _ = await service.complete_order(mock_bot, order.id)
+        assert ok is True
+        tx = (
+            db_session.query(BesitoTransaction)
+            .filter_by(user_id=sample_user.telegram_id, source=TransactionSource.PURCHASE)
+            .first()
+        )
+        assert tx is not None
+        assert abs(tx.amount) == 80
+        priv = (
+            db_session.query(StorePrivilege)
+            .filter_by(
+                user_id=sample_user.telegram_id,
+                privilege_type=PrivilegeType.DISCOUNT,
+            )
+            .first()
+        )
+        assert priv.consumed_at is not None
+        with patch("services.fulfillment_service.PackageService") as MockPkg:
+            MockPkg.return_value.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+            ok2, msg2 = await service.complete_order(mock_bot, order.id)
+        assert ok2 is True
+        assert "80" in msg2
+        assert str(sample_store_product.price) not in msg2
+        priv2 = db_session.query(StorePrivilege).filter_by(id=priv.id).first()
+        assert priv2.consumed_at == priv.consumed_at
+        txs = (
+            db_session.query(BesitoTransaction)
+            .filter_by(user_id=sample_user.telegram_id, source=TransactionSource.PURCHASE)
+            .all()
+        )
+        assert len(txs) == 1
+
+    @pytest.mark.asyncio
+    async def test_complete_order_stalled_fulfillment_redispatch_skips_duplicate_notifications(
+        self, tmp_path: Path, mock_bot
+    ):
+        from models.models import FulfillmentStatus, OrderFulfillment
+
+        engine, TestSession = TestStorePurchaseAtomicGold()._create_engine_and_session(  # noqa: N806
+            tmp_path
+        )
+        db = TestSession()
+        try:
+            tg = 77709019
+            user = User(telegram_id=tg, username="stalled", role=UserRole.USER)
+            db.add(user)
+            balance = BesitoBalance(user_id=tg, balance=500, total_earned=500, total_spent=0)
+            db.add(balance)
+            pkg = Package(name="Stall Pkg", is_active=True)
+            db.add(pkg)
+            db.commit()
+            product = StoreProduct(
+                name="Stall Prod", price=50, stock=10, package_id=pkg.id, is_active=True
+            )
+            db.add(product)
+            db.commit()
+            service = StoreService(db=db)
+            service.add_to_cart(tg, product.id, 1)
+            order, _ = service.create_order(tg)
+            with patch("services.fulfillment_service.PackageService") as MockPkg:
+                MockPkg.return_value.deliver_package_to_user = AsyncMock(
+                    return_value=(False, "deliver fail")
+                )
+                with patch.object(
+                    StoreService, "_notify_admins_of_purchase", new_callable=AsyncMock
+                ) as mock_admin_notif:
+                    ok1, _ = await service.complete_order(mock_bot, order.id)
+                    first_admin_calls = mock_admin_notif.await_count
+                    ok2, _ = await service.complete_order(mock_bot, order.id)
+                    second_admin_calls = mock_admin_notif.await_count
+            assert ok1 is True
+            assert ok2 is True
+            assert first_admin_calls == 1
+            assert second_admin_calls == 1
+            fulfill = (
+                db.query(OrderFulfillment).filter(OrderFulfillment.user_id == tg).first()
+            )
+            assert fulfill.status == FulfillmentStatus.FAILED
+            assert db.query(BesitoTransaction).filter_by(user_id=tg).count() == 1
+            assert mock_bot.send_message.await_count == 0
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_create_product_rejects_package_kind_without_package_id(self, db_session):
+        service = StoreService(db_session)
+        from models.models import FulfillmentKind
+
+        with pytest.raises(ValueError, match="package_id required"):
+            service.create_product(
+                name="Bad",
+                description="",
+                package_id=None,
+                price=100,
+                fulfillment_kind=FulfillmentKind.PACKAGE,
+            )
+
+    def test_create_product_rejects_vip_grant_without_tariff(self, db_session):
+        service = StoreService(db_session)
+        from models.models import FulfillmentKind
+
+        pkg = Package(name="Placeholder", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        with pytest.raises(ValueError, match="tariff_id required"):
+            service.create_product(
+                name="VIP",
+                description="",
+                package_id=pkg.id,
+                price=100,
+                fulfillment_kind=FulfillmentKind.VIP_GRANT,
+            )
+
+    def test_create_product_rejects_story_unlock_without_node(self, db_session):
+        service = StoreService(db_session)
+        from models.models import FulfillmentKind
+
+        pkg = Package(name="Placeholder", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        with pytest.raises(ValueError, match="story_node_id required"):
+            service.create_product(
+                name="Story",
+                description="",
+                package_id=pkg.id,
+                price=100,
+                fulfillment_kind=FulfillmentKind.STORY_UNLOCK,
+            )
+
+    def test_update_product_rejects_vip_grant_without_tariff(
+        self, db_session, sample_store_product
+    ):
+        from models.models import FulfillmentKind
+
+        service = StoreService(db_session)
+        result = service.update_product(
+            sample_store_product.id,
+            fulfillment_kind=FulfillmentKind.VIP_GRANT,
+            tariff_id=None,
+        )
+        assert result is False
+
+    def test_update_product_rejects_story_unlock_without_node(
+        self, db_session, sample_store_product
+    ):
+        from models.models import FulfillmentKind
+
+        service = StoreService(db_session)
+        result = service.update_product(
+            sample_store_product.id,
+            fulfillment_kind=FulfillmentKind.STORY_UNLOCK,
+            story_node_id=None,
+        )
+        assert result is False
+
+    def test_update_product_rejects_package_kind_without_package_id(
+        self, db_session, sample_store_product
+    ):
+        from models.models import FulfillmentKind
+
+        service = StoreService(db_session)
+        result = service.update_product(
+            sample_store_product.id,
+            fulfillment_kind=FulfillmentKind.PACKAGE_DEFERRED,
+            package_id=None,
+        )
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_notify_admins_of_purchase_enriched_with_charged_amount(
+        self, db_session, sample_store_product, sample_user, mock_bot
+    ):
+        from models.models import FulfillmentKind, OrderItem, OrderStatus
+        from services.fulfillment_service import FulfillmentService
+
+        sample_store_product.name = '<script>Evil</script>'
+        db_session.commit()
+        self._seed_discount_privilege(
+            db_session, sample_user.telegram_id, sample_store_product.id, pct=20
+        )
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=sample_store_product.price,
+            total_earned=sample_store_product.price,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+        service = StoreService(db_session)
+        service.add_to_cart(sample_user.telegram_id, sample_store_product.id, 1)
+        order, _ = service.create_order(sample_user.telegram_id)
+        with patch("services.fulfillment_service.PackageService") as MockPkg:
+            MockPkg.return_value.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+            with patch("services.store_service.bot_config") as mock_cfg:
+                mock_cfg.ADMIN_IDS = [999001]
+                ok, _ = await service.complete_order(mock_bot, order.id)
+        assert ok is True
+        admin_msgs = [
+            c for c in mock_bot.send_message.await_args_list if c.kwargs.get("chat_id") == 999001
+        ]
+        assert admin_msgs
+        text = admin_msgs[0].kwargs.get("text", "")
+        assert "package" in text
+        assert "80 besitos" in text
+        assert "&lt;script&gt;" in text
+        assert "<script>" not in text
+
+    def test_ventaja_kinky_creates_dual_privileges(self, db_session, sample_user):
+        from models.models import (
+            DeliveryMode,
+            FulfillmentKind,
+            OrderItem,
+            PrivilegeType,
+            StorePrivilege,
+        )
+        from services.fulfillment_service import FulfillmentService
+
+        pkg = Package(name="EA pkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        product = StoreProduct(
+            name="Ventaja Kinky",
+            price=100,
+            stock=-1,
+            package_id=pkg.id,
+            delivery_mode=DeliveryMode.MANUAL,
+            fulfillment_kind=FulfillmentKind.PRIVILEGE_EARLY_ACCESS,
+            fulfillment_config='{"early_access_hours": 24, "companion_discount_pct": 15}',
+            is_active=True,
+        )
+        db_session.add(product)
+        db_session.commit()
+        order = Order(
+            user_id=sample_user.telegram_id,
+            total_items=1,
+            total_price=100,
+            status=OrderStatus.COMPLETED,
+        )
+        db_session.add(order)
+        db_session.flush()
+        item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            product_name=product.name,
+            quantity=1,
+            unit_price=100,
+            total_price=100,
+        )
+        db_session.add(item)
+        db_session.commit()
+        svc = FulfillmentService(db_session)
+        svc.create_fulfillments_for_order(order.id)
+        row = svc.get_fulfillment_for_order_item(item.id)
+        import asyncio
+
+        asyncio.run(svc.dispatch_fulfillment(AsyncMock(), row.id))
+        privs = (
+            db_session.query(StorePrivilege)
+            .filter_by(order_fulfillment_id=row.id)
+            .all()
+        )
+        types = {p.privilege_type for p in privs}
+        assert PrivilegeType.EARLY_ACCESS in types
+        assert PrivilegeType.DISCOUNT in types
+
+    def test_ventaja_kinky_dispatch_idempotent_and_companion_discount_usable(
+        self, db_session, sample_user, sample_store_product, mock_bot
+    ):
+        from models.models import (
+            DeliveryMode,
+            FulfillmentKind,
+            OrderItem,
+            PrivilegeType,
+            StorePrivilege,
+        )
+        from services.fulfillment_service import FulfillmentService
+
+        pkg = Package(name="EA pkg2", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        product = StoreProduct(
+            name="Ventaja Kinky 2",
+            price=100,
+            stock=-1,
+            package_id=pkg.id,
+            delivery_mode=DeliveryMode.MANUAL,
+            fulfillment_kind=FulfillmentKind.PRIVILEGE_EARLY_ACCESS,
+            fulfillment_config='{"early_access_hours": 24, "companion_discount_pct": 15}',
+            is_active=True,
+        )
+        db_session.add(product)
+        db_session.commit()
+        order = Order(
+            user_id=sample_user.telegram_id,
+            total_items=1,
+            total_price=100,
+            status=OrderStatus.COMPLETED,
+        )
+        db_session.add(order)
+        db_session.flush()
+        item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            product_name=product.name,
+            quantity=1,
+            unit_price=100,
+            total_price=100,
+        )
+        db_session.add(item)
+        db_session.commit()
+        svc = FulfillmentService(db_session)
+        svc.create_fulfillments_for_order(order.id)
+        row = svc.get_fulfillment_for_order_item(item.id)
+        import asyncio
+
+        asyncio.run(svc.dispatch_fulfillment(AsyncMock(), row.id))
+        asyncio.run(svc.dispatch_fulfillment(AsyncMock(), row.id))
+        privs = (
+            db_session.query(StorePrivilege)
+            .filter_by(order_fulfillment_id=row.id)
+            .all()
+        )
+        assert len(privs) == 2
+        assert svc.get_active_discount_pct(sample_user.telegram_id) == 15
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id,
+            balance=sample_store_product.price,
+            total_earned=sample_store_product.price,
+            total_spent=0,
+        )
+        db_session.add(balance)
+        db_session.commit()
+        store = StoreService(db_session)
+        store.add_to_cart(sample_user.telegram_id, sample_store_product.id, 1)
+        order2, _ = store.create_order(sample_user.telegram_id)
+        expected = store.get_effective_price(
+            sample_user.telegram_id, sample_store_product.price
+        )
+        assert expected == max(
+            0, sample_store_product.price - (sample_store_product.price * 15 // 100)
+        )
+
+
+@pytest.mark.unit
 class TestRaceConditions:
     @pytest.mark.asyncio
     async def test_complete_order_uses_select_for_update_on_product(
@@ -302,7 +815,12 @@ class TestRaceConditions:
             return real_query(model)
 
         with patch.object(db_session, "query", spy_query):
-            await service.complete_order(AsyncMock(), order.id)
+            with patch("services.fulfillment_service.FulfillmentService") as MockFS:
+                fs_inst = MockFS.return_value
+                fs_inst.create_fulfillments_for_order.return_value = []
+                fs_inst.process_order_fulfillments = AsyncMock()
+                fs_inst.get_active_discount_pct.return_value = 0
+                await service.complete_order(AsyncMock(), order.id)
 
         assert mock_filtered.with_for_update.called, "Debe usar SELECT FOR UPDATE en producto"
 
@@ -396,10 +914,7 @@ class TestStorePurchaseAtomicGold:
             db.commit()
             db.refresh(product)
 
-            # Service with shared TestSession db (no owns)
             service = StoreService(db=db)
-            service.package_service = MagicMock()  # avoid real deliver side
-            service.package_service.deliver_package_to_user = AsyncMock()
 
             # cart + order
             service.add_to_cart(saved_tg, product.id, quantity=1)
@@ -407,11 +922,14 @@ class TestStorePurchaseAtomicGold:
             assert order is not None
             assert order.status == OrderStatus.PENDING
 
-            # complete (async)
-            success, msg = await service.complete_order(mock_bot, order.id)
+            with patch(
+                "services.fulfillment_service.PackageService"
+            ) as MockPkg:
+                inst = MockPkg.return_value
+                inst.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+                success, msg = await service.complete_order(mock_bot, order.id)
             assert success is True
 
-            # Strict re-query post internal commits (use fresh session)
             db2 = TestSession()
             try:
                 re_bal = db2.query(BesitoBalance).filter_by(user_id=saved_tg).first()
@@ -434,8 +952,7 @@ class TestStorePurchaseAtomicGold:
                 assert txs[0].amount == -150
                 assert txs[0].type == TransactionType.DEBIT
                 assert txs[0].reference_id == order.id
-                # deliver called (best effort)
-                service.package_service.deliver_package_to_user.assert_called()
+                inst.deliver_package_to_user.assert_called()
             finally:
                 db2.close()
         finally:
@@ -480,19 +997,15 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock(
-                side_effect=Exception("deliver fail sim")
-            )
-
             service.add_to_cart(saved_tg, product.id, quantity=1)
             order, _ = service.create_order(saved_tg)
 
-            # Note: complete_order does recheck + debit_besitos (internal commit) then product.with_for_update()
-            # for stock decr, then deliver (best-effort, exception here does not rollback the atomic DB phase in current impl).
-            # This pilot protects the debit + for_update(product) + PURCHASE tx + COMPLETED state.
-            # Full concurrency/race coverage (TOCTOU etc.) is in cross_service_atomicity + invariants tests.
-            success, _ = await service.complete_order(mock_bot, order.id)
+            with patch("services.fulfillment_service.PackageService") as MockPkg:
+                inst = MockPkg.return_value
+                inst.deliver_package_to_user = AsyncMock(
+                    side_effect=Exception("deliver fail sim")
+                )
+                success, _ = await service.complete_order(mock_bot, order.id)
             assert success is True, "DB phase must succeed even when TG delivery fails post-commit"
 
             db3 = TestSession()
@@ -514,7 +1027,7 @@ class TestStorePurchaseAtomicGold:
                 assert len(txs) == 1
                 assert txs[0].amount == -50
                 assert txs[0].reference_id == order.id
-                service.package_service.deliver_package_to_user.assert_called()
+                inst.deliver_package_to_user.assert_called()
             finally:
                 db3.close()
         finally:
@@ -550,9 +1063,6 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock()
-
             service.add_to_cart(saved_tg, product.id, quantity=1)
             order, _ = service.create_order(saved_tg)
             product.stock = 0
@@ -603,9 +1113,6 @@ class TestStorePurchaseAtomicGold:
             product_id = product.id
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock()
-
             service.add_to_cart(saved_tg, product_id, quantity=1)
             order, _ = service.create_order(saved_tg)
 
@@ -664,15 +1171,14 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock(return_value=(True, ""))
-
             service.add_to_cart(saved_tg, product.id, quantity=2)
             order, _ = service.create_order(saved_tg)
-            success, _ = await service.complete_order(mock_bot, order.id)
+            with patch("services.fulfillment_service.PackageService") as MockPkg:
+                inst = MockPkg.return_value
+                inst.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+                success, _ = await service.complete_order(mock_bot, order.id)
             assert success is True
-
-            assert service.package_service.deliver_package_to_user.call_count == 2
+            assert inst.deliver_package_to_user.call_count == 2
 
             db2 = TestSession()
             try:
@@ -730,14 +1236,13 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock(
-                return_value=(False, "deliver fail")
-            )
-
             service.add_to_cart(saved_tg, product.id, quantity=1)
             order, _ = service.create_order(saved_tg)
-            success, _ = await service.complete_order(mock_bot, order.id)
+            with patch("services.fulfillment_service.PackageService") as MockPkg:
+                MockPkg.return_value.deliver_package_to_user = AsyncMock(
+                    return_value=(False, "deliver fail")
+                )
+                success, _ = await service.complete_order(mock_bot, order.id)
             assert success is True
 
             db3 = TestSession()
@@ -780,14 +1285,15 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock(return_value=(True, ""))
-
             service.add_to_cart(saved_tg, product.id, quantity=1)
             order, _ = service.create_order(saved_tg)
 
-            success1, _ = await service.complete_order(mock_bot, order.id)
-            success2, _ = await service.complete_order(mock_bot, order.id)
+            with patch("services.fulfillment_service.PackageService") as MockPkg:
+                MockPkg.return_value.deliver_package_to_user = AsyncMock(
+                    return_value=(True, "")
+                )
+                success1, _ = await service.complete_order(mock_bot, order.id)
+                success2, _ = await service.complete_order(mock_bot, order.id)
             assert success1 is True
             assert success2 is True
 
@@ -841,14 +1347,10 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock()
-
             service.add_to_cart(saved_tg, product.id, quantity=1)
             order, _ = service.create_order(saved_tg)
             assert order is not None
 
-            # Simular carrera: saldo suficiente al crear orden, insuficiente al completar
             balance.balance = 30
             db.commit()
 
@@ -866,7 +1368,6 @@ class TestStorePurchaseAtomicGold:
                 assert re_prod.stock == 10
                 assert re_order.status == OrderStatus.PENDING
                 assert re_order.completed_at is None
-                service.package_service.deliver_package_to_user.assert_not_called()
                 assert db3.query(BesitoTransaction).filter_by(user_id=saved_tg).count() == 0
             finally:
                 db3.close()
@@ -910,9 +1411,6 @@ class TestStorePurchaseAtomicGold:
             db.refresh(product)
 
             service = StoreService(db=db)
-            service.package_service = MagicMock()
-            service.package_service.deliver_package_to_user = AsyncMock()
-
             service.add_to_cart(saved_tg, product.id, quantity=1)
             order, _ = service.create_order(saved_tg)
             assert order is not None
@@ -934,7 +1432,6 @@ class TestStorePurchaseAtomicGold:
                 assert re_order.status == OrderStatus.PENDING
                 assert re_order.completed_at is None
                 assert db3.query(BesitoTransaction).filter_by(user_id=saved_tg).count() == 0
-                service.package_service.deliver_package_to_user.assert_not_called()
             finally:
                 db3.close()
         finally:

@@ -31,7 +31,7 @@ All tests must remain 100% passing + ruff clean after each edit.
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -366,6 +366,34 @@ class TestBackpackService:
         svc.close()
 
     @pytest.mark.asyncio
+    async def test_deliver_package_content_rejects_unauthorized_user(self, db_session):
+        """IDOR: existing package without entitlement returns package_not_found."""
+        pkg = Package(
+            name="Paquete Ajeno", store_stock=-1, reward_stock=-1, is_active=True
+        )
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        db_session.add(
+            PackageFile(
+                package_id=pkg.id,
+                file_id="AgACAgEAAx0Test",
+                file_type="photo",
+                file_name="test.jpg",
+            )
+        )
+        db_session.commit()
+
+        svc = BackpackService(db_session)
+        mock_bot = AsyncMock()
+        with patch("services.backpack_service.PackageService") as MockPkg:
+            succ, msg = await svc.deliver_package_content(mock_bot, 77709099, pkg.id)
+        assert succ is False
+        assert "Paquete no encontrado" in msg
+        MockPkg.return_value.deliver_package_to_user.assert_not_called()
+        svc.close()
+
+    @pytest.mark.asyncio
     async def test_deliver_package_content_not_found_returns_false_and_message(self, db_session):
         """Non-existent package_id: backpack early return False + 'no encontrado' (no delegation)."""
         svc = BackpackService(db_session)
@@ -396,6 +424,17 @@ class TestBackpackService:
             file_name="test.jpg",
         )
         db_session.add(pf)
+        reward = Reward(
+            name="Pkg Reward",
+            reward_type=RewardType.PACKAGE,
+            package_id=pkg.id,
+            is_active=True,
+        )
+        db_session.add(reward)
+        db_session.commit()
+        db_session.add(
+            UserRewardHistory(user_id=user_tg, reward_id=reward.id, mission_id=None)
+        )
         db_session.commit()
 
         svc = BackpackService(db_session)

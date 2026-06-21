@@ -18,13 +18,14 @@ from keyboards.callback_data import (
     ProductDetailCallback,
     ProductPreviewCallback,
     StoreCategoryCallback,
+    StoreTierCallback,
 )
 from keyboards.inline_keyboards import back_keyboard
 from services import get_service
-from services.besito_service import BesitoService
-from services.package_service import PackageService
+from handlers.states.store_fulfillment_states import PurchaseInputStates
 from services.store_service import StoreService
 from utils.admin import is_admin
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -46,13 +47,19 @@ class SearchStates(StatesGroup):
 async def shop_menu(callback: CallbackQuery):
     """Menu principal de la tienda"""
     user_id = callback.from_user.id
-    with get_service(BesitoService) as besito_service:
-        balance = besito_service.get_balance(user_id)
+    with get_service(StoreService) as store_service:
+        balance = store_service.get_shop_balance_display(user_id)
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🔍 Buscar productos", callback_data="store_search")],
             [InlineKeyboardButton(text="📁 Ver por categorias", callback_data="store_categories")],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_tier_menu_button(),
+                    callback_data="store_tiers",
+                )
+            ],
             [InlineKeyboardButton(text="🛍️ Ver catalogo completo", callback_data="store_catalog")],
             [
                 InlineKeyboardButton(
@@ -74,6 +81,70 @@ async def shop_menu(callback: CallbackQuery):
 
 
 # ==================== CATALOGO ====================
+
+
+@router.callback_query(F.data == "store_tiers", lambda cb: not is_admin(cb.from_user.id))
+async def store_tiers_menu(callback: CallbackQuery):
+    """Menú de tiers del catálogo."""
+    with get_service(StoreService) as store_service:
+        tiers = store_service.get_all_tiers()
+    if not tiers:
+        await callback.answer(LucienVoice.store_catalog_unavailable(), show_alert=True)
+        return
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{t.name} ({t.price_min}-{t.price_max} 💋)",
+                callback_data=StoreTierCallback(tier_id=t.id).pack(),
+            )
+        ]
+        for t in tiers
+    ]
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    await callback.message.edit_text(
+        LucienVoice.store_tier_menu_intro(),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(StoreTierCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+async def store_tier_products(callback: CallbackQuery, callback_data: StoreTierCallback):
+    """Lista productos de un tier."""
+    with get_service(StoreService) as store_service:
+        tiers = {t.id: t for t in store_service.get_all_tiers()}
+        tier = tiers.get(callback_data.tier_id)
+        products = store_service.get_products_by_tier(callback_data.tier_id)
+    if not tier:
+        await callback.answer("Tier no encontrado", show_alert=True)
+        return
+    intro_fn = getattr(LucienVoice, f"store_tier_{tier.slug}_intro", None)
+    intro = intro_fn() if intro_fn else LucienVoice.store_tier_intro_for_slug(tier.slug)
+    buttons = []
+    for product in products:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{product.name} — {product.price} 💋",
+                    callback_data=ProductDetailCallback(product_id=product.id).pack(),
+                )
+            ]
+        )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text=LucienVoice.store_back_to_tier_button("TIENDA"),
+                callback_data="store_tiers",
+            )
+        ]
+    )
+    await callback.message.edit_text(
+        intro,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="HTML",
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "store_catalog", lambda cb: not is_admin(cb.from_user.id))
@@ -125,8 +196,8 @@ async def store_catalog(callback: CallbackQuery):
 @router.callback_query(F.data == "store_categories", lambda cb: not is_admin(cb.from_user.id))
 async def store_categories(callback: CallbackQuery):
     """Muestra categorias disponibles"""
-    with get_service(PackageService) as package_service:
-        categories = package_service.get_all_categories(active_only=True)
+    with get_service(StoreService) as store_service:
+        categories = store_service.get_categories_for_shop(active_only=True)
 
     if not categories:
         await callback.message.edit_text(
@@ -177,14 +248,11 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
     """Muestra productos de una categoria con botones minimalistas"""
     category_id = callback_data.category_id
 
-    with get_service(PackageService) as package_service:
-        category = package_service.get_category(category_id)
+    with get_service(StoreService) as store_service:
+        category = store_service.get_category_for_shop(category_id)
         if not category:
             await callback.answer("Categoria no encontrada", show_alert=True)
             return
-
-    with get_service(StoreService) as store_service:
-        # Get products in this category via service filter
         products = store_service.filter_products(category_id=category_id, active_only=True)
 
     if not products:
@@ -247,37 +315,32 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
     product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
-        product = store_service.get_product(product_id)
-        if not product:
+        ctx = store_service.get_product_detail_context(product_id, callback.from_user.id)
+        if not ctx:
             await callback.answer("Producto no encontrado", show_alert=True)
             return
-
-    with get_service(BesitoService) as besito_service:
-        user_id = callback.from_user.id
-        balance = besito_service.get_balance(user_id)
-
-    with get_service(PackageService) as package_service:
-        pkg_id = product.package_id
-        files = package_service.get_package_files(pkg_id) if pkg_id else []
-
+    product = ctx["product"]
+    balance = ctx["balance"]
+    effective_price = ctx.get("effective_price", product.price)
+    file_count = ctx["file_count"]
     stock_text = "∞" if product.stock == -1 else str(product.stock)
-    is_available = product.is_available
-
-    text = f"""🎩 <b>Lucien:</b>
-
-<i>{product.name}</i>
-
-📝 {product.description or "Un tesoro del reino..."}
-
-💰 <b>Precio:</b> {product.price} besitos
-📊 <b>Stock:</b> {stock_text}
-📦 <b>Contenido:</b> {len(files)} archivo(s)
-
-💋 Tu saldo: {balance} besitos"""
+    is_available = product.is_available and ctx.get("monthly_cap_available", True)
+    text = LucienVoice.store_product_detail(
+        product.name,
+        product.description or "",
+        effective_price if effective_price != product.price else product.price,
+        ctx.get("tier_name", ""),
+    )
+    if effective_price < product.price:
+        text += f"\n🏷️ <b>Precio lista:</b> {product.price} besitos · <i>descuento activo</i>"
+    text += f"\n📊 <b>Stock:</b> {stock_text}\n📦 <b>Contenido:</b> {file_count} archivo(s)"
+    text += f"\n\n💋 Tu saldo: {balance} besitos"
+    if not ctx.get("monthly_cap_available", True):
+        text += f"\n\n⚠️ {LucienVoice.store_monthly_cap_reached(product.name)}"
 
     # Add guidance on earning besitos if balance is insufficient
-    if balance < product.price:
-        text += "\n\n<i>¿Necesitas mas besitos?</i>\n"
+    if balance < effective_price:
+        text += LucienVoice.store_need_more_besitos_hint()
         text += "• Reclama tu regalo diario\n"
         text += "• Reacciona a publicaciones\n"
         text += "• Completa misiones\n"
@@ -295,7 +358,7 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
     )
 
     if is_available:
-        if balance >= product.price:
+        if balance >= effective_price:
             row.append(
                 InlineKeyboardButton(
                     text="💋 Comprar ahora",
@@ -305,7 +368,8 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
         else:
             row.append(
                 InlineKeyboardButton(
-                    text=f"❌ Necesitas {product.price - balance} besitos mas", callback_data="#"
+                    text=f"❌ Necesitas {effective_price - balance} besitos mas",
+                    callback_data="#",
                 )
             )
     else:
@@ -334,21 +398,17 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
     product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
-        product = store_service.get_product(product_id)
-        if not product:
+        ctx = store_service.get_product_detail_context(product_id, callback.from_user.id)
+        if not ctx:
             await callback.answer("Producto no encontrado", show_alert=True)
             return
-
-    with get_service(PackageService) as package_service:
-        pkg_id = product.package_id
-        files = package_service.get_package_files(pkg_id) if pkg_id else []
-        preview_files = files[:1]
-
-    with get_service(BesitoService) as besito_service:
-        user_id = callback.from_user.id
-        balance = besito_service.get_balance(user_id)
+        preview_files = store_service.get_preview_files_for_product(product_id, limit=1)
+    product = ctx["product"]
+    balance = ctx["balance"]
+    effective_price = ctx.get("effective_price", product.price)
+    file_count = ctx["file_count"]
     stock_text = "∞" if product.stock == -1 else str(product.stock)
-    is_available = product.is_available
+    is_available = product.is_available and ctx.get("monthly_cap_available", True)
 
     # Enviar preview si hay archivos
     preview_errors = []
@@ -380,14 +440,14 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
 
 📝 {product.description or "Un tesoro del reino..."}
 
-💰 <b>Precio:</b> {product.price} besitos
+💰 <b>Precio:</b> {effective_price} besitos
 📊 <b>Stock:</b> {stock_text}
-📦 <b>Contenido:</b> {len(files)} archivo(s)
+📦 <b>Contenido:</b> {file_count} archivo(s)
 
 💋 Tu saldo: {balance} besitos"""
 
-    if balance < product.price:
-        text += "\n\n<i>¿Necesitas mas besitos?</i>\n"
+    if balance < effective_price:
+        text += LucienVoice.store_need_more_besitos_hint()
         text += "• Reclama tu regalo diario\n"
         text += "• Reacciona a publicaciones\n"
         text += "• Completa misiones\n"
@@ -395,34 +455,27 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
 
     buttons = []
     row = []
-
-    # Botón de comprar
     if is_available:
-        if balance >= product.price:
+        if balance >= effective_price:
             row.append(
                 InlineKeyboardButton(
-                    text="💋 Comprar ahora",
+                    text=LucienVoice.store_acquire_button(),
                     callback_data=DirectBuyCallback(product_id=product.id).pack(),
                 )
             )
         else:
             row.append(
                 InlineKeyboardButton(
-                    text=f"❌ Necesitas {product.price - balance} besitos mas", callback_data="#"
+                    text=f"❌ Necesitas {effective_price - balance} besitos mas",
+                    callback_data="#",
                 )
             )
     else:
         row.append(InlineKeyboardButton(text="🔒 Agotado", callback_data="#"))
-
     buttons.append(row)
-
-    buttons.append(
-        [InlineKeyboardButton(text="🛍️ Ver mas productos", callback_data="store_catalog")]
-    )
+    buttons.append([InlineKeyboardButton(text="🛍️ Ver mas productos", callback_data="store_tiers")])
     buttons.append([InlineKeyboardButton(text="🔙 Volver a la tienda", callback_data="shop")])
-
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-
     await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer("Preview enviado!", show_alert=False)
 
@@ -440,22 +493,25 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
         if not product:
             await callback.answer("Producto no encontrado", show_alert=True)
             return
-
-    with get_service(BesitoService) as besito_service:
         user_id = callback.from_user.id
-        balance = besito_service.get_balance(user_id)
+        cap_err = store_service._check_monthly_cap_for_product(product_id)
+        if cap_err:
+            await callback.answer(cap_err, show_alert=True)
+            return
+        balance = store_service.get_shop_balance_display(user_id)
+        effective_price = store_service.get_effective_price(user_id, product.price)
 
-    if balance < product.price:
+    if balance < effective_price:
         await callback.answer("Saldo insuficiente", show_alert=True)
         return
 
     text = (
         f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>¿Confirmar compra?</i>\n\n"
+        f"{LucienVoice.store_confirm_purchase_prompt()}"
         f"📦 <b>{product.name}</b>\n"
-        f"💰 <b>Precio:</b> {product.price} besitos\n\n"
+        f"💰 <b>Precio:</b> {effective_price} besitos\n\n"
         f"💋 Tu saldo: {balance} besitos\n"
-        f"📊 Después de compra: {balance - product.price} besitos"
+        f"{LucienVoice.store_after_purchase_balance_line(balance - effective_price)}"
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -481,49 +537,94 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
 
 @router.callback_query(ConfirmDirectBuyCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def confirm_direct_buy(
-    callback: CallbackQuery, callback_data: ConfirmDirectBuyCallback, bot: Bot
+    callback: CallbackQuery,
+    callback_data: ConfirmDirectBuyCallback,
+    bot: Bot,
+    state: FSMContext,
 ):
     """Procesa la compra directa"""
     product_id = callback_data.product_id
 
     with get_service(StoreService) as store_service:
         user_id = callback.from_user.id
-
-        # Crear orden directa
-        order, error = store_service.direct_purchase(user_id, product_id)
-
-    if error:
-        await callback.answer(error, show_alert=True)
-        return
-
-    # Completar orden
-    success, message = await store_service.complete_order(bot, order.id)
-
-    if success:
-        await callback.message.edit_text(
-            f"🎩 Lucien:\n\n"
-            f"✅ Compra completada exitosamente!\n\n"
-            f"{message}\n\n"
-            f"Los productos han sido enviados a tu chat privado.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="🛍️ Seguir comprando", callback_data="store_catalog"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="📜 Ver historial", callback_data="purchase_history"
-                        )
-                    ],
-                    [InlineKeyboardButton(text="🔙 Menu principal", callback_data="back_to_main")],
-                ]
-            ),
+        order, summaries, error = await store_service.purchase_and_complete(
+            bot, user_id, product_id
         )
-        await callback.answer("Compra exitosa!")
+        if error:
+            await callback.answer(error, show_alert=True)
+            return
+        charge_amount = store_service._get_order_charge_amount(user_id, order)
+
+    post_msg = LucienVoice.store_purchase_completed(charge_amount)
+    if summaries:
+        kind = summaries[0].get("kind", "package")
+        post_msg = LucienVoice.fulfillment_post_purchase_message_for_kind(
+            kind, summaries[0].get("product_name", "")
+        )
+
+    await callback.message.edit_text(
+        post_msg,
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=LucienVoice.store_go_backpack_button(),
+                        callback_data="backpack_purchases",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=LucienVoice.store_continue_shopping_button(),
+                        callback_data="store_tiers",
+                    )
+                ],
+                [InlineKeyboardButton(text="🔙 Menu principal", callback_data="back_to_main")],
+            ]
+        ),
+        parse_mode="HTML",
+    )
+    await callback.answer("Compra exitosa!")
+
+    pending = next(
+        (s for s in summaries if s.get("status") == "pending_input" and s.get("fulfillment_id")),
+        None,
+    )
+    if pending:
+        await state.set_state(PurchaseInputStates.awaiting_input)
+        await state.update_data(fulfillment_id=pending["fulfillment_id"])
+
+
+@router.message(PurchaseInputStates.awaiting_input, F.text == "/cancel")
+async def cancel_purchase_input(message: Message, state: FSMContext):
+    """Cancela captura de input de compra."""
+    await state.clear()
+    await message.answer(LucienVoice.fulfillment_input_cancelled(), parse_mode="HTML")
+
+
+@router.message(PurchaseInputStates.awaiting_input, lambda m: not is_admin(m.from_user.id))
+async def process_purchase_input(message: Message, state: FSMContext):
+    """Captura input del visitante para USER_INPUT_THEN_MANUAL."""
+    data = await state.get_data()
+    fulfillment_id = data.get("fulfillment_id")
+    if not fulfillment_id:
+        await state.clear()
+        await message.answer(LucienVoice.store_order_not_found(), parse_mode="HTML")
+        return
+    await state.set_state(PurchaseInputStates.validating)
+    with get_service(StoreService) as store_service:
+        ok, msg = await store_service.submit_purchase_input(
+            message.bot, fulfillment_id, message.from_user.id, message.text or ""
+        )
+    if ok:
+        await state.clear()
+    elif msg in (
+        LucienVoice.fulfillment_input_already_submitted(),
+        LucienVoice.store_order_not_found(),
+    ):
+        await state.clear()
     else:
-        await callback.answer(f"Error: {message}", show_alert=True)
+        await state.set_state(PurchaseInputStates.awaiting_input)
+    await message.answer(msg, parse_mode="HTML")
 
 
 # ==================== HISTORIAL DE COMPRAS ====================
@@ -584,7 +685,7 @@ async def store_search_start(callback: CallbackQuery, state: FSMContext):
     """Inicia busqueda de productos"""
     await callback.message.edit_text(
         "🎩 <b>Lucien:</b>\n\n"
-        "<i>¿Que tesoro buscas?</i>\n\n"
+        f"{LucienVoice.store_search_prompt()}"
         "Escribe el nombre o una palabra clave del producto:",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="❌ Cancelar", callback_data="shop")]]
