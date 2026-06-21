@@ -270,8 +270,8 @@ class TestGameServiceTriviaPaths:
             description="Directed item6",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         promo.is_active = True
         promo.status = "active"  # enum string ok per usage

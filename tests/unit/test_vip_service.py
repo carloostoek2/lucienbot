@@ -3,13 +3,12 @@ Tests unitarios para VIPService.
 """
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 from models.models import Channel, ChannelType, Subscription, Token, TokenStatus
 from services import get_service
-from services.event_bus import EVENT_VIP_ACTIVATED
 from services.vip_service import VIPService
 
 
@@ -102,7 +101,10 @@ class TestTokenService:
         token = service.generate_token(sample_tariff.id, expires_in_days=7)
 
         assert token.expires_at is not None
-        expected_date = datetime.utcnow() + timedelta(days=7)
+        # NOTE: SQLite + DateTime(timezone=True) returns naive datetimes on read in this engine setup.
+        # Service correctly writes aware (now(UTC)); test matches observed retrieval for loose time check.
+        # DESIRED: expires_at should be tz-aware in richer DBs.
+        expected_date = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
         # Permitir margen de 1 minuto
         assert abs((token.expires_at - expected_date).total_seconds()) < 60
 
@@ -458,7 +460,6 @@ class TestVIPServiceNurtureEmit:
         self, db_session, sample_tariff, sample_user, sample_vip_channel
     ):
         from unittest.mock import patch
-        from services.event_bus import schedule_emit
 
         service = VIPService(db_session)
         tok = service.generate_token(sample_tariff.id)
@@ -472,7 +473,6 @@ class TestVIPServiceNurtureEmit:
         self, db_session, sample_tariff, sample_user, sample_vip_channel, sample_token
     ):
         from unittest.mock import patch
-        from services.event_bus import schedule_emit
 
         service = VIPService(db_session)
         # first sub

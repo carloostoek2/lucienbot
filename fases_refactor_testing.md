@@ -1350,4 +1350,35 @@ See /tmp/grok-impl-summary-ae9b25c5.md for updated details (exact post-revert fi
 
 (Secciones Fases 12-18 + último tirón completado.)
 
+---
+## Revisión de estructura de pilotos + expansión de cobertura (continuación)
+
+**Fecha:** 2026-06-21
+
+Siguiendo el principio establecido (pilotos de contrato por dominio, ver docs/fase_testing_review_process.md + "Inicio de Bajo Riesgo"): 
+- Revisión de patrones gold actuales en unit + integ (Test*Service @pytest.mark.unit, Service(db_session), telegram_id contract, aware datetimes now(UTC), DESIRED CONTRACT docstrings, SQLite+TestSession para multi-commit flows, deterministic setup, try/finally dispose, strict asserts).
+- Todos los dominios principales tienen su piloto (besito, vip, mission, store, reward, daily, broadcast_reaction, backpack, game, streak, analytics, health, promotion, package, channel, nurture, fulfillment, user, anonymous, trivia_service).
+- Dominio faltante: trivia_config_service.py (sin test_*_service.py dedicado; cubierto sólo indirectamente vía game_service model inserts; ~58% en report).
+- Estructura verificada correcta en lo esencial (ID duality, patterns replicados, 1svc focus implícito vía tests en service). 
+- Inconsistencias corregidas (estructura correcta): 
+  - utcnow() naive legacy en fixtures (conftest sample_expired_token) y tests unit (streak_promotion x12, vip 1, game) → datetime.now(UTC) + import UTC. 
+  - Ajuste comparativa en vip token test (SQLite tz=True devuelve naive en refresh; servicio escribe aware correctamente; test ahora robusto + nota "DESIRED aware").
+- Expansión: Nuevo piloto `tests/unit/test_trivia_config_service.py` (8 tests, sigue al pie test_daily_gift_service + test_analytics + test_health):
+  - Lifecycle (owns/no-own + close).
+  - Get: auto-crea row con DEFAULTS, retorna todos los keys (incl besitos caps).
+  - Update: sólo campos válidos (>=0 int), ignora keys inválidos/negativos/non-int, setea updated_by/at, crea si falta, devuelve config completo.
+  - Shape contract keys.
+- Verificación: 8/8 new passing; ruff clean; 500+ unit services (incl new + streak/vip/game) passing; targeted invariants/atomic/streak/besito 42 passing; 0 regressions atribuibles. Warnings pre-existentes (event emit schedule).
+- Cobertura: trivia_config_service ahora ejercitado directamente (get/update paths); mejora en servicio minijuegos/trivia domain.
+
+Esto continúa la expansión manteniendo la red de seguridad por dominio vía pilotos de contrato deseado.
+
+**Expansión handlers (2026-06-21 continuación):** 
+- Priorizados por criticidad + % cov más baja: 1) game_user_handlers.py (14%, minijuegos/dados/trivia/rachas/protección - engagement + earnings system; usa get_service moderno). 2) free_channel_handlers (20%, entry point free join/leave).
+- Todos los services/domains ya tenían pilotos unit → ahora abarcamos handlers completos por sistema (patrón gold replicado: patch get_service, assert 1 svc call + user_id, edit_text/answer, close, happy+limits+errors+streak paths).
+- Nuevo: tests/handlers/test_game_user_handlers.py (13 tests cubriendo menu, dice, trivia free/vip/simple, streak protection/retire/continue/decline).
+- Nuevo: tests/handlers/test_free_channel_handlers.py (3 tests básicos para join/leave/member).
+- Verif: 13+3 passing, 122+ en smoke con golds (reaction, invariants, gamif, mission); ruff clean; 0 regressions.
+- Siguientes sugeridos (si continuar): vip_*_handlers (19-24%, acceso crítico), broadcast_handlers (20%), package/reward_admin.
+
 

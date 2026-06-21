@@ -1,6 +1,6 @@
 """Unit tests for StreakPromotionService -- Phase 17."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -34,8 +34,8 @@ class TestStreakPromotionService:
             description="Promo with 3 levels",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         assert promo is not None
         assert promo.name == "Test Levels Promotion"
@@ -58,8 +58,8 @@ class TestStreakPromotionService:
             description="Desc",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         promo.is_active = True
         promo.status = StreakPromotionStatus.ACTIVE
@@ -102,8 +102,8 @@ class TestStreakPromotionService:
             description="Desc",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         promo.is_active = True
         promo.status = StreakPromotionStatus.ACTIVE
@@ -129,8 +129,8 @@ class TestStreakPromotionService:
             description="Desc",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         all_codes = []
         for level in promo.levels:
@@ -149,8 +149,8 @@ class TestStreakPromotionService:
             description="Desc",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         # Do NOT activate the promotion
         result = service.claim_for_streak(user_id=123, game_type="trivia", streak=3)
@@ -167,8 +167,8 @@ class TestStreakPromotionService:
             description="Desc",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         promo.is_active = True
         promo.status = StreakPromotionStatus.ACTIVE
@@ -189,7 +189,7 @@ class TestStreakPromotionService:
     def test_promotion_with_dates_mode(self, db_session):
         """Verify dates-duration mode promotion appears in active promotions."""
         service = StreakPromotionService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         levels = [
             {"consecutive_required": 3, "discount_pct": 10, "codes_available": 3},
         ]
@@ -246,8 +246,8 @@ class TestStreakPromotionService:
             description="Desc",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         # Initial state
         assert promo.is_active is False
@@ -281,8 +281,8 @@ class TestStreakPromotionService:
             description="Integration test promo",
             levels=levels,
             duration_mode="dates",
-            start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=7),
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=7),
         )
         promo.is_active = True
         promo.status = StreakPromotionStatus.ACTIVE

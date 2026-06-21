@@ -195,7 +195,7 @@ def sample_expired_token(db_session: Session, sample_tariff):
         token_code="EXPIRED123",
         tariff_id=sample_tariff.id,
         status=TokenStatus.EXPIRED,
-        expires_at=datetime.utcnow() - timedelta(days=1),
+        expires_at=datetime.now(UTC) - timedelta(days=1),
     )
     db_session.add(token)
     db_session.commit()
