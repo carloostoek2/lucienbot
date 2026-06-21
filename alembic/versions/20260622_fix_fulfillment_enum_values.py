@@ -46,7 +46,7 @@ _STATUS_MAP = {
 def _normalize_column(table: str, column: str, mapping: dict[str, str]) -> None:
     for old, new in mapping.items():
         op.execute(
-            f"UPDATE {table} SET {column} = '{new}' WHERE {column} = '{old}'"
+            f"UPDATE {table} SET {column} = '{new}' WHERE {column}::text = '{old}'"
         )
 
 
