@@ -142,36 +142,39 @@ def upgrade() -> None:
     deliverymode_enum = sa.Enum("auto", "manual", name="deliverymode")
     deliverymode_enum.create(op.get_bind(), checkfirst=True)
 
+    op.add_column(
+        "store_products",
+        sa.Column(
+            "delivery_mode",
+            deliverymode_enum,
+            nullable=False,
+            server_default=sa.text("'auto'::deliverymode"),
+        ),
+    )
+    op.add_column(
+        "store_products",
+        sa.Column(
+            "fulfillment_kind",
+            sa.Enum(
+                "package",
+                "package_deferred",
+                "user_input_manual",
+                "early_access",
+                "discount",
+                "story_unlock",
+                "vip_grant",
+                "waitlist",
+                "channel_honor",
+                "scheduled_chat",
+                name="fulfillmentkind",
+                create_type=False,
+            ),
+            nullable=False,
+            server_default=sa.text("'package'::fulfillmentkind"),
+        ),
+    )
+
     with op.batch_alter_table("store_products") as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                "delivery_mode",
-                deliverymode_enum,
-                nullable=False,
-                server_default="auto",
-            )
-        )
-        batch_op.add_column(
-            sa.Column(
-                "fulfillment_kind",
-                sa.Enum(
-                    "package",
-                    "package_deferred",
-                    "user_input_manual",
-                    "early_access",
-                    "discount",
-                    "story_unlock",
-                    "vip_grant",
-                    "waitlist",
-                    "channel_honor",
-                    "scheduled_chat",
-                    name="fulfillmentkind",
-                    create_type=False,
-                ),
-                nullable=False,
-                server_default="package",
-            )
-        )
         batch_op.add_column(sa.Column("tier_id", sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column("story_node_id", sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column("tariff_id", sa.Integer(), nullable=True))
@@ -198,6 +201,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_column("store_products", "delivery_mode")
+    op.drop_column("store_products", "fulfillment_kind")
+
     with op.batch_alter_table("store_products") as batch_op:
         batch_op.drop_constraint("fk_store_products_tariff", type_="foreignkey")
         batch_op.drop_constraint("fk_store_products_story_node", type_="foreignkey")
@@ -208,8 +214,6 @@ def downgrade() -> None:
         batch_op.drop_column("tariff_id")
         batch_op.drop_column("story_node_id")
         batch_op.drop_column("tier_id")
-        batch_op.drop_column("fulfillment_kind")
-        batch_op.drop_column("delivery_mode")
 
     op.drop_table("store_waitlist_entries")
     op.drop_table("store_privileges")
