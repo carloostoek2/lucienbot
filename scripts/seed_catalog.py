@@ -327,7 +327,7 @@ def seed_products(db, slug_to_id: dict[str, int]) -> tuple[int, int]:
             fulfillment_config=json.dumps(cfg) if cfg else None,
             monthly_stock_cap=monthly_cap,
             sort_order=idx + 1,
-            is_active=True,
+            is_active=False,
         )
         db.add(product)
         created += 1
