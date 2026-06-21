@@ -5,7 +5,6 @@ Handlers para comandos básicos y flujos generales.
 """
 
 import logging
-from datetime import timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -28,6 +27,15 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+def _redact_start_log_args(args: str | None) -> str:
+    """Redact sensitive deep-link tokens; log presence/length only."""
+    if not args:
+        return "none"
+    if args == "free":
+        return "free"
+    return f"token(len={len(args)})"
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     """Handler para el comando /start"""
@@ -37,7 +45,9 @@ async def cmd_start(message: Message):
     user_service = UserService()
     vip_service = VIPService()
 
-    logger.info(f"/start recibido - user_id={user.id}, args={args}, full_text='{message.text}'")
+    logger.info(
+        f"/start recibido - user_id={user.id}, args={_redact_start_log_args(args)}"
+    )
 
     try:
         # Verificar si es deep link "free"
@@ -108,26 +118,9 @@ async def cmd_start(message: Message):
             )
 
             if subscription:
-                # Token válido - enviar enlace directo al canal VIP
-                vip_channel = vip_service.get_vip_channel()
-                invite_link = None
-
-                if vip_channel:
-                    try:
-                        invite_link_obj = await message.bot.create_chat_invite_link(
-                            chat_id=vip_channel.channel_id,
-                            name=f"VIP {user.id}",
-                            creates_join_request=False,
-                            member_limit=1,
-                            expire_date=timedelta(days=VIPService.INVITE_LINK_EXPIRATION_DAYS),
-                        )
-                        invite_link = invite_link_obj.invite_link
-                    except Exception as e:
-                        logger.error(
-                            f"Error creando invite link para canal {vip_channel.channel_id}: {e}"
-                        )
-                        invite_link = vip_channel.invite_link
-
+                invite_link = await vip_service.create_vip_invite_link(
+                    message.bot, user.id, allow_fallback=True
+                )
                 await message.answer(
                     LucienVoice.vip_direct_access(invite_link),
                     reply_markup=vip_access_keyboard(),

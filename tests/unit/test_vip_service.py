@@ -3,7 +3,7 @@ Tests unitarios para VIPService.
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -753,6 +753,135 @@ class TestVIPServiceNurtureEmit:
         assert expiring[0].id == sub_expiring.id
         assert sub_far.id not in [s.id for s in expiring]
         assert sub_reminded.id not in [s.id for s in expiring]
+
+
+@pytest.mark.unit
+class TestVIPServiceInviteLinks:
+    """Tests para create_vip_invite_link, grant_vip_from_tariff y resend."""
+
+    @pytest.mark.asyncio
+    async def test_create_vip_invite_link_member_limit_1(
+        self, db_session, sample_vip_channel, sample_user
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+dynamic")
+        )
+        link = await service.create_vip_invite_link(mock_bot, sample_user.telegram_id)
+        assert link == "https://t.me/+dynamic"
+        call_kwargs = mock_bot.create_chat_invite_link.await_args.kwargs
+        assert call_kwargs["member_limit"] == 1
+        assert call_kwargs["chat_id"] == sample_vip_channel.channel_id
+
+    @pytest.mark.asyncio
+    async def test_create_vip_invite_link_fail_closed_by_default(
+        self, db_session, sample_vip_channel, sample_user
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
+        link = await service.create_vip_invite_link(mock_bot, sample_user.telegram_id)
+        assert link is None
+
+    @pytest.mark.asyncio
+    async def test_create_vip_invite_link_fallback_when_allowed(
+        self, db_session, sample_vip_channel, sample_user
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
+        link = await service.create_vip_invite_link(
+            mock_bot, sample_user.telegram_id, allow_fallback=True
+        )
+        assert link == sample_vip_channel.invite_link
+
+    @pytest.mark.asyncio
+    async def test_create_vip_invite_link_uses_datetime_expire(
+        self, db_session, sample_vip_channel, sample_user
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+dynamic")
+        )
+        await service.create_vip_invite_link(mock_bot, sample_user.telegram_id)
+        expire_arg = mock_bot.create_chat_invite_link.await_args.kwargs["expire_date"]
+        assert isinstance(expire_arg, datetime)
+
+    @pytest.mark.asyncio
+    async def test_grant_vip_from_tariff_activates_and_returns_metadata(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+grant")
+        )
+        ok, msg, metadata = await service.grant_vip_from_tariff(
+            mock_bot, sample_user.telegram_id, sample_tariff.id
+        )
+        assert ok is True
+        assert metadata["vip_activated"] is True
+        assert metadata["invite_link"] == "https://t.me/+grant"
+        assert service.is_user_vip(sample_user.telegram_id)
+        assert "círculo íntimo" in msg
+
+    @pytest.mark.asyncio
+    async def test_resend_vip_invite_requires_active_subscription(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+resend")
+        )
+        ok, msg, link = await service.resend_vip_invite_for_user(
+            mock_bot, sample_user.telegram_id
+        )
+        assert ok is False
+        assert link is None
+
+        token = service.generate_token(sample_tariff.id)
+        service.redeem_token(token.token_code, sample_user.telegram_id)
+        ok2, msg2, link2 = await service.resend_vip_invite_for_user(
+            mock_bot, sample_user.telegram_id
+        )
+        assert ok2 is True
+        assert link2 == "https://t.me/+resend"
+        assert "círculo íntimo" in msg2
+
+    @pytest.mark.asyncio
+    async def test_grant_vip_from_tariff_fails_without_vip_channel(
+        self, db_session, sample_user, sample_tariff
+    ):
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        ok, msg, metadata = await service.grant_vip_from_tariff(
+            mock_bot, sample_user.telegram_id, sample_tariff.id
+        )
+        assert ok is False
+        assert metadata == {}
+        assert "activar" in msg.lower() or "VIP" in msg
+
+    @pytest.mark.asyncio
+    async def test_grant_vip_from_tariff_partial_metadata_on_invite_failure(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel
+    ):
+        """Redeem OK + invite fallido devuelve metadata parcial para retry."""
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
+        ok, msg, metadata = await service.grant_vip_from_tariff(
+            mock_bot, sample_user.telegram_id, sample_tariff.id
+        )
+        assert ok is False
+        assert metadata["vip_activated"] is True
+        assert metadata["subscription_id"] is not None
+        assert metadata["token_id"] is not None
+        assert metadata["invite_link"] is None
+        assert service.is_user_vip(sample_user.telegram_id)
+        assert "VIP" in msg or "invit" in msg.lower()
 
 
 class TestVIPServiceLifecycleOrGetServiceContext:

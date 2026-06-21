@@ -221,18 +221,19 @@ class TestCmdStart:
         mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
             return_value=MagicMock(id=1)
         )
-        mock_vip_svc.INVITE_LINK_EXPIRATION_DAYS = 7
+        mock_vip_svc.return_value.create_vip_invite_link = AsyncMock(
+            return_value="https://t.me/+custom"
+        )
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
         msg = make_message(text="/start TOKEN123", user=user)
-        msg.bot.create_chat_invite_link.return_value = MagicMock(invite_link="https://t.me/+custom")
 
         from handlers.common_handlers import cmd_start
 
         await cmd_start(msg)
 
-        msg.bot.create_chat_invite_link.assert_called_once()
+        mock_vip_svc.return_value.create_vip_invite_link.assert_awaited_once()
         msg.answer.assert_called_once()
 
     @patch("handlers.common_handlers.VIPService", autospec=True)
@@ -348,20 +349,20 @@ class TestCmdStart:
         mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
             return_value=MagicMock(id=1)
         )
-        mock_vip_svc.INVITE_LINK_EXPIRATION_DAYS = 7
+        mock_vip_svc.return_value.create_vip_invite_link = AsyncMock(
+            return_value="https://t.me/+fallback"
+        )
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
         msg = make_message(text="/start TOKEN123", user=user)
-        msg.bot.create_chat_invite_link.side_effect = Exception("API error")
 
         from handlers.common_handlers import cmd_start
 
         await cmd_start(msg)
 
+        mock_vip_svc.return_value.create_vip_invite_link.assert_awaited_once()
         msg.answer.assert_called_once()
-        # Debe usar link del canal (fallback)
-        assert msg.answer.call_count == 1
 
     @patch("handlers.common_handlers.VIPService", autospec=True)
     @patch("handlers.common_handlers.UserService", autospec=True)
@@ -546,11 +547,7 @@ class TestVIPInviteLinkGenerationFase7:
         mock_vip = MagicMock()
         # Explicit truthy to guarantee if subscription: and if vip_channel: are taken so handler executes the create with member_limit=1
         mock_vip.redeem_token_with_missions = AsyncMock(return_value=True)
-        # Simple object (not MagicMock) to avoid any truthiness/attr quirks in the if
-        class _Chan:
-            channel_id = -1001234567890
-            invite_link = "https://t.me/+STATICFALLBACK"
-        mock_vip.get_vip_channel.return_value = _Chan()
+        mock_vip.create_vip_invite_link = AsyncMock(return_value="https://t.me/+DYNONELIMIT")
         mock_vip_cls.return_value = mock_vip
 
         # UserService may be instantiated; make harmless
@@ -560,10 +557,6 @@ class TestVIPInviteLinkGenerationFase7:
             mock_user_cls.return_value = mock_user
 
             msg = make_message(text="/start DYNTOKEN123")
-            # Use fixture's bot.create_chat_invite_link mock (already AsyncMock from make_message); override return.
-            # This allows us to assert the *exact* call made by handler code (incl. member_limit=1).
-            create_mock = msg.bot.create_chat_invite_link
-            create_mock.return_value = MagicMock(invite_link="https://t.me/+DYNONELIMIT")
 
             # Mock mission catchup (get_service used early in cmd_start before the token if) to reach redeem/create branch.
             with patch("handlers.common_handlers.get_service") as mock_gs:
@@ -578,40 +571,33 @@ class TestVIPInviteLinkGenerationFase7:
 
             # Verify redeem path exercised with correct method (drives the VIP-07 branch during cmd_start)
             mock_vip.redeem_token_with_missions.assert_called()
-            # Diagnostic + strict: prove the if subscription/if vip_channel were taken by handler
-            mock_vip.get_vip_channel.assert_called()
-            # Strict: the handler code itself invoked create with member_limit=1 (no post-hoc simulate).
-            # We assert on the mock that the handler called.
-            create_mock.assert_called()
-            call_kwargs = create_mock.call_args.kwargs if create_mock.call_args else {}
-            assert call_kwargs.get("member_limit") == 1
+            mock_vip.create_vip_invite_link.assert_awaited_once()
+            create_call = mock_vip.create_vip_invite_link.await_args
+            assert create_call.args[0] is msg.bot
+            assert create_call.args[1] == msg.from_user.id
 
-            # Pre-existing security (Issue 9) canary: the specific token value appears in the /start log line.
-            # This is a regression guard: if prod logging is later redacted (e.g. args=***), this test will fail
-            # and require update. Documents the exposure in redeem args/full_text.
-            assert "DYNTOKEN123" in caplog.text
-            assert "/start recibido" in caplog.text or "args=" in caplog.text
+            # Security: VIP deep-link tokens must not appear in logs.
+            assert "DYNTOKEN123" not in caplog.text
+            assert "token(len=11)" in caplog.text
+            assert "/start recibido" in caplog.text
 
     @patch("handlers.common_handlers.VIPService")
     async def test_redeem_falls_back_to_static_on_create_error(self, mock_vip_cls, make_message):
         """Error path: create raises -> fallback to static channel invite_link used in answer."""
         mock_vip = MagicMock()
         mock_vip.redeem_token_with_missions = AsyncMock(return_value=MagicMock())
-        mock_channel = MagicMock(
-            channel_id=-1001234567890, invite_link="https://t.me/+STATICFALLBACK"
+        mock_vip.create_vip_invite_link = AsyncMock(
+            return_value="https://t.me/+STATICFALLBACK"
         )
-        mock_vip.get_vip_channel.return_value = mock_channel
         mock_vip_cls.return_value = mock_vip
 
         with patch("handlers.common_handlers.UserService"):
             msg = make_message(text="/start FALLBACKTOKEN")
-            msg.bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG API fail sim"))
 
             from handlers.common_handlers import cmd_start
 
             await cmd_start(msg)
 
             mock_vip.redeem_token_with_missions.assert_called()
-            # Fallback exercised (no successful create, answer sent with static or handled)
-            # The except sets invite_link = vip_channel.invite_link ; answer is called
+            mock_vip.create_vip_invite_link.assert_awaited_once()
             assert msg.answer.called

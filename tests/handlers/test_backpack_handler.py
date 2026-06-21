@@ -71,18 +71,22 @@ class TestBackpackFulfillmentCallbacks:
     async def test_activate_vip_shows_link(self, mock_get_service, make_callback):
         svc = _mock_backpack_ctx(
             mock_get_service,
-            get_vip_activation_link=MagicMock(return_value=(True, "https://t.me/bot?start=abc")),
+            resend_vip_invite_for_fulfillment=AsyncMock(
+                return_value=(True, "VIP access message")
+            ),
         )
         from keyboards.callback_data import BackpackActivateVipCallback
 
         cb_data = BackpackActivateVipCallback(fulfillment_id=7)
         cb = make_callback(data=cb_data.pack())
 
-        from handlers.backpack_handler import callback_activate_vip
+        from handlers.backpack_handler import callback_resend_vip_invite
 
-        await callback_activate_vip(cb, cb_data)
+        await callback_resend_vip_invite(cb, cb_data)
 
-        svc.get_vip_activation_link.assert_called_once_with(cb.from_user.id, 7)
+        svc.resend_vip_invite_for_fulfillment.assert_awaited_once_with(
+            cb.bot, cb.from_user.id, 7
+        )
         cb.message.answer.assert_awaited_once()
         cb.answer.assert_called_once()
 
@@ -292,12 +296,12 @@ class TestBuildPurchaseDetailKeyboard:
         from handlers.backpack_handler import build_purchase_detail_keyboard
 
         purchase = {
-            "actions_available": ["activate_vip"],
+            "actions_available": ["resend_vip_invite"],
             "fulfillment_id": 1,
         }
         kb = build_purchase_detail_keyboard(purchase)
         labels = [btn.text for row in kb.inline_keyboard for btn in row]
-        assert "👑 Activar VIP" in labels
+        assert "🔗 Reenviar acceso VIP" in labels
 
     def test_submit_input_button_when_action_available(self):
         from handlers.backpack_handler import build_purchase_detail_keyboard

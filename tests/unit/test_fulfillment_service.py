@@ -1,5 +1,6 @@
 """Gold tests G1–G8 for FulfillmentService (store fulfillment catalog)."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -146,16 +147,301 @@ class TestFulfillmentServiceGold:
             svc.create_fulfillments_for_order(order.id)
             row = svc.get_fulfillment_for_order_item(item.id)
             mock_bot = AsyncMock()
-            mock_bot.get_me = AsyncMock(return_value=MagicMock(username="testbot"))
+            metadata = {
+                "vip_activated": True,
+                "subscription_id": 1,
+                "invite_link": "https://t.me/+vipinvite",
+                "tariff_name": tariff.name,
+                "token_id": 99,
+                "token_code": "ABC123",
+            }
             with patch("services.fulfillment_service.VIPService") as MockVip:
-                token = MagicMock(token_code="ABC123")
-                MockVip.return_value.get_tariff.return_value = tariff
-                MockVip.return_value.generate_token.return_value = token
+                mock_vip = MockVip.return_value
+                mock_vip.is_user_vip.return_value = False
+                mock_vip.grant_vip_from_tariff = AsyncMock(
+                    return_value=(True, "VIP activated", metadata)
+                )
+                mock_vip.resend_vip_invite_for_user = AsyncMock(
+                    return_value=(True, "VIP resend", "https://t.me/+vipinvite")
+                )
                 ok1, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
+                row2 = svc.get_fulfillment_by_id(row.id)
+                assert json.loads(row2.auto_result or "{}").get("vip_activated") is True
+                row2.status = FulfillmentStatus.AUTO_IN_PROGRESS
+                db.commit()
                 ok2, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
             assert ok1 and ok2
-            auto = svc.get_fulfillment_by_id(row.id).auto_result
-            assert "ABC123" in (auto or "")
+            mock_vip.grant_vip_from_tariff.assert_awaited_once()
+            mock_vip.resend_vip_invite_for_user.assert_awaited_once()
+            final_row = svc.get_fulfillment_by_id(row.id)
+            assert final_row.status == FulfillmentStatus.FULFILLED
+            auto = json.loads(final_row.auto_result or "{}")
+            assert auto.get("vip_activated") is True
+            assert "token_url" not in auto
+        finally:
+            db.close()
+            engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_vip_grant_already_vip_calls_grant_from_tariff(self, tmp_path: Path):
+        """Compra nueva por usuario VIP activo debe extender vía grant_vip_from_tariff."""
+        engine, TestSession = self._session(tmp_path)
+        db = TestSession()
+        try:
+            tg = 77709152
+            db.add(User(telegram_id=tg, role=UserRole.USER))
+            tariff = Tariff(name="Mes VIP", duration_days=30, price="0", is_active=True)
+            db.add(tariff)
+            db.commit()
+            db.refresh(tariff)
+            pkg = Package(name="VIP placeholder", is_active=True)
+            db.add(pkg)
+            db.commit()
+            db.refresh(pkg)
+            product = StoreProduct(
+                name="Renovación VIP",
+                price=100,
+                stock=-1,
+                package_id=pkg.id,
+                delivery_mode=DeliveryMode.AUTO,
+                fulfillment_kind=FulfillmentKind.VIP_GRANT,
+                tariff_id=tariff.id,
+                is_active=True,
+            )
+            db.add(product)
+            db.commit()
+            order = Order(user_id=tg, total_items=1, total_price=100, status=OrderStatus.COMPLETED)
+            db.add(order)
+            db.flush()
+            item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=1,
+                unit_price=100,
+                total_price=100,
+            )
+            db.add(item)
+            db.commit()
+            svc = FulfillmentService(db=db)
+            svc.create_fulfillments_for_order(order.id)
+            row = svc.get_fulfillment_for_order_item(item.id)
+            mock_bot = AsyncMock()
+            metadata = {
+                "vip_activated": True,
+                "subscription_id": 2,
+                "invite_link": "https://t.me/+viprenew",
+                "tariff_name": tariff.name,
+                "token_id": 42,
+            }
+            with patch("services.fulfillment_service.VIPService") as MockVip:
+                mock_vip = MockVip.return_value
+                mock_vip.is_user_vip.return_value = True
+                mock_vip.grant_vip_from_tariff = AsyncMock(
+                    return_value=(True, "VIP renewed", metadata)
+                )
+                mock_vip.resend_vip_invite_for_user = AsyncMock()
+                ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
+            assert ok is True
+            mock_vip.grant_vip_from_tariff.assert_awaited_once()
+            mock_vip.resend_vip_invite_for_user.assert_not_called()
+        finally:
+            db.close()
+            engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_vip_grant_invite_failure_keeps_auto_in_progress_with_metadata(
+        self, tmp_path: Path
+    ):
+        """Redeem OK + invite fallido: metadata parcial y AUTO_IN_PROGRESS para retry."""
+        engine, TestSession = self._session(tmp_path)
+        db = TestSession()
+        try:
+            tg = 77709153
+            db.add(User(telegram_id=tg, role=UserRole.USER))
+            tariff = Tariff(name="VIP", duration_days=30, price="0", is_active=True)
+            db.add(tariff)
+            db.commit()
+            db.refresh(tariff)
+            pkg = Package(name="VIP placeholder", is_active=True)
+            db.add(pkg)
+            db.commit()
+            db.refresh(pkg)
+            product = StoreProduct(
+                name="VIP Product",
+                price=100,
+                stock=-1,
+                package_id=pkg.id,
+                delivery_mode=DeliveryMode.AUTO,
+                fulfillment_kind=FulfillmentKind.VIP_GRANT,
+                tariff_id=tariff.id,
+                is_active=True,
+            )
+            db.add(product)
+            db.commit()
+            order = Order(user_id=tg, total_items=1, total_price=100, status=OrderStatus.COMPLETED)
+            db.add(order)
+            db.flush()
+            item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=1,
+                unit_price=100,
+                total_price=100,
+            )
+            db.add(item)
+            db.commit()
+            svc = FulfillmentService(db=db)
+            svc.create_fulfillments_for_order(order.id)
+            row = svc.get_fulfillment_for_order_item(item.id)
+            mock_bot = AsyncMock()
+            partial = {
+                "vip_activated": True,
+                "subscription_id": 9,
+                "invite_link": None,
+                "tariff_name": tariff.name,
+                "token_id": 7,
+            }
+            with patch("services.fulfillment_service.VIPService") as MockVip:
+                MockVip.return_value.is_user_vip.return_value = False
+                MockVip.return_value.grant_vip_from_tariff = AsyncMock(
+                    return_value=(False, "invite failed", partial)
+                )
+                ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
+            assert ok is False
+            refreshed = svc.get_fulfillment_by_id(row.id)
+            assert refreshed.status == FulfillmentStatus.AUTO_IN_PROGRESS
+            auto = json.loads(refreshed.auto_result or "{}")
+            assert auto.get("vip_activated") is True
+            assert auto.get("subscription_id") == 9
+            assert auto.get("token_id") == 7
+            enrichment = svc.build_purchase_enrichment(item.id)
+            assert "resend_vip_invite" in enrichment["actions_available"]
+        finally:
+            db.close()
+            engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_vip_grant_failure_sets_failed_status(self, tmp_path: Path):
+        engine, TestSession = self._session(tmp_path)
+        db = TestSession()
+        try:
+            tg = 77709150
+            db.add(User(telegram_id=tg, role=UserRole.USER))
+            tariff = Tariff(name="VIP", duration_days=30, price="0", is_active=True)
+            db.add(tariff)
+            db.commit()
+            db.refresh(tariff)
+            pkg = Package(name="VIP placeholder", is_active=True)
+            db.add(pkg)
+            db.commit()
+            db.refresh(pkg)
+            product = StoreProduct(
+                name="VIP Product",
+                price=100,
+                stock=-1,
+                package_id=pkg.id,
+                delivery_mode=DeliveryMode.AUTO,
+                fulfillment_kind=FulfillmentKind.VIP_GRANT,
+                tariff_id=tariff.id,
+                is_active=True,
+            )
+            db.add(product)
+            db.commit()
+            order = Order(user_id=tg, total_items=1, total_price=100, status=OrderStatus.COMPLETED)
+            db.add(order)
+            db.flush()
+            item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=1,
+                unit_price=100,
+                total_price=100,
+            )
+            db.add(item)
+            db.commit()
+            svc = FulfillmentService(db=db)
+            svc.create_fulfillments_for_order(order.id)
+            row = svc.get_fulfillment_for_order_item(item.id)
+            mock_bot = AsyncMock()
+            with patch("services.fulfillment_service.VIPService") as MockVip:
+                MockVip.return_value.is_user_vip.return_value = False
+                MockVip.return_value.grant_vip_from_tariff = AsyncMock(
+                    return_value=(False, "activation failed", {})
+                )
+                ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
+            assert ok is False
+            refreshed = svc.get_fulfillment_by_id(row.id)
+            assert refreshed.status == FulfillmentStatus.FAILED
+        finally:
+            db.close()
+            engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_vip_grant_send_failure_keeps_auto_in_progress(self, tmp_path: Path):
+        engine, TestSession = self._session(tmp_path)
+        db = TestSession()
+        try:
+            tg = 77709151
+            db.add(User(telegram_id=tg, role=UserRole.USER))
+            tariff = Tariff(name="VIP", duration_days=30, price="0", is_active=True)
+            db.add(tariff)
+            db.commit()
+            db.refresh(tariff)
+            pkg = Package(name="VIP placeholder", is_active=True)
+            db.add(pkg)
+            db.commit()
+            db.refresh(pkg)
+            product = StoreProduct(
+                name="VIP Product",
+                price=100,
+                stock=-1,
+                package_id=pkg.id,
+                delivery_mode=DeliveryMode.AUTO,
+                fulfillment_kind=FulfillmentKind.VIP_GRANT,
+                tariff_id=tariff.id,
+                is_active=True,
+            )
+            db.add(product)
+            db.commit()
+            order = Order(user_id=tg, total_items=1, total_price=100, status=OrderStatus.COMPLETED)
+            db.add(order)
+            db.flush()
+            item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=1,
+                unit_price=100,
+                total_price=100,
+            )
+            db.add(item)
+            db.commit()
+            svc = FulfillmentService(db=db)
+            svc.create_fulfillments_for_order(order.id)
+            row = svc.get_fulfillment_for_order_item(item.id)
+            mock_bot = AsyncMock()
+            mock_bot.send_message = AsyncMock(side_effect=RuntimeError("telegram down"))
+            metadata = {
+                "vip_activated": True,
+                "subscription_id": 1,
+                "invite_link": "https://t.me/+vipinvite",
+                "tariff_name": tariff.name,
+                "token_id": 1,
+            }
+            with patch("services.fulfillment_service.VIPService") as MockVip:
+                MockVip.return_value.is_user_vip.return_value = False
+                MockVip.return_value.grant_vip_from_tariff = AsyncMock(
+                    return_value=(True, "VIP activated", metadata)
+                )
+                ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
+            assert ok is False
+            refreshed = svc.get_fulfillment_by_id(row.id)
+            assert refreshed.status == FulfillmentStatus.AUTO_IN_PROGRESS
+            auto = json.loads(refreshed.auto_result or "{}")
+            assert auto.get("vip_activated") is True
         finally:
             db.close()
             engine.dispose()
@@ -509,13 +795,15 @@ class TestFulfillmentServiceGold:
             row = svc.get_fulfillment_for_order_item(item.id)
             row.status = FulfillmentStatus.FULFILLED
             row.auto_result = (
-                '{"token_code": "secret", "token_url": "https://t.me/bot?start=x"}'
+                '{"vip_activated": true, "invite_link": "https://t.me/+vip", '
+                '"tariff_name": "VIP", "token_code": "secret"}'
             )
             db.commit()
             enrichment = svc.build_purchase_enrichment(item.id)
-            assert "activate_vip" in enrichment["actions_available"]
+            assert "resend_vip_invite" in enrichment["actions_available"]
             assert "token_code" not in enrichment["auto_result"]
             assert "token_url" not in enrichment["auto_result"]
+            assert enrichment["auto_result"].get("invite_link") == "https://t.me/+vip"
             assert "user_input" not in enrichment
         finally:
             db.close()
@@ -815,7 +1103,8 @@ class TestFulfillmentServiceGold:
             db.close()
             engine.dispose()
 
-    def test_sanitize_auto_result_strips_token_url(self, tmp_path: Path):
+    @pytest.mark.asyncio
+    async def test_sanitize_auto_result_strips_token_url(self, tmp_path: Path):
         engine, TestSession = self._session(tmp_path)
         db = TestSession()
         try:
@@ -841,18 +1130,69 @@ class TestFulfillmentServiceGold:
             svc = FulfillmentService(db=db)
             svc.create_fulfillments_for_order(order.id)
             row = svc.get_fulfillment_for_order_item(item.id)
-            row.status = FulfillmentStatus.FULFILLED
+            row.status = FulfillmentStatus.AUTO_IN_PROGRESS
             row.auto_result = (
-                '{"token_code": "secret", "token_url": "https://t.me/bot?start=x"}'
+                '{"vip_activated": true, "invite_link": "https://t.me/+vip", '
+                '"tariff_name": "VIP"}'
             )
             db.commit()
             enrichment = svc.build_purchase_enrichment(item.id)
-            assert "activate_vip" in enrichment["actions_available"]
+            assert "resend_vip_invite" in enrichment["actions_available"]
             assert "token_code" not in enrichment["auto_result"]
             assert "token_url" not in enrichment["auto_result"]
-            ok, url = svc.get_vip_activation_link(tg, row.id)
+            mock_bot = AsyncMock()
+            with patch("services.fulfillment_service.VIPService") as MockVip:
+                MockVip.return_value.resend_vip_invite_for_user = AsyncMock(
+                    return_value=(True, "VIP access", "https://t.me/+fresh")
+                )
+                ok, msg = await svc.resend_vip_invite_for_fulfillment(
+                    mock_bot, tg, row.id
+                )
             assert ok is True
-            assert url == "https://t.me/bot?start=x"
+            assert "VIP" in msg
+            refreshed = svc.get_fulfillment_by_id(row.id)
+            assert refreshed.status == FulfillmentStatus.FULFILLED
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_build_purchase_enrichment_resend_on_failed_with_vip_activated(
+        self, tmp_path: Path
+    ):
+        """FAILED + vip_activated expone resend_vip_invite para recuperación en mochila."""
+        engine, TestSession = self._session(tmp_path)
+        db = TestSession()
+        try:
+            tg = 77709154
+            product, _ = self._seed_package_product(db, tg)
+            product.fulfillment_kind = FulfillmentKind.VIP_GRANT
+            db.commit()
+            order = Order(
+                user_id=tg, total_items=1, total_price=50, status=OrderStatus.COMPLETED
+            )
+            db.add(order)
+            db.flush()
+            item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=1,
+                unit_price=50,
+                total_price=50,
+            )
+            db.add(item)
+            db.commit()
+            svc = FulfillmentService(db=db)
+            svc.create_fulfillments_for_order(order.id)
+            row = svc.get_fulfillment_for_order_item(item.id)
+            row.status = FulfillmentStatus.FAILED
+            row.auto_result = (
+                '{"vip_activated": true, "subscription_id": 3, "token_id": 8, '
+                '"tariff_name": "VIP"}'
+            )
+            db.commit()
+            enrichment = svc.build_purchase_enrichment(item.id)
+            assert "resend_vip_invite" in enrichment["actions_available"]
         finally:
             db.close()
             engine.dispose()

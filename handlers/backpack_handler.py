@@ -24,6 +24,7 @@ from keyboards.callback_data import (
     BackpackRewardsPageCallback,
     BackpackViewWaitlistCallback,
 )
+from keyboards.inline_keyboards import vip_access_keyboard
 from services import get_service
 from handlers.states.store_fulfillment_states import BackpackInputStates
 from services.backpack_service import BackpackService
@@ -208,11 +209,11 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
                 )
             ]
         )
-    if "activate_vip" in actions and fulfillment_id:
+    if "resend_vip_invite" in actions and fulfillment_id:
         keyboard_buttons.append(
             [
                 InlineKeyboardButton(
-                    text=LucienVoice.backpack_fulfillment_activate_vip_button(),
+                    text=LucienVoice.backpack_fulfillment_resend_vip_invite_button(),
                     callback_data=BackpackActivateVipCallback(
                         fulfillment_id=fulfillment_id
                     ).pack(),
@@ -563,21 +564,21 @@ async def callback_fulfillment_retry(
 @router.callback_query(
     BackpackActivateVipCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
 )
-async def callback_activate_vip(
+async def callback_resend_vip_invite(
     callback: CallbackQuery, callback_data: BackpackActivateVipCallback
 ):
-    """Muestra enlace de activación VIP."""
+    """Reenvía enlace nativo de acceso VIP."""
     with get_service(BackpackService) as backpack_service:
-        ok, url = backpack_service.get_vip_activation_link(
-            callback.from_user.id, callback_data.fulfillment_id
+        ok, msg = await backpack_service.resend_vip_invite_for_fulfillment(
+            callback.bot, callback.from_user.id, callback_data.fulfillment_id
         )
     if ok:
         await callback.message.answer(
-            LucienVoice.fulfillment_vip_grant_message("VIP", url), parse_mode="HTML"
+            msg, reply_markup=vip_access_keyboard(), parse_mode="HTML"
         )
         await callback.answer()
     else:
-        await callback.answer(url, show_alert=True)
+        await callback.answer(msg, show_alert=True)
 
 
 @router.callback_query(

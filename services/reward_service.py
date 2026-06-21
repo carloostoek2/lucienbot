@@ -4,7 +4,6 @@ Servicio de Recompensas - Lucien Bot
 Gestiona la creacion y entrega de recompensas.
 """
 
-import html
 import logging
 from datetime import UTC, datetime
 
@@ -17,11 +16,11 @@ from models.models import (
     MissionFrequency,
     Reward,
     RewardType,
-    TokenStatus,
     TransactionSource,
     UserMissionProgress,
     UserRewardHistory,
 )
+from keyboards.inline_keyboards import vip_access_keyboard
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.vip_service import VIPService
@@ -47,6 +46,13 @@ def _finalized_delivery_clause():
     )
 
 
+def _has_prior_vip_grant_attempt(details: str | None) -> bool:
+    """True si el claim refleja un intento previo de activación VIP (retry/resend)."""
+    if not details:
+        return False
+    return details.startswith(_CLAIM_TOKEN_PREFIX) or details.startswith(_CLAIM_SENT_PREFIX)
+
+
 def _is_resumable_delivery_claim(details: str | None) -> bool:
     """True si el claim pendiente puede reanudarse (stale o VIP en vuelo)."""
     if not details:
@@ -67,19 +73,6 @@ def _is_fresh_delivery_claim(details: str | None, delivered_at: datetime) -> boo
     if details != _DELIVERY_CLAIM_MARKER:
         return False
     return _delivery_claim_age_seconds(delivered_at) < _DELIVERY_CLAIM_TTL_SECONDS
-
-
-def _parse_vip_token_code(details: str) -> str | None:
-    """Extrae token_code de token:CODE o sent:token:CODE."""
-    if details.startswith(_CLAIM_SENT_PREFIX):
-        remainder = details[len(_CLAIM_SENT_PREFIX) :]
-    elif details.startswith(_CLAIM_TOKEN_PREFIX):
-        remainder = details[len(_CLAIM_TOKEN_PREFIX) :]
-    else:
-        return None
-    if remainder.startswith(_CLAIM_TOKEN_PREFIX):
-        remainder = remainder[len(_CLAIM_TOKEN_PREFIX) :]
-    return remainder or None
 
 
 def get_reward_emoji(reward: Reward) -> tuple[str, str]:
@@ -405,45 +398,38 @@ class RewardService:
         self.db.commit()
         return success, message
 
-    def _get_vip_token_from_claim_details(self, details: str):
-        """Obtiene token ACTIVE desde token: o sent:token: en claim.details."""
-        code = _parse_vip_token_code(details)
-        if not code:
-            return None
-        token = self.vip_service.get_token_by_code(code)
-        if token and token.status == TokenStatus.ACTIVE:
-            return token
-        return None
+    async def _mark_vip_partial_grant(
+        self, claim: UserRewardHistory | None, metadata: dict
+    ) -> None:
+        """Persist token: marker so retry resends instead of re-granting."""
+        if not claim:
+            return
+        token_id = metadata.get("token_id")
+        if token_id is not None:
+            claim.details = f"{_CLAIM_TOKEN_PREFIX}{token_id}"
+            self.db.commit()
 
-    def _get_or_create_vip_delivery_token(
-        self, user_id: int, reward: Reward, mission_id: int | None
-    ):
-        """Reutiliza token de un intento fallido antes de generar uno nuevo."""
-        if mission_id:
-            claim = self._get_mission_delivery_claim(user_id, mission_id, reward.id)
-            if claim and claim.details:
-                if claim.details.startswith(_CLAIM_SENT_PREFIX):
-                    token = self._get_vip_token_from_claim_details(claim.details)
-                    if token:
-                        return token
-                elif claim.details.startswith(_CLAIM_TOKEN_PREFIX):
-                    token = self._get_vip_token_from_claim_details(claim.details)
-                    if token:
-                        return token
-        token = self.vip_service.generate_token(reward.tariff_id)
-        if mission_id:
-            claim = self._get_mission_delivery_claim(user_id, mission_id, reward.id)
-            if claim and not (
-                claim.details and claim.details.startswith(_CLAIM_SENT_PREFIX)
-            ):
-                claim.details = f"{_CLAIM_TOKEN_PREFIX}{token.token_code}"
-                self.db.commit()
-        return token
+    async def _mark_vip_delivery_sent(
+        self, claim: UserRewardHistory | None, metadata: dict
+    ) -> None:
+        if not claim:
+            return
+        token_id = metadata.get("token_id")
+        claim.details = f"{_CLAIM_SENT_PREFIX}vip_activated:{token_id}"
+        self.db.commit()
+
+    async def _send_vip_access_message(self, bot, user_id: int, message: str) -> None:
+        await bot.send_message(
+            chat_id=user_id,
+            text=message,
+            reply_markup=vip_access_keyboard(),
+            parse_mode="HTML",
+        )
 
     async def _deliver_vip_access(
         self, bot, user_id: int, reward: Reward, *, mission_id: int | None = None
     ) -> tuple[bool, str]:
-        """Entrega recompensa de acceso VIP"""
+        """Entrega recompensa de acceso VIP con activación inmediata."""
         if not reward.tariff_id:
             return False, LucienVoice.reward_vip_not_configured()
 
@@ -455,28 +441,45 @@ class RewardService:
             self._get_mission_delivery_claim(user_id, mission_id, reward.id) if mission_id else None
         )
         already_sent = claim and claim.details and claim.details.startswith(_CLAIM_SENT_PREFIX)
-        if already_sent:
-            token = self._get_vip_token_from_claim_details(claim.details)
-            if not token:
-                return False, LucienVoice.reward_vip_not_configured()
-            return True, LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)
+        received_msg = LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)
 
-        token = self._get_or_create_vip_delivery_token(user_id, reward, mission_id)
-        bot_info = await bot.get_me()
-        token_url = f"https://t.me/{bot_info.username}?start={token.token_code}"
-        await bot.send_message(
-            chat_id=user_id,
-            text=LucienVoice.reward_vip_message(
-                html.escape(tariff.name), tariff.duration_days, token_url
-            ),
-            parse_mode="HTML",
+        if already_sent and self.vip_service.is_user_vip(user_id):
+            return True, received_msg
+
+        prior_grant = claim and _has_prior_vip_grant_attempt(claim.details)
+        if prior_grant and self.vip_service.is_user_vip(user_id):
+            ok, msg, _invite = await self.vip_service.resend_vip_invite_for_user(bot, user_id)
+            if not ok:
+                return False, msg
+            try:
+                await self._send_vip_access_message(bot, user_id, msg)
+            except Exception as exc:
+                logger.error(
+                    f"reward_service | _deliver_vip_access | send_failed | "
+                    f"user_id={user_id} | error={exc}"
+                )
+                return False, LucienVoice.reward_delivery_error()
+            await self._mark_vip_delivery_sent(claim, {"token_id": "resend"})
+            return True, received_msg
+
+        ok, msg, metadata = await self.vip_service.grant_vip_from_tariff(
+            bot, user_id, reward.tariff_id
         )
-        if mission_id and claim:
-            token_detail = claim.details or f"{_CLAIM_TOKEN_PREFIX}{token.token_code}"
-            claim.details = f"{_CLAIM_SENT_PREFIX}{token_detail}"
-            self.db.commit()
-
-        return True, LucienVoice.reward_vip_received(tariff.name, tariff.duration_days)
+        if not ok:
+            if metadata.get("vip_activated"):
+                await self._mark_vip_partial_grant(claim, metadata)
+            return False, msg
+        try:
+            await self._send_vip_access_message(bot, user_id, msg)
+        except Exception as exc:
+            logger.error(
+                f"reward_service | _deliver_vip_access | send_failed | "
+                f"user_id={user_id} | error={exc}"
+            )
+            await self._mark_vip_partial_grant(claim, metadata)
+            return False, LucienVoice.reward_delivery_error()
+        await self._mark_vip_delivery_sent(claim, metadata)
+        return True, received_msg
 
     # ==================== HISTORIAL ====================
 

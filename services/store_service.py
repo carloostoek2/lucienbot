@@ -595,12 +595,16 @@ class StoreService:
         for item in order.items:
             row = fulfill_svc.get_fulfillment_for_order_item(item.id)
             if row:
+                enrichment = fulfill_svc.build_purchase_enrichment(item.id)
+                auto = enrichment.get("auto_result") or {}
                 summaries.append(
                     {
                         "kind": row.fulfillment_kind.value,
                         "status": row.status.value,
                         "product_name": item.product_name,
                         "fulfillment_id": row.id,
+                        "invite_link": auto.get("invite_link"),
+                        "vip_activated": auto.get("vip_activated"),
                     }
                 )
         return order, summaries, None

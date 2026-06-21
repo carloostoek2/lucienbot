@@ -211,11 +211,13 @@ class BackpackService:
             bot, fulfillment_id, user_id, text
         )
 
-    def get_vip_activation_link(self, user_id: int, fulfillment_id: int) -> tuple[bool, str]:
+    async def resend_vip_invite_for_fulfillment(
+        self, bot, user_id: int, fulfillment_id: int
+    ) -> tuple[bool, str]:
         from services.fulfillment_service import FulfillmentService
 
-        return FulfillmentService(self._get_db()).get_vip_activation_link(
-            user_id, fulfillment_id
+        return await FulfillmentService(self._get_db()).resend_vip_invite_for_fulfillment(
+            bot, user_id, fulfillment_id
         )
 
     def get_vip_subscriptions_for_backpack(self, user_id: int) -> list[dict]:

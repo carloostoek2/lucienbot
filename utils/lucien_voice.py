@@ -1155,14 +1155,6 @@ Permítame consultar con Diana cuándo volverá a estar disponible."""
 Revise <b>Sus tesoros adquiridos</b> en la mochila para reintentar."""
 
     @staticmethod
-    def fulfillment_vip_grant_message(tariff: str, token_url: str) -> str:
-        return f"""🎩 <b>Lucien:</b>
-
-<i>Diana le concede acceso VIP: <b>{tariff}</b></i>
-
-👉 <a href="{token_url}">Activar su privilegio</a>"""
-
-    @staticmethod
     def fulfillment_story_unlocked(node_title: str) -> str:
         safe_title = html.escape(node_title)
         return f"""🎩 <b>Lucien:</b>
@@ -1571,10 +1563,6 @@ Estado: {status}{input_block}"""
         return f"<b>{safe_name}</b> — su mensaje ya fue enviado a Diana."
 
     @staticmethod
-    def backpack_fulfillment_vip_token(tariff: str) -> str:
-        return f"VIP <b>{tariff}</b> — active su enlace cuando lo desee."
-
-    @staticmethod
     def backpack_fulfillment_privilege_active(kind: str, expires: str) -> str:
         return f"Privilegio <b>{kind}</b> activo hasta {expires}."
 
@@ -1592,8 +1580,8 @@ Estado: {status}{input_block}"""
         return "🔄 Reintentar entrega"
 
     @staticmethod
-    def backpack_fulfillment_activate_vip_button() -> str:
-        return "👑 Activar VIP"
+    def backpack_fulfillment_resend_vip_invite_button() -> str:
+        return "🔗 Reenviar acceso VIP"
 
     @staticmethod
     def backpack_fulfillment_read_chapter_button() -> str:
@@ -1676,7 +1664,7 @@ o completar misiones para ganar más.</i>"""
     def fulfillment_post_purchase_message_for_kind(kind: str, product_name: str) -> str:
         fallbacks = {
             "package": LucienVoice.fulfillment_package_delivered(product_name),
-            "vip_grant": LucienVoice.fulfillment_vip_grant_message("VIP", ""),
+            "vip_grant": LucienVoice.vip_direct_access(),
             "story_unlock": LucienVoice.fulfillment_story_unlocked(product_name),
             "early_access": LucienVoice.fulfillment_early_access_granted(24),
             "user_input_manual": LucienVoice.fulfillment_awaiting_input(
@@ -1826,6 +1814,26 @@ Lucien prefiere no preguntar por qué tardó tanto.</i>"""
     @staticmethod
     def reward_vip_not_configured() -> str:
         return "Tarifa VIP no configurada"
+
+    @staticmethod
+    def reward_vip_activation_failed() -> str:
+        return "No se pudo activar su membresía VIP. Contacte a soporte."
+
+    @staticmethod
+    def reward_vip_invite_failed() -> str:
+        return "No se pudo generar su enlace de acceso VIP. Intente desde la mochila."
+
+    @staticmethod
+    def fulfillment_vip_delivery_failed() -> str:
+        return "Su VIP está activo pero no pudimos enviarle el enlace. Revise la mochila."
+
+    @staticmethod
+    def store_vip_purchase_pending_backpack() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Su compra se registró, pero el acceso VIP requiere un paso más.</i>
+
+Revise <b>Sus tesoros adquiridos</b> en la mochila."""
 
     @staticmethod
     def reward_tariff_not_found() -> str:

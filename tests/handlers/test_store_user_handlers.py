@@ -1036,6 +1036,115 @@ class TestConfirmDirectBuy:
 
         store.purchase_and_complete.assert_called_once_with(cb.bot, 123456789, 1)
 
+    @patch("handlers.store_user_handlers.get_service")
+    async def test_confirm_direct_buy_vip_activated_shows_purchase_completed(
+        self, mock_get_service, make_callback
+    ):
+        """VIP activado: pantalla de confirmación sin duplicar invite."""
+        from keyboards.callback_data import ConfirmDirectBuyCallback
+
+        order = MagicMock(id=99, total_price=100)
+        store = _mock_store_ctx(mock_get_service)
+        store.purchase_and_complete = AsyncMock(
+            return_value=(
+                order,
+                [
+                    {
+                        "kind": "vip_grant",
+                        "status": "fulfilled",
+                        "vip_activated": True,
+                        "product_name": "Mes VIP",
+                    }
+                ],
+                None,
+            )
+        )
+        store._get_order_charge_amount = MagicMock(return_value=100)
+        cb = make_callback(data="confirm_direct_buy:1")
+        cd = ConfirmDirectBuyCallback(product_id=1)
+        state = AsyncMock()
+
+        from handlers.store_user_handlers import confirm_direct_buy
+
+        await confirm_direct_buy(cb, cd, cb.bot, state)
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "Compra completada" in text
+        assert "círculo íntimo" not in text
+
+    @patch("handlers.store_user_handlers.get_service")
+    async def test_confirm_direct_buy_vip_auto_running_shows_backpack_cta(
+        self, mock_get_service, make_callback
+    ):
+        """VIP activado pero DM pendiente: CTA mochila, no éxito de compra."""
+        from keyboards.callback_data import ConfirmDirectBuyCallback
+
+        order = MagicMock(id=99, total_price=100)
+        store = _mock_store_ctx(mock_get_service)
+        store.purchase_and_complete = AsyncMock(
+            return_value=(
+                order,
+                [
+                    {
+                        "kind": "vip_grant",
+                        "status": "auto_running",
+                        "vip_activated": True,
+                        "product_name": "Mes VIP",
+                    }
+                ],
+                None,
+            )
+        )
+        store._get_order_charge_amount = MagicMock(return_value=100)
+        cb = make_callback(data="confirm_direct_buy:1")
+        cd = ConfirmDirectBuyCallback(product_id=1)
+        state = AsyncMock()
+
+        from handlers.store_user_handlers import confirm_direct_buy
+
+        await confirm_direct_buy(cb, cd, cb.bot, state)
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "mochila" in text.lower()
+        assert "Compra completada" not in text
+
+    @patch("handlers.store_user_handlers.get_service")
+    async def test_confirm_direct_buy_vip_failed_shows_backpack_cta(
+        self, mock_get_service, make_callback
+    ):
+        """VIP grant fallido: mensaje de mochila, no invite vacío."""
+        from keyboards.callback_data import ConfirmDirectBuyCallback
+
+        order = MagicMock(id=99, total_price=100)
+        store = _mock_store_ctx(mock_get_service)
+        store.purchase_and_complete = AsyncMock(
+            return_value=(
+                order,
+                [
+                    {
+                        "kind": "vip_grant",
+                        "status": "failed",
+                        "vip_activated": False,
+                        "invite_link": "https://t.me/+stale",
+                        "product_name": "Mes VIP",
+                    }
+                ],
+                None,
+            )
+        )
+        store._get_order_charge_amount = MagicMock(return_value=100)
+        cb = make_callback(data="confirm_direct_buy:1")
+        cd = ConfirmDirectBuyCallback(product_id=1)
+        state = AsyncMock()
+
+        from handlers.store_user_handlers import confirm_direct_buy
+
+        await confirm_direct_buy(cb, cd, cb.bot, state)
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "mochila" in text.lower()
+        assert "https://t.me/+stale" not in text
+
 
 class TestPurchaseHistory:
     """Tests para purchase_history - historial de compras."""

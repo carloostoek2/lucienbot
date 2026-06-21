@@ -557,10 +557,20 @@ async def confirm_direct_buy(
 
     post_msg = LucienVoice.store_purchase_completed(charge_amount)
     if summaries:
-        kind = summaries[0].get("kind", "package")
-        post_msg = LucienVoice.fulfillment_post_purchase_message_for_kind(
-            kind, summaries[0].get("product_name", "")
-        )
+        summary = summaries[0]
+        kind = summary.get("kind", "package")
+        status = summary.get("status", "")
+        if kind == "vip_grant":
+            if status == "failed" or (
+                status == "auto_running" and summary.get("vip_activated")
+            ):
+                post_msg = LucienVoice.store_vip_purchase_pending_backpack()
+            else:
+                post_msg = LucienVoice.store_purchase_completed(charge_amount)
+        else:
+            post_msg = LucienVoice.fulfillment_post_purchase_message_for_kind(
+                kind, summary.get("product_name", "")
+            )
 
     await callback.message.edit_text(
         post_msg,

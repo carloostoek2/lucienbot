@@ -2,7 +2,7 @@
 Tests unitarios para RewardService.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -222,10 +222,11 @@ class TestRewardServiceDelivery:
 
     @pytest.mark.asyncio
     async def test_deliver_reward_vip_reuses_token_on_retry(
-        self, db_session, sample_user, sample_tariff, mock_bot
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
-        """Retry tras fallo de send reutiliza token y no duplica mensajes."""
+        """Retry tras fallo de send reutiliza token y no duplica grant."""
         from services.mission_service import MissionService
+        from services.vip_service import VIPService
 
         service = RewardService(db_session)
         reward = service.create_reward_vip("VIP Retry", "Desc", sample_tariff.id)
@@ -248,17 +249,214 @@ class TestRewardServiceDelivery:
         )
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
         mock_bot.send_message = AsyncMock(side_effect=[RuntimeError("send fail"), None])
+        vip_svc = VIPService(db_session)
 
-        ok1, _ = await service.deliver_reward(
-            mock_bot, sample_user.id, reward.id, mission_id=mission.id, history_claimed=True
-        )
-        ok2, _ = await service.deliver_reward(
-            mock_bot, sample_user.id, reward.id, mission_id=mission.id, history_claimed=True
-        )
+        with patch.object(
+            vip_svc, "grant_vip_from_tariff", wraps=vip_svc.grant_vip_from_tariff
+        ) as grant_spy, patch.object(
+            vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
+        ) as resend_spy:
+            service.vip_service = vip_svc
+            ok1, _ = await service.deliver_reward(
+                mock_bot,
+                sample_user.id,
+                reward.id,
+                mission_id=mission.id,
+                history_claimed=True,
+            )
+            assert ok1 is False
+            claim_after_fail = service._get_mission_delivery_claim(
+                sample_user.id, mission.id, reward.id
+            )
+            assert claim_after_fail.details.startswith("token:")
+            ok2, _ = await service.deliver_reward(
+                mock_bot,
+                sample_user.id,
+                reward.id,
+                mission_id=mission.id,
+                history_claimed=True,
+            )
 
-        assert ok1 is False
         assert ok2 is True
         assert mock_bot.send_message.await_count == 2
+        grant_spy.assert_awaited_once()
+        resend_spy.assert_awaited_once()
+        claim_final = service._get_mission_delivery_claim(
+            sample_user.id, mission.id, reward.id
+        )
+        assert claim_final.details is None
+
+    @pytest.mark.asyncio
+    async def test_deliver_reward_vip_mission_fresh_claim_extends_already_vip(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        """__delivery_claim__ fresco + ya VIP debe grant (extender), no resend."""
+        from services.mission_service import MissionService
+        from services.vip_service import VIPService
+
+        service = RewardService(db_session)
+        reward = service.create_reward_vip("VIP Mission Extend", "Desc", sample_tariff.id)
+        ms = MissionService(db_session)
+        mission = ms.create_mission(
+            name="VIP Extend Mission",
+            description="Fresh claim extend",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=reward.id,
+        )
+        progress = ms.set_progress(sample_user.id, mission.id, 1)
+        service.try_claim_mission_delivery(
+            sample_user.id,
+            mission.id,
+            reward.id,
+            since_completed_at=progress.completed_at,
+            frequency=MissionFrequency.ONE_TIME,
+        )
+        vip_svc = VIPService(db_session)
+        token = vip_svc.generate_token(sample_tariff.id)
+        vip_svc.redeem_token(token.token_code, sample_user.id)
+        sub_before = vip_svc.get_user_subscription(sample_user.id)
+        end_before = sub_before.end_date
+
+        mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
+        with patch.object(
+            vip_svc, "resend_vip_invite_for_user", new_callable=AsyncMock
+        ) as resend_mock:
+            service.vip_service = vip_svc
+            ok, _ = await service.deliver_reward(
+                mock_bot,
+                sample_user.id,
+                reward.id,
+                mission_id=mission.id,
+                history_claimed=True,
+            )
+
+        assert ok is True
+        resend_mock.assert_not_awaited()
+        sub_after = vip_svc.get_user_subscription(sample_user.id)
+        assert sub_after.end_date > end_before
+
+    @pytest.mark.asyncio
+    async def test_deliver_reward_vip_token_prefix_resend_only(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        """Claim token: + VIP activo reenvía invite sin nuevo grant."""
+        from services.mission_service import MissionService
+        from services.vip_service import VIPService
+
+        service = RewardService(db_session)
+        reward = service.create_reward_vip("VIP Token Retry", "Desc", sample_tariff.id)
+        ms = MissionService(db_session)
+        mission = ms.create_mission(
+            name="VIP Token Mission",
+            description="Resend only",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=reward.id,
+        )
+        progress = ms.set_progress(sample_user.id, mission.id, 1)
+        service.try_claim_mission_delivery(
+            sample_user.id,
+            mission.id,
+            reward.id,
+            since_completed_at=progress.completed_at,
+            frequency=MissionFrequency.ONE_TIME,
+        )
+        vip_svc = VIPService(db_session)
+        token = vip_svc.generate_token(sample_tariff.id)
+        vip_svc.redeem_token(token.token_code, sample_user.id)
+        claim = service._get_mission_delivery_claim(sample_user.id, mission.id, reward.id)
+        claim.details = f"token:{token.id}"
+        db_session.commit()
+
+        mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
+        with patch.object(
+            vip_svc, "grant_vip_from_tariff", new_callable=AsyncMock
+        ) as grant_mock, patch.object(
+            vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
+        ) as resend_spy:
+            service.vip_service = vip_svc
+            ok, _ = await service.deliver_reward(
+                mock_bot,
+                sample_user.id,
+                reward.id,
+                mission_id=mission.id,
+                history_claimed=True,
+            )
+
+        assert ok is True
+        grant_mock.assert_not_awaited()
+        resend_spy.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_deliver_reward_vip_invite_failure_retry_resends_not_regrants(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        """Partial metadata (invite fallido) marca token:; retry resend sin segundo grant."""
+        from services.mission_service import MissionService
+        from services.vip_service import VIPService
+
+        service = RewardService(db_session)
+        reward = service.create_reward_vip("VIP Invite Fail", "Desc", sample_tariff.id)
+        ms = MissionService(db_session)
+        mission = ms.create_mission(
+            name="VIP Invite Fail Mission",
+            description="Partial then retry",
+            mission_type=MissionType.REACTION_COUNT,
+            target_value=1,
+            frequency=MissionFrequency.ONE_TIME,
+            reward_id=reward.id,
+        )
+        progress = ms.set_progress(sample_user.id, mission.id, 1)
+        service.try_claim_mission_delivery(
+            sample_user.id,
+            mission.id,
+            reward.id,
+            since_completed_at=progress.completed_at,
+            frequency=MissionFrequency.ONE_TIME,
+        )
+        vip_svc = VIPService(db_session)
+        mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
+        mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
+
+        with patch.object(
+            vip_svc, "grant_vip_from_tariff", wraps=vip_svc.grant_vip_from_tariff
+        ) as grant_spy, patch.object(
+            vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
+        ) as resend_spy:
+            service.vip_service = vip_svc
+            ok1, _ = await service.deliver_reward(
+                mock_bot,
+                sample_user.id,
+                reward.id,
+                mission_id=mission.id,
+                history_claimed=True,
+            )
+            assert ok1 is False
+            claim_after_fail = service._get_mission_delivery_claim(
+                sample_user.id, mission.id, reward.id
+            )
+            assert claim_after_fail.details.startswith("token:")
+            mock_bot.create_chat_invite_link = AsyncMock(
+                return_value=MagicMock(invite_link="https://t.me/+retry")
+            )
+            ok2, _ = await service.deliver_reward(
+                mock_bot,
+                sample_user.id,
+                reward.id,
+                mission_id=mission.id,
+                history_claimed=True,
+            )
+
+        assert ok2 is True
+        grant_spy.assert_awaited_once()
+        resend_spy.assert_awaited_once()
+        claim_final = service._get_mission_delivery_claim(
+            sample_user.id, mission.id, reward.id
+        )
+        assert claim_final.details is None
 
     @pytest.mark.asyncio
     async def test_deliver_besitos_no_double_credit_on_retry(
@@ -319,9 +517,9 @@ class TestRewardServiceDelivery:
 
     @pytest.mark.asyncio
     async def test_deliver_reward_vip_skips_resend_when_sent_prefix(
-        self, db_session, sample_user, sample_tariff, mock_bot
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
-        """Retry con sent:token: reutiliza token y no reenvía mensaje VIP."""
+        """Retry con sent:vip_activated y VIP activo no reenvía mensaje."""
         from services.mission_service import MissionService
         from services.vip_service import VIPService
 
@@ -344,9 +542,11 @@ class TestRewardServiceDelivery:
             since_completed_at=progress.completed_at,
             frequency=MissionFrequency.ONE_TIME,
         )
-        token = VIPService(db_session).generate_token(sample_tariff.id)
+        vip_svc = VIPService(db_session)
+        token = vip_svc.generate_token(sample_tariff.id)
+        vip_svc.redeem_token(token.token_code, sample_user.id)
         claim = service._get_mission_delivery_claim(sample_user.id, mission.id, reward.id)
-        claim.details = f"sent:token:{token.token_code}"
+        claim.details = f"sent:vip_activated:{token.id}"
         db_session.commit()
 
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
@@ -446,9 +646,9 @@ class TestRewardServiceDelivery:
 
     @pytest.mark.asyncio
     async def test_deliver_reward_vip_access(
-        self, db_session, sample_user, sample_tariff, mock_bot
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
-        """Test entregar recompensa VIP genera token y envía mensaje con URL"""
+        """Test entregar recompensa VIP activa membresía y envía acceso directo"""
         service = RewardService(db_session)
         reward = service.create_reward_vip("VIP Reward", "Desc", sample_tariff.id)
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
@@ -458,9 +658,30 @@ class TestRewardServiceDelivery:
         assert success is True
         assert "VIP" in msg
         mock_bot.send_message.assert_called_once()
-        # Verificar que el mensaje incluye el enlace con el token
         call_args = mock_bot.send_message.call_args
-        assert "https://t.me/lucien_bot?start=" in call_args.kwargs["text"]
+        assert "El Diván" in call_args.kwargs["text"] or "círculo íntimo" in call_args.kwargs["text"]
+        assert call_args.kwargs.get("reply_markup") is not None
+
+    @pytest.mark.asyncio
+    async def test_deliver_reward_vip_extends_existing_subscription(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        """Misión VIP extiende suscripción existente vía grant_vip_from_tariff."""
+        from services.vip_service import VIPService
+
+        vip_svc = VIPService(db_session)
+        token = vip_svc.generate_token(sample_tariff.id)
+        vip_svc.redeem_token(token.token_code, sample_user.id)
+        sub_before = vip_svc.get_user_subscription(sample_user.id)
+        end_before = sub_before.end_date
+
+        service = RewardService(db_session)
+        reward = service.create_reward_vip("VIP Extend", "Desc", sample_tariff.id)
+        ok, _ = await service.deliver_reward(mock_bot, sample_user.id, reward.id)
+
+        assert ok is True
+        sub_after = vip_svc.get_user_subscription(sample_user.id)
+        assert sub_after.end_date > end_before
 
 
 @pytest.mark.unit

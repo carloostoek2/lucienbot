@@ -6,7 +6,6 @@ Fulfillment must NEVER run inside StoreService.complete_order atomic transaction
 
 from __future__ import annotations
 
-import html
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -31,6 +30,7 @@ from models.models import (
     StoreWaitlistEntry,
     WaitlistStatus,
 )
+from keyboards.inline_keyboards import vip_access_keyboard
 from services.package_service import PackageService
 from services.story_service import StoryService
 from services.vip_service import VIPService
@@ -139,11 +139,8 @@ def _resolve_actions_available(
         actions.append("submit_input")
     if kind == FulfillmentKind.PACKAGE and status == FulfillmentStatus.FAILED:
         actions.append("retry_delivery")
-    if kind == FulfillmentKind.VIP_GRANT and (
-        auto_result.get("token_url")
-        or (status == FulfillmentStatus.FULFILLED and auto_result.get("token_code"))
-    ):
-        actions.append("activate_vip")
+    if kind == FulfillmentKind.VIP_GRANT and auto_result.get("vip_activated"):
+        actions.append("resend_vip_invite")
     if kind == FulfillmentKind.STORY_UNLOCK and status == FulfillmentStatus.FULFILLED:
         actions.append("read_chapter")
     if kind == FulfillmentKind.WAITLIST_ENTRY and status == FulfillmentStatus.FULFILLED:
@@ -306,42 +303,88 @@ class FulfillmentService:
         self._get_db().commit()
         return True, LucienVoice.fulfillment_package_delivered(product.name)
 
+    async def _send_vip_access_dm(self, bot, user_id: int, msg: str) -> bool:
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=msg,
+                reply_markup=vip_access_keyboard(),
+                parse_mode="HTML",
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                f"fulfillment_service | _send_vip_access_dm | user_id={user_id} | error={exc}"
+            )
+            return False
+
+    def _partial_vip_metadata(
+        self, vip_svc: VIPService, product: StoreProduct, subscription
+    ) -> dict:
+        tariff = vip_svc.get_tariff(product.tariff_id) if product.tariff_id else None
+        return {
+            "vip_activated": True,
+            "subscription_id": subscription.id if subscription else None,
+            "invite_link": None,
+            "tariff_name": tariff.name if tariff else "",
+            "token_id": subscription.token_id if subscription else None,
+        }
+
+    async def _finalize_vip_resend(
+        self, bot, row: OrderFulfillment, vip_svc: VIPService, auto: dict
+    ) -> tuple[bool, str]:
+        ok, msg, invite = await vip_svc.resend_vip_invite_for_user(bot, row.user_id)
+        if not ok:
+            return False, msg
+        if not await self._send_vip_access_dm(bot, row.user_id, msg):
+            return False, LucienVoice.fulfillment_vip_delivery_failed()
+        auto["invite_link"] = invite
+        row.status = FulfillmentStatus.FULFILLED
+        row.auto_result = _dump_json(auto)
+        self._get_db().commit()
+        return True, msg
+
+    async def _commit_vip_grant_after_send(
+        self, bot, row: OrderFulfillment, msg: str, metadata: dict
+    ) -> tuple[bool, str]:
+        if not await self._send_vip_access_dm(bot, row.user_id, msg):
+            row.status = FulfillmentStatus.AUTO_IN_PROGRESS
+            row.auto_result = _dump_json(metadata)
+            self._get_db().commit()
+            return False, LucienVoice.fulfillment_vip_delivery_failed()
+        row.status = FulfillmentStatus.FULFILLED
+        row.auto_result = _dump_json(metadata)
+        self._get_db().commit()
+        return True, msg
+
     async def _dispatch_vip_grant(self, bot, row: OrderFulfillment, product: StoreProduct) -> tuple[bool, str]:
         auto = _parse_json(row.auto_result)
-        if auto.get("token_code"):
-            return True, LucienVoice.fulfillment_vip_grant_message(
-                auto.get("tariff_name", ""), auto.get("token_url", "")
-            )
+        vip_svc = VIPService(self._get_db())
+        if auto.get("vip_activated"):
+            return await self._finalize_vip_resend(bot, row, vip_svc, auto)
         if not product.tariff_id:
             row.status = FulfillmentStatus.FAILED
             self._get_db().commit()
             return False, LucienVoice.reward_vip_not_configured()
-        vip_svc = VIPService(self._get_db())
-        tariff = vip_svc.get_tariff(product.tariff_id)
-        if not tariff:
+        ok, msg, metadata = await vip_svc.grant_vip_from_tariff(
+            bot, row.user_id, product.tariff_id
+        )
+        if not ok:
+            if metadata.get("vip_activated"):
+                row.status = FulfillmentStatus.AUTO_IN_PROGRESS
+                row.auto_result = _dump_json(metadata)
+                self._get_db().commit()
+                return False, msg
             row.status = FulfillmentStatus.FAILED
+            row.auto_result = _dump_json({"errors": [msg]})
             self._get_db().commit()
-            return False, LucienVoice.reward_tariff_not_found()
-        token = vip_svc.generate_token(product.tariff_id)
-        bot_info = await bot.get_me()
-        token_url = f"https://t.me/{bot_info.username}?start={token.token_code}"
-        row.status = FulfillmentStatus.FULFILLED
-        row.auto_result = _dump_json(
-            {
-                "token_code": token.token_code,
-                "token_url": token_url,
-                "tariff_name": tariff.name,
-            }
-        )
-        self._get_db().commit()
-        await bot.send_message(
-            chat_id=row.user_id,
-            text=LucienVoice.fulfillment_vip_grant_message(
-                html.escape(tariff.name), token_url
-            ),
-            parse_mode="HTML",
-        )
-        return True, LucienVoice.fulfillment_vip_grant_message(tariff.name, token_url)
+            return False, msg
+        if not metadata.get("invite_link"):
+            row.status = FulfillmentStatus.AUTO_IN_PROGRESS
+            row.auto_result = _dump_json(metadata)
+            self._get_db().commit()
+            return False, LucienVoice.reward_vip_invite_failed()
+        return await self._commit_vip_grant_after_send(bot, row, msg, metadata)
 
     async def _dispatch_story_unlock(
         self, bot, row: OrderFulfillment, product: StoreProduct
@@ -733,15 +776,26 @@ class FulfillmentService:
             "package_id": package_id,
         }
 
-    def get_vip_activation_link(self, user_id: int, fulfillment_id: int) -> tuple[bool, str]:
+    async def resend_vip_invite_for_fulfillment(
+        self, bot, user_id: int, fulfillment_id: int
+    ) -> tuple[bool, str]:
         row = self._get_fulfillment_row(fulfillment_id)
         if not row or row.user_id != user_id:
             return False, LucienVoice.store_order_not_found()
+        if row.fulfillment_kind != FulfillmentKind.VIP_GRANT:
+            return False, LucienVoice.store_product_unavailable()
         auto = _parse_json(row.auto_result)
-        url = auto.get("token_url")
-        if not url:
+        if not auto.get("vip_activated"):
             return False, LucienVoice.reward_vip_not_configured()
-        return True, url
+        vip_svc = VIPService(self._get_db())
+        ok, msg, invite_link = await vip_svc.resend_vip_invite_for_user(bot, user_id)
+        if not ok:
+            return False, msg
+        auto["invite_link"] = invite_link
+        row.status = FulfillmentStatus.FULFILLED
+        row.auto_result = _dump_json(auto)
+        self._get_db().commit()
+        return True, msg
 
     async def retry_fulfillment_delivery(self, bot, user_id: int, fulfillment_id: int) -> tuple[bool, str]:
         row = self._get_fulfillment_row(fulfillment_id)
