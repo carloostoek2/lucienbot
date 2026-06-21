@@ -4,14 +4,21 @@ Handlers de Paquetes - Lucien Bot
 Wizard de creación y gestión de paquetes de contenido.
 """
 
+import json
 import logging
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from handlers.states.package_states import (
+    DeleteFileStates,
+    PackageWizardStates,
+    SendPackageStates,
+    UpdatePackageStates,
+)
 from keyboards.callback_data import (
+    CancelPackageWizardCallback,
     ConfirmDeleteFileCallback,
     ContinueDeleteFilesCallback,
     DeleteFilePkgCallback,
@@ -21,6 +28,7 @@ from keyboards.callback_data import (
     FinishDeleteFilesCallback,
     PackageDetailCallback,
     PackageListCallback,
+    ProductAdminDetailCallback,
     SendPackageSelectCallback,
     TogglePackageCallback,
     UpdatePackageSelectCallback,
@@ -29,42 +37,12 @@ from keyboards.callback_data import (
 from keyboards.inline_keyboards import back_keyboard, cancel_keyboard
 from services import get_service
 from services.package_service import PackageService
+from services.store_service import StoreService
 from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
-
-
-# Estados para FSM del Wizard de Paquetes
-class PackageWizardStates(StatesGroup):
-    waiting_name = State()
-    waiting_description = State()
-    waiting_files = State()
-    waiting_store_stock = State()
-    waiting_reward_stock = State()
-    confirming = State()
-
-
-# Estados para enviar paquete a usuario
-class SendPackageStates(StatesGroup):
-    selecting_package = State()
-    waiting_user_id = State()
-    confirming = State()
-
-
-# Estados para actualizar paquete (agregar archivos)
-class UpdatePackageStates(StatesGroup):
-    selecting_package = State()
-    waiting_files = State()
-    confirming = State()
-
-
-# Estados para eliminar archivos de paquete
-class DeleteFileStates(StatesGroup):
-    selecting_package = State()
-    deleting_files = State()
-
 
 # ==================== MENÚ DE PAQUETES ====================
 
@@ -391,7 +369,7 @@ async def create_package_start(callback: CallbackQuery, state: FSMContext):
 
 Indique un nombre descriptivo para el paquete:
 Ejemplo: <code>Fotos exclusivas de marzo</code>""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
     await state.set_state(PackageWizardStates.waiting_name)
@@ -406,7 +384,7 @@ async def process_package_name(message: Message, state: FSMContext):
     if len(name) < 3:
         await message.answer(
             "🎩 <b>Lucien:</b>\n\n<i>El nombre debe tener al menos 3 caracteres...</i>",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
             parse_mode="HTML",
         )
         return
@@ -424,7 +402,7 @@ Escriba una descripción corta (opcional):
 Ejemplo: <code>Una colección especial de fotos</code>
 
 O envíe /skip para omitir.""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
     await state.set_state(PackageWizardStates.waiting_description)
@@ -449,7 +427,7 @@ Envíe las fotos, videos o archivos que desea incluir en el paquete.
 Puede enviar varios archivos uno por uno.
 
 Cuando termine, envíe /done""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
 
@@ -471,7 +449,7 @@ async def process_package_files(message: Message, state: FSMContext):
                 "🎩 <b>Lucien:</b>\n\n"
                 "<i>Debe agregar al menos un archivo al paquete...</i>\n\n"
                 "Envíe los archivos o /cancel para cancelar.",
-                reply_markup=cancel_keyboard(),
+                reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
                 parse_mode="HTML",
             )
             return
@@ -510,7 +488,7 @@ async def process_package_files(message: Message, state: FSMContext):
             "🎩 <b>Lucien:</b>\n\n"
             "<i>No reconocí el tipo de archivo.\n"
             "Por favor envíe fotos, videos, documentos o GIFs...</i>",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
             parse_mode="HTML",
         )
         return
@@ -531,7 +509,7 @@ async def process_package_files(message: Message, state: FSMContext):
 📊 <b>Total de archivos:</b> {len(files)}
 
 <i>Envíe más archivos o /done para continuar.</i>""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
 
@@ -588,7 +566,7 @@ async def store_stock_limited(callback: CallbackQuery, state: FSMContext):
 📋 Stock en tienda:
 
 Ejemplo: <code>10</code> para 10 unidades""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -604,7 +582,7 @@ async def process_store_stock(message: Message, state: FSMContext):
     except ValueError:
         await message.answer(
             "🎩 <b>Lucien:</b>\n\n<i>Por favor, indique un número válido (0 o mayor)...</i>",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
             parse_mode="HTML",
         )
         return
@@ -667,7 +645,7 @@ async def reward_stock_limited(callback: CallbackQuery, state: FSMContext):
 📋 Stock en recompensas:
 
 Ejemplo: <code>50</code> para 50 unidades""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -683,7 +661,7 @@ async def process_reward_stock(message: Message, state: FSMContext):
     except ValueError:
         await message.answer(
             "🎩 <b>Lucien:</b>\n\n<i>Por favor, indique un número válido (0 o mayor)...</i>",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
             parse_mode="HTML",
         )
         return
@@ -746,10 +724,10 @@ async def show_package_preview(target, state: FSMContext):
 async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
     """Crea el paquete con todos los datos"""
     data = await state.get_data()
+    return_context_raw = data.get("__return_context")
 
     with get_service(PackageService) as package_service:
         try:
-            # Crear el paquete
             package = package_service.create_package(
                 name=data["name"],
                 description=data.get("description"),
@@ -758,7 +736,6 @@ async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
                 created_by=callback.from_user.id,
             )
 
-            # Agregar archivos
             files = data.get("files", [])
             for i, file_data in enumerate(files):
                 package_service.add_file_to_package(
@@ -770,8 +747,55 @@ async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
                     order_index=i,
                 )
 
-            await callback.message.edit_text(
-                f"""🎩 <b>Lucien:</b>
+            logger.info(
+                f"Paquete creado: {package.name} (ID: {package.id}) por admin {callback.from_user.id}"
+            )
+
+            if return_context_raw:
+                try:
+                    await _restore_product_context(callback, state, package, return_context_raw)
+                except Exception as restore_error:
+                    logger.error(
+                        f"package_handlers | restore_context_failed | "
+                        f"user_id={callback.from_user.id} | "
+                        f"package_id={package.id} | error={restore_error}"
+                    )
+                    await state.clear()
+                    return_context = json.loads(return_context_raw)
+                    await state.update_data(**return_context["data"])
+                    await callback.answer(
+                        f"Paquete creado pero no asignado — selecciónalo manualmente",
+                        show_alert=True,
+                    )
+                    if return_context["source"] == "product_wizard":
+                        from handlers.store_admin_handlers import (
+                            ProductWizardStates,
+                            _wizard_prompt_package_selection,
+                        )
+                        await state.set_state(ProductWizardStates.selecting_package)
+                        await _wizard_prompt_package_selection(callback, state)
+                    else:
+                        from handlers.store_admin_handlers import (
+                            ProductEditStates,
+                            build_edit_package_buttons,
+                        )
+                        product_id = return_context["data"]["edit_product_id"]
+                        await state.set_state(ProductEditStates.selecting_package)
+                        with get_service(StoreService) as store_service:
+                            packages = store_service.get_packages_for_product_edit(product_id)
+                        await callback.message.edit_text(
+                            f"🎩 <b>Lucien:</b>\n\n"
+                            f"⚠️ El paquete <b>{package.name}</b> fue creado pero "
+                            f"no pudo asignarse al producto automáticamente.\n\n"
+                            f"<i>Selecciónalo manualmente en la lista.</i>",
+                            reply_markup=InlineKeyboardMarkup(
+                                inline_keyboard=build_edit_package_buttons(product_id, packages)
+                            ),
+                            parse_mode="HTML",
+                        )
+            else:
+                await callback.message.edit_text(
+                    f"""🎩 <b>Lucien:</b>
 
         <i>El tesoro ha sido registrado en los archivos de Diana...</i>
 
@@ -781,26 +805,132 @@ async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
         📁 {len(files)} archivo(s)
 
         <i>El paquete está listo para usarse en recompensas o tienda.</i>""",
-                reply_markup=back_keyboard("manage_packages"),
-                parse_mode="HTML",
-            )
-
-            logger.info(
-                f"Paquete creado: {package.name} (ID: {package.id}) por admin {callback.from_user.id}"
-            )
+                    reply_markup=back_keyboard("manage_packages"),
+                    parse_mode="HTML",
+                )
+                await state.clear()
 
         except Exception as e:
-            logger.error(f"Error creando paquete: {e}")
+            logger.error(f"package_handlers | create_package_failed | user_id={callback.from_user.id} | error={e}")
             await callback.message.edit_text(
                 LucienVoice.error_message("la creación del paquete"),
                 reply_markup=back_keyboard("manage_packages"),
                 parse_mode="HTML",
             )
 
-        await state.clear()
         await callback.answer()
 
-    # ==================== ENVIAR PAQUETE A USUARIO (PRUEBA) ====================
+
+async def _restore_product_context(target, state, package, return_context_raw):
+    """Restaura el contexto del wizard de producto y asigna el paquete recién creado."""
+    return_context = json.loads(return_context_raw)
+    source = return_context["source"]
+    saved_data = return_context["data"]
+
+    await state.clear()
+
+    if source == "product_wizard":
+        from handlers.store_admin_handlers import ProductWizardStates
+
+        saved_data["package_id"] = package.id
+        await state.update_data(**saved_data)
+        await state.set_state(ProductWizardStates.waiting_price)
+
+        text = (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"✨ Paquete <b>{package.name}</b> creado y seleccionado.\n\n"
+            f"📋 <b>Paso 6 de 6:</b> Precio del producto\n\n"
+            f"¿Cuántos besitos costará este producto?\n"
+            f"Ejemplo: 100"
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]
+            ]
+        )
+        if isinstance(target, CallbackQuery):
+            await target.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        else:
+            await target.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    elif source == "product_edit":
+        product_id = saved_data["edit_product_id"]
+        with get_service(StoreService) as store_service:
+            store_service.update_product(product_id, package_id=package.id)
+        await target.message.edit_text(
+            f"🎩 <b>Lucien:</b>\n\n✅ Paquete <b>{package.name}</b> creado y asignado al producto.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📦 Ver producto",
+                            callback_data=ProductAdminDetailCallback(
+                                product_id=product_id
+                            ).pack(),
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="🔙 Tienda", callback_data="admin_store"
+                        )
+                    ],
+                ]
+            ),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(CancelPackageWizardCallback.filter())
+async def cancel_package_wizard(callback: CallbackQuery, state: FSMContext):
+    """Cancela el wizard de paquete. Si vino del flujo de producto, restaura contexto."""
+    data = await state.get_data()
+    return_context_raw = data.get("__return_context")
+
+    if not return_context_raw:
+        await state.clear()
+        await callback.message.edit_text(
+            "🎩 <b>Lucien:</b>\n\n<i>Acción cancelada.</i>",
+            reply_markup=back_keyboard("manage_packages"),
+            parse_mode="HTML",
+        )
+        await callback.answer("Acción cancelada")
+        return
+
+    return_context = json.loads(return_context_raw)
+    source = return_context["source"]
+    saved_data = return_context["data"]
+
+    await state.clear()
+    await state.update_data(**saved_data)
+
+    if source == "product_wizard":
+        from handlers.store_admin_handlers import (
+            ProductWizardStates,
+            _wizard_prompt_package_selection,
+        )
+
+        await state.set_state(ProductWizardStates.selecting_package)
+        await _wizard_prompt_package_selection(callback, state)
+    elif source == "product_edit":
+        from handlers.store_admin_handlers import ProductEditStates, build_edit_package_buttons
+
+        product_id = saved_data["edit_product_id"]
+        await state.set_state(ProductEditStates.selecting_package)
+        with get_service(StoreService) as store_service:
+            packages = store_service.get_packages_for_product_edit(product_id)
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=build_edit_package_buttons(product_id, packages)
+        )
+        await callback.message.edit_text(
+            "🎩 Lucien:\n\nSelecciona el nuevo paquete:",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+    await callback.answer()
+
+
+# ==================== ENVIAR PAQUETE A USUARIO (PRUEBA) ====================
 
 
 @router.callback_query(F.data == "send_package_to_user", lambda cb: is_admin(cb.from_user.id))
@@ -1063,7 +1193,7 @@ async def select_package_to_update(
         Puede enviar varios archivos uno por uno.
 
         Cuando termine, envíe <code>/done</code>""",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
             parse_mode="HTML",
         )
         await state.set_state(UpdatePackageStates.waiting_files)
@@ -1085,7 +1215,7 @@ async def process_update_files(message: Message, state: FSMContext):
 <i>No ha agregado ningún archivo nuevo...</i>
 
 Envíe archivos o /cancel para cancelar.""",
-                reply_markup=cancel_keyboard(),
+                reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
                 parse_mode="HTML",
             )
             return
@@ -1125,7 +1255,7 @@ Envíe archivos o /cancel para cancelar.""",
 
 <i>No reconocí el tipo de archivo.
 Por favor envíe fotos, videos, documentos o GIFs...</i>""",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
             parse_mode="HTML",
         )
         return
@@ -1146,7 +1276,7 @@ Por favor envíe fotos, videos, documentos o GIFs...</i>""",
 📊 <b>Nuevos archivos:</b> {len(new_files)}
 
 <i>Envíe más archivos o /done para finalizar.</i>""",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
         parse_mode="HTML",
     )
 

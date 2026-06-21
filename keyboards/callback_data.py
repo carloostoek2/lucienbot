@@ -186,6 +186,17 @@ class SelectPkgEditProductCallback(CallbackData, prefix="sel_pkg_edit"):
     package_id: int
 
 
+class CreatePkgForProductCallback(CallbackData, prefix="create_pkg_prod"):
+    """Crear nuevo paquete desde selección de paquete en flujo de producto"""
+
+    source: str  # "wizard" (creación) o "edit" (edición)
+    product_id: int = 0  # solo usado en source="edit"
+
+
+class CancelPackageWizardCallback(CallbackData, prefix="cancel_pkg_wiz"):
+    """Cancelar wizard de paquete (namespaced para no colisionar con cancel global)"""
+
+
 # ==================== PROMOTIONS ====================
 
 

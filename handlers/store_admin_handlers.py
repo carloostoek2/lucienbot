@@ -4,6 +4,7 @@ Handlers de Tienda para Administradores - Lucien Bot
 Gestion de productos y estadisticas de la tienda.
 """
 
+import json
 import logging
 
 from aiogram import F, Router
@@ -11,8 +12,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from handlers.states.package_states import PackageWizardStates
 from keyboards.callback_data import (
+    CancelPackageWizardCallback,
     ConfigStockAlertCallback,
+    CreatePkgForProductCallback,
     DeleteProductCallback,
     EditProductCallback,
     EditProductFieldCallback,
@@ -22,6 +26,7 @@ from keyboards.callback_data import (
     SelectPkgProductCallback,
     ToggleProductCallback,
 )
+from keyboards.inline_keyboards import cancel_keyboard
 from models.models import DeliveryMode, FulfillmentKind
 from services import get_service
 from services.store_service import StoreService, compute_stock_emoji_and_text
@@ -331,6 +336,16 @@ def build_edit_package_buttons(
                 )
             ]
         )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="➕ Crear nuevo paquete",
+                callback_data=CreatePkgForProductCallback(
+                    source="edit", product_id=product_id
+                ).pack(),
+            )
+        ]
+    )
     buttons.append(
         [
             InlineKeyboardButton(
@@ -753,18 +768,25 @@ async def _wizard_prompt_package_selection(target, state: FSMContext) -> None:
     """Muestra paquetes si el kind lo requiere; si no, salta a precio."""
     with get_service(StoreService) as store_service:
         packages = store_service.get_available_packages_for_store()
+
+    create_btn = InlineKeyboardButton(
+        text="➕ Crear nuevo paquete",
+        callback_data=CreatePkgForProductCallback(source="wizard").pack(),
+    )
+
     if not packages:
         text = LucienVoice.fulfillment_admin_wizard_no_packages()
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
+                [create_btn],
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")],
             ]
         )
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=keyboard)
         else:
             await target.answer(text, reply_markup=keyboard)
-        await state.clear()
+        await state.set_state(ProductWizardStates.selecting_package)
         return
     buttons = [
         [
@@ -775,6 +797,7 @@ async def _wizard_prompt_package_selection(target, state: FSMContext) -> None:
         ]
         for pkg in packages[:20]
     ]
+    buttons.append([create_btn])
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
     text = LucienVoice.fulfillment_admin_wizard_step_select_package()
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -867,6 +890,64 @@ async def select_package_for_product(
         ),
     )
     await state.set_state(ProductWizardStates.waiting_price)
+    await callback.answer()
+
+
+@router.callback_query(
+    ProductWizardStates.selecting_package,
+    CreatePkgForProductCallback.filter(F.source == "wizard"),
+)
+async def create_package_for_product_wizard(
+    callback: CallbackQuery, state: FSMContext, callback_data: CreatePkgForProductCallback
+):
+    """Inicia wizard de creación de paquete desde el wizard de producto."""
+    wizard_data = await state.get_data()
+    return_context = {"source": "product_wizard", "data": wizard_data}
+    await state.clear()
+    await state.update_data(__return_context=json.dumps(return_context))
+    await state.set_state(PackageWizardStates.waiting_name)
+
+    await callback.message.edit_text(
+        """🎩 <b>Lucien:</b>
+
+<i>Vamos a crear un nuevo tesoro para el reino...</i>
+
+📋 <b>Paso 1 de 6:</b> Nombre del paquete
+
+Indique un nombre descriptivo para el paquete:
+Ejemplo: <code>Fotos exclusivas de marzo</code>""",
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    ProductEditStates.selecting_package,
+    CreatePkgForProductCallback.filter(F.source == "edit"),
+)
+async def create_package_for_product_edit(
+    callback: CallbackQuery, state: FSMContext, callback_data: CreatePkgForProductCallback
+):
+    """Inicia wizard de creación de paquete desde la edición de producto."""
+    product_id = callback_data.product_id
+    return_context = {"source": "product_edit", "data": {"edit_product_id": product_id}}
+    await state.clear()
+    await state.update_data(__return_context=json.dumps(return_context))
+    await state.set_state(PackageWizardStates.waiting_name)
+
+    await callback.message.edit_text(
+        """🎩 <b>Lucien:</b>
+
+<i>Vamos a crear un nuevo tesoro para el reino...</i>
+
+📋 <b>Paso 1 de 6:</b> Nombre del paquete
+
+Indique un nombre descriptivo para el paquete:
+Ejemplo: <code>Fotos exclusivas de marzo</code>""",
+        reply_markup=cancel_keyboard(CancelPackageWizardCallback().pack()),
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 

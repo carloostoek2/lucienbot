@@ -318,9 +318,9 @@ def back_keyboard(back_callback: str = "back_to_admin") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def cancel_keyboard() -> InlineKeyboardMarkup:
+def cancel_keyboard(callback_data: str = "cancel") -> InlineKeyboardMarkup:
     """Teclado con botón de cancelar"""
-    buttons = [[InlineKeyboardButton(text="❌ Cancelar", callback_data="cancel")]]
+    buttons = [[InlineKeyboardButton(text="❌ Cancelar", callback_data=callback_data)]]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
