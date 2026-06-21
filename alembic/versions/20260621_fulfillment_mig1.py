@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("price_min", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("price_max", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("order_index", sa.Integer(), nullable=True, server_default="0"),
-        sa.Column("is_active", sa.Boolean(), nullable=True, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean(), nullable=True, server_default=sa.text("true")),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("slug"),
     )
@@ -185,11 +185,11 @@ def upgrade() -> None:
         """
         INSERT INTO store_tiers (slug, name, tagline, price_min, price_max, order_index, is_active)
         VALUES
-        ('impulso', 'IMPULSO', 'Vende curiosidad · Compra sin pensar', 50, 120, 1, 1),
-        ('deseo', 'DESEO', 'Vende acceso · El corazón del catálogo', 150, 350, 2, 1),
-        ('exclusivo', 'EXCLUSIVO', 'Vende completitud · Vale guardar para esto', 400, 700, 3, 1),
-        ('reservado', 'RESERVADO', 'Vende poder · Solo para los que llegaron lejos', 800, 1500, 4, 1),
-        ('mitico', 'MÍTICO', 'Vende leyenda · Stock limitado · Solo existe este mes', 2000, 5000, 5, 1)
+        ('impulso', 'IMPULSO', 'Vende curiosidad · Compra sin pensar', 50, 120, 1, true),
+        ('deseo', 'DESEO', 'Vende acceso · El corazón del catálogo', 150, 350, 2, true),
+        ('exclusivo', 'EXCLUSIVO', 'Vende completitud · Vale guardar para esto', 400, 700, 3, true),
+        ('reservado', 'RESERVADO', 'Vende poder · Solo para los que llegaron lejos', 800, 1500, 4, true),
+        ('mitico', 'MÍTICO', 'Vende leyenda · Stock limitado · Solo existe este mes', 2000, 5000, 5, true)
         """
     )
 
