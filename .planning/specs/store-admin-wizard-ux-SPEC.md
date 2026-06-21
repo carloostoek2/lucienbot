@@ -4,7 +4,7 @@
 |-------|-------|
 | **Versión** | 0.1 borrador |
 | **Fecha** | 2026-06-21 |
-| **Estado** | Diferido — ejecutar después de Fase 1 (activación VIP inmediata) |
+| **Estado** | Completado — Fase 32 (2026-06-21) |
 | **Depende de** | Fase 1 cerrada (tests green) |
 | **Relacionado** | [store-fulfillment-catalog-SPEC.md](./store-fulfillment-catalog-SPEC.md) |
 
@@ -133,11 +133,11 @@ pytest tests/handlers/test_store_admin_handlers.py -q --tb=line -p no:cov --over
 
 ## 7. Criterios de cierre Fase 2
 
-- [ ] Custodio crea producto VIP sin escribir ningún ID
-- [ ] Custodio crea producto STORY_UNLOCK sin escribir ningún ID
-- [ ] Custodio edita tarifa de producto VIP existente
-- [ ] Tests handler store_admin green
-- [ ] 0 strings user-facing nuevos fuera de LucienVoice
+- [x] Custodio crea producto VIP sin escribir ningún ID
+- [x] Custodio crea producto STORY_UNLOCK sin escribir ningún ID
+- [x] Custodio edita tarifa de producto VIP existente
+- [x] Tests handler store_admin green (72 passed)
+- [x] 0 strings user-facing nuevos fuera de LucienVoice
 
 ---
 

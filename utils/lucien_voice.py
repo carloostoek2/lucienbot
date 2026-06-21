@@ -1401,12 +1401,12 @@ Estado: {status}{input_block}"""
         )
 
     @staticmethod
-    def fulfillment_admin_wizard_step_tariff_id() -> str:
-        return "Paso: Tariff ID\n\nIndica el ID de tarifa VIP:"
+    def fulfillment_admin_wizard_select_tariff() -> str:
+        return "Paso: Seleccionar tarifa VIP\n\nElige la tarifa para este producto:"
 
     @staticmethod
-    def fulfillment_admin_wizard_step_story_node_id() -> str:
-        return "Paso: Story Node ID\n\nIndica el ID del nodo narrativo:"
+    def fulfillment_admin_wizard_select_story_node() -> str:
+        return "Paso: Seleccionar nodo narrativo\n\nElige el nodo a desbloquear:"
 
     @staticmethod
     def fulfillment_admin_wizard_step_fulfillment_config() -> str:
@@ -1424,16 +1424,16 @@ Estado: {status}{input_block}"""
         return "No hay paquetes disponibles."
 
     @staticmethod
+    def fulfillment_admin_wizard_no_tariffs() -> str:
+        return "No hay tarifas VIP disponibles."
+
+    @staticmethod
+    def fulfillment_admin_wizard_no_story_nodes() -> str:
+        return "No hay nodos narrativos disponibles."
+
+    @staticmethod
     def fulfillment_admin_wizard_step_select_package() -> str:
         return "Paso: Seleccionar paquete"
-
-    @staticmethod
-    def fulfillment_admin_wizard_invalid_tariff_id() -> str:
-        return "Indica un tariff_id numérico válido."
-
-    @staticmethod
-    def fulfillment_admin_wizard_invalid_story_node_id() -> str:
-        return "Indica un story_node_id numérico válido."
 
     @staticmethod
     def fulfillment_admin_wizard_invalid_json() -> str:
@@ -1473,22 +1473,34 @@ Estado: {status}{input_block}"""
         price: int,
         stock_text: str,
         cap_text: str,
+        tariff_name: str | None = None,
+        story_node_title: str | None = None,
     ) -> str:
         safe_name = html.escape(name)
         safe_description = html.escape(description)
-        return (
-            f"🎩 Lucien:\n\n"
-            f"Resumen del producto:\n\n"
-            f"📦 {safe_name}\n"
-            f"📝 {safe_description}\n"
-            f"✨ Tier: {tier}\n"
-            f"🚚 Modo: {delivery}\n"
-            f"🎯 Kind: {kind}\n"
-            f"💰 Precio: {price} besitos\n"
-            f"📊 Stock: {stock_text}\n"
-            f"📅 Cupo mensual: {cap_text}\n\n"
-            f"Crear este producto?"
+        lines = [
+            "🎩 Lucien:\n",
+            "Resumen del producto:\n",
+            f"📦 {safe_name}",
+            f"📝 {safe_description}",
+            f"✨ Tier: {tier}",
+            f"🚚 Modo: {delivery}",
+            f"🎯 Kind: {kind}",
+        ]
+        if tariff_name:
+            lines.append(f"👑 Tarifa: {html.escape(tariff_name)}")
+        if story_node_title:
+            lines.append(f"📖 Nodo: {html.escape(story_node_title)}")
+        lines.extend(
+            [
+                f"💰 Precio: {price} besitos",
+                f"📊 Stock: {stock_text}",
+                f"📅 Cupo mensual: {cap_text}",
+                "",
+                "Crear este producto?",
+            ]
         )
+        return "\n".join(lines)
 
     @staticmethod
     def fulfillment_admin_wizard_product_created(name: str, price: int) -> str:

@@ -176,7 +176,7 @@ class EditProductFieldCallback(CallbackData, prefix="edit_prod_field"):
     """Editar un campo específico del producto"""
 
     product_id: int
-    field: str  # name | description | package | price | stock
+    field: str  # name | description | package | price | stock | tariff | story_node
 
 
 class SelectPkgEditProductCallback(CallbackData, prefix="sel_pkg_edit"):
@@ -184,6 +184,32 @@ class SelectPkgEditProductCallback(CallbackData, prefix="sel_pkg_edit"):
 
     product_id: int
     package_id: int
+
+
+class SelectTariffStoreWizardCallback(CallbackData, prefix="wiz_store_tariff"):
+    """Seleccionar tarifa VIP en wizard crear producto tienda."""
+
+    tariff_id: int
+
+
+class SelectStoryNodeStoreWizardCallback(CallbackData, prefix="wiz_store_story"):
+    """Seleccionar nodo narrativo en wizard crear producto tienda."""
+
+    story_node_id: int
+
+
+class SelectTariffEditProductCallback(CallbackData, prefix="sel_tariff_edit"):
+    """Seleccionar tarifa al editar producto VIP_GRANT."""
+
+    product_id: int
+    tariff_id: int
+
+
+class SelectStoryNodeEditProductCallback(CallbackData, prefix="sel_story_edit"):
+    """Seleccionar nodo al editar producto STORY_UNLOCK."""
+
+    product_id: int
+    story_node_id: int
 
 
 class CreatePkgForProductCallback(CallbackData, prefix="create_pkg_prod"):

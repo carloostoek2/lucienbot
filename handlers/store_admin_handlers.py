@@ -24,6 +24,10 @@ from keyboards.callback_data import (
     RestockProductCallback,
     SelectPkgEditProductCallback,
     SelectPkgProductCallback,
+    SelectStoryNodeEditProductCallback,
+    SelectStoryNodeStoreWizardCallback,
+    SelectTariffEditProductCallback,
+    SelectTariffStoreWizardCallback,
     ToggleProductCallback,
 )
 from keyboards.inline_keyboards import cancel_keyboard
@@ -45,8 +49,8 @@ class ProductWizardStates(StatesGroup):
     selecting_delivery_mode = State()
     selecting_fulfillment_kind = State()
     selecting_package = State()
-    waiting_tariff_id = State()
-    waiting_story_node_id = State()
+    selecting_tariff = State()
+    selecting_story_node = State()
     waiting_fulfillment_config = State()
     waiting_price = State()
     waiting_stock = State()
@@ -76,6 +80,8 @@ class ProductEditStates(StatesGroup):
     waiting_name = State()
     waiting_description = State()
     selecting_package = State()
+    selecting_tariff = State()
+    selecting_story_node = State()
     waiting_price = State()
     waiting_stock = State()
 
@@ -200,7 +206,16 @@ def build_product_confirmation_text_and_keyboard(data: dict) -> tuple[str, Inlin
         else str(cap)
     )
     text = LucienVoice.fulfillment_admin_wizard_confirmation_summary(
-        name, description, tier, delivery, kind, price, stock_text, cap_text
+        name,
+        description,
+        tier,
+        delivery,
+        kind,
+        price,
+        stock_text,
+        cap_text,
+        tariff_name=data.get("tariff_name"),
+        story_node_title=data.get("story_node_title"),
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -217,20 +232,33 @@ def build_product_edit_menu_text(product) -> str:
     stock_text = "Ilimitado" if product.stock == -1 else str(product.stock)
     package_name = product.package.name if getattr(product, "package", None) else "Sin paquete"
     description = product.description or "Sin descripcion"
-    return (
-        f"🎩 Lucien:\n\n"
-        f"Editar producto:\n\n"
-        f"📦 {product.name}\n"
-        f"📝 {description}\n"
-        f"📁 Paquete: {package_name}\n"
-        f"💰 Precio: {product.price} besitos\n"
-        f"📊 Stock: {stock_text}\n\n"
-        f"Que campo deseas modificar?"
+    lines = [
+        "🎩 Lucien:\n",
+        "Editar producto:\n",
+        f"📦 {product.name}",
+        f"📝 {description}",
+        f"📁 Paquete: {package_name}",
+    ]
+    if product.fulfillment_kind == FulfillmentKind.VIP_GRANT:
+        tariff_name = product.tariff.name if getattr(product, "tariff", None) else "Sin tarifa"
+        lines.append(f"👑 Tarifa: {tariff_name}")
+    elif product.fulfillment_kind == FulfillmentKind.STORY_UNLOCK:
+        node_title = product.story_node.title if getattr(product, "story_node", None) else "Sin nodo"
+        lines.append(f"📖 Nodo: {node_title}")
+    lines.extend(
+        [
+            f"💰 Precio: {product.price} besitos",
+            f"📊 Stock: {stock_text}",
+            "",
+            "Que campo deseas modificar?",
+        ]
     )
+    return "\n".join(lines)
 
 
-def build_product_edit_menu_keyboard(product_id: int) -> InlineKeyboardMarkup:
+def build_product_edit_menu_keyboard(product) -> InlineKeyboardMarkup:
     """Construye el teclado del menú de edición por campo. Función pura."""
+    product_id = product.id
     fields = [
         ("📦 Nombre", "name"),
         ("📝 Descripcion", "description"),
@@ -238,6 +266,10 @@ def build_product_edit_menu_keyboard(product_id: int) -> InlineKeyboardMarkup:
         ("💰 Precio", "price"),
         ("📊 Stock", "stock"),
     ]
+    if product.fulfillment_kind == FulfillmentKind.VIP_GRANT:
+        fields.append(("👑 Tarifa VIP", "tariff"))
+    elif product.fulfillment_kind == FulfillmentKind.STORY_UNLOCK:
+        fields.append(("📖 Nodo narrativo", "story_node"))
     buttons = [
         [
             InlineKeyboardButton(
@@ -346,6 +378,88 @@ def build_edit_package_buttons(
             )
         ]
     )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="❌ Cancelar",
+                callback_data=EditProductCallback(product_id=product_id).pack(),
+            )
+        ]
+    )
+    return buttons
+
+
+def build_wizard_tariff_keyboard(tariffs: list) -> InlineKeyboardMarkup:
+    """Construye teclado inline de tarifas VIP para wizard crear producto. Función pura."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{tariff.name} ({tariff.duration_days} dias)",
+                callback_data=SelectTariffStoreWizardCallback(tariff_id=tariff.id).pack(),
+            )
+        ]
+        for tariff in tariffs[:20]
+    ]
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_wizard_story_node_keyboard(nodes: list) -> InlineKeyboardMarkup:
+    """Construye teclado inline de nodos narrativos para wizard crear producto. Función pura."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=node.title,
+                callback_data=SelectStoryNodeStoreWizardCallback(story_node_id=node.id).pack(),
+            )
+        ]
+        for node in nodes[:20]
+    ]
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_edit_tariff_buttons(
+    product_id: int, tariffs: list
+) -> list[list[InlineKeyboardButton]]:
+    """Construye botones de selección de tarifa para edición. Función pura."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{tariff.name} ({tariff.duration_days} dias)",
+                callback_data=SelectTariffEditProductCallback(
+                    product_id=product_id, tariff_id=tariff.id
+                ).pack(),
+            )
+        ]
+        for tariff in tariffs
+    ]
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="❌ Cancelar",
+                callback_data=EditProductCallback(product_id=product_id).pack(),
+            )
+        ]
+    )
+    return buttons
+
+
+def build_edit_story_node_buttons(
+    product_id: int, nodes: list
+) -> list[list[InlineKeyboardButton]]:
+    """Construye botones de selección de nodo narrativo para edición. Función pura."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=node.title,
+                callback_data=SelectStoryNodeEditProductCallback(
+                    product_id=product_id, story_node_id=node.id
+                ).pack(),
+            )
+        ]
+        for node in nodes
+    ]
     buttons.append(
         [
             InlineKeyboardButton(
@@ -702,29 +816,9 @@ async def _wizard_route_after_kind(target, state: FSMContext, kind: str) -> None
     if kind in _WIZARD_PACKAGE_KINDS:
         await _wizard_prompt_package_selection(target, state)
     elif kind == FulfillmentKind.VIP_GRANT.value:
-        text = LucienVoice.fulfillment_admin_wizard_step_tariff_id()
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]
-            ]
-        )
-        if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=keyboard)
-        else:
-            await target.answer(text, reply_markup=keyboard)
-        await state.set_state(ProductWizardStates.waiting_tariff_id)
+        await _wizard_prompt_tariff_selection(target, state)
     elif kind == FulfillmentKind.STORY_UNLOCK.value:
-        text = LucienVoice.fulfillment_admin_wizard_step_story_node_id()
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]
-            ]
-        )
-        if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=keyboard)
-        else:
-            await target.answer(text, reply_markup=keyboard)
-        await state.set_state(ProductWizardStates.waiting_story_node_id)
+        await _wizard_prompt_story_node_selection(target, state)
     elif kind in _WIZARD_CONFIG_KINDS:
         text = LucienVoice.fulfillment_admin_wizard_step_fulfillment_config()
         keyboard = InlineKeyboardMarkup(
@@ -808,6 +902,62 @@ async def _wizard_prompt_package_selection(target, state: FSMContext) -> None:
     await state.set_state(ProductWizardStates.selecting_package)
 
 
+async def _wizard_prompt_tariff_selection(target, state: FSMContext) -> None:
+    """Muestra tarifas VIP para VIP_GRANT; si vacío, vuelve a admin tienda."""
+    with get_service(StoreService) as store_service:
+        tariffs = store_service.get_tariffs_for_product_wizard()
+
+    if not tariffs:
+        text = LucienVoice.fulfillment_admin_wizard_no_tariffs()
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
+            ]
+        )
+        if isinstance(target, CallbackQuery):
+            await target.message.edit_text(text, reply_markup=keyboard)
+        else:
+            await target.answer(text, reply_markup=keyboard)
+        await state.clear()
+        return
+
+    keyboard = build_wizard_tariff_keyboard(tariffs)
+    text = LucienVoice.fulfillment_admin_wizard_select_tariff()
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await target.answer(text, reply_markup=keyboard)
+    await state.set_state(ProductWizardStates.selecting_tariff)
+
+
+async def _wizard_prompt_story_node_selection(target, state: FSMContext) -> None:
+    """Muestra nodos narrativos para STORY_UNLOCK; si vacío, vuelve a admin tienda."""
+    with get_service(StoreService) as store_service:
+        nodes = store_service.get_story_nodes_for_product_wizard()
+
+    if not nodes:
+        text = LucienVoice.fulfillment_admin_wizard_no_story_nodes()
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
+            ]
+        )
+        if isinstance(target, CallbackQuery):
+            await target.message.edit_text(text, reply_markup=keyboard)
+        else:
+            await target.answer(text, reply_markup=keyboard)
+        await state.clear()
+        return
+
+    keyboard = build_wizard_story_node_keyboard(nodes)
+    text = LucienVoice.fulfillment_admin_wizard_select_story_node()
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await target.answer(text, reply_markup=keyboard)
+    await state.set_state(ProductWizardStates.selecting_story_node)
+
+
 @router.callback_query(
     ProductWizardStates.selecting_fulfillment_kind, F.data.startswith("wiz_kind:")
 )
@@ -819,32 +969,44 @@ async def wizard_select_fulfillment_kind(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
-@router.message(ProductWizardStates.waiting_tariff_id)
-async def wizard_process_tariff_id(message: Message, state: FSMContext):
-    """Captura tariff_id para VIP_GRANT."""
-    try:
-        tariff_id = int(message.text.strip())
-        if tariff_id < 1:
-            raise ValueError
-    except ValueError:
-        await message.answer(LucienVoice.fulfillment_admin_wizard_invalid_tariff_id())
-        return
-    await state.update_data(tariff_id=tariff_id)
-    await _wizard_prompt_price_step(message, state)
+@router.callback_query(
+    ProductWizardStates.selecting_tariff, SelectTariffStoreWizardCallback.filter()
+)
+async def wizard_select_tariff(
+    callback: CallbackQuery, state: FSMContext, callback_data: SelectTariffStoreWizardCallback
+):
+    """Selecciona tarifa VIP en wizard crear producto."""
+    with get_service(StoreService) as store_service:
+        tariffs = store_service.get_tariffs_for_product_wizard()
+    tariff_name = next(
+        (t.name for t in tariffs if t.id == callback_data.tariff_id),
+        str(callback_data.tariff_id),
+    )
+    await state.update_data(tariff_id=callback_data.tariff_id, tariff_name=tariff_name)
+    await _wizard_prompt_price_step(callback, state)
+    await callback.answer()
 
 
-@router.message(ProductWizardStates.waiting_story_node_id)
-async def wizard_process_story_node_id(message: Message, state: FSMContext):
-    """Captura story_node_id para STORY_UNLOCK."""
-    try:
-        story_node_id = int(message.text.strip())
-        if story_node_id < 1:
-            raise ValueError
-    except ValueError:
-        await message.answer(LucienVoice.fulfillment_admin_wizard_invalid_story_node_id())
-        return
-    await state.update_data(story_node_id=story_node_id)
-    await _wizard_prompt_price_step(message, state)
+@router.callback_query(
+    ProductWizardStates.selecting_story_node, SelectStoryNodeStoreWizardCallback.filter()
+)
+async def wizard_select_story_node(
+    callback: CallbackQuery,
+    state: FSMContext,
+    callback_data: SelectStoryNodeStoreWizardCallback,
+):
+    """Selecciona nodo narrativo en wizard crear producto."""
+    with get_service(StoreService) as store_service:
+        nodes = store_service.get_story_nodes_for_product_wizard()
+    story_node_title = next(
+        (n.title for n in nodes if n.id == callback_data.story_node_id),
+        str(callback_data.story_node_id),
+    )
+    await state.update_data(
+        story_node_id=callback_data.story_node_id, story_node_title=story_node_title
+    )
+    await _wizard_prompt_price_step(callback, state)
+    await callback.answer()
 
 
 @router.callback_query(
@@ -1192,7 +1354,7 @@ async def edit_product_menu(callback: CallbackQuery, callback_data: EditProductC
 
         await callback.message.edit_text(
             build_product_edit_menu_text(product),
-            reply_markup=build_product_edit_menu_keyboard(product_id),
+            reply_markup=build_product_edit_menu_keyboard(product),
         )
         await callback.answer()
 
@@ -1237,6 +1399,30 @@ async def edit_product_field_start(
         elif field == "stock":
             text, keyboard = build_edit_stock_prompt_and_keyboard(product_id, product.stock)
             next_state = ProductEditStates.waiting_stock
+        elif field == "tariff":
+            tariffs = store_service.get_tariffs_for_product_edit(product_id)
+            if not tariffs:
+                await callback.answer(
+                    LucienVoice.fulfillment_admin_wizard_no_tariffs(), show_alert=True
+                )
+                return
+            text = LucienVoice.fulfillment_admin_wizard_select_tariff()
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=build_edit_tariff_buttons(product_id, tariffs)
+            )
+            next_state = ProductEditStates.selecting_tariff
+        elif field == "story_node":
+            nodes = store_service.get_story_nodes_for_product_edit(product_id)
+            if not nodes:
+                await callback.answer(
+                    LucienVoice.fulfillment_admin_wizard_no_story_nodes(), show_alert=True
+                )
+                return
+            text = LucienVoice.fulfillment_admin_wizard_select_story_node()
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=build_edit_story_node_buttons(product_id, nodes)
+            )
+            next_state = ProductEditStates.selecting_story_node
         else:
             await callback.answer("Campo no valido", show_alert=True)
             return
@@ -1287,6 +1473,38 @@ async def process_edit_product_package(
     with get_service(StoreService) as store_service:
         success = store_service.update_product(product_id, package_id=package_id)
         await _finish_product_edit(callback, state, product_id, success, "paquete")
+
+
+@router.callback_query(
+    ProductEditStates.selecting_tariff, SelectTariffEditProductCallback.filter()
+)
+async def process_edit_product_tariff(
+    callback: CallbackQuery, state: FSMContext, callback_data: SelectTariffEditProductCallback
+):
+    """Procesa nueva tarifa VIP del producto."""
+    product_id = callback_data.product_id
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, tariff_id=callback_data.tariff_id)
+        await _finish_product_edit(callback, state, product_id, success, "tarifa")
+
+
+@router.callback_query(
+    ProductEditStates.selecting_story_node, SelectStoryNodeEditProductCallback.filter()
+)
+async def process_edit_product_story_node(
+    callback: CallbackQuery,
+    state: FSMContext,
+    callback_data: SelectStoryNodeEditProductCallback,
+):
+    """Procesa nuevo nodo narrativo del producto."""
+    product_id = callback_data.product_id
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(
+            product_id, story_node_id=callback_data.story_node_id
+        )
+        await _finish_product_edit(callback, state, product_id, success, "nodo narrativo")
 
 
 @router.message(ProductEditStates.waiting_price)

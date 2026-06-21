@@ -980,11 +980,89 @@ class TestStoreAdminPureHelpers:
     def test_build_product_edit_menu_keyboard(self):
         from handlers.store_admin_handlers import build_product_edit_menu_keyboard
 
-        kb = build_product_edit_menu_keyboard(7)
+        mock_product = MagicMock()
+        mock_product.id = 7
+        mock_product.fulfillment_kind = "package"
+
+        kb = build_product_edit_menu_keyboard(mock_product)
         assert len(kb.inline_keyboard) == 6
         assert "Nombre" in kb.inline_keyboard[0][0].text
         assert "Paquete" in kb.inline_keyboard[2][0].text
         assert "7" in kb.inline_keyboard[5][0].callback_data
+
+    def test_build_wizard_tariff_keyboard(self):
+        from handlers.store_admin_handlers import build_wizard_tariff_keyboard
+
+        mock_tariff = MagicMock()
+        mock_tariff.id = 2
+        mock_tariff.name = "VIP 30 dias"
+        mock_tariff.duration_days = 30
+
+        kb = build_wizard_tariff_keyboard([mock_tariff])
+        assert "VIP 30 dias" in kb.inline_keyboard[0][0].text
+        assert "wiz_store_tariff" in kb.inline_keyboard[0][0].callback_data
+
+    def test_build_wizard_story_node_keyboard(self):
+        from handlers.store_admin_handlers import build_wizard_story_node_keyboard
+
+        mock_node = MagicMock()
+        mock_node.id = 5
+        mock_node.title = "Capitulo 1"
+
+        kb = build_wizard_story_node_keyboard([mock_node])
+        assert "Capitulo 1" in kb.inline_keyboard[0][0].text
+        assert "wiz_store_story" in kb.inline_keyboard[0][0].callback_data
+
+    def test_build_product_edit_menu_vip_shows_tariff(self):
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import (
+            build_product_edit_menu_keyboard,
+            build_product_edit_menu_text,
+        )
+
+        mock_product = MagicMock()
+        mock_product.id = 1
+        mock_product.name = "VIP Pack"
+        mock_product.description = "Desc"
+        mock_product.price = 100
+        mock_product.stock = 5
+        mock_product.package = None
+        mock_product.fulfillment_kind = FulfillmentKind.VIP_GRANT
+        mock_product.tariff.name = "VIP Mensual"
+
+        text = build_product_edit_menu_text(mock_product)
+        assert "👑 Tarifa: VIP Mensual" in text
+
+        kb = build_product_edit_menu_keyboard(mock_product)
+        labels = [row[0].text for row in kb.inline_keyboard]
+        assert "👑 Tarifa VIP" in labels
+
+    def test_build_product_edit_menu_package_no_tariff_button(self):
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import build_product_edit_menu_keyboard
+
+        mock_product = MagicMock()
+        mock_product.id = 3
+        mock_product.fulfillment_kind = FulfillmentKind.PACKAGE
+
+        kb = build_product_edit_menu_keyboard(mock_product)
+        labels = [row[0].text for row in kb.inline_keyboard]
+        assert "👑 Tarifa VIP" not in labels
+
+    def test_build_product_confirmation_includes_tariff_name(self):
+        from handlers.store_admin_handlers import build_product_confirmation_text_and_keyboard
+
+        data = {
+            "name": "VIP Product",
+            "description": "Desc",
+            "price": 200,
+            "stock": 10,
+            "fulfillment_kind": "vip_grant",
+            "tariff_name": "VIP 30 dias",
+        }
+        text, _kb = build_product_confirmation_text_and_keyboard(data)
+        assert "VIP 30 dias" in text
+        assert "👑 Tarifa" in text
 
     def test_build_product_confirmation_text_and_keyboard(self):
         from handlers.store_admin_handlers import build_product_confirmation_text_and_keyboard
@@ -1080,9 +1158,9 @@ class TestProductWizardFulfillmentSteps:
         data = await fsm.get_data()
         assert data["fulfillment_kind"] == FulfillmentKind.PACKAGE_DEFERRED.value
 
-    @patch("handlers.store_admin_handlers._wizard_route_after_kind", new_callable=AsyncMock)
+    @patch("handlers.store_admin_handlers._wizard_prompt_tariff_selection", new_callable=AsyncMock)
     async def test_wizard_kind_vip_routes_payload(
-        self, mock_route, make_callback, make_fsm_context
+        self, mock_tariff_prompt, make_callback, make_fsm_context
     ):
         from models.models import FulfillmentKind
         from handlers.store_admin_handlers import ProductWizardStates, wizard_select_fulfillment_kind
@@ -1093,7 +1171,219 @@ class TestProductWizardFulfillmentSteps:
 
         await wizard_select_fulfillment_kind(cb, fsm)
 
-        mock_route.assert_awaited_once()
+        mock_tariff_prompt.assert_awaited_once()
+
+
+class TestWizardSelectTariff:
+    """Wizard: selección inline de tarifa VIP."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_callback_sets_tariff_and_advances_to_price(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_tariff = MagicMock()
+        mock_tariff.id = 2
+        mock_tariff.name = "VIP 30 dias"
+        mock_store = MagicMock()
+        mock_store.get_tariffs_for_product_wizard.return_value = [mock_tariff]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from keyboards.callback_data import SelectTariffStoreWizardCallback
+        from handlers.store_admin_handlers import ProductWizardStates, wizard_select_tariff
+
+        cb_data = SelectTariffStoreWizardCallback(tariff_id=2)
+        cb = make_callback(data=cb_data.pack())
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductWizardStates.selecting_tariff)
+
+        await wizard_select_tariff(cb, fsm, cb_data)
+
+        data = await fsm.get_data()
+        assert data["tariff_id"] == 2
+        assert data["tariff_name"] == "VIP 30 dias"
+        assert await fsm.get_state() == ProductWizardStates.waiting_price
+        mock_store.get_tariffs_for_product_wizard.assert_called_once()
+        cb.answer.assert_called_once()
+
+
+class TestWizardSelectStoryNode:
+    """Wizard: selección inline de nodo narrativo."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_callback_sets_node_and_advances_to_price(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_node = MagicMock()
+        mock_node.id = 7
+        mock_node.title = "Capitulo 1"
+        mock_store = MagicMock()
+        mock_store.get_story_nodes_for_product_wizard.return_value = [mock_node]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from keyboards.callback_data import SelectStoryNodeStoreWizardCallback
+        from handlers.store_admin_handlers import ProductWizardStates, wizard_select_story_node
+
+        cb_data = SelectStoryNodeStoreWizardCallback(story_node_id=7)
+        cb = make_callback(data=cb_data.pack())
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductWizardStates.selecting_story_node)
+
+        await wizard_select_story_node(cb, fsm, cb_data)
+
+        data = await fsm.get_data()
+        assert data["story_node_id"] == 7
+        assert data["story_node_title"] == "Capitulo 1"
+        assert await fsm.get_state() == ProductWizardStates.waiting_price
+        mock_store.get_story_nodes_for_product_wizard.assert_called_once()
+        cb.answer.assert_called_once()
+
+
+class TestWizardEmptyTariffs:
+    """Wizard: lista vacía de tarifas."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_empty_list_shows_no_tariffs_and_clears_fsm(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_store = MagicMock()
+        mock_store.get_tariffs_for_product_wizard.return_value = []
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from handlers.store_admin_handlers import _wizard_prompt_tariff_selection
+
+        cb = make_callback()
+        fsm = await make_fsm_context()
+        await _wizard_prompt_tariff_selection(cb, fsm)
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "tarifas" in text.lower()
+        markup = cb.message.edit_text.call_args[1]["reply_markup"]
+        assert markup.inline_keyboard[0][0].callback_data == "admin_store"
+        assert await fsm.get_state() is None
+        mock_store.get_tariffs_for_product_wizard.assert_called_once()
+
+
+class TestWizardEmptyStoryNodes:
+    """Wizard: lista vacía de nodos narrativos."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_empty_list_shows_no_story_nodes(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_store = MagicMock()
+        mock_store.get_story_nodes_for_product_wizard.return_value = []
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from handlers.store_admin_handlers import _wizard_prompt_story_node_selection
+
+        cb = make_callback()
+        fsm = await make_fsm_context()
+        await _wizard_prompt_story_node_selection(cb, fsm)
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "nodos" in text.lower()
+        markup = cb.message.edit_text.call_args[1]["reply_markup"]
+        assert markup.inline_keyboard[0][0].callback_data == "admin_store"
+        assert await fsm.get_state() is None
+        mock_store.get_story_nodes_for_product_wizard.assert_called_once()
+
+
+class TestWizardRouteAfterKind:
+    """Wizard: routing real tras selección de fulfillment kind."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_vip_grant_routes_to_tariff_selection(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_tariff = MagicMock()
+        mock_tariff.id = 1
+        mock_tariff.name = "VIP 7 dias"
+        mock_tariff.duration_days = 7
+        mock_store = MagicMock()
+        mock_store.get_tariffs_for_product_wizard.return_value = [mock_tariff]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import (
+            ProductWizardStates,
+            _wizard_route_after_kind,
+        )
+
+        cb = make_callback()
+        fsm = await make_fsm_context()
+        await _wizard_route_after_kind(cb, fsm, FulfillmentKind.VIP_GRANT.value)
+
+        assert await fsm.get_state() == ProductWizardStates.selecting_tariff
+        mock_store.get_tariffs_for_product_wizard.assert_called_once()
+        cb.message.edit_text.assert_called_once()
+
+
+class TestEditProductTariff:
+    """Edición: tarifa VIP en producto VIP_GRANT."""
+
+    def test_vip_menu_shows_tariff_button(self):
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import build_product_edit_menu_keyboard
+
+        mock_product = MagicMock()
+        mock_product.id = 10
+        mock_product.fulfillment_kind = FulfillmentKind.VIP_GRANT
+
+        kb = build_product_edit_menu_keyboard(mock_product)
+        labels = [row[0].text for row in kb.inline_keyboard]
+        assert "👑 Tarifa VIP" in labels
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_edit_tariff_updates_product(
+        self, mock_get_service, make_callback, make_fsm_context
+    ):
+        mock_store = MagicMock()
+        mock_store.update_product.return_value = True
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_store
+        mock_get_service.return_value = mock_context
+
+        from keyboards.callback_data import SelectTariffEditProductCallback
+        from handlers.store_admin_handlers import (
+            ProductEditStates,
+            process_edit_product_tariff,
+        )
+
+        cb_data = SelectTariffEditProductCallback(product_id=10, tariff_id=3)
+        cb = make_callback(data=cb_data.pack())
+        fsm = await make_fsm_context()
+        await fsm.set_state(ProductEditStates.selecting_tariff)
+
+        await process_edit_product_tariff(cb, fsm, cb_data)
+
+        mock_store.update_product.assert_called_once_with(10, tariff_id=3)
+        assert await fsm.get_state() is None
+
+
+class TestEditProductStoryNode:
+    """Edición: nodo narrativo en producto STORY_UNLOCK."""
+
+    def test_story_menu_shows_node_button(self):
+        from models.models import FulfillmentKind
+        from handlers.store_admin_handlers import build_product_edit_menu_keyboard
+
+        mock_product = MagicMock()
+        mock_product.id = 11
+        mock_product.fulfillment_kind = FulfillmentKind.STORY_UNLOCK
+
+        kb = build_product_edit_menu_keyboard(mock_product)
+        labels = [row[0].text for row in kb.inline_keyboard]
+        assert "📖 Nodo narrativo" in labels
 
 
 class TestEditProductMenu:

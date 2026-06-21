@@ -23,6 +23,8 @@ from models.models import (
     OrderStatus,
     Package,
     StoreProduct,
+    StoryNode,
+    Tariff,
     TransactionSource,
     User,
 )
@@ -398,6 +400,58 @@ class StoreService:
             return available
 
         available_ids = {pkg.id for pkg in available}
+        if current.id in available_ids:
+            return available
+        return [current, *available]
+
+    def get_tariffs_for_product_wizard(self, active_only: bool = True) -> list[Tariff]:
+        """Thin delegate → VIPService(db).get_all_tariffs(active_only).
+        Fase 2 store-admin-wizard-ux: wizard inline tariff selection. Read-only. 0 purchase impact.
+        """
+        from services.vip_service import VIPService
+
+        return VIPService(self._get_db()).get_all_tariffs(active_only=active_only)
+
+    def get_story_nodes_for_product_wizard(self, active_only: bool = True) -> list[StoryNode]:
+        """Thin delegate → StoryService(db).get_all_nodes(active_only).
+        Fase 2 store-admin-wizard-ux: wizard inline story selection. Read-only. 0 purchase impact.
+        """
+        from services.story_service import StoryService
+
+        return StoryService(self._get_db()).get_all_nodes(active_only=active_only)
+
+    def get_tariffs_for_product_edit(self, product_id: int) -> list[Tariff]:
+        """Tarifas elegibles al editar: activas + tarifa actual del producto si está inactiva.
+        Espejo get_packages_for_product_edit (item8 gold).
+        """
+        available = self.get_tariffs_for_product_wizard(active_only=True)
+        product = self.get_product(product_id)
+        if not product or not product.tariff_id:
+            return available
+        from services.vip_service import VIPService
+
+        current = VIPService(self._get_db()).get_tariff(product.tariff_id)
+        if not current:
+            return available
+        available_ids = {t.id for t in available}
+        if current.id in available_ids:
+            return available
+        return [current, *available]
+
+    def get_story_nodes_for_product_edit(self, product_id: int) -> list[StoryNode]:
+        """Nodos elegibles al editar: activos + nodo actual del producto si está inactivo.
+        Espejo get_packages_for_product_edit (item8 gold).
+        """
+        available = self.get_story_nodes_for_product_wizard(active_only=True)
+        product = self.get_product(product_id)
+        if not product or not product.story_node_id:
+            return available
+        from services.story_service import StoryService
+
+        current = StoryService(self._get_db()).get_node(product.story_node_id)
+        if not current:
+            return available
+        available_ids = {n.id for n in available}
         if current.id in available_ids:
             return available
         return [current, *available]
