@@ -139,11 +139,14 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
+    deliverymode_enum = sa.Enum("auto", "manual", name="deliverymode")
+    deliverymode_enum.create(op.get_bind(), checkfirst=True)
+
     with op.batch_alter_table("store_products") as batch_op:
         batch_op.add_column(
             sa.Column(
                 "delivery_mode",
-                sa.Enum("auto", "manual", name="deliverymode"),
+                deliverymode_enum,
                 nullable=False,
                 server_default="auto",
             )
@@ -215,3 +218,5 @@ def downgrade() -> None:
     op.drop_table("order_fulfillments")
     op.drop_index("ix_store_tiers_id", table_name="store_tiers")
     op.drop_table("store_tiers")
+
+    sa.Enum(name="deliverymode").drop(op.get_bind(), checkfirst=True)
