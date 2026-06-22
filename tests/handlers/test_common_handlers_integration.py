@@ -79,17 +79,19 @@ class TestCmdStartIntegration:
         mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
             return_value=MagicMock(id=1)
         )
-        mock_vip_svc.INVITE_LINK_EXPIRATION_DAYS = 7
-        msg = make_message(text="/start ABC123", user=user)
-        msg.bot.create_chat_invite_link.return_value = MagicMock(
-            invite_link="https://t.me/+custom"
+        mock_vip_svc.return_value.create_vip_invite_link = AsyncMock(
+            return_value="https://t.me/+custom"
         )
+        msg = make_message(text="/start ABC123", user=user)
 
         from handlers.common_handlers import cmd_start
         await cmd_start(msg)
 
         mock_vip_svc.return_value.redeem_token_with_missions.assert_awaited_once_with(
             "ABC123", user.id, bot=msg.bot
+        )
+        mock_vip_svc.return_value.create_vip_invite_link.assert_awaited_once_with(
+            msg.bot, user.id, allow_fallback=True
         )
 
     @patch("handlers.common_handlers.VIPService")

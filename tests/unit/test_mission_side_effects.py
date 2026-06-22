@@ -335,7 +335,7 @@ class TestMissionSideEffects:
 
     @pytest.mark.asyncio
     async def test_vip_mission_auto_deliver_sends_celebration(
-        self, db_session, sample_user, sample_tariff, mock_bot
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
         """Primera entrega VIP por misión VIP_ACTIVE: historial + mensaje Lucien."""
         from services.reward_service import RewardService
