@@ -154,6 +154,53 @@ class TestCheckAndRegisterReaction:
         # Mission delivery attempted only for the first (successful) call
         assert mock_mission.await_count == 1
 
+    async def test_second_reaction_any_button_blocked(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """
+        Second reaction on the *same* broadcast (same or different button/emoji)
+        must be rejected with reason=duplicate.
+        The contract is one reaction total per user per publication.
+        Pre-check (new) + UC (restored via mig) enforce it.
+        """
+        # fresh balance
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
+        )
+        db_session.add(balance)
+        db_session.commit()
+
+        service = BroadcastService(db_session)
+
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+
+            # First (any of the allowed buttons)
+            first = await service.check_and_register_reaction(
+                broadcast_id=sample_broadcast_message.id,
+                user_id=sample_user.telegram_id,
+                emoji_id=sample_reaction_emoji.id,
+                bot=AsyncMock(),
+            )
+
+            # Second attempt — even if user picks "another button", still duplicate
+            second = await service.check_and_register_reaction(
+                broadcast_id=sample_broadcast_message.id,
+                user_id=sample_user.telegram_id,
+                emoji_id=sample_reaction_emoji.id,
+                bot=AsyncMock(),
+            )
+
+        assert first["success"] is True
+        assert second["success"] is False
+        assert second["reason"] == "duplicate"
+        assert mock_mission.await_count == 1
+
     async def test_missing_emoji_returns_none_early(
         self, db_session, sample_user, sample_broadcast_message
     ):
