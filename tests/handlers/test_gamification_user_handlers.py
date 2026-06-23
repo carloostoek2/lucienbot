@@ -385,7 +385,7 @@ class TestHandleReaction:
         )
         mock_instance.update_reaction_message = AsyncMock(return_value=True)
         mock_instance.get_broadcast.return_value = MagicMock(
-            has_reactions=True, channel_id=-100, message_id=42
+            has_reactions=True, channel_id=-100, message_id=42, extra_button_id=None
         )
         mock_instance.get_selected_emoji_ids.return_value = [1, 2]
         mock_instance.get_reactions_by_broadcast.return_value = []
@@ -406,6 +406,45 @@ class TestHandleReaction:
 
         unpacked = ReactionCallback.unpack(button_data)
         assert unpacked.broadcast_id == 1
+
+    @patch("handlers.gamification_user_handlers.get_service")
+    async def test_refresh_preserves_extra_button_url_row(self, mock_get_service):
+        """Si broadcast tiene extra_button_id, el markup de refresh incluye fila URL (no solo reacciones)."""
+        mock_instance = MagicMock()
+        # broadcast con extra
+        mock_broadcast = MagicMock(
+            has_reactions=True,
+            channel_id=-100,
+            message_id=99,
+            extra_button_id=7,
+        )
+        mock_instance.get_broadcast.return_value = mock_broadcast
+        mock_instance.get_selected_emoji_ids.return_value = [10]
+        mock_instance.get_reactions_by_broadcast.return_value = []
+        mock_emoji = MagicMock(emoji="🔥", id=10)
+        mock_instance.get_reaction_emoji.return_value = mock_emoji
+        # simular botón extra
+        mock_button = MagicMock(label="🔗 Link", url="https://t.me/foo")
+        mock_instance.get_broadcast_button.return_value = mock_button
+        mock_instance.update_reaction_message = AsyncMock(return_value=True)
+        mock_get_service.return_value.__enter__.return_value = mock_instance
+
+        from handlers.gamification_user_handlers import refresh_reaction_markup_counts
+        from aiogram.types import InlineKeyboardMarkup
+
+        await refresh_reaction_markup_counts(mock_instance, MagicMock(), mock_broadcast, 99)
+
+        mock_instance.update_reaction_message.assert_called_once()
+        _, call_kwargs = mock_instance.update_reaction_message.call_args
+        new_markup: InlineKeyboardMarkup = call_kwargs["new_markup"]
+        # Debe tener 2 filas: reacciones + url
+        assert len(new_markup.inline_keyboard) == 2
+        # segunda fila es url button
+        url_btn = new_markup.inline_keyboard[1][0]
+        assert url_btn.url == "https://t.me/foo"
+        assert url_btn.text == "🔗 Link"
+        # primera fila tiene callback (reaccion)
+        assert "callback_data" in str(new_markup.inline_keyboard[0][0].callback_data) or hasattr(new_markup.inline_keyboard[0][0], "callback_data")
 
     @patch("handlers.gamification_user_handlers.get_service")
     async def test_closes_service_via_context_manager(self, mock_get_service, make_callback):

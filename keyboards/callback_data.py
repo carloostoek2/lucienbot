@@ -751,6 +751,49 @@ class BroadcastProtectCallback(CallbackData, prefix="bc_protect"):
     action: str  # "yes" | "no"
 
 
+class ToggleExtraButtonCallback(CallbackData, prefix="bc_extra"):
+    """Toggle selección de botón extra (single choice: 0 = ninguno)"""
+
+    button_id: int  # 0 means "ninguno"
+
+
+# ==================== BROADCAST BUTTONS ADMIN (gestión del catálogo "definir primero") ====================
+
+
+class EditButtonCallback(CallbackData, prefix="edit_btn"):
+    """Editar un botón de enlace existente (admin wizard)"""
+
+    button_id: int
+
+
+class ToggleButtonCallback(CallbackData, prefix="toggle_btn"):
+    """Activar o desactivar un botón de enlace (admin)"""
+
+    button_id: int
+
+
+class DeleteButtonCallback(CallbackData, prefix="del_btn"):
+    """Eliminar botón de enlace (requiere confirmación)"""
+
+    button_id: int
+    confirmed: bool = False
+
+
+class ChangeButtonLabelCallback(CallbackData, prefix="ch_btn_label"):
+    """Iniciar cambio de label de un botón (admin wizard)"""
+    button_id: int
+
+
+class ChangeButtonUrlCallback(CallbackData, prefix="ch_btn_url"):
+    """Iniciar cambio de url de un botón (admin wizard)"""
+    button_id: int
+
+
+class ChangeButtonDescCallback(CallbackData, prefix="ch_btn_desc"):
+    """Iniciar cambio de descripción de un botón (admin wizard)"""
+    button_id: int
+
+
 # ==================== ANONYMOUS MESSAGE ====================
 
 

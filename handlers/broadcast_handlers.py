@@ -4,7 +4,10 @@ Handlers de Broadcasting - Lucien Bot
 Flujo conversacional completo para enviar mensajes con reacciones.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -15,6 +18,7 @@ from keyboards.callback_data import (
     BroadcastChannelCallback,
     BroadcastProtectCallback,
     ReactionCallback,
+    ToggleExtraButtonCallback,
     ToggleReactionCallback,
 )
 from keyboards.inline_keyboards import (
@@ -26,6 +30,9 @@ from services import get_service
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
 from utils.admin import is_admin
+
+if TYPE_CHECKING:
+    from models.models import BroadcastMessage
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -54,6 +61,128 @@ def build_send_reaction_markup(
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
+def build_broadcast_send_markup(
+    broadcast_id: int,
+    selected_emoji_ids: list[int],
+    extra_button,  # BroadcastButton | None
+    get_emoji,
+) -> InlineKeyboardMarkup | None:
+    """Construye markup combinado: reacciones (si hay) + botón URL extra (si hay). Función pura (sin estado ni side-effects)."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from keyboards.callback_data import ReactionCallback
+
+    rows = []
+    # reactions row
+    if selected_emoji_ids:
+        reaction_row = []
+        for eid in selected_emoji_ids:
+            em = get_emoji(eid)
+            if em:
+                reaction_row.append(
+                    InlineKeyboardButton(
+                        text=em.emoji,
+                        callback_data=ReactionCallback(
+                            broadcast_id=broadcast_id, emoji_id=em.id
+                        ).pack(),
+                    )
+                )
+        if reaction_row:
+            rows.append(reaction_row)
+    # extra button row
+    if extra_button:
+        rows.append([InlineKeyboardButton(text=extra_button.label, url=extra_button.url)])
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def persist_broadcast_from_state(data: dict, admin_id: int, broadcast_service) -> BroadcastMessage:  # noqa: F821 - forward ref under TYPE_CHECKING + postponed annotations
+    """Persiste BroadcastMessage desde estado FSM + extra_button_id. Delega a servicio."""
+    selected_emojis = data.get("selected_emojis", [])
+    extra_button_id = data.get("extra_button_id")
+    selected_emoji_ids_str = ",".join(str(eid) for eid in selected_emojis)
+    return broadcast_service.create_broadcast_message(
+        message_id=0,
+        channel_id=data.get("channel_id"),
+        admin_id=admin_id,
+        text=data.get("text", ""),
+        has_attachment=data.get("has_attachment", False),
+        attachment_type=data.get("attachment_type"),
+        attachment_file_id=data.get("attachment_file_id"),
+        has_reactions=len(selected_emojis) > 0,
+        is_protected=data.get("is_protected", False),
+        selected_emoji_ids=selected_emoji_ids_str,
+        extra_button_id=extra_button_id,
+    )
+
+
+def build_broadcast_preview_text(data: dict, extra_button_info: str = "❌") -> str:
+    """Construye el texto completo de preview/resumen del broadcast (incluye botón extra). Función pura (sin estado ni side-effects)."""
+    preview_text = data.get("text", "")
+    has_attachment = data.get("has_attachment", False)
+    has_reactions = len(data.get("selected_emojis", [])) > 0
+    is_protected = data.get("is_protected", False)
+
+    return f"""🎩 <b>Lucien:</b>
+
+<i>Así se verá su mensaje en el canal...</i>
+
+📋 <b>Resumen:</b>
+   • Canal: {data.get("channel_name", "Desconocido")}
+   • Texto: {"✅" if preview_text else "❌"}
+   • Adjunto: {"✅ " + data.get("attachment_type", "") if has_attachment else "❌"}
+   • Reacciones: {"✅" if has_reactions else "❌"}
+   • Botón extra: {extra_button_info}
+   • Protección: {"🔒 Sí" if is_protected else "❌ No"}
+
+---
+
+<b>Preview del mensaje:</b>
+
+{preview_text[:500]}{"..." if len(preview_text) > 500 else ""}
+
+---
+
+<i>¿Desea enviar este mensaje?</i>"""
+
+
+def build_extra_button_selection_keyboard(
+    buttons: list, selected_id: int | None
+) -> InlineKeyboardMarkup:
+    """Construye teclado single-choice para botones extra (+ 'Ninguno' + Continuar). Función pura (sin estado ni side-effects)."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from keyboards.callback_data import ToggleExtraButtonCallback
+
+    rows = []
+    for btn in buttons:
+        is_sel = selected_id == btn.id
+        check = "✅ " if is_sel else "⬜ "
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{check}{btn.label}",
+                    callback_data=ToggleExtraButtonCallback(button_id=btn.id).pack(),
+                )
+            ]
+        )
+
+    ninguno_sel = selected_id is None or selected_id == 0
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"{'✅ ' if ninguno_sel else '⬜ '}⏭️ Ninguno",
+                callback_data=ToggleExtraButtonCallback(button_id=0).pack(),
+            )
+        ]
+    )
+    rows.append([InlineKeyboardButton(text="✅ Continuar", callback_data="extra_button_continue")])
+    rows.append([InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_extra")])
+    rows.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 # Estados para FSM
 class BroadcastStates(StatesGroup):
     selecting_channel = State()
@@ -62,6 +191,8 @@ class BroadcastStates(StatesGroup):
     waiting_attachment = State()
     waiting_reaction_decision = State()
     selecting_reactions = State()
+    waiting_extra_button_decision = State()
+    selecting_extra_button = State()
     waiting_protection_decision = State()
     confirming = State()
 
@@ -140,7 +271,7 @@ async def select_channel_for_broadcast(
 
 <i>Preparando mensaje para <b>{channel.channel_name}</b>...</i>
 
-📋 <b>Paso 1 de 6:</b> Texto del mensaje
+📋 <b>Paso 1 de 7:</b> Texto del mensaje
 
 Envíe el texto que desea publicar. Puede usar formato HTML:
 • &lt;b&gt;negrita&lt;/b&gt;
@@ -179,7 +310,7 @@ async def process_broadcast_text(message: Message, state: FSMContext):
 
 <i>Texto recibido. ¿Desea incluir algún adjunto?</i>
 
-📋 <b>Paso 2 de 6:</b> Adjunto
+📋 <b>Paso 2 de 7:</b> Adjunto
 
 Puede agregar una foto, video o archivo al mensaje.""",
         reply_markup=keyboard,
@@ -198,7 +329,7 @@ async def back_to_text(callback: CallbackQuery, state: FSMContext):
 
 <i>Preparando mensaje para <b>{data.get("channel_name", "Desconocido")}</b>...</i>
 
-📋 <b>Paso 1 de 6:</b> Texto del mensaje
+📋 <b>Paso 1 de 7:</b> Texto del mensaje
 
 Envíe el texto que desea publicar. Puede usar formato HTML:
 • &lt;b&gt;negrita&lt;/b&gt;
@@ -225,7 +356,7 @@ async def want_attachment(callback: CallbackQuery, state: FSMContext):
 
 <i>Envíe la foto o archivo que desea adjuntar...</i>
 
-📋 <b>Paso 2 de 6:</b> Adjunto
+📋 <b>Paso 2 de 7:</b> Adjunto
 
 Puede enviar:
 • Foto
@@ -289,8 +420,8 @@ async def ask_for_reactions(target, state: FSMContext):
     """Pregunta si quiere agregar reacciones"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
-            [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
+            [InlineKeyboardButton(text="💋 Mantener reacciones (predeterminado)", callback_data="reaction_yes")],
+            [InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
             [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
         ]
@@ -298,11 +429,11 @@ async def ask_for_reactions(target, state: FSMContext):
 
     text = """🎩 <b>Lucien:</b>
 
-<i>¿Desea incluir botones de reacción?</i>
+<i>Las reacciones se incluyen por defecto (a menos que las deshabilite).</i>
 
-📋 <b>Paso 3 de 6:</b> Reacciones
+📋 <b>Paso 3 de 7:</b> Reacciones
 
-Los usuarios podrán reaccionar y recibir besitos."""
+Los usuarios podrán reaccionar y recibir besitos. (Predeterminado: todos los emojis activos preseleccionados)."""
 
     try:
         if isinstance(target, CallbackQuery):
@@ -338,7 +469,7 @@ async def back_to_attachment_decision(callback: CallbackQuery, state: FSMContext
 
 <i>¿Desea incluir algún adjunto?</i>
 
-📋 <b>Paso 2 de 6:</b> Adjunto
+📋 <b>Paso 2 de 7:</b> Adjunto
 
 Puede agregar una foto, video o archivo al mensaje.""",
             reply_markup=keyboard,
@@ -355,7 +486,7 @@ Puede agregar una foto, video o archivo al mensaje.""",
 
 @router.callback_query(BroadcastStates.waiting_reaction_decision, F.data == "reaction_yes")
 async def want_reactions(callback: CallbackQuery, state: FSMContext):
-    """Usuario quiere reacciones - mostrar emojis disponibles"""
+    """Usuario quiere reacciones - mostrar emojis disponibles (default predeterminado: todos los activos)"""
     with get_service(BroadcastService) as broadcast_service:
         emojis = broadcast_service.get_all_emojis(active_only=True)
 
@@ -379,8 +510,9 @@ async def want_reactions(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    # Guardar emojis seleccionados temporalmente
-    await state.update_data(selected_emojis=[])
+    # Default predeterminado: preseleccionar TODOS los emojis activos (a menos que admin deshabilite explícitamente)
+    preselected = [emoji.id for emoji in emojis]
+    await state.update_data(selected_emojis=preselected)
 
     await show_reaction_selection(callback, state)
     await callback.answer()
@@ -407,6 +539,7 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
         )
 
     buttons.append([InlineKeyboardButton(text="✅ Continuar", callback_data="reactions_selected")])
+    buttons.append([InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")])
     buttons.append(
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_reactions")]
     )
@@ -420,7 +553,7 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
 
 <i>Seleccione los emojis para este mensaje...</i>
 
-📋 <b>Paso 3 de 6:</b> Reacciones
+📋 <b>Paso 3 de 7:</b> Reacciones
 
 Toque para seleccionar/deseleccionar:""",
             reply_markup=keyboard,
@@ -439,8 +572,8 @@ async def back_from_reaction_selection(callback: CallbackQuery, state: FSMContex
     """Regresar desde selección de reacciones"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💋 Sí, agregar reacciones", callback_data="reaction_yes")],
-            [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
+            [InlineKeyboardButton(text="💋 Mantener reacciones (predeterminado)", callback_data="reaction_yes")],
+            [InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
             [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
         ]
@@ -452,7 +585,7 @@ async def back_from_reaction_selection(callback: CallbackQuery, state: FSMContex
 
 <i>¿Desea incluir botones de reacción?</i>
 
-📋 <b>Paso 3 de 6:</b> Reacciones
+📋 <b>Paso 3 de 7:</b> Reacciones
 
 Los usuarios podrán reaccionar y recibir besitos.""",
             reply_markup=keyboard,
@@ -496,15 +629,178 @@ async def reactions_selected(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Seleccione al menos un emoji", show_alert=True)
         return
 
-    await ask_for_protection(callback, state)
+    await ask_for_extra_button(callback, state)
     await callback.answer()
 
 
 @router.callback_query(BroadcastStates.waiting_reaction_decision, F.data == "reaction_no")
 async def skip_reactions(callback: CallbackQuery, state: FSMContext):
-    """Usuario no quiere reacciones"""
+    """Admin deshabilita reacciones explícitamente (opt-out del default predeterminado)"""
     await state.update_data(selected_emojis=[], has_reactions=False)
+    await ask_for_extra_button(callback, state)
+    await callback.answer()
+
+
+async def ask_for_extra_button(target, state: FSMContext):
+    """Pregunta si quiere agregar botón extra de enlace (single choice, default ninguno)."""
+    with get_service(BroadcastService) as broadcast_service:
+        buttons = broadcast_service.get_all_buttons(active_only=True)
+
+    if not buttons:
+        # Catálogo vacío: auto-skip (document gap: admin UI para crear botones está pendiente)
+        await state.update_data(extra_button_id=None)
+        await ask_for_protection(target, state)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔗 Agregar botón de enlace", callback_data="extra_button_yes"
+                )
+            ],
+            [InlineKeyboardButton(text="⏭️ Sin botón extra", callback_data="extra_button_no")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_extra")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+        ]
+    )
+
+    text = """🎩 <b>Lucien:</b>
+
+<i>¿Desea adjuntar un botón de enlace extra?</i>
+
+📋 <b>Paso 4 de 7:</b> Botón extra
+
+El botón aparecerá debajo de las reacciones (si las hay)."""
+
+    try:
+        if isinstance(target, CallbackQuery):
+            await target.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        else:
+            await target.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    except Exception as e:
+        if "message is not modified" in str(e).lower():
+            pass
+        else:
+            raise
+
+    await state.set_state(BroadcastStates.waiting_extra_button_decision)
+
+
+@router.callback_query(BroadcastStates.waiting_extra_button_decision, F.data == "extra_button_yes")
+async def want_extra_button(callback: CallbackQuery, state: FSMContext):
+    """Usuario quiere elegir botón extra - mostrar selección single choice."""
+    await show_extra_button_selection(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(BroadcastStates.waiting_extra_button_decision, F.data == "extra_button_no")
+async def skip_extra_button(callback: CallbackQuery, state: FSMContext):
+    """Usuario omite botón extra."""
+    await state.update_data(extra_button_id=None)
     await ask_for_protection(callback, state)
+    await callback.answer()
+
+
+async def show_extra_button_selection(callback: CallbackQuery, state: FSMContext):
+    """Muestra lista de botones activos para selección única (o 'ninguno')."""
+    with get_service(BroadcastService) as broadcast_service:
+        buttons = broadcast_service.get_all_buttons(active_only=True)
+    data = await state.get_data()
+    selected_id = data.get("extra_button_id")  # None o int
+
+    keyboard = build_extra_button_selection_keyboard(buttons, selected_id)
+
+    try:
+        await callback.message.edit_text(
+            """🎩 <b>Lucien:</b>
+
+<i>Seleccione un botón de enlace (solo uno)...</i>
+
+📋 <b>Paso 4 de 7:</b> Botón extra
+
+Toque para seleccionar; "Ninguno" para omitir.""",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        if "message is not modified" in str(e).lower():
+            pass
+        else:
+            raise
+    await state.set_state(BroadcastStates.selecting_extra_button)
+
+
+@router.callback_query(BroadcastStates.selecting_extra_button, ToggleExtraButtonCallback.filter())
+async def toggle_extra_button_selection(
+    callback: CallbackQuery, state: FSMContext, callback_data: ToggleExtraButtonCallback
+):
+    """Selección single-choice: reemplaza cualquier elección previa."""
+    button_id = callback_data.button_id
+    if button_id == 0:
+        await state.update_data(extra_button_id=None)
+    else:
+        await state.update_data(extra_button_id=button_id)
+    await show_extra_button_selection(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(BroadcastStates.selecting_extra_button, F.data == "extra_button_continue")
+async def extra_button_selected(callback: CallbackQuery, state: FSMContext):
+    """Continúa después de elegir (o ninguno)."""
+    await ask_for_protection(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(
+    BroadcastStates.waiting_extra_button_decision, F.data == "broadcast_back_extra"
+)
+async def back_from_extra_decision(callback: CallbackQuery, state: FSMContext):
+    """Volver desde decisión de botón extra a reacciones."""
+    data = await state.get_data()
+    has_reactions = len(data.get("selected_emojis", [])) > 0
+
+    if has_reactions:
+        await state.update_data(selected_emojis=[])  # mirror pattern
+        await show_reaction_selection(callback, state)
+    else:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💋 Sí, agregar reacciones", callback_data="reaction_yes"
+                    )
+                ],
+                [InlineKeyboardButton(text="⏭️ No, sin reacciones", callback_data="reaction_no")],
+                [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
+                [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
+            ]
+        )
+        try:
+            await callback.message.edit_text(
+                """🎩 <b>Lucien:</b>
+
+<i>¿Desea incluir botones de reacción?</i>
+
+📋 <b>Paso 3 de 7:</b> Reacciones
+
+Los usuarios podrán reaccionar y recibir besitos.""",
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            if "message is not modified" in str(e).lower():
+                pass
+            else:
+                raise
+        await state.set_state(BroadcastStates.waiting_reaction_decision)
+    await callback.answer()
+
+
+@router.callback_query(BroadcastStates.selecting_extra_button, F.data == "broadcast_back_extra")
+async def back_from_extra_selection(callback: CallbackQuery, state: FSMContext):
+    """Volver desde selección de botón a la decisión sí/no."""
+    await ask_for_extra_button(callback, state)
     await callback.answer()
 
 
@@ -533,7 +829,7 @@ async def ask_for_protection(target, state: FSMContext):
 
 <i>¿Desea proteger el mensaje?</i>
 
-📋 <b>Paso 4 de 6:</b> Protección
+📋 <b>Paso 5 de 7:</b> Protección
 
 🔒 <b>Proteger:</b> Impide copiar, reenviar y descargar el contenido.
 
@@ -571,11 +867,17 @@ async def set_protection(
     BroadcastStates.waiting_protection_decision, F.data == "broadcast_back_protection"
 )
 async def back_from_protection(callback: CallbackQuery, state: FSMContext):
-    """Regresar desde protección a reacciones"""
+    """Regresar desde protección: si hay botones extra activos → selección extra; si no, reacciones."""
     data = await state.get_data()
     has_reactions = len(data.get("selected_emojis", [])) > 0
 
-    if has_reactions:
+    with get_service(BroadcastService) as broadcast_service:
+        has_extra_buttons = len(broadcast_service.get_all_buttons(active_only=True)) > 0
+
+    if has_extra_buttons:
+        # Volver a selección de botón extra (muestra elección actual o "ninguno")
+        await show_extra_button_selection(callback, state)
+    elif has_reactions:
         # Si tiene reacciones, volver a selección
         await state.update_data(selected_emojis=[])
         await show_reaction_selection(callback, state)
@@ -600,7 +902,7 @@ async def back_from_protection(callback: CallbackQuery, state: FSMContext):
 
 <i>¿Desea incluir botones de reacción?</i>
 
-📋 <b>Paso 3 de 6:</b> Reacciones
+📋 <b>Paso 3 de 7:</b> Reacciones
 
 Los usuarios podrán reaccionar y recibir besitos.""",
                 reply_markup=keyboard,
@@ -619,32 +921,16 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
     """Muestra preview del mensaje antes de enviar"""
     data = await state.get_data()
 
-    # Construir preview
-    preview_text = data.get("text", "")
-    has_attachment = data.get("has_attachment", False)
-    has_reactions = len(data.get("selected_emojis", [])) > 0
-    is_protected = data.get("is_protected", False)
+    # Resolver info de botón extra (side-effect mínimo, solo lectura)
+    extra_button_id = data.get("extra_button_id")
+    extra_info = "❌"
+    if extra_button_id:
+        with get_service(BroadcastService) as broadcast_service:
+            btn = broadcast_service.get_broadcast_button(extra_button_id)
+            if btn:
+                extra_info = f"{btn.label} ({btn.url})"
 
-    info_text = f"""🎩 <b>Lucien:</b>
-
-<i>Así se verá su mensaje en el canal...</i>
-
-📋 <b>Resumen:</b>
-   • Canal: {data.get("channel_name", "Desconocido")}
-   • Texto: {"✅" if preview_text else "❌"}
-   • Adjunto: {"✅ " + data.get("attachment_type", "") if has_attachment else "❌"}
-   • Reacciones: {"✅" if has_reactions else "❌"}
-   • Protección: {"🔒 Sí" if is_protected else "❌ No"}
-
----
-
-<b>Preview del mensaje:</b>
-
-{preview_text[:500]}{"..." if len(preview_text) > 500 else ""}
-
----
-
-<i>¿Desea enviar este mensaje?</i>"""
+    info_text = build_broadcast_preview_text(data, extra_info)
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -692,7 +978,7 @@ async def back_from_preview(callback: CallbackQuery, state: FSMContext):
 
 <i>¿Desea proteger el mensaje?</i>
 
-📋 <b>Paso 4 de 6:</b> Protección
+📋 <b>Paso 5 de 7:</b> Protección
 
 🔒 <b>Proteger:</b> Impide copiar, reenviar y descargar el contenido.
 
@@ -723,27 +1009,19 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
     is_protected = data.get("is_protected", False)
 
     with get_service(BroadcastService) as broadcast_service:
-        selected_emoji_ids_str = ",".join(str(eid) for eid in selected_emojis)
-        broadcast = broadcast_service.create_broadcast_message(
-            message_id=0,
-            channel_id=channel_id,
-            admin_id=callback.from_user.id,
-            text=text,
-            has_attachment=has_attachment,
-            attachment_type=attachment_type,
-            attachment_file_id=attachment_file_id,
-            has_reactions=len(selected_emojis) > 0,
-            is_protected=is_protected,
-            selected_emoji_ids=selected_emoji_ids_str,
-        )
+        extra_button_id = data.get("extra_button_id")
+        broadcast = persist_broadcast_from_state(data, callback.from_user.id, broadcast_service)
 
-        reaction_markup = None
-        if selected_emojis:
-            reaction_markup = build_send_reaction_markup(
-                broadcast.id,
-                selected_emojis,
-                broadcast_service.get_reaction_emoji,
-            )
+        extra_button = None
+        if extra_button_id:
+            extra_button = broadcast_service.get_broadcast_button(extra_button_id)
+
+        reaction_markup = build_broadcast_send_markup(
+            broadcast.id,
+            selected_emojis,
+            extra_button,
+            broadcast_service.get_reaction_emoji,
+        )
 
         # Sin botones de reacción en el envío inicial: se adjuntan tras fijar message_id
         send_markup = None
@@ -804,9 +1082,7 @@ async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext,
             )
             return
 
-        if not broadcast_service.update_broadcast_message_id(
-            broadcast.id, sent_message.message_id
-        ):
+        if not broadcast_service.update_broadcast_message_id(broadcast.id, sent_message.message_id):
             logger.error(
                 f"broadcast_handlers | confirm_and_send_broadcast | message_id_update_failed | broadcast_id={broadcast.id}"
             )

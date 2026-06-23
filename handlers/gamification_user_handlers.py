@@ -217,7 +217,7 @@ async def refresh_reaction_markup_counts(
     broadcast,
     broadcast_id: int,
 ) -> None:
-    """Reconstruye y actualiza el teclado de reacciones con conteos."""
+    """Reconstruye y actualiza el teclado de reacciones con conteos (preserva botón extra URL si existe)."""
     selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_id)
     reactions = broadcast_service.get_reactions_by_broadcast(broadcast_id)
     emoji_counts = calculate_emoji_counts_from_reactions(reactions)
@@ -226,8 +226,40 @@ async def refresh_reaction_markup_counts(
         emoji_obj = broadcast_service.get_reaction_emoji(selected_emoji_id)
         if emoji_obj:
             emojis.append((selected_emoji_id, emoji_obj.emoji))
+
+    # Preservar extra button: usar reactions_keyboard_with_counts (estable) para fila de reacciones + fila URL manual si extra.
+    # NO modificar reactions_keyboard_with_counts.
+    extra_button = None
+    extra_id = getattr(broadcast, "extra_button_id", None)
+    if isinstance(extra_id, int):
+        extra_button = broadcast_service.get_broadcast_button(extra_id)
+
     if emojis:
-        new_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
+        # Fila de reacciones con conteos (estable)
+        reaction_markup = reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)
+        rows = (
+            list(reaction_markup.inline_keyboard)
+            if reaction_markup and reaction_markup.inline_keyboard
+            else []
+        )
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+        if extra_button:
+            rows.append([InlineKeyboardButton(text=extra_button.label, url=extra_button.url)])
+        new_markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+    else:
+        if extra_button:
+            from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+            new_markup = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=extra_button.label, url=extra_button.url)]
+                ]
+            )
+        else:
+            new_markup = None
+
+    if new_markup is not None:
         await broadcast_service.update_reaction_message(
             bot=bot,
             channel_id=broadcast.channel_id,
@@ -236,7 +268,7 @@ async def refresh_reaction_markup_counts(
         )
 
 
-@router.callback_query(ReactionCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(ReactionCallback.filter())
 async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallback):
     """Maneja las reacciones a mensajes de broadcast y actualiza conteos"""
     if not callback.message:
@@ -248,6 +280,10 @@ async def handle_reaction(callback: CallbackQuery, callback_data: ReactionCallba
     user = callback.from_user
     broadcast_id = callback_data.broadcast_id
     emoji_id = callback_data.emoji_id
+
+    if is_admin(user.id):
+        await callback.answer("Los custodios observan con elegancia...")
+        return
 
     with get_service(BroadcastService) as broadcast_service:
         result = await broadcast_service.check_and_register_reaction(
