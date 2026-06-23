@@ -205,6 +205,13 @@ class SelectTariffEditProductCallback(CallbackData, prefix="sel_tariff_edit"):
     tariff_id: int
 
 
+class SelectTierEditProductCallback(CallbackData, prefix="sel_tier_edit"):
+    """Seleccionar tier/nivel al editar producto."""
+
+    product_id: int
+    tier_id: int
+
+
 class SelectStoryNodeEditProductCallback(CallbackData, prefix="sel_story_edit"):
     """Seleccionar nodo al editar producto STORY_UNLOCK."""
 

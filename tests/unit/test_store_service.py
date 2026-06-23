@@ -15,9 +15,11 @@ from models.models import (
     BesitoTransaction,
     Category,
     Order,
+    OrderItem,
     OrderStatus,
     Package,
     StoreProduct,
+    StoreTier,
     TransactionSource,
     TransactionType,
     User,
@@ -26,7 +28,11 @@ from models.models import (
 from services.besito_service import (
     BesitoService,  # minimal for 1-line/guard port post Item10 local (copy daily precedent); counted in delta per tight
 )
-from services.store_service import StoreService
+from services.store_service import (
+    REQUIRED_PREV_TIER_PURCHASES,
+    StoreService,
+    resolve_product_category_id,
+)
 
 
 @pytest.mark.unit
@@ -1532,5 +1538,161 @@ class TestStorePurchaseAtomicGold:
             db_session.commit()
             db_session.refresh(prod)
             assert prod.stock_status == "unlimited"
+        finally:
+            service.close()
+
+    def test_resolve_product_category_id_prefers_direct(self, db_session):
+        cat = Category(name="DirectCat", order_index=0, is_active=True)
+        db_session.add(cat)
+        db_session.commit()
+        db_session.refresh(cat)
+        pkg = Package(name="Pkg", is_active=True, category_id=cat.id)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        other_cat = Category(name="OtherCat", order_index=1, is_active=True)
+        db_session.add(other_cat)
+        db_session.commit()
+        db_session.refresh(other_cat)
+        prod = StoreProduct(
+            name="DirectProd",
+            package_id=pkg.id,
+            category_id=other_cat.id,
+            price=100,
+            is_active=True,
+        )
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+        assert resolve_product_category_id(prod) == other_cat.id
+
+    def test_filter_products_by_store_product_category_id(self, db_session):
+        cat = Category(name="StoreProdCat", order_index=0, is_active=True)
+        db_session.add(cat)
+        db_session.commit()
+        db_session.refresh(cat)
+        pkg = Package(name="UncatPkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        prod = StoreProduct(
+            name="CatProd",
+            package_id=pkg.id,
+            category_id=cat.id,
+            price=50,
+            is_active=True,
+        )
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+        service = StoreService(db_session)
+        try:
+            results = service.filter_products(category_id=cat.id, active_only=True)
+            assert [p.id for p in results] == [prod.id]
+        finally:
+            service.close()
+
+    def test_get_categories_for_shop_only_with_products(self, db_session):
+        empty_cat = Category(name="EmptyShelf", order_index=0, is_active=True)
+        filled_cat = Category(name="FilledShelf", order_index=1, is_active=True)
+        db_session.add_all([empty_cat, filled_cat])
+        db_session.commit()
+        db_session.refresh(empty_cat)
+        db_session.refresh(filled_cat)
+        pkg = Package(name="ShelfPkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+        prod = StoreProduct(
+            name="ShelfProd",
+            package_id=pkg.id,
+            category_id=filled_cat.id,
+            price=80,
+            is_active=True,
+        )
+        db_session.add(prod)
+        db_session.commit()
+        service = StoreService(db_session)
+        try:
+            visible = service.get_categories_for_shop(active_only=True)
+            assert [c.id for c in visible] == [filled_cat.id]
+        finally:
+            service.close()
+
+    def test_tier_purchase_gate_blocks_higher_level(self, db_session):
+        tier1 = StoreTier(slug="impulso", name="IMPULSO", price_min=50, price_max=120, order_index=1)
+        tier2 = StoreTier(slug="deseo", name="DESEO", price_min=150, price_max=350, order_index=2)
+        db_session.add_all([tier1, tier2])
+        db_session.commit()
+        db_session.refresh(tier2)
+        prod = StoreProduct(name="Lvl2Prod", tier_id=tier2.id, price=200, is_active=True)
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+        service = StoreService(db_session)
+        try:
+            err = service.check_tier_purchase_gate(999001, prod.id)
+            assert err is not None
+            assert str(REQUIRED_PREV_TIER_PURCHASES) in err
+        finally:
+            service.close()
+
+    def test_tier_purchase_gate_allows_first_level(self, db_session):
+        tier1 = StoreTier(slug="impulso", name="IMPULSO", price_min=50, price_max=120, order_index=1)
+        tier2 = StoreTier(slug="deseo", name="DESEO", price_min=150, price_max=350, order_index=2)
+        db_session.add_all([tier1, tier2])
+        db_session.commit()
+        db_session.refresh(tier1)
+        prod = StoreProduct(name="Lvl1Prod", tier_id=tier1.id, price=100, is_active=True)
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+        service = StoreService(db_session)
+        try:
+            assert service.check_tier_purchase_gate(999002, prod.id) is None
+        finally:
+            service.close()
+
+    def test_tier_purchase_gate_unlocks_after_two_prev_purchases(self, db_session):
+        user_id = 999003
+        user = User(telegram_id=user_id, role=UserRole.USER)
+        db_session.add(user)
+        tier1 = StoreTier(slug="impulso", name="IMPULSO", price_min=50, price_max=120, order_index=1)
+        tier2 = StoreTier(slug="deseo", name="DESEO", price_min=150, price_max=350, order_index=2)
+        db_session.add_all([tier1, tier2])
+        db_session.commit()
+        db_session.refresh(tier1)
+        db_session.refresh(tier2)
+        prod1 = StoreProduct(name="Base1", tier_id=tier1.id, price=10, is_active=True)
+        prod2 = StoreProduct(name="Base2", tier_id=tier1.id, price=10, is_active=True)
+        adv_prod = StoreProduct(name="Adv", tier_id=tier2.id, price=50, is_active=True)
+        db_session.add_all([prod1, prod2, adv_prod])
+        db_session.commit()
+        for product in (prod1, prod2, adv_prod):
+            db_session.refresh(product)
+        for product in (prod1, prod2):
+            order = Order(
+                user_id=user_id,
+                total_items=1,
+                total_price=product.price,
+                status=OrderStatus.COMPLETED,
+            )
+            db_session.add(order)
+            db_session.flush()
+            db_session.add(
+                OrderItem(
+                    order_id=order.id,
+                    product_id=product.id,
+                    product_name=product.name,
+                    quantity=1,
+                    unit_price=product.price,
+                    total_price=product.price,
+                )
+            )
+        db_session.commit()
+        service = StoreService(db_session)
+        try:
+            assert service.check_tier_purchase_gate(user_id, adv_prod.id) is None
+            assert service.count_user_purchases_at_tier_level(user_id, 1) == 2
         finally:
             service.close()

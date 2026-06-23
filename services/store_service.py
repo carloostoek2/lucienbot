@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import desc
+from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
 from config.settings import bot_config
@@ -17,6 +17,7 @@ from models.database import SessionLocal
 from models.models import (
     BesitoTransaction,
     CartItem,
+    Category,
     MissionType,
     Order,
     OrderItem,
@@ -33,6 +34,18 @@ from services.package_service import PackageService
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
+
+REQUIRED_PREV_TIER_PURCHASES = 2
+
+
+def resolve_product_category_id(product: StoreProduct) -> int | None:
+    """Función pura: categoría efectiva del producto (directa o vía paquete)."""
+    if product.category_id:
+        return product.category_id
+    package = getattr(product, "package", None)
+    if package and package.category_id:
+        return package.category_id
+    return None
 
 
 class _OrderAtomicError(Exception):
@@ -250,16 +263,22 @@ class StoreService:
     def get_products_by_category(
         self, category_id: int, active_only: bool = True
     ) -> list[StoreProduct]:
-        """Obtiene productos por categoria (via package)"""
-        db = self._get_db()
-        # Get packages in category
-        packages = db.query(Package).filter(Package.category_id == category_id).all()
-        package_ids = [p.id for p in packages]
+        """Obtiene productos por categoría (category_id directo o vía paquete)."""
+        return self.filter_products(category_id=category_id, active_only=active_only)
 
-        q = db.query(StoreProduct).filter(StoreProduct.package_id.in_(package_ids))
-        if active_only:
-            q = q.filter(StoreProduct.is_active)
-        return q.order_by(desc(StoreProduct.created_at)).all()
+    def _category_product_filter(self, query, category_id: int):
+        """Aplica filtro OR: StoreProduct.category_id o Package.category_id."""
+        package_ids = [
+            row[0]
+            for row in self._get_db()
+            .query(Package.id)
+            .filter(Package.category_id == category_id)
+            .all()
+        ]
+        conditions = [StoreProduct.category_id == category_id]
+        if package_ids:
+            conditions.append(StoreProduct.package_id.in_(package_ids))
+        return query.filter(or_(*conditions))
 
     def filter_products(
         self,
@@ -277,9 +296,7 @@ class StoreService:
             q = q.filter(StoreProduct.is_active)
 
         if category_id:
-            packages = db.query(Package).filter(Package.category_id == category_id).all()
-            package_ids = [p.id for p in packages]
-            q = q.filter(StoreProduct.package_id.in_(package_ids))
+            q = self._category_product_filter(q, category_id)
 
         if min_price is not None:
             q = q.filter(StoreProduct.price >= min_price)
@@ -583,12 +600,143 @@ class StoreService:
         return {"file_count": len(files), "can_preview": len(files) > 0}
 
     def get_categories_for_shop(self, active_only: bool = True) -> list:
-        """Thin delegate: categorías para navegación tienda."""
-        return self.package_service.get_all_categories(active_only=active_only)
+        """Categorías activas que tienen al menos un producto visible en tienda."""
+        categories = self.package_service.get_all_categories(active_only=active_only)
+        if not categories:
+            return []
+        visible_ids = {
+            resolve_product_category_id(product)
+            for product in self._get_db()
+            .query(StoreProduct)
+            .outerjoin(Package)
+            .filter(StoreProduct.is_active)
+            .all()
+        }
+        visible_ids.discard(None)
+        return [category for category in categories if category.id in visible_ids]
+
+    def count_products_in_category(self, category_id: int, active_only: bool = True) -> int:
+        """Cuenta productos activos en una categoría."""
+        return len(self.filter_products(category_id=category_id, active_only=active_only))
 
     def get_category_for_shop(self, category_id: int):
         """Thin delegate: categoría por id."""
         return self.package_service.get_category(category_id)
+
+    def _get_category_for_product(self, product: StoreProduct) -> Category | None:
+        """Resuelve la categoría efectiva de un producto."""
+        category_id = resolve_product_category_id(product)
+        if not category_id:
+            return None
+        return self.package_service.get_category(category_id)
+
+    def _get_min_tier_order_index(self) -> int:
+        """Orden mínimo entre tiers activos (primer nivel del catálogo)."""
+        from models.models import StoreTier
+
+        result = (
+            self._get_db()
+            .query(func.min(StoreTier.order_index))
+            .filter(StoreTier.is_active)
+            .scalar()
+        )
+        return result if result is not None else 0
+
+    def count_user_purchases_at_tier_level(self, user_id: int, order_index: int) -> int:
+        """Cuenta unidades compradas en tiers de un order_index (órdenes completadas)."""
+        from models.models import StoreTier
+
+        db = self._get_db()
+        tier_ids = [
+            row[0]
+            for row in db.query(StoreTier.id)
+            .filter(StoreTier.order_index == order_index, StoreTier.is_active)
+            .all()
+        ]
+        if not tier_ids:
+            return 0
+        rows = (
+            db.query(OrderItem.quantity)
+            .join(Order, OrderItem.order_id == Order.id)
+            .join(StoreProduct, OrderItem.product_id == StoreProduct.id)
+            .filter(
+                Order.user_id == user_id,
+                Order.status == OrderStatus.COMPLETED,
+                StoreProduct.tier_id.in_(tier_ids),
+            )
+            .all()
+        )
+        return sum(row[0] for row in rows)
+
+    def check_tier_purchase_gate(self, user_id: int, product_id: int) -> str | None:
+        """Bloquea compra si el visitante no cumple requisito del tier anterior."""
+        product = self.get_product(product_id)
+        if not product or not product.tier_id:
+            return None
+        tier = product.tier
+        if not tier or tier.order_index <= self._get_min_tier_order_index():
+            return None
+        prev_index = tier.order_index - 1
+        purchased = self.count_user_purchases_at_tier_level(user_id, prev_index)
+        if purchased >= REQUIRED_PREV_TIER_PURCHASES:
+            return None
+        from models.models import StoreTier
+
+        prev_tiers = (
+            self._get_db()
+            .query(StoreTier)
+            .filter(StoreTier.order_index == prev_index, StoreTier.is_active)
+            .order_by(StoreTier.order_index, StoreTier.name)
+            .all()
+        )
+        prev_label = ", ".join(t.name for t in prev_tiers) or "el nivel anterior"
+        remaining = REQUIRED_PREV_TIER_PURCHASES - purchased
+        return LucienVoice.store_tier_locked(
+            prev_label, purchased, REQUIRED_PREV_TIER_PURCHASES, remaining
+        )
+
+    def get_tier_purchase_status(self, user_id: int, product_id: int) -> dict:
+        """Estado de desbloqueo de tier para UI de detalle."""
+        product = self.get_product(product_id)
+        if not product or not product.tier_id:
+            return {
+                "tier_unlocked": True,
+                "tier_lock_message": None,
+                "tier_lock_remaining": 0,
+            }
+        tier = product.tier
+        if not tier or tier.order_index <= self._get_min_tier_order_index():
+            return {
+                "tier_unlocked": True,
+                "tier_lock_message": None,
+                "tier_lock_remaining": 0,
+            }
+        prev_index = tier.order_index - 1
+        purchased = self.count_user_purchases_at_tier_level(user_id, prev_index)
+        if purchased >= REQUIRED_PREV_TIER_PURCHASES:
+            return {
+                "tier_unlocked": True,
+                "tier_lock_message": None,
+                "tier_lock_remaining": 0,
+            }
+        from models.models import StoreTier
+
+        prev_tiers = (
+            self._get_db()
+            .query(StoreTier)
+            .filter(StoreTier.order_index == prev_index, StoreTier.is_active)
+            .order_by(StoreTier.order_index, StoreTier.name)
+            .all()
+        )
+        prev_label = ", ".join(t.name for t in prev_tiers) or "el nivel anterior"
+        remaining = REQUIRED_PREV_TIER_PURCHASES - purchased
+        return {
+            "tier_unlocked": False,
+            "tier_lock_message": LucienVoice.store_tier_locked(
+                prev_label, purchased, REQUIRED_PREV_TIER_PURCHASES, remaining
+            ),
+            "tier_lock_remaining": remaining,
+        }
 
     def get_preview_files_for_product(self, product_id: int, limit: int = 1) -> list:
         """Thin delegate: archivos de preview del paquete."""
@@ -613,12 +761,14 @@ class StoreService:
         tier_name = product.tier.name if product.tier else ""
         effective_price = self.get_effective_price(user_id, product.price)
         cap_available = FulfillmentService(self._get_db()).is_monthly_cap_available(product_id)
+        tier_status = self.get_tier_purchase_status(user_id, product_id)
         return {
             "product": product,
             "balance": self.get_shop_balance_display(user_id),
             "tier_name": tier_name,
             "effective_price": effective_price,
             "monthly_cap_available": cap_available,
+            **tier_status,
             **preview,
         }
 
@@ -695,6 +845,10 @@ class StoreService:
         if cap_err:
             return None, cap_err
 
+        tier_err = self.check_tier_purchase_gate(user_id, product_id)
+        if tier_err:
+            return None, tier_err
+
         # Verificar stock
         if product.stock != -1 and product.stock < 1:
             return None, LucienVoice.store_stock_insufficient(product.name, product.stock)
@@ -764,6 +918,10 @@ class StoreService:
             cap_err = self._check_monthly_cap_for_product(product.id)
             if cap_err:
                 return None, cap_err
+
+            tier_err = self.check_tier_purchase_gate(user_id, product.id)
+            if tier_err:
+                return None, tier_err
 
             # Verificar stock
             if product.stock != -1 and product.stock < cart_item.quantity:

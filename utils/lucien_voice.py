@@ -1273,6 +1273,7 @@ Seleccione un nivel para explorar."""
         tier: str = "",
         list_price: int | None = None,
         monthly_cap_available: bool = True,
+        tier_lock_message: str | None = None,
     ) -> str:
         """Tarjeta completa de producto para detalle y preview."""
         text = LucienVoice.store_product_detail(name, desc, price, tier)
@@ -1282,6 +1283,8 @@ Seleccione un nivel para explorar."""
         text += LucienVoice.store_product_balance_line(balance)
         if not monthly_cap_available:
             text += f"\n\n⚠️ {LucienVoice.store_monthly_cap_inline(name)}"
+        if tier_lock_message:
+            text += f"\n\n🔒 <i>{html.escape(tier_lock_message)}</i>"
         if balance < price:
             text += LucienVoice.store_need_more_besitos_hint()
             text += LucienVoice.store_earn_besitos_tips()
@@ -1817,6 +1820,23 @@ Quizá otra palabra lo guíe, o prefiera explorar el catálogo."""
     @staticmethod
     def store_category_not_found() -> str:
         return "Esa estantería no figura en el catálogo."
+
+    @staticmethod
+    def store_tier_locked(
+        previous_tier_name: str,
+        purchased: int,
+        required: int,
+        remaining: int,
+    ) -> str:
+        safe_prev = html.escape(previous_tier_name)
+        return (
+            f"Para acceder a este nivel, adquiera {required} tesoros de "
+            f"«{safe_prev}» primero ({purchased}/{required}; faltan {remaining})."
+        )
+
+    @staticmethod
+    def store_button_tier_locked(remaining: int) -> str:
+        return f"🔒 Requiere {remaining} más en nivel anterior"
 
     @staticmethod
     def store_purchase_history_empty() -> str:

@@ -28,6 +28,7 @@ from keyboards.callback_data import (
     SelectStoryNodeStoreWizardCallback,
     SelectTariffEditProductCallback,
     SelectTariffStoreWizardCallback,
+    SelectTierEditProductCallback,
     ToggleProductCallback,
 )
 from keyboards.inline_keyboards import cancel_keyboard
@@ -80,6 +81,7 @@ class ProductEditStates(StatesGroup):
     waiting_name = State()
     waiting_description = State()
     selecting_package = State()
+    selecting_tier = State()
     selecting_tariff = State()
     selecting_story_node = State()
     waiting_price = State()
@@ -172,12 +174,20 @@ def build_stock_alerts_text_and_buttons(
     return text, buttons
 
 
+def _product_tier_label(product) -> str:
+    """Etiqueta de tier para vistas admin. Función pura."""
+    tier = getattr(product, "tier", None)
+    return tier.name if tier else "Sin nivel"
+
+
 def build_product_list_entry_and_button(product) -> tuple[str, list[InlineKeyboardButton]]:
     """Construye entrada de texto y botón para un producto en lista admin (status + stock emoji via pure + price + detail cb + trunc). Función pura."""
     status = "✅" if product.is_active else "❌"
     emoji, stock_text = compute_stock_emoji_and_text(product.stock, product.is_low_stock)
+    tier_label = _product_tier_label(product)
     entry = (
-        f"{status} {product.name}\n   {emoji} Stock: {stock_text} | 💰 {product.price} besitos\n\n"
+        f"{status} {product.name}\n"
+        f"   ✨ {tier_label} | {emoji} Stock: {stock_text} | 💰 {product.price} besitos\n\n"
     )
     button = [
         InlineKeyboardButton(
@@ -237,6 +247,7 @@ def build_product_edit_menu_text(product) -> str:
         "Editar producto:\n",
         f"📦 {product.name}",
         f"📝 {description}",
+        f"✨ Nivel: {_product_tier_label(product)}",
         f"📁 Paquete: {package_name}",
     ]
     if product.fulfillment_kind == FulfillmentKind.VIP_GRANT:
@@ -262,6 +273,7 @@ def build_product_edit_menu_keyboard(product) -> InlineKeyboardMarkup:
     fields = [
         ("📦 Nombre", "name"),
         ("📝 Descripcion", "description"),
+        ("✨ Nivel", "tier"),
         ("📁 Paquete", "package"),
         ("💰 Precio", "price"),
         ("📊 Stock", "stock"),
@@ -417,6 +429,25 @@ def build_wizard_story_node_keyboard(nodes: list) -> InlineKeyboardMarkup:
     ]
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_edit_tier_buttons(product_id: int, tiers: list) -> list[list[InlineKeyboardButton]]:
+    """Construye botones de selección de tier para edición. Función pura."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{tier.name} ({tier.price_min}-{tier.price_max} 💋)",
+                callback_data=SelectTierEditProductCallback(
+                    product_id=product_id, tier_id=tier.id
+                ).pack(),
+            )
+        ]
+        for tier in tiers
+    ]
+    buttons.append(
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"edit_product:{product_id}")]
+    )
+    return buttons
 
 
 def build_edit_tariff_buttons(
@@ -1321,6 +1352,7 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
         status = "✅ Activo" if product.is_active else "❌ Inactivo"
         stock_text = "Ilimitado" if product.stock == -1 else str(product.stock)
         package_name = product.package.name if product.package else "Sin paquete"
+        tier_label = _product_tier_label(product)
 
         keyboard = build_product_detail_keyboard(product_id, product.is_active)
 
@@ -1328,6 +1360,7 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
             f"🎩 Lucien:\n\n"
             f"📦 {product.name}\n\n"
             f"📝 {product.description or 'Sin descripcion'}\n\n"
+            f"✨ Nivel: {tier_label}\n"
             f"📁 Paquete: {package_name}\n"
             f"💰 Precio: {product.price} besitos\n"
             f"📊 Stock: {stock_text}\n"
@@ -1393,6 +1426,18 @@ async def edit_product_field_start(
                 inline_keyboard=build_edit_package_buttons(product_id, packages)
             )
             next_state = ProductEditStates.selecting_package
+        elif field == "tier":
+            tiers = store_service.get_all_tiers()
+            if not tiers:
+                await callback.answer(
+                    LucienVoice.fulfillment_admin_wizard_select_tier(), show_alert=True
+                )
+                return
+            text = LucienVoice.fulfillment_admin_wizard_select_tier()
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=build_edit_tier_buttons(product_id, tiers)
+            )
+            next_state = ProductEditStates.selecting_tier
         elif field == "price":
             text, keyboard = build_edit_price_prompt_and_keyboard(product_id, product.price)
             next_state = ProductEditStates.waiting_price
@@ -1473,6 +1518,21 @@ async def process_edit_product_package(
     with get_service(StoreService) as store_service:
         success = store_service.update_product(product_id, package_id=package_id)
         await _finish_product_edit(callback, state, product_id, success, "paquete")
+
+
+@router.callback_query(
+    ProductEditStates.selecting_tier, SelectTierEditProductCallback.filter()
+)
+async def process_edit_product_tier(
+    callback: CallbackQuery, state: FSMContext, callback_data: SelectTierEditProductCallback
+):
+    """Procesa nuevo tier del producto."""
+    product_id = callback_data.product_id
+    tier_id = callback_data.tier_id
+
+    with get_service(StoreService) as store_service:
+        success = store_service.update_product(product_id, tier_id=tier_id)
+        await _finish_product_edit(callback, state, product_id, success, "nivel")
 
 
 @router.callback_query(

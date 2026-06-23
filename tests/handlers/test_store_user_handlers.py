@@ -175,17 +175,16 @@ class TestStoreCategories:
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_categories_with_counts(self, mock_get_service, make_callback):
-        """Muestra categorias con conteo de paquetes activos."""
+        """Muestra categorias con conteo de productos activos."""
         cat1 = MagicMock()
         cat1.id = 1
         cat1.name = "Fotos"
-        cat1.packages = [MagicMock(is_active=True), MagicMock(is_active=True)]
         cat2 = MagicMock()
         cat2.id = 2
         cat2.name = "Videos"
-        cat2.packages = []
         store = _mock_store_ctx(mock_get_service)
         store.get_categories_for_shop.return_value = [cat1, cat2]
+        store.count_products_in_category.side_effect = lambda cid, **_: 2 if cid == 1 else 0
         cb = make_callback(data="store_categories")
 
         from handlers.store_user_handlers import store_categories
@@ -198,18 +197,14 @@ class TestStoreCategories:
         assert any("Videos" in t for t in button_texts)
 
     @patch("handlers.store_user_handlers.get_service")
-    async def test_category_count_shows_active_packages_only(self, mock_get_service, make_callback):
-        """El conteo muestra solo paquetes activos."""
+    async def test_category_count_shows_active_products_only(self, mock_get_service, make_callback):
+        """El conteo muestra productos activos en la categoría."""
         cat = MagicMock()
         cat.id = 1
         cat.name = "Mix"
-        cat.packages = [
-            MagicMock(is_active=True),
-            MagicMock(is_active=False),
-            MagicMock(is_active=True),
-        ]
         store = _mock_store_ctx(mock_get_service)
         store.get_categories_for_shop.return_value = [cat]
+        store.count_products_in_category.return_value = 2
         cb = make_callback(data="store_categories")
 
         from handlers.store_user_handlers import store_categories
@@ -435,6 +430,41 @@ class TestProductDetail:
         buy_texts = [btn.text for btn in buy_row]
         assert any("200" in t for t in buy_texts)
         assert any("faltan" in t.lower() for t in buy_texts)
+
+    @patch("handlers.store_user_handlers.get_service")
+    async def test_tier_locked_shows_lock_button(self, mock_get_service, make_callback):
+        """Nivel bloqueado muestra candado y no el boton de compra."""
+        from keyboards.callback_data import DirectBuyCallback, ProductDetailCallback
+
+        product = MagicMock()
+        product.id = 9
+        product.name = "Tesoro Bloqueado"
+        product.description = "Requiere nivel previo"
+        product.price = 200
+        product.stock = 5
+        product.is_available = True
+        product.package = MagicMock(id=1)
+        ctx = _product_ctx(product, balance=500)
+        ctx.update(
+            tier_unlocked=False,
+            tier_lock_remaining=1,
+            tier_lock_message="Para acceder a este nivel, adquiera 2 tesoros",
+        )
+        store = _mock_store_ctx(mock_get_service)
+        store.get_product_detail_context.return_value = ctx
+        cb = make_callback(data="product_detail:9")
+        cd = ProductDetailCallback(product_id=9)
+
+        from handlers.store_user_handlers import product_detail
+
+        await product_detail(cb, cd)
+
+        markup = cb.message.edit_text.call_args[1].get("reply_markup")
+        buy_texts = [btn.text for btn in markup.inline_keyboard[0]]
+        buy_callbacks = [btn.callback_data for btn in markup.inline_keyboard[0]]
+        assert any("Requiere" in t for t in buy_texts)
+        assert not any("Adquirir" in t for t in buy_texts)
+        assert DirectBuyCallback(product_id=9).pack() in buy_callbacks
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_product_not_available_shows_agotado(self, mock_get_service, make_callback):
@@ -669,6 +699,42 @@ class TestProductPreview:
         )
 
     @patch("handlers.store_user_handlers.get_service")
+    async def test_tier_locked_after_preview_keeps_lock_button(self, mock_get_service, make_callback):
+        """Tras el preview, el detalle mantiene el boton de candado."""
+        from keyboards.callback_data import DirectBuyCallback, ProductPreviewCallback
+
+        product = MagicMock()
+        product.id = 9
+        product.name = "Tesoro Bloqueado"
+        product.description = "Requiere nivel previo"
+        product.price = 200
+        product.stock = 5
+        product.is_available = True
+        product.package = MagicMock(id=1)
+        ctx = _product_ctx(product, balance=500)
+        ctx.update(
+            tier_unlocked=False,
+            tier_lock_remaining=1,
+            tier_lock_message="Para acceder a este nivel, adquiera 2 tesoros",
+        )
+        store = _mock_store_ctx(mock_get_service)
+        store.get_product_detail_context.return_value = ctx
+        store.get_preview_files_for_product.return_value = []
+        cb = make_callback(data="product_preview:9")
+        cd = ProductPreviewCallback(product_id=9)
+
+        from handlers.store_user_handlers import product_preview
+
+        await product_preview(cb, cd)
+
+        markup = cb.message.answer.call_args[1].get("reply_markup")
+        buy_texts = [btn.text for btn in markup.inline_keyboard[0]]
+        buy_callbacks = [btn.callback_data for btn in markup.inline_keyboard[0]]
+        assert any("Requiere" in t for t in buy_texts)
+        assert not any("Adquirir" in t for t in buy_texts)
+        assert DirectBuyCallback(product_id=9).pack() in buy_callbacks
+
+    @patch("handlers.store_user_handlers.get_service")
     async def test_no_package_files_sends_no_preview(self, mock_get_service, make_callback):
         """Sin archivos en el paquete, no envia preview."""
         from keyboards.callback_data import ProductPreviewCallback
@@ -859,6 +925,7 @@ class TestDirectBuy:
         store.get_shop_balance_display.return_value = balance
         store.get_effective_price.return_value = effective if effective is not None else product.price
         store._check_monthly_cap_for_product.return_value = None
+        store.check_tier_purchase_gate.return_value = None
         return store
 
     @patch("handlers.store_user_handlers.get_service")

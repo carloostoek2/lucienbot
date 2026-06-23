@@ -47,6 +47,8 @@ def _build_product_buttons(
     *,
     include_preview: bool = True,
     more_products_callback: str = "store_catalog",
+    tier_unlocked: bool = True,
+    tier_lock_remaining: int = 0,
 ) -> list[list[InlineKeyboardButton]]:
     """Construye filas de botones para detalle/preview de producto."""
     row = []
@@ -57,7 +59,14 @@ def _build_product_buttons(
                 callback_data=ProductPreviewCallback(product_id=product.id).pack(),
             )
         )
-    if is_available:
+    if not tier_unlocked:
+        row.append(
+            InlineKeyboardButton(
+                text=LucienVoice.store_button_tier_locked(tier_lock_remaining),
+                callback_data=DirectBuyCallback(product_id=product.id).pack(),
+            )
+        )
+    elif is_available:
         if balance >= effective_price:
             row.append(
                 InlineKeyboardButton(
@@ -90,6 +99,45 @@ def _build_product_buttons(
         [InlineKeyboardButton(text=LucienVoice.store_button_back_to_shop(), callback_data="shop")]
     )
     return buttons
+
+
+def _product_detail_card_and_buttons(
+    ctx: dict,
+    *,
+    include_preview: bool = True,
+    more_products_callback: str = "store_catalog",
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
+    """Construye tarjeta y botones de detalle desde contexto unificado del servicio."""
+    product = ctx["product"]
+    balance = ctx["balance"]
+    effective_price = ctx.get("effective_price", product.price)
+    stock_text = "∞" if product.stock == -1 else str(product.stock)
+    is_available = product.is_available and ctx.get("monthly_cap_available", True)
+    display_price = effective_price if effective_price != product.price else product.price
+    list_price = product.price if effective_price < product.price else None
+    text = LucienVoice.store_product_detail_card(
+        product.name,
+        product.description or "",
+        display_price,
+        balance,
+        stock_text,
+        ctx["file_count"],
+        ctx.get("tier_name", ""),
+        list_price=list_price,
+        monthly_cap_available=ctx.get("monthly_cap_available", True),
+        tier_lock_message=ctx.get("tier_lock_message"),
+    )
+    buttons = _build_product_buttons(
+        product,
+        balance,
+        effective_price,
+        is_available,
+        include_preview=include_preview,
+        more_products_callback=more_products_callback,
+        tier_unlocked=ctx.get("tier_unlocked", True),
+        tier_lock_remaining=ctx.get("tier_lock_remaining", 0),
+    )
+    return text, buttons
 
 
 class SearchStates(StatesGroup):
@@ -249,47 +297,47 @@ async def store_categories(callback: CallbackQuery):
     with get_service(StoreService) as store_service:
         categories = store_service.get_categories_for_shop(active_only=True)
 
-    if not categories:
-        await callback.message.edit_text(
-            LucienVoice.store_categories_empty(),
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=LucienVoice.store_button_catalog(), callback_data="store_catalog"
-                        )
-                    ],
-                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
+        if not categories:
+            await callback.message.edit_text(
+                LucienVoice.store_categories_empty(),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=LucienVoice.store_button_catalog(), callback_data="store_catalog"
+                            )
+                        ],
+                        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
+                    ]
+                ),
+                parse_mode="HTML",
+            )
+            await callback.answer()
+            return
+
+        text = LucienVoice.store_categories_intro()
+
+        buttons = []
+        for category in categories:
+            product_count = store_service.count_products_in_category(category.id, active_only=True)
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"📁 {category.name} ({product_count})",
+                        callback_data=StoreCategoryCallback(category_id=category.id).pack(),
+                    )
                 ]
-            ),
-            parse_mode="HTML",
-        )
-        await callback.answer()
-        return
+            )
 
-    text = LucienVoice.store_categories_intro()
-
-    buttons = []
-    for category in categories:
-        package_count = (
-            len([p for p in category.packages if p.is_active]) if category.packages else 0
-        )
         buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=f"📁 {category.name} ({package_count})",
-                    callback_data=StoreCategoryCallback(category_id=category.id).pack(),
-                )
-            ]
+            [InlineKeyboardButton(text=LucienVoice.store_button_see_all(), callback_data="store_catalog")]
         )
+        buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_see_all(), callback_data="store_catalog")])
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    await callback.answer()
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer()
 
 
 @router.callback_query(StoreCategoryCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
@@ -365,30 +413,8 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
         if not ctx:
             await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
             return
-    product = ctx["product"]
-    balance = ctx["balance"]
-    effective_price = ctx.get("effective_price", product.price)
-    file_count = ctx["file_count"]
-    stock_text = "∞" if product.stock == -1 else str(product.stock)
-    is_available = product.is_available and ctx.get("monthly_cap_available", True)
-    display_price = effective_price if effective_price != product.price else product.price
-    list_price = product.price if effective_price < product.price else None
-    text = LucienVoice.store_product_detail_card(
-        product.name,
-        product.description or "",
-        display_price,
-        balance,
-        stock_text,
-        file_count,
-        ctx.get("tier_name", ""),
-        list_price=list_price,
-        monthly_cap_available=ctx.get("monthly_cap_available", True),
-    )
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=_build_product_buttons(
-            product, balance, effective_price, is_available
-        )
-    )
+    text, buttons = _product_detail_card_and_buttons(ctx)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -405,15 +431,6 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
             await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
             return
         preview_files = store_service.get_preview_files_for_product(product_id, limit=1)
-    product = ctx["product"]
-    balance = ctx["balance"]
-    effective_price = ctx.get("effective_price", product.price)
-    file_count = ctx["file_count"]
-    stock_text = "∞" if product.stock == -1 else str(product.stock)
-    is_available = product.is_available and ctx.get("monthly_cap_available", True)
-    display_price = effective_price if effective_price != product.price else product.price
-    list_price = product.price if effective_price < product.price else None
-
     if preview_files:
         for file_entry in preview_files:
             try:
@@ -437,27 +454,12 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
                 logger.error(error_msg)
                 continue
 
-    text = LucienVoice.store_product_detail_card(
-        product.name,
-        product.description or "",
-        display_price,
-        balance,
-        stock_text,
-        file_count,
-        ctx.get("tier_name", ""),
-        list_price=list_price,
-        monthly_cap_available=ctx.get("monthly_cap_available", True),
+    text, buttons = _product_detail_card_and_buttons(
+        ctx,
+        include_preview=False,
+        more_products_callback="store_tiers",
     )
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=_build_product_buttons(
-            product,
-            balance,
-            effective_price,
-            is_available,
-            include_preview=False,
-            more_products_callback="store_tiers",
-        )
-    )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer(LucienVoice.store_preview_sent_alert(), show_alert=False)
 
@@ -479,6 +481,10 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
         cap_err = store_service._check_monthly_cap_for_product(product_id)
         if cap_err:
             await callback.answer(cap_err, show_alert=True)
+            return
+        tier_err = store_service.check_tier_purchase_gate(user_id, product_id)
+        if tier_err:
+            await callback.answer(tier_err, show_alert=True)
             return
         balance = store_service.get_shop_balance_display(user_id)
         effective_price = store_service.get_effective_price(user_id, product.price)

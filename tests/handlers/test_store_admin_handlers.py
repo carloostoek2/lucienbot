@@ -969,10 +969,12 @@ class TestStoreAdminPureHelpers:
         mock_product.price = 200
         mock_product.stock = 10
         mock_product.package.name = "Paquete Marzo"
+        mock_product.tier.name = "DESEO"
 
         text = build_product_edit_menu_text(mock_product)
         assert "Pack VIP" in text
         assert "Contenido exclusivo" in text
+        assert "DESEO" in text
         assert "Paquete Marzo" in text
         assert "200" in text
         assert "10" in text
@@ -985,10 +987,11 @@ class TestStoreAdminPureHelpers:
         mock_product.fulfillment_kind = "package"
 
         kb = build_product_edit_menu_keyboard(mock_product)
-        assert len(kb.inline_keyboard) == 6
+        assert len(kb.inline_keyboard) == 7
         assert "Nombre" in kb.inline_keyboard[0][0].text
-        assert "Paquete" in kb.inline_keyboard[2][0].text
-        assert "7" in kb.inline_keyboard[5][0].callback_data
+        assert "Nivel" in kb.inline_keyboard[2][0].text
+        assert "Paquete" in kb.inline_keyboard[3][0].text
+        assert "7" in kb.inline_keyboard[6][0].callback_data
 
     def test_build_wizard_tariff_keyboard(self):
         from handlers.store_admin_handlers import build_wizard_tariff_keyboard
