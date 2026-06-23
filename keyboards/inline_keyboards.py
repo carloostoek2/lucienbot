@@ -6,6 +6,7 @@ Teclados personalizados con la estética elegante de Diana.
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from utils.lucien_voice import LucienVoice
 from keyboards.callback_data import (
     AnonViewCallback,
     ApproveAllCallback,
@@ -57,7 +58,9 @@ def main_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
     )
 
     # Tienda (solo)
-    buttons.append([InlineKeyboardButton(text="🛍️ Tienda", callback_data="shop")])
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.main_menu_shop_button(), callback_data="shop")]
+    )
 
     # Misiones - Recompensas (misma fila)
     buttons.append(

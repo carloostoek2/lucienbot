@@ -53,7 +53,7 @@ class TestShopMenu:
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
         assert "500" in text
-        assert "tienda" in text.lower()
+        assert "gabinete" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_calls_service_with_user_id(self, mock_get_service, make_callback):
@@ -104,7 +104,7 @@ class TestStoreCatalog:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "vacia" in text.lower()
+        assert "silencio" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_products(self, mock_get_service, make_callback):
@@ -120,7 +120,7 @@ class TestStoreCatalog:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Catalogo" in text
+        assert "catálogo" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_calls_service_with_active_only(self, mock_get_service, make_callback):
@@ -271,7 +271,9 @@ class TestStoreCategoryProducts:
         from handlers.store_user_handlers import store_category_products
         await store_category_products(cb, cd)
 
-        cb.answer.assert_called_once_with("Categoria no encontrada", show_alert=True)
+        cb.answer.assert_called_once_with(
+            "Esa estantería no figura en el catálogo.", show_alert=True
+        )
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_category_empty_products(self, mock_get_service, make_callback):
@@ -292,7 +294,7 @@ class TestStoreCategoryProducts:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "vacia" in text.lower()
+        assert "aguarda nuevas piezas" in text.lower()
         assert "Fotos Exclusivas" in text
 
     @patch("handlers.store_user_handlers.get_service")
@@ -368,7 +370,10 @@ class TestProductDetail:
         from handlers.store_user_handlers import product_detail
         await product_detail(cb, cd)
 
-        cb.answer.assert_called_once_with("Producto no encontrado", show_alert=True)
+        cb.answer.assert_called_once_with(
+            "Permítame buscar de nuevo… ese tesoro no figura en el catálogo.",
+            show_alert=True,
+        )
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_sufficient_balance_shows_buy_button(self, mock_get_service, make_callback):
@@ -397,8 +402,8 @@ class TestProductDetail:
         buttons = markup.inline_keyboard
         buy_row = buttons[0]
         buy_texts = [btn.text for btn in buy_row]
-        assert any("Comprar ahora" in t for t in buy_texts)
-        assert any("Preview" in t for t in buy_texts)
+        assert any("Adquirir ahora" in t for t in buy_texts)
+        assert any("Anticipo" in t for t in buy_texts)
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_insufficient_balance_shows_needed_amount(self, mock_get_service, make_callback):
@@ -422,14 +427,14 @@ class TestProductDetail:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Necesitas mas besitos" in text
+        assert "moneda especial" in text.lower()
         # Check the insufficient balance button
         markup = cb.message.edit_text.call_args[1].get("reply_markup")
         buttons = markup.inline_keyboard
         buy_row = buttons[0]
         buy_texts = [btn.text for btn in buy_row]
         assert any("200" in t for t in buy_texts)
-        assert any("besitos mas" in t for t in buy_texts)
+        assert any("faltan" in t.lower() for t in buy_texts)
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_product_not_available_shows_agotado(self, mock_get_service, make_callback):
@@ -555,7 +560,7 @@ class TestProductDetail:
         assert "80" in text
         markup = cb.message.edit_text.call_args[1].get("reply_markup")
         buy_texts = [btn.text for btn in markup.inline_keyboard[0]]
-        assert any("Comprar ahora" in t for t in buy_texts)
+        assert any("Adquirir ahora" in t for t in buy_texts)
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_product_detail_monthly_cap_exhausted_shows_agotado(
@@ -602,7 +607,10 @@ class TestProductPreview:
         from handlers.store_user_handlers import product_preview
         await product_preview(cb, cd)
 
-        cb.answer.assert_called_once_with("Producto no encontrado", show_alert=True)
+        cb.answer.assert_called_once_with(
+            "Permítame buscar de nuevo… ese tesoro no figura en el catálogo.",
+            show_alert=True,
+        )
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_sends_photo_preview(self, mock_get_service, make_callback):
@@ -628,7 +636,7 @@ class TestProductPreview:
 
         cb.message.answer_photo.assert_called_once_with(
             photo="abc123",
-            caption="<i>Preview del contenido...</i>",
+            caption="<i>Un anticipo de lo que aguarda…</i>",
             parse_mode="HTML",
         )
 
@@ -656,7 +664,7 @@ class TestProductPreview:
 
         cb.message.answer_video.assert_called_once_with(
             video="video123",
-            caption="<i>Preview del contenido...</i>",
+            caption="<i>Un anticipo de lo que aguarda…</i>",
             parse_mode="HTML",
         )
 
@@ -708,8 +716,8 @@ class TestProductPreview:
         await product_preview(cb, cd)
 
         text = cb.message.answer.call_args[0][0]
-        assert "80 besitos" in text
-        assert "100 besitos" not in text
+        assert "💋 <b>80</b> besitos" in text
+        assert "Precio de lista:</b> 100 besitos" in text
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_no_package_shows_no_preview(self, mock_get_service, make_callback):
@@ -789,7 +797,7 @@ class TestProductPreview:
 
         cb.message.answer_photo.assert_called_once_with(
             photo="first",
-            caption="<i>Preview del contenido...</i>",
+            caption="<i>Un anticipo de lo que aguarda…</i>",
             parse_mode="HTML",
         )
 
@@ -839,7 +847,7 @@ class TestProductPreview:
         from handlers.store_user_handlers import product_preview
         await product_preview(cb, cd)
 
-        cb.answer.assert_called_with("Preview enviado!", show_alert=False)
+        cb.answer.assert_called_with("Anticipo enviado.", show_alert=False)
 
 
 class TestDirectBuy:
@@ -865,7 +873,10 @@ class TestDirectBuy:
         from handlers.store_user_handlers import direct_buy
         await direct_buy(cb, cd)
 
-        cb.answer.assert_called_once_with("Producto no encontrado", show_alert=True)
+        cb.answer.assert_called_once_with(
+            "Permítame buscar de nuevo… ese tesoro no figura en el catálogo.",
+            show_alert=True,
+        )
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_insufficient_balance(self, mock_get_service, make_callback):
@@ -881,7 +892,9 @@ class TestDirectBuy:
         from handlers.store_user_handlers import direct_buy
         await direct_buy(cb, cd)
 
-        cb.answer.assert_called_once_with("Saldo insuficiente", show_alert=True)
+        cb.answer.assert_called_once_with(
+            "Moneda especial insuficiente.", show_alert=True
+        )
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_monthly_cap_blocks_before_confirm(self, mock_get_service, make_callback):
@@ -926,7 +939,7 @@ class TestDirectBuy:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Confirmar compra" in text
+        assert "adquisición" in text.lower()
         assert "Producto Test" in text
         assert "200" in text
         assert "300" in text  # balance after (500-200)
@@ -1003,7 +1016,7 @@ class TestConfirmDirectBuy:
 
         store.purchase_and_complete.assert_called_once_with(cb.bot, 123456789, 1)
         cb.message.edit_text.assert_called_once()
-        cb.answer.assert_called_once_with("Compra exitosa!")
+        cb.answer.assert_called_once_with("Adquisición completada.")
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_complete_order_failure(self, mock_get_service, make_callback):
@@ -1069,7 +1082,7 @@ class TestConfirmDirectBuy:
         await confirm_direct_buy(cb, cd, cb.bot, state)
 
         text = cb.message.edit_text.call_args[0][0]
-        assert "Compra completada" in text
+        assert "discernimiento" in text.lower()
         assert "círculo íntimo" not in text
 
     @patch("handlers.store_user_handlers.get_service")
@@ -1106,7 +1119,7 @@ class TestConfirmDirectBuy:
 
         text = cb.message.edit_text.call_args[0][0]
         assert "mochila" in text.lower()
-        assert "Compra completada" not in text
+        assert "discernimiento" not in text
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_confirm_direct_buy_vip_failed_shows_backpack_cta(
@@ -1161,7 +1174,7 @@ class TestPurchaseHistory:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "compras registradas" in text.lower()
+        assert "adquisiciones" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_orders(self, mock_get_service, make_callback):
@@ -1275,7 +1288,7 @@ class TestStoreSearchStart:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "tesoro buscas" in text.lower()
+        assert "tesoro busca" in text.lower()
 
     async def test_calls_answer(self, make_callback, make_fsm_context):
         """Llama a callback.answer()."""
@@ -1303,7 +1316,7 @@ class TestProcessSearchQuery:
 
         msg.answer.assert_called_once()
         text = msg.answer.call_args[0][0]
-        assert "2 caracteres" in text
+        assert "dos caracteres" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_short_query_does_not_search(self, mock_get_service, make_message, make_fsm_context):
@@ -1330,7 +1343,7 @@ class TestProcessSearchQuery:
 
         msg.answer.assert_called_once()
         text = msg.answer.call_args[0][0]
-        assert "No encontre" in text
+        assert "no hallé" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_no_results_clears_state(self, mock_get_service, make_message, make_fsm_context):
@@ -1405,7 +1418,7 @@ class TestStoreFilters:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Filtrar" in text
+        assert "ordenar" in text.lower()
 
     async def test_calls_answer(self, make_callback):
         """Llama a callback.answer()."""
@@ -1432,7 +1445,7 @@ class TestFilterPriceAsc:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "No hay tesoros" in text
+        assert "ningún tesoro" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_products_sorted_asc(self, mock_get_service, make_callback):
@@ -1478,7 +1491,7 @@ class TestFilterPriceDesc:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "No hay tesoros" in text
+        assert "ningún tesoro" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_products_sorted_desc(self, mock_get_service, make_callback):
@@ -1524,7 +1537,7 @@ class TestFilterInStock:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "No hay tesoros" in text
+        assert "ningún tesoro" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_available_products(self, mock_get_service, make_callback):
@@ -1581,7 +1594,7 @@ class TestFilterRecent:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "No hay tesoros" in text
+        assert "ningún tesoro" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_recent_products(self, mock_get_service, make_callback):
@@ -1596,7 +1609,7 @@ class TestFilterRecent:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Mas recientes" in text
+        assert "más recientes" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_calls_answer(self, mock_get_service, make_callback):
@@ -1736,7 +1749,7 @@ class TestShowFilteredProducts:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "No hay tesoros" in text
+        assert "ningún tesoro" in text.lower()
 
     async def test_shows_filtered_products(self, make_callback):
         """Muestra productos filtrados con el nombre del filtro."""
@@ -1745,11 +1758,13 @@ class TestShowFilteredProducts:
         cb = make_callback(data="filter_recent")
 
         from handlers.store_user_handlers import show_filtered_products
-        await show_filtered_products(cb, [p1, p2], "Mas recientes")
+        from utils.lucien_voice import LucienVoice
+
+        await show_filtered_products(cb, [p1, p2], LucienVoice.store_filter_label_recent())
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "Mas recientes" in text
+        assert "recientes" in text.lower()
         assert "2" in text
 
     async def test_shows_overflow_message(self, make_callback):
@@ -1764,7 +1779,7 @@ class TestShowFilteredProducts:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "5 mas" in text  # 15 - 10 = 5
+        assert "5 más" in text  # 15 - 10 = 5
 
     async def test_no_overflow_for_10_or_less(self, make_callback):
         """10 o menos productos no muestra mensaje de overflow."""

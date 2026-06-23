@@ -1031,49 +1031,154 @@ ser revelados correctamente.</i>"""
 
     @staticmethod
     def store_product_not_found() -> str:
-        return "Producto no encontrado"
+        return "Permítame buscar de nuevo… ese tesoro no figura en el catálogo."
 
     @staticmethod
     def store_product_unavailable(product_name: str = None) -> str:
         if product_name:
-            return f"Producto no disponible: {product_name}"
-        return "Producto no disponible"
+            safe_name = html.escape(product_name)
+            return f"<i>{safe_name}</i> ya no está disponible en el Gabinete."
+        return "Ese tesoro ya no está disponible en el Gabinete."
 
     @staticmethod
     def store_cart_updated(quantity: int, product_name: str) -> str:
-        return f"Cantidad actualizada: {quantity} x {product_name}"
+        safe_name = html.escape(product_name)
+        return f"Cantidad ajustada: {quantity} × <i>{safe_name}</i>"
 
     @staticmethod
     def store_cart_added(product_name: str) -> str:
-        return f"Agregado al carrito: {product_name}"
+        safe_name = html.escape(product_name)
+        return f"<i>{safe_name}</i> aguarda en su selección."
 
     @staticmethod
     def store_cart_empty() -> str:
-        return "El carrito esta vacio"
+        return "Su selección está vacía por el momento."
 
     @staticmethod
     def store_stock_insufficient(product_name: str, available: int) -> str:
-        return f"Stock insuficiente para: {product_name} (disponible: {available})"
+        safe_name = html.escape(product_name)
+        return (
+            f"Quedan pocas unidades de <i>{safe_name}</i> "
+            f"(disponibles: {available})."
+        )
 
     @staticmethod
     def store_balance_insufficient(needed: int, have: int) -> str:
-        return f"Saldo insuficiente. Necesitas: {needed} besitos. Tienes: {have}"
+        return (
+            f"Necesita {needed} besitos; dispone de {have} por ahora."
+        )
 
     @staticmethod
     def store_order_not_found() -> str:
-        return "Orden no encontrada"
+        return "No encuentro esa adquisición en los registros del reino."
 
     @staticmethod
     def store_order_already_processed() -> str:
-        return "La orden ya fue procesada"
+        return "Esa adquisición ya fue atendida."
 
     @staticmethod
     def store_payment_failed() -> str:
-        return "Error al procesar el pago"
+        return "Hubo un inconveniente al procesar su adquisición."
 
     @staticmethod
     def store_purchase_completed(total_price: int) -> str:
-        return f"Compra completada! Se debitaron {total_price} besitos."
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Excelente elección. Diana aprueba su discernimiento…</i>
+
+Se han destinado <b>{total_price}</b> besitos a esta adquisición.
+
+<i>¿Desea continuar explorando el Gabinete?</i>"""
+
+    @staticmethod
+    def store_menu_intro(balance: int) -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Bienvenido al Gabinete de Tesoros de Diana…
+objetos que ella ha seleccionado con particular cuidado.</i>
+
+💋 <b>Su moneda especial:</b> {balance} besitos
+
+<i>Permítame guiarle hacia lo que busca…</i>"""
+
+    @staticmethod
+    def store_button_search() -> str:
+        return "🔍 Buscar entre los tesoros"
+
+    @staticmethod
+    def store_button_categories() -> str:
+        return "📁 Recorrer las estanterías"
+
+    @staticmethod
+    def store_button_catalog() -> str:
+        return "🛍️ Explorar el catálogo completo"
+
+    @staticmethod
+    def store_button_history() -> str:
+        return "📜 Sus adquisiciones pasadas"
+
+    @staticmethod
+    def store_button_back() -> str:
+        return "🔙 Volver"
+
+    @staticmethod
+    def store_button_back_to_shop() -> str:
+        return "🔙 Volver al Gabinete"
+
+    @staticmethod
+    def store_button_back_main() -> str:
+        return "🔙 Menú principal"
+
+    @staticmethod
+    def store_catalog_intro() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>El catálogo completo de Diana…</i>
+
+Permítame presentarle cada pieza disponible."""
+
+    @staticmethod
+    def store_catalog_empty() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>El Gabinete descansa en silencio por ahora…</i>
+
+Diana prepara nuevas piezas. Permítame invitarle a regresar pronto."""
+
+    @staticmethod
+    def store_categories_intro() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Las estanterías de Diana aguardan su curiosidad…</i>
+
+Seleccione una sección para explorar."""
+
+    @staticmethod
+    def store_categories_empty() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>El catálogo aún no tiene secciones definidas…</i>
+
+Sin embargo, los tesoros aguardan en el catálogo completo."""
+
+    @staticmethod
+    def store_category_header(name: str, description: str = "") -> str:
+        safe_name = html.escape(name)
+        text = f"""🎩 <b>Lucien:</b>
+
+<i>La estantería «{safe_name}»…</i>"""
+        if description:
+            text += f"\n\n{html.escape(description)}"
+        return text
+
+    @staticmethod
+    def store_category_empty(name: str) -> str:
+        safe_name = html.escape(name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>La estantería «{safe_name}» aguarda nuevas piezas…</i>
+
+Permítame invitarle a explorar otras secciones."""
 
     @staticmethod
     def store_tier_menu_intro() -> str:
@@ -1087,13 +1192,13 @@ Seleccione un nivel para explorar."""
     @staticmethod
     def store_tier_intro_for_slug(slug: str) -> str:
         intros = {
-            "impulso": "Vende curiosidad · Compra sin pensar",
-            "deseo": "Vende acceso · El corazón del catálogo",
-            "exclusivo": "Vende completitud · Vale guardar para esto",
-            "reservado": "Vende poder · Solo para los que llegaron lejos",
-            "mitico": "Vende leyenda · Stock limitado · Solo existe este mes",
+            "impulso": "Curiosidad al alcance de la mano… piezas para quien no puede resistir.",
+            "deseo": "El corazón del catálogo… donde el acceso se vuelve irresistible.",
+            "exclusivo": "Completitud reservada… tesoros que merecen ser guardados.",
+            "reservado": "Poder silencioso… solo para quienes llegaron lejos.",
+            "mitico": "Leyenda en existencia limitada… piezas que quizá no vuelvan.",
         }
-        tag = intros.get(slug, "")
+        tag = intros.get(slug, "Un rincón del Gabinete aguarda su mirada…")
         return f"""🎩 <b>Lucien:</b>
 
 <i>{tag}</i>"""
@@ -1121,14 +1226,66 @@ Seleccione un nivel para explorar."""
     @staticmethod
     def store_product_detail(name: str, desc: str, price: int, tier: str = "") -> str:
         safe_name = html.escape(name)
-        safe_desc = html.escape(desc) if desc else ""
+        safe_desc = html.escape(desc) if desc else "<i>Un tesoro del reino…</i>"
         tier_line = f"\n<i>Nivel {html.escape(tier)}</i>\n" if tier else "\n"
         return f"""🎩 <b>Lucien:</b>
 {tier_line}
 <b>{safe_name}</b>
+
 {safe_desc}
 
 💋 <b>{price}</b> besitos"""
+
+    @staticmethod
+    def store_product_discount_line(list_price: int) -> str:
+        return (
+            f"\n🏷️ <b>Precio de lista:</b> {list_price} besitos "
+            f"· <i>ventaja activa</i>"
+        )
+
+    @staticmethod
+    def store_product_availability_lines(stock_text: str, file_count: int) -> str:
+        return (
+            f"\n📊 <b>Existencias:</b> {stock_text}"
+            f"\n📦 <b>Contenido:</b> {file_count} archivo(s)"
+        )
+
+    @staticmethod
+    def store_product_balance_line(balance: int) -> str:
+        return f"\n\n💋 <b>Su moneda especial:</b> {balance} besitos"
+
+    @staticmethod
+    def store_monthly_cap_inline(product_name: str) -> str:
+        safe_name = html.escape(product_name)
+        return (
+            f"<i>Este mes, <b>{safe_name}</b> ya encontró dueño… "
+            f"Diana decidirá cuándo volverá.</i>"
+        )
+
+    @staticmethod
+    def store_product_detail_card(
+        name: str,
+        desc: str,
+        price: int,
+        balance: int,
+        stock_text: str,
+        file_count: int,
+        tier: str = "",
+        list_price: int | None = None,
+        monthly_cap_available: bool = True,
+    ) -> str:
+        """Tarjeta completa de producto para detalle y preview."""
+        text = LucienVoice.store_product_detail(name, desc, price, tier)
+        if list_price is not None and list_price > price:
+            text += LucienVoice.store_product_discount_line(list_price)
+        text += LucienVoice.store_product_availability_lines(stock_text, file_count)
+        text += LucienVoice.store_product_balance_line(balance)
+        if not monthly_cap_available:
+            text += f"\n\n⚠️ {LucienVoice.store_monthly_cap_inline(name)}"
+        if balance < price:
+            text += LucienVoice.store_need_more_besitos_hint()
+            text += LucienVoice.store_earn_besitos_tips()
+        return text
 
     @staticmethod
     def store_monthly_cap_reached(product_name: str) -> str:
@@ -1523,19 +1680,224 @@ Estado: {status}{input_block}"""
 
     @staticmethod
     def store_need_more_besitos_hint() -> str:
-        return "\n\n<i>¿Necesitas mas besitos?</i>\n"
+        return (
+            "\n\n<i>Ah… parece que necesita acumular más "
+            "de la moneda especial de Diana.</i>\n"
+        )
+
+    @staticmethod
+    def store_earn_besitos_tips() -> str:
+        return """👉 <b>Sugerencia:</b> <i>La devoción suele ser recompensada…</i>
+• Reclame su regalo diario
+• Reaccione a las publicaciones del reino
+• Complete los encargos de Diana
+• Únase al círculo exclusivo para mayores ventajas"""
 
     @staticmethod
     def store_confirm_purchase_prompt() -> str:
-        return "<i>¿Confirmar compra?</i>\n\n"
+        return "<i>¿Confirma esta adquisición?</i>\n\n"
+
+    @staticmethod
+    def store_confirm_purchase_message(
+        product_name: str, price: int, balance: int, remaining: int
+    ) -> str:
+        safe_name = html.escape(product_name)
+        return f"""🎩 <b>Lucien:</b>
+
+{LucienVoice.store_confirm_purchase_prompt()}📦 <b>{safe_name}</b>
+💋 <b>Inversión:</b> {price} besitos
+
+{LucienVoice.store_product_balance_line(balance).strip()}
+{LucienVoice.store_after_purchase_balance_line(remaining)}"""
 
     @staticmethod
     def store_after_purchase_balance_line(remaining: int) -> str:
-        return f"📊 Después de compra: {remaining} besitos"
+        return f"📊 <b>Tras la adquisición:</b> {remaining} besitos"
 
     @staticmethod
     def store_search_prompt() -> str:
-        return "<i>¿Que tesoro buscas?</i>\n\n"
+        return "<i>¿Qué tesoro busca?</i>\n\n"
+
+    @staticmethod
+    def store_search_start_message() -> str:
+        return f"""🎩 <b>Lucien:</b>
+
+{LucienVoice.store_search_prompt()}<i>Escriba el nombre o una palabra clave…</i>"""
+
+    @staticmethod
+    def store_search_min_chars() -> str:
+        return "Permítame al menos dos caracteres para orientar la búsqueda."
+
+    @staticmethod
+    def store_search_no_results(query: str) -> str:
+        safe_query = html.escape(query)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>No hallé tesoros para «{safe_query}»…</i>
+
+Quizá otra palabra lo guíe, o prefiera explorar el catálogo."""
+
+    @staticmethod
+    def store_search_results(query: str, count: int) -> str:
+        safe_query = html.escape(query)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Resultados para «{safe_query}»…</i>
+
+{count} tesoro(s) encontrado(s)"""
+
+    @staticmethod
+    def store_button_new_search() -> str:
+        return "🔍 Nueva búsqueda"
+
+    @staticmethod
+    def store_button_preview() -> str:
+        return "👁️ Anticipo del tesoro"
+
+    @staticmethod
+    def store_button_buy() -> str:
+        return "🌸 Adquirir ahora"
+
+    @staticmethod
+    def store_button_insufficient(shortfall: int) -> str:
+        return f"❌ Faltan {shortfall} besitos"
+
+    @staticmethod
+    def store_button_sold_out() -> str:
+        return "🔒 Agotado por ahora"
+
+    @staticmethod
+    def store_button_more_products() -> str:
+        return "🛍️ Explorar más tesoros"
+
+    @staticmethod
+    def store_button_by_categories() -> str:
+        return "📁 Por estanterías"
+
+    @staticmethod
+    def store_button_other_categories() -> str:
+        return "📁 Otras estanterías"
+
+    @staticmethod
+    def store_button_see_all() -> str:
+        return "🛍️ Ver todo el catálogo"
+
+    @staticmethod
+    def store_button_confirm() -> str:
+        return "✅ Confirmar adquisición"
+
+    @staticmethod
+    def store_button_cancel() -> str:
+        return "❌ Reconsiderar"
+
+    @staticmethod
+    def store_button_go_shop() -> str:
+        return "🛍️ Ir al Gabinete"
+
+    @staticmethod
+    def store_preview_caption() -> str:
+        return "<i>Un anticipo de lo que aguarda…</i>"
+
+    @staticmethod
+    def store_preview_sent_alert() -> str:
+        return "Anticipo enviado."
+
+    @staticmethod
+    def store_purchase_success_alert() -> str:
+        return "Adquisición completada."
+
+    @staticmethod
+    def store_balance_insufficient_alert() -> str:
+        return "Moneda especial insuficiente."
+
+    @staticmethod
+    def store_tier_not_found() -> str:
+        return "Ese nivel no figura en el Gabinete."
+
+    @staticmethod
+    def store_category_not_found() -> str:
+        return "Esa estantería no figura en el catálogo."
+
+    @staticmethod
+    def store_purchase_history_empty() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Aún no registra adquisiciones en el reino…</i>
+
+Permítame invitarle al Gabinete para su primera elección."""
+
+    @staticmethod
+    def store_purchase_history_header() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Sus adquisiciones pasadas en el Gabinete de Diana…</i>"""
+
+    @staticmethod
+    def store_purchase_history_item(
+        order_id: int, date_str: str, total_items: int, total_price: int, status_emoji: str
+    ) -> str:
+        return (
+            f"{status_emoji} Adquisición #{order_id} — {date_str}\n"
+            f"   Piezas: {total_items} | Total: {total_price} besitos\n\n"
+        )
+
+    @staticmethod
+    def store_filters_intro() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Permítame ordenar los tesoros a su gusto…</i>
+
+Seleccione cómo desea explorarlos:"""
+
+    @staticmethod
+    def store_filter_empty() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>Ningún tesoro coincide con ese criterio…</i>"""
+
+    @staticmethod
+    def store_filter_results(filter_name: str, count: int, overflow: int = 0) -> str:
+        safe_filter = html.escape(filter_name)
+        text = f"""🎩 <b>Lucien:</b>
+
+<i>Criterio: {safe_filter}</i>
+
+{count} tesoro(s)"""
+        if overflow > 0:
+            text += f"\n\n<i>…y {overflow} más</i>"
+        return text
+
+    @staticmethod
+    def store_filter_price_asc() -> str:
+        return "💰 Del más accesible al más selecto"
+
+    @staticmethod
+    def store_filter_price_desc() -> str:
+        return "💰 Del más selecto al más accesible"
+
+    @staticmethod
+    def store_filter_in_stock() -> str:
+        return "📦 Solo disponibles ahora"
+
+    @staticmethod
+    def store_filter_recent() -> str:
+        return "🆕 Las piezas más recientes"
+
+    @staticmethod
+    def store_filter_label_price_asc() -> str:
+        return "Precio: menor a mayor"
+
+    @staticmethod
+    def store_filter_label_price_desc() -> str:
+        return "Precio: mayor a menor"
+
+    @staticmethod
+    def store_filter_label_in_stock() -> str:
+        return "Solo disponibles"
+
+    @staticmethod
+    def store_filter_label_recent() -> str:
+        return "Más recientes"
 
     @staticmethod
     def backpack_fulfillment_status_pending_input() -> str:
@@ -1605,7 +1967,7 @@ Estado: {status}{input_block}"""
 
     @staticmethod
     def store_catalog_unavailable() -> str:
-        return "Catálogo no disponible"
+        return "El Gabinete no está disponible en este momento."
 
     @staticmethod
     def store_admin_stock_alerts_empty() -> str:
@@ -1633,6 +1995,10 @@ Estado: {status}{input_block}"""
 o completar misiones para ganar más.</i>"""
 
     @staticmethod
+    def main_menu_shop_button() -> str:
+        return "🛍️ El Gabinete de Tesoros"
+
+    @staticmethod
     def store_tier_menu_button() -> str:
         return "✨ Ver por niveles"
 
@@ -1642,7 +2008,7 @@ o completar misiones para ganar más.</i>"""
 
     @staticmethod
     def store_back_to_tier_button(tier_name: str) -> str:
-        return f"🔙 Volver al tier {tier_name}"
+        return f"🔙 Volver a {tier_name}"
 
     @staticmethod
     def store_go_backpack_button() -> str:

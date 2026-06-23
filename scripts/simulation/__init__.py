@@ -1,0 +1,1 @@
+"""Utilidades de simulación de economía de besitos (scripts internos)."""

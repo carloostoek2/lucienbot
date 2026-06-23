@@ -39,6 +39,59 @@ def get_random_emoji() -> str:
     return random.choice(CATALOG_EMOJI_LIST)
 
 
+def _build_product_buttons(
+    product,
+    balance: int,
+    effective_price: int,
+    is_available: bool,
+    *,
+    include_preview: bool = True,
+    more_products_callback: str = "store_catalog",
+) -> list[list[InlineKeyboardButton]]:
+    """Construye filas de botones para detalle/preview de producto."""
+    row = []
+    if include_preview:
+        row.append(
+            InlineKeyboardButton(
+                text=LucienVoice.store_button_preview(),
+                callback_data=ProductPreviewCallback(product_id=product.id).pack(),
+            )
+        )
+    if is_available:
+        if balance >= effective_price:
+            row.append(
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_buy(),
+                    callback_data=DirectBuyCallback(product_id=product.id).pack(),
+                )
+            )
+        else:
+            row.append(
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_insufficient(effective_price - balance),
+                    callback_data="#",
+                )
+            )
+    else:
+        row.append(InlineKeyboardButton(text=LucienVoice.store_button_sold_out(), callback_data="#"))
+    buttons = [row]
+    if include_preview:
+        buttons.append(
+            [InlineKeyboardButton(text=LucienVoice.store_button_more_products(), callback_data=more_products_callback)]
+        )
+        buttons.append(
+            [InlineKeyboardButton(text=LucienVoice.store_button_by_categories(), callback_data="store_categories")]
+        )
+    else:
+        buttons.append(
+            [InlineKeyboardButton(text=LucienVoice.store_button_more_products(), callback_data=more_products_callback)]
+        )
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.store_button_back_to_shop(), callback_data="shop")]
+    )
+    return buttons
+
+
 class SearchStates(StatesGroup):
     waiting_query = State()
 
@@ -52,30 +105,28 @@ async def shop_menu(callback: CallbackQuery):
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔍 Buscar productos", callback_data="store_search")],
-            [InlineKeyboardButton(text="📁 Ver por categorias", callback_data="store_categories")],
+            [InlineKeyboardButton(text=LucienVoice.store_button_search(), callback_data="store_search")],
+            [InlineKeyboardButton(text=LucienVoice.store_button_categories(), callback_data="store_categories")],
             [
                 InlineKeyboardButton(
                     text=LucienVoice.store_tier_menu_button(),
                     callback_data="store_tiers",
                 )
             ],
-            [InlineKeyboardButton(text="🛍️ Ver catalogo completo", callback_data="store_catalog")],
+            [InlineKeyboardButton(text=LucienVoice.store_button_catalog(), callback_data="store_catalog")],
             [
                 InlineKeyboardButton(
-                    text="📜 Historial de compras", callback_data="purchase_history"
+                    text=LucienVoice.store_button_history(), callback_data="purchase_history"
                 )
             ],
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")],
+            [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="back_to_main")],
         ]
     )
 
     await callback.message.edit_text(
-        f"🎩 Lucien:\n\n"
-        f"Bienvenido a la tienda de Diana...\n\n"
-        f"💋 Tu saldo: {balance} besitos\n\n"
-        f"Que deseas hacer?",
+        LucienVoice.store_menu_intro(balance),
         reply_markup=keyboard,
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -100,7 +151,7 @@ async def store_tiers_menu(callback: CallbackQuery):
         ]
         for t in tiers
     ]
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
     await callback.message.edit_text(
         LucienVoice.store_tier_menu_intro(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
@@ -117,7 +168,7 @@ async def store_tier_products(callback: CallbackQuery, callback_data: StoreTierC
         tier = tiers.get(callback_data.tier_id)
         products = store_service.get_products_by_tier(callback_data.tier_id)
     if not tier:
-        await callback.answer("Tier no encontrado", show_alert=True)
+        await callback.answer(LucienVoice.store_tier_not_found(), show_alert=True)
         return
     intro_fn = getattr(LucienVoice, f"store_tier_{tier.slug}_intro", None)
     intro = intro_fn() if intro_fn else LucienVoice.store_tier_intro_for_slug(tier.slug)
@@ -155,15 +206,14 @@ async def store_catalog(callback: CallbackQuery):
 
     if not products:
         await callback.message.edit_text(
-            "🎩 Lucien:\n\n"
-            "La tienda esta vacia en este momento...\n\n"
-            "Vuelve mas tarde para ver nuevos productos.",
+            LucienVoice.store_catalog_empty(),
             reply_markup=back_keyboard("shop"),
+            parse_mode="HTML",
         )
         await callback.answer()
         return
 
-    text = "🎩 Lucien:\n\nCatalogo de productos:\n\n"
+    text = LucienVoice.store_catalog_intro()
 
     buttons = []
     row = []
@@ -185,7 +235,7 @@ async def store_catalog(callback: CallbackQuery):
     if row:
         buttons.append(row)
 
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -201,24 +251,23 @@ async def store_categories(callback: CallbackQuery):
 
     if not categories:
         await callback.message.edit_text(
-            "🎩 <b>Lucien:</b>\n\n"
-            "<i>El catalogo aun no tiene secciones...</i>\n\n"
-            "Explora todos los productos disponibles.",
+            LucienVoice.store_categories_empty(),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="🛍️ Ver catalogo completo", callback_data="store_catalog"
+                            text=LucienVoice.store_button_catalog(), callback_data="store_catalog"
                         )
                     ],
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")],
+                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
                 ]
             ),
+            parse_mode="HTML",
         )
         await callback.answer()
         return
 
-    text = "🎩 <b>Lucien:</b>\n\n<i>Las estanterias de Diana...</i>\n\nSelecciona una categoria:"
+    text = LucienVoice.store_categories_intro()
 
     buttons = []
     for category in categories:
@@ -234,12 +283,12 @@ async def store_categories(callback: CallbackQuery):
             ]
         )
 
-    buttons.append([InlineKeyboardButton(text="🛍️ Ver todo", callback_data="store_catalog")])
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_see_all(), callback_data="store_catalog")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
 
@@ -251,33 +300,30 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
     with get_service(StoreService) as store_service:
         category = store_service.get_category_for_shop(category_id)
         if not category:
-            await callback.answer("Categoria no encontrada", show_alert=True)
+            await callback.answer(LucienVoice.store_category_not_found(), show_alert=True)
             return
         products = store_service.filter_products(category_id=category_id, active_only=True)
 
     if not products:
         await callback.message.edit_text(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>La estanteria '{category.name}' esta vacia...</i>\n\n"
-            f"Vuelve mas tarde para ver nuevos productos.",
+            LucienVoice.store_category_empty(category.name),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="📁 Otras categorias", callback_data="store_categories"
+                            text=LucienVoice.store_button_other_categories(),
+                            callback_data="store_categories",
                         )
                     ],
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")],
+                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
                 ]
             ),
+            parse_mode="HTML",
         )
         await callback.answer()
         return
 
-    text = f"🎩 <b>Lucien:</b>\n\n<i>{category.name}...</i>\n\n"
-
-    if category.description:
-        text += f"{category.description}\n\n"
+    text = LucienVoice.store_category_header(category.name, category.description or "")
 
     buttons = []
     row = []
@@ -299,13 +345,13 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
         buttons.append(row)
 
     buttons.append(
-        [InlineKeyboardButton(text="📁 Otras categorias", callback_data="store_categories")]
+        [InlineKeyboardButton(text=LucienVoice.store_button_other_categories(), callback_data="store_categories")]
     )
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
 
@@ -317,7 +363,7 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
     with get_service(StoreService) as store_service:
         ctx = store_service.get_product_detail_context(product_id, callback.from_user.id)
         if not ctx:
-            await callback.answer("Producto no encontrado", show_alert=True)
+            await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
             return
     product = ctx["product"]
     balance = ctx["balance"]
@@ -325,68 +371,24 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
     file_count = ctx["file_count"]
     stock_text = "∞" if product.stock == -1 else str(product.stock)
     is_available = product.is_available and ctx.get("monthly_cap_available", True)
-    text = LucienVoice.store_product_detail(
+    display_price = effective_price if effective_price != product.price else product.price
+    list_price = product.price if effective_price < product.price else None
+    text = LucienVoice.store_product_detail_card(
         product.name,
         product.description or "",
-        effective_price if effective_price != product.price else product.price,
+        display_price,
+        balance,
+        stock_text,
+        file_count,
         ctx.get("tier_name", ""),
+        list_price=list_price,
+        monthly_cap_available=ctx.get("monthly_cap_available", True),
     )
-    if effective_price < product.price:
-        text += f"\n🏷️ <b>Precio lista:</b> {product.price} besitos · <i>descuento activo</i>"
-    text += f"\n📊 <b>Stock:</b> {stock_text}\n📦 <b>Contenido:</b> {file_count} archivo(s)"
-    text += f"\n\n💋 Tu saldo: {balance} besitos"
-    if not ctx.get("monthly_cap_available", True):
-        text += f"\n\n⚠️ {LucienVoice.store_monthly_cap_reached(product.name)}"
-
-    # Add guidance on earning besitos if balance is insufficient
-    if balance < effective_price:
-        text += LucienVoice.store_need_more_besitos_hint()
-        text += "• Reclama tu regalo diario\n"
-        text += "• Reacciona a publicaciones\n"
-        text += "• Completa misiones\n"
-        text += "• Subscribete VIP para mas beneficios"
-
-    # Build keyboard
-    buttons = []
-    row = []
-
-    # First row: Preview button and Buy button (if available)
-    row.append(
-        InlineKeyboardButton(
-            text="👁️ Preview", callback_data=ProductPreviewCallback(product_id=product.id).pack()
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=_build_product_buttons(
+            product, balance, effective_price, is_available
         )
     )
-
-    if is_available:
-        if balance >= effective_price:
-            row.append(
-                InlineKeyboardButton(
-                    text="💋 Comprar ahora",
-                    callback_data=DirectBuyCallback(product_id=product.id).pack(),
-                )
-            )
-        else:
-            row.append(
-                InlineKeyboardButton(
-                    text=f"❌ Necesitas {effective_price - balance} besitos mas",
-                    callback_data="#",
-                )
-            )
-    else:
-        row.append(InlineKeyboardButton(text="🔒 Agotado", callback_data="#"))
-
-    buttons.append(row)
-
-    # Navigation row
-    buttons.append(
-        [InlineKeyboardButton(text="🛍️ Ver mas productos", callback_data="store_catalog")]
-    )
-    buttons.append(
-        [InlineKeyboardButton(text="📁 Por categorias", callback_data="store_categories")]
-    )
-    buttons.append([InlineKeyboardButton(text="🔙 Volver a la tienda", callback_data="shop")])
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -400,7 +402,7 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
     with get_service(StoreService) as store_service:
         ctx = store_service.get_product_detail_context(product_id, callback.from_user.id)
         if not ctx:
-            await callback.answer("Producto no encontrado", show_alert=True)
+            await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
             return
         preview_files = store_service.get_preview_files_for_product(product_id, limit=1)
     product = ctx["product"]
@@ -409,75 +411,55 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
     file_count = ctx["file_count"]
     stock_text = "∞" if product.stock == -1 else str(product.stock)
     is_available = product.is_available and ctx.get("monthly_cap_available", True)
+    display_price = effective_price if effective_price != product.price else product.price
+    list_price = product.price if effective_price < product.price else None
 
-    # Enviar preview si hay archivos
-    preview_errors = []
     if preview_files:
         for file_entry in preview_files:
             try:
                 if file_entry.file_type == "photo":
                     await callback.message.answer_photo(
                         photo=file_entry.file_id,
-                        caption="<i>Preview del contenido...</i>",
+                        caption=LucienVoice.store_preview_caption(),
                         parse_mode="HTML",
                     )
                 elif file_entry.file_type == "video":
                     await callback.message.answer_video(
                         video=file_entry.file_id,
-                        caption="<i>Preview del contenido...</i>",
+                        caption=LucienVoice.store_preview_caption(),
                         parse_mode="HTML",
                     )
             except Exception as e:
-                error_msg = f"Error enviando preview (file_id={file_entry.file_id[:20]}..., type={file_entry.file_type}): {e}"
+                error_msg = (
+                    f"Error enviando preview (file_id={file_entry.file_id[:20]}..., "
+                    f"type={file_entry.file_type}): {e}"
+                )
                 logger.error(error_msg)
-                preview_errors.append(file_entry.file_type)
                 continue
 
-    # Construir mensaje con la tarjeta del producto y botones
-    text = f"""🎩 <b>Lucien:</b>
-
-<i>{product.name}</i>
-
-📝 {product.description or "Un tesoro del reino..."}
-
-💰 <b>Precio:</b> {effective_price} besitos
-📊 <b>Stock:</b> {stock_text}
-📦 <b>Contenido:</b> {file_count} archivo(s)
-
-💋 Tu saldo: {balance} besitos"""
-
-    if balance < effective_price:
-        text += LucienVoice.store_need_more_besitos_hint()
-        text += "• Reclama tu regalo diario\n"
-        text += "• Reacciona a publicaciones\n"
-        text += "• Completa misiones\n"
-        text += "• Subscribete VIP para mas beneficios"
-
-    buttons = []
-    row = []
-    if is_available:
-        if balance >= effective_price:
-            row.append(
-                InlineKeyboardButton(
-                    text=LucienVoice.store_acquire_button(),
-                    callback_data=DirectBuyCallback(product_id=product.id).pack(),
-                )
-            )
-        else:
-            row.append(
-                InlineKeyboardButton(
-                    text=f"❌ Necesitas {effective_price - balance} besitos mas",
-                    callback_data="#",
-                )
-            )
-    else:
-        row.append(InlineKeyboardButton(text="🔒 Agotado", callback_data="#"))
-    buttons.append(row)
-    buttons.append([InlineKeyboardButton(text="🛍️ Ver mas productos", callback_data="store_tiers")])
-    buttons.append([InlineKeyboardButton(text="🔙 Volver a la tienda", callback_data="shop")])
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    text = LucienVoice.store_product_detail_card(
+        product.name,
+        product.description or "",
+        display_price,
+        balance,
+        stock_text,
+        file_count,
+        ctx.get("tier_name", ""),
+        list_price=list_price,
+        monthly_cap_available=ctx.get("monthly_cap_available", True),
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=_build_product_buttons(
+            product,
+            balance,
+            effective_price,
+            is_available,
+            include_preview=False,
+            more_products_callback="store_tiers",
+        )
+    )
     await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-    await callback.answer("Preview enviado!", show_alert=False)
+    await callback.answer(LucienVoice.store_preview_sent_alert(), show_alert=False)
 
 
 # ==================== COMPRA DIRECTA ====================
@@ -491,7 +473,7 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
     with get_service(StoreService) as store_service:
         product = store_service.get_product(product_id)
         if not product:
-            await callback.answer("Producto no encontrado", show_alert=True)
+            await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
             return
         user_id = callback.from_user.id
         cap_err = store_service._check_monthly_cap_for_product(product_id)
@@ -502,29 +484,23 @@ async def direct_buy(callback: CallbackQuery, callback_data: DirectBuyCallback):
         effective_price = store_service.get_effective_price(user_id, product.price)
 
     if balance < effective_price:
-        await callback.answer("Saldo insuficiente", show_alert=True)
+        await callback.answer(LucienVoice.store_balance_insufficient_alert(), show_alert=True)
         return
 
-    text = (
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"{LucienVoice.store_confirm_purchase_prompt()}"
-        f"📦 <b>{product.name}</b>\n"
-        f"💰 <b>Precio:</b> {effective_price} besitos\n\n"
-        f"💋 Tu saldo: {balance} besitos\n"
-        f"{LucienVoice.store_after_purchase_balance_line(balance - effective_price)}"
+    text = LucienVoice.store_confirm_purchase_message(
+        product.name, effective_price, balance, balance - effective_price
     )
-
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Confirmar",
+                    text=LucienVoice.store_button_confirm(),
                     callback_data=ConfirmDirectBuyCallback(product_id=product_id).pack(),
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="❌ Cancelar",
+                    text=LucienVoice.store_button_cancel(),
                     callback_data=ProductDetailCallback(product_id=product_id).pack(),
                 )
             ],
@@ -588,12 +564,12 @@ async def confirm_direct_buy(
                         callback_data="store_tiers",
                     )
                 ],
-                [InlineKeyboardButton(text="🔙 Menu principal", callback_data="back_to_main")],
+                [InlineKeyboardButton(text=LucienVoice.store_button_back_main(), callback_data="back_to_main")],
             ]
         ),
         parse_mode="HTML",
     )
-    await callback.answer("Compra exitosa!")
+    await callback.answer(LucienVoice.store_purchase_success_alert())
 
     pending = next(
         (s for s in summaries if s.get("status") == "pending_input" and s.get("fulfillment_id")),
@@ -650,39 +626,37 @@ async def purchase_history(callback: CallbackQuery):
 
     if not orders:
         await callback.message.edit_text(
-            "🎩 Lucien:\n\n"
-            "Aun no tienes compras registradas...\n\n"
-            "Visita la tienda para hacer tu primera compra.",
+            LucienVoice.store_purchase_history_empty(),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="🛍️ Ir a la tienda", callback_data="shop")],
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")],
+                    [InlineKeyboardButton(text=LucienVoice.store_button_go_shop(), callback_data="shop")],
+                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
                 ]
             ),
+            parse_mode="HTML",
         )
         await callback.answer()
         return
 
-    text = "🎩 Lucien:\n\nTu historial de compras:\n\n"
-
+    text = LucienVoice.store_purchase_history_header() + "\n\n"
     for order in orders:
         status_emoji = {"completed": "✅", "pending": "⏳", "cancelled": "❌"}.get(
             order.status.value, "❓"
         )
-
         date_str = order.created_at.strftime("%d/%m/%Y") if order.created_at else "?"
-
-        text += f"{status_emoji} Orden #{order.id} - {date_str}\n"
-        text += f"   Items: {order.total_items} | Total: {order.total_price} besitos\n\n"
+        text += LucienVoice.store_purchase_history_item(
+            order.id, date_str, order.total_items, order.total_price, status_emoji
+        )
 
     await callback.message.edit_text(
         text,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🛍️ Ir a la tienda", callback_data="shop")],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")],
+                [InlineKeyboardButton(text=LucienVoice.store_button_go_shop(), callback_data="shop")],
+                [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
             ]
         ),
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -694,12 +668,13 @@ async def purchase_history(callback: CallbackQuery):
 async def store_search_start(callback: CallbackQuery, state: FSMContext):
     """Inicia busqueda de productos"""
     await callback.message.edit_text(
-        "🎩 <b>Lucien:</b>\n\n"
-        f"{LucienVoice.store_search_prompt()}"
-        "Escribe el nombre o una palabra clave del producto:",
+        LucienVoice.store_search_start_message(),
         reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="❌ Cancelar", callback_data="shop")]]
+            inline_keyboard=[
+                [InlineKeyboardButton(text=LucienVoice.store_button_cancel(), callback_data="shop")]
+            ]
         ),
+        parse_mode="HTML",
     )
     await state.set_state(SearchStates.waiting_query)
     await callback.answer()
@@ -711,9 +686,11 @@ async def process_search_query(message: Message, state: FSMContext):
     query = message.text.strip()
     if len(query) < 2:
         await message.answer(
-            "Por favor escribe al menos 2 caracteres para buscar.",
+            LucienVoice.store_search_min_chars(),
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="❌ Cancelar", callback_data="shop")]]
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=LucienVoice.store_button_cancel(), callback_data="shop")]
+                ]
             ),
         )
         return
@@ -723,25 +700,19 @@ async def process_search_query(message: Message, state: FSMContext):
 
     if not products:
         await message.answer(
-            f"🎩 <b>Lucien:</b>\n\n"
-            f"<i>No encontre tesoros para '{query}'...</i>\n\n"
-            f"Intenta con otra palabra o explora el catalogo.",
+            LucienVoice.store_search_no_results(query),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="🛍️ Ver catalogo", callback_data="store_catalog")],
-                    [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")],
+                    [InlineKeyboardButton(text=LucienVoice.store_button_catalog(), callback_data="store_catalog")],
+                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
                 ]
             ),
+            parse_mode="HTML",
         )
         await state.clear()
         return
 
-    # Show search results
-    text = (
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Resultados para '{query}':</i>\n\n"
-        f"{len(products)} tesoro(s) encontrado(s)\n\n"
-    )
+    text = LucienVoice.store_search_results(query, len(products)) + "\n\n"
 
     buttons = []
     row = []
@@ -761,10 +732,14 @@ async def process_search_query(message: Message, state: FSMContext):
     if row:
         buttons.append(row)
 
-    buttons.append([InlineKeyboardButton(text="🔍 Nueva busqueda", callback_data="store_search")])
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_new_search(), callback_data="store_search")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 
-    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="HTML",
+    )
     await state.clear()
 
 
@@ -775,23 +750,24 @@ async def store_filters(callback: CallbackQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💰 Por precio: Menor a mayor", callback_data="filter_price_asc"
+                    text=LucienVoice.store_filter_price_asc(), callback_data="filter_price_asc"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="💰 Por precio: Mayor a menor", callback_data="filter_price_desc"
+                    text=LucienVoice.store_filter_price_desc(), callback_data="filter_price_desc"
                 )
             ],
-            [InlineKeyboardButton(text="📦 Solo disponibles", callback_data="filter_in_stock")],
-            [InlineKeyboardButton(text="🆕 Mas recientes", callback_data="filter_recent")],
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="shop")],
+            [InlineKeyboardButton(text=LucienVoice.store_filter_in_stock(), callback_data="filter_in_stock")],
+            [InlineKeyboardButton(text=LucienVoice.store_filter_recent(), callback_data="filter_recent")],
+            [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
         ]
     )
 
     await callback.message.edit_text(
-        "🎩 <b>Lucien:</b>\n\n<i>Filtrar tesoros...</i>\n\nSelecciona como ordenar los productos:",
+        LucienVoice.store_filters_intro(),
         reply_markup=keyboard,
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -803,7 +779,7 @@ async def filter_price_asc(callback: CallbackQuery):
         products = store_service.get_all_products(active_only=True)
         products.sort(key=lambda p: p.price)
 
-        await show_filtered_products(callback, products, "Precio: menor a mayor")
+        await show_filtered_products(callback, products, LucienVoice.store_filter_label_price_asc())
 
 
 @router.callback_query(F.data == "filter_price_desc", lambda cb: not is_admin(cb.from_user.id))
@@ -813,7 +789,7 @@ async def filter_price_desc(callback: CallbackQuery):
         products = store_service.get_all_products(active_only=True)
         products.sort(key=lambda p: p.price, reverse=True)
 
-        await show_filtered_products(callback, products, "Precio: mayor a menor")
+        await show_filtered_products(callback, products, LucienVoice.store_filter_label_price_desc())
 
 
 @router.callback_query(F.data == "filter_in_stock", lambda cb: not is_admin(cb.from_user.id))
@@ -822,7 +798,7 @@ async def filter_in_stock(callback: CallbackQuery):
     with get_service(StoreService) as store_service:
         products = store_service.get_available_products()
 
-        await show_filtered_products(callback, products, "Solo disponibles")
+        await show_filtered_products(callback, products, LucienVoice.store_filter_label_in_stock())
 
 
 @router.callback_query(F.data == "filter_recent", lambda cb: not is_admin(cb.from_user.id))
@@ -832,22 +808,24 @@ async def filter_recent(callback: CallbackQuery):
         products = store_service.get_all_products(active_only=True)
         # Already sorted by created_at desc from service
 
-        await show_filtered_products(callback, products, "Mas recientes")
+        await show_filtered_products(callback, products, LucienVoice.store_filter_label_recent())
 
 
 async def show_filtered_products(callback: CallbackQuery, products: list, filter_name: str):
     """Helper para mostrar productos filtrados"""
     if not products:
         await callback.message.edit_text(
-            "🎩 <b>Lucien:</b>\n\n<i>No hay tesoros que coincidan...</i>",
+            LucienVoice.store_filter_empty(),
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="🔙 Volver", callback_data="shop")]]
+                inline_keyboard=[[InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]]
             ),
+            parse_mode="HTML",
         )
         await callback.answer()
         return
 
-    text = f"🎩 <b>Lucien:</b>\n\n<i>Filtrado: {filter_name}</i>\n\n{len(products)} tesoro(s)\n\n"
+    overflow = max(0, len(products) - 10)
+    text = LucienVoice.store_filter_results(filter_name, min(len(products), 10), overflow) + "\n\n"
 
     buttons = []
     row = []
@@ -867,12 +845,11 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
     if row:
         buttons.append(row)
 
-    if len(products) > 10:
-        text += f"<i>...y {len(products) - 10} mas</i>\n\n"
-
-    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="shop")])
+    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 
     await callback.message.edit_text(
-        text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="HTML",
     )
     await callback.answer()

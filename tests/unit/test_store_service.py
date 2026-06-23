@@ -141,7 +141,7 @@ class TestStoreService:
         service = StoreService(db_session)
         order, error = service.create_order(sample_user.id)
         assert order is None
-        assert "vacio" in error.lower() or "empty" in error.lower()
+        assert "vacía" in error.lower() or "empty" in error.lower()
 
     def test_create_order_insufficient_stock(self, db_session, sample_user, sample_store_product):
         service = StoreService(db_session)
@@ -150,7 +150,7 @@ class TestStoreService:
         service.add_to_cart(sample_user.id, sample_store_product.id, quantity=5)
         order, error = service.create_order(sample_user.id)
         assert order is None
-        assert "stock" in error.lower()
+        assert "unidades" in error.lower() or "stock" in error.lower()
 
     def test_create_order_insufficient_balance(self, db_session, sample_user, sample_store_product):
         service = StoreService(db_session)
@@ -161,8 +161,8 @@ class TestStoreService:
         order, error = service.create_order(sample_user.id)
         assert order is None
         assert (
-            "saldo" in error.lower()
-            or "balance" in error.lower()
+            "necesita" in error.lower()
+            or "dispone" in error.lower()
             or "insufficient" in error.lower()
         )
 
