@@ -1,0 +1,2 @@
+- [broadcast-link-buttons-item1.md](broadcast-link-buttons-item1.md) — ITEM1 catalog: 6 tests + 69 baseline + 11 golds; suite protege adecuadamente; 0 regressions on atomicity/reactions
+- [broadcast-link-buttons-item2.md](broadcast-link-buttons-item2.md) — ITEM2 wizard+markup: 8 new (pures+create+prefix+preserve) + 71 baseline + golds green; suite protege adecuadamente; reacciones + extra button OK; 0 regressions
