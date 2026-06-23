@@ -1768,7 +1768,10 @@ async def toggle_product(callback: CallbackQuery, callback_data: ToggleProductCa
             await callback.answer("Producto no encontrado", show_alert=True)
             return
 
-        store_service.update_product(product_id, is_active=not product.is_active)
+        success = store_service.update_product(product_id, is_active=not product.is_active)
+        if not success:
+            await callback.answer("No se pudo actualizar el producto", show_alert=True)
+            return
 
         status = "activado" if not product.is_active else "desactivado"
         await callback.answer(f"Producto {status}")

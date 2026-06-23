@@ -323,24 +323,26 @@ class StoreService:
         new_tariff_id = kwargs.get("tariff_id", product.tariff_id)
         new_story_node_id = kwargs.get("story_node_id", product.story_node_id)
 
-        if new_kind in (FulfillmentKind.PACKAGE, FulfillmentKind.PACKAGE_DEFERRED) and not new_package_id:
-            logger.warning(
-                f"store_service | update_product | product_id={product_id} | "
-                f"result=package_id_required_for_kind"
-            )
-            return False
-        if new_kind == FulfillmentKind.VIP_GRANT and not new_tariff_id:
-            logger.warning(
-                f"store_service | update_product | product_id={product_id} | "
-                f"result=tariff_id_required_for_kind"
-            )
-            return False
-        if new_kind == FulfillmentKind.STORY_UNLOCK and not new_story_node_id:
-            logger.warning(
-                f"store_service | update_product | product_id={product_id} | "
-                f"result=story_node_id_required_for_kind"
-            )
-            return False
+        changing_kind = "fulfillment_kind" in kwargs
+        if changing_kind:
+            if new_kind in (FulfillmentKind.PACKAGE, FulfillmentKind.PACKAGE_DEFERRED) and not new_package_id:
+                logger.warning(
+                    f"store_service | update_product | product_id={product_id} | "
+                    f"result=package_id_required_for_kind"
+                )
+                return False
+            if new_kind == FulfillmentKind.VIP_GRANT and not new_tariff_id:
+                logger.warning(
+                    f"store_service | update_product | product_id={product_id} | "
+                    f"result=tariff_id_required_for_kind"
+                )
+                return False
+            if new_kind == FulfillmentKind.STORY_UNLOCK and not new_story_node_id:
+                logger.warning(
+                    f"store_service | update_product | product_id={product_id} | "
+                    f"result=story_node_id_required_for_kind"
+                )
+                return False
 
         if "package_id" in kwargs and kwargs["package_id"] is not None:
             new_package_id = kwargs["package_id"]
