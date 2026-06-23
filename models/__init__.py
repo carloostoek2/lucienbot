@@ -3,6 +3,7 @@ from .models import (
     # Fase 1 - Gamificacion
     BesitoBalance,
     BesitoTransaction,
+    BroadcastButton,
     BroadcastMessage,
     BroadcastReaction,
     CartItem,
@@ -52,6 +53,7 @@ __all__ = [
     "TransactionType",
     "TransactionSource",
     "ReactionEmoji",
+    "BroadcastButton",
     "BroadcastMessage",
     "BroadcastReaction",
     "DailyGiftConfig",

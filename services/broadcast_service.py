@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from models.database import SessionLocal
 from models.models import (
+    BroadcastButton,
     BroadcastMessage,
     BroadcastReaction,
     MissionType,
@@ -100,6 +101,76 @@ class BroadcastService:
             return True
         return False
 
+    # ==================== BOTONES DE ENLACE EXTRA ====================
+
+    def create_broadcast_button(
+        self, label: str, url: str, description: str = None
+    ) -> BroadcastButton:
+        """Crea un nuevo botón de enlace extra.
+
+        Validation is loose per ITEM1 decision (Telegram link intent documented;
+        enforcement + tests deferred to ITEM2 integration). No strict checks here.
+        """
+        button = BroadcastButton(label=label, url=url, description=description, is_active=True)
+        self.db.add(button)
+        self.db.commit()
+        self.db.refresh(button)
+        logger.info(
+            f"broadcast_service | create_broadcast_button | label={label} | url={url} | id={button.id}"
+        )
+        return button
+
+    def get_broadcast_button(self, button_id: int) -> BroadcastButton | None:
+        """Obtiene un botón por ID"""
+        return self.db.query(BroadcastButton).filter(BroadcastButton.id == button_id).first()
+
+    def get_all_buttons(self, active_only: bool = True) -> list[BroadcastButton]:
+        """Obtiene todos los botones de enlace"""
+        query = self.db.query(BroadcastButton)
+        if active_only:
+            query = query.filter(BroadcastButton.is_active)
+        return query.all()
+
+    def toggle_broadcast_button(self, button_id: int) -> bool:
+        """Activa/desactiva un botón de enlace"""
+        button = self.get_broadcast_button(button_id)
+        if button:
+            button.is_active = not button.is_active
+            self.db.commit()
+            return True
+        return False
+
+    def update_broadcast_button(
+        self, button_id: int, label: str = None, url: str = None, description: str = None
+    ) -> bool:
+        """Actualiza campos provistos de un botón (parcial).
+
+        If no non-None fields provided, this is a no-op (no columns mutated)
+        but we still commit (harmless) and return True because the row was found.
+        This matches the simple "if found: mutate; commit; return True" pattern
+        used by update_emoji_value / siblings (no early-exit complexity).
+        """
+        button = self.get_broadcast_button(button_id)
+        if not button:
+            return False
+        if label is not None:
+            button.label = label
+        if url is not None:
+            button.url = url
+        if description is not None:
+            button.description = description
+        self.db.commit()  # commit even on no-op to keep pattern consistent
+        return True
+
+    def delete_broadcast_button(self, button_id: int) -> bool:
+        """Elimina un botón de enlace"""
+        button = self.get_broadcast_button(button_id)
+        if button:
+            self.db.delete(button)
+            self.db.commit()
+            return True
+        return False
+
     # ==================== MENSAJES DE BROADCAST ====================
 
     def create_broadcast_message(
@@ -114,8 +185,9 @@ class BroadcastService:
         has_reactions: bool = False,
         is_protected: bool = False,
         selected_emoji_ids: str = None,
+        extra_button_id: int = None,
     ) -> BroadcastMessage:
-        """Registra un mensaje de broadcast en la base de datos"""
+        """Registra un mensaje de broadcast en la base de datos (acepta extra_button_id opcional)."""
         broadcast = BroadcastMessage(
             message_id=message_id,
             channel_id=channel_id,
@@ -127,6 +199,7 @@ class BroadcastService:
             has_reactions=has_reactions,
             is_protected=is_protected,
             selected_emoji_ids=selected_emoji_ids,
+            extra_button_id=extra_button_id,
         )
         self.db.add(broadcast)
         self.db.commit()
@@ -334,10 +407,17 @@ class BroadcastService:
         if emoji_id not in selected_emoji_ids:
             return self._reaction_failure("emoji_not_allowed")
 
+        # Defensa en profundidad: chequeo explícito antes del INSERT (UC sigue siendo la protección final para races).
+        if self.has_user_reacted(broadcast_id, user_id):
+            logger.info(
+                f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | duplicate (pre-check)"
+            )
+            return self._reaction_failure("duplicate")
+
         besito_value = emoji.besito_value
 
         try:
-            # Crear la reacción - el UniqueConstraint en BD evitará duplicados
+            # Crear la reacción - el UniqueConstraint en BD evitará duplicados (fallback para concurrencia)
             reaction = BroadcastReaction(
                 broadcast_id=broadcast_id,
                 user_id=user_id,
@@ -410,6 +490,7 @@ class BroadcastService:
             err_lower = err_text.lower()
             is_duplicate = (
                 "uq_broadcast_user_reaction" in err_text
+                or "unique constraint failed" in err_lower  # SQLite common message
                 or (
                     "unique" in err_lower
                     and "broadcast_reactions" in err_lower
@@ -432,7 +513,9 @@ class BroadcastService:
             return self._reaction_failure("error")
         except Exception as e:
             db.rollback()
-            logger.error(f"broadcast_service | check_and_register_reaction | user_id={user_id} | error={e}")
+            logger.error(
+                f"broadcast_service | check_and_register_reaction | user_id={user_id} | error={e}"
+            )
             return self._reaction_failure("error")
 
     def get_reactions_by_broadcast(self, broadcast_id: int) -> list[BroadcastReaction]:

@@ -10,6 +10,16 @@ Sistema de reacciones con besitos a mensajes broadcast. **NO envía broadcasts**
 
 ## BroadcastService API
 
+**Gestión de botones de enlace extra (catálogo "definir primero", máx 1 por broadcast):**
+- `create_broadcast_button(label, url, description=None)`
+- `get_broadcast_button(button_id)`
+- `get_all_buttons(active_only=True)`
+- `toggle_broadcast_button(button_id)`
+- `update_broadcast_button(button_id, label=None, url=None, description=None)`
+- `delete_broadcast_button(button_id)`
+
+Admin wizard completo en `gamification_admin_handlers` (config_buttons + add/edit/toggle/delete flows) accesible desde el menú de gamificación y desde "Configurar besitos".
+
 **Gestión de emojis de reacción:**
 ```python
 create_reaction_emoji(emoji, name, besito_value) -> ReactionEmoji

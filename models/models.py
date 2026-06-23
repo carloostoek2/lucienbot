@@ -270,6 +270,21 @@ class ReactionEmoji(Base):
     broadcast_reactions = relationship("BroadcastReaction", back_populates="reaction_emoji")
 
 
+class BroadcastButton(Base):
+    """Botones de enlace extra reutilizables para broadcasts"""
+
+    __tablename__ = "broadcast_buttons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    label = Column(String(100), nullable=False)  # Texto del botón
+    url = Column(
+        String(500), nullable=False
+    )  # Enlace de Telegram (https://t.me/ o tg://); Validation is loose per ITEM1 decision (Telegram link intent documented; enforcement + tests deferred to ITEM2 integration)
+    description = Column(Text, nullable=True)  # Nota para admins (opcional)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class BroadcastMessage(Base):
     """Mensajes de broadcasting con reacciones"""
 
@@ -288,6 +303,9 @@ class BroadcastMessage(Base):
     selected_emoji_ids = Column(
         String(200), nullable=True
     )  # IDs de emojis seleccionados separados por coma
+    extra_button_id = Column(
+        Integer, ForeignKey("broadcast_buttons.id"), nullable=True, index=True
+    )  # Botón de enlace extra opcional (ITEM 1: nullable, no bidirectional relationship)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relaciones
@@ -981,7 +999,9 @@ class OrderFulfillment(Base):
     order_item_id = Column(Integer, ForeignKey("order_items.id"), nullable=False, unique=True)
     user_id = Column(BigInteger, nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
-    fulfillment_kind = Column(Enum(FulfillmentKind, values_callable=str_enum_values), nullable=False)
+    fulfillment_kind = Column(
+        Enum(FulfillmentKind, values_callable=str_enum_values), nullable=False
+    )
     status = Column(
         Enum(FulfillmentStatus, values_callable=str_enum_values),
         default=FulfillmentStatus.PENDING_FULFILLMENT,
@@ -998,9 +1018,7 @@ class OrderFulfillment(Base):
     order_item = relationship("OrderItem", back_populates="fulfillment")
     product = relationship("StoreProduct")
     privileges = relationship("StorePrivilege", back_populates="fulfillment")
-    waitlist_entry = relationship(
-        "StoreWaitlistEntry", back_populates="fulfillment", uselist=False
-    )
+    waitlist_entry = relationship("StoreWaitlistEntry", back_populates="fulfillment", uselist=False)
 
 
 class StorePrivilege(Base):
