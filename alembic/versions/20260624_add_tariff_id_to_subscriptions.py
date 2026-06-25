@@ -5,7 +5,7 @@ This enables the relaxed convention:
 - Internal grants (missions, store VIP, admin forward, etc.): can associate directly to Tariff (tariff_id set, token_id may stay for audit/fallback or be omitted in future direct paths).
 
 Revision ID: 20260624_add_tariff_id_to_subscriptions
-Revises: 20260622_fix_fulfillment_enums   # adjust to actual head if needed at apply time
+Revises: 20260624_reinstate_broadcast_reaction_unique
 Create Date: 2026-06-24
 """
 
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "20260624_add_tariff_id_to_subscriptions"
-down_revision: Union[str, None] = "20260622_fix_fulfillment_enums"
+down_revision: Union[str, None] = "20260624_reinstate_broadcast_reaction_unique"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
