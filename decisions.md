@@ -347,6 +347,45 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 - `channel_handlers.py`: `is_admin` en todos los callbacks admin + guards FSM; FSM wait custom (1–1440); editor approval/welcome; lista pendientes paginada (8/página) con approve/reject individual; exactly 1 `get_service(ChannelService)` por entrypoint.
 - `free_channel_handlers.py`: resolver mensajes custom en welcome manual.
 - Callbacks tipados en `callback_data.py`; voz Lucien en `lucien_voice.py`.
+
+---
+## Adaptación de la regla VIP "siempre via Token" + base técnica para grants internos (2026-06)
+
+**Motivo:**
+- La regla estricta documentada en services/vip/CLAUDE.md ("No existe 'agregar/quitar VIP directo' — siempre via Token → Subscription") obliga a generar Tokens sintéticos (inmediatamente USED) para todos los grants internos (misiones VIP, paquetes VIP en tienda, forward admin).
+- Esto genera overhead (ruido en tabla tokens, acoplamiento tariff info solo vía token en Subscription, queries frágiles, metadata de workarounds para resends/idempotencia, fallback deep-link leakage).
+- El sistema evolucionó: la mayoría de grants son programáticos (no distribución manual). Reward/StoreProduct ya usan tariff_id directo; Subscription no.
+- Usuario pidió análisis de impacto + plan mínimo para relajar la regla y **sentar base técnica + convención explícita** para que todo desarrollo futuro (misiones, etc.) tenga un camino claro sin repetir el workaround de grant_vip_from_tariff.
+
+**Riesgos (mitigados):**
+- Romper flujo manual de tokens o contratos atómicos de redeem (FOR UPDATE, extensión, EVENT post-commit).
+- Pérdida de trazabilidad/audit para grants internos (mit: tariff_id directo + metadata existente en claims/fulfillments + opción de token opcional para fallback).
+- Inconsistencia en queries/display (backpack, listas) (mit: prefer direct + fallback).
+- Migración + datos existentes (mit: columna nullable + backfill).
+
+**Decisión:**
+- Modelo: agregar `tariff_id` (nullable) + rel a Subscription (models/models.py). Mantener token_id para manual.
+- Migración Alembic nueva (20260624_...) + backfill desde token.
+- VIPService: 
+  - redeem actualiza/establece tariff_id (token path).
+  - Nuevo `grant_internal_vip_access(user_id, tariff_id)` para grants directos (sin token forzado; misma atomicidad + emit).
+  - grant_vip_from_tariff se mantiene para compat (casos que necesitan token_code).
+  - Queries (get_active_*, etc.) cargan tariff directo + token fallback.
+- Callers internos migran (o usan) el nuevo path: reward, fulfillment, forward (forward mantiene from_tariff por necesidad de fallback code).
+- Backpack y lecturas actualizadas para usar tariff_id preferente.
+- Docs: actualizar services/vip/CLAUDE.md con convención clara (manual = Token; interno = direct Tariff). Añadir entry en decisions.md. Sincronizar otros CLAUDE.
+- Tests: cubrir nuevo path (sin token sintético para interno, tariff visible), re-correr golds (0 reg en manual + atomic).
+
+**Resultado:**
+- Base técnica sentada: patrón "interno = direct tariff" documentado y con helper + campo en modelo.
+- Futuros grants (nuevas misiones, admin tools, etc.) siguen el camino sin esfuerzo extra ni tokens fantasma.
+- Flujo manual 100% intacto.
+- 0 impacto en atomicidad, EventBus, is_user_vip, scheduler, 3 crit.
+- Ver plan.md en sesión para detalles de ejecución + verificación (golds, mig up/down, smoke).
+
+(Ver plan en /.../plan.md de esta sesión + impacto analysis previo.)
+
+Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool.
 - Status `"rejected"` para rechazo admin (sin migración Alembic; cabe en `String(20)`).
 - Tests: `test_channel_grant.py`, `test_channel_admin_handlers.py`, extensiones `test_channel_service.py`, flip contrato en `test_free_entry_flow.py`.
 

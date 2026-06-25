@@ -244,12 +244,13 @@ class BackpackService:
 
         result = []
         for sub in subscriptions:
-            db.query(Package).first()  # Placeholder - using Tariff model
             from models.models import Tariff
 
+            # Prefer direct tariff_id (new convention for internal grants); fallback to token for legacy/manual
+            tariff_id = sub.tariff_id or (sub.token.tariff_id if sub.token else None)
             tariff_obj = (
-                db.query(Tariff).filter(Tariff.id == sub.token.tariff_id).first()
-                if sub.token
+                db.query(Tariff).filter(Tariff.id == tariff_id).first()
+                if tariff_id
                 else None
             )
 

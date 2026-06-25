@@ -129,11 +129,16 @@ Diana (Admin)
 
 ## Notas técnicas
 - Canales VIP se gestionan via `ChannelService`, NO son env vars
-- No existe "agregar/quitar VIP directo" — siempre via Token → Subscription
-- `is_user_vip()` verifica suscripción activa contra el canal
+- **Convención actualizada (2026-06):** 
+  - Distribución manual (admin genera token → usuario canjea con /start): siempre via Token → redeem → Subscription (token_id requerido, útil para share + is_gift + single-use).
+  - Grants internos/programáticos (misiones/recompensas VIP, paquetes VIP en tienda, activación admin/forward, futuros): asociación directa a Tariff en Subscription (tariff_id). No se genera Token sintético a menos que se necesite explícitamente para fallback o auditoría.
+- Subscription ahora puede tener tariff_id directo (nullable para compat). Queries prefieren tariff_id; fallback a token.tariff.
+- `grant_vip_from_tariff` mantiene compatibilidad (todavía crea token para casos que lo requieran). Usar `grant_internal_vip_access` para el nuevo camino directo.
+- `is_user_vip()` verifica suscripción activa contra el canal (independiente de cómo se otorgó).
 
 ## Antes de Implementar
 1. Lee [@architecture.md](../../architecture.md)
 2. Lee [@rules.md](../../rules.md)
 3. Verifica métodos en `vip_service.py` antes de asumir que existen
-4. Si necesitas dar VIP directo a un usuario → generar y redimir un token
+4. Distribución manual / usuario final → generar + redimir token.
+5. Grants internos (misiones, tienda VIP, forward admin, etc.) → usar grant directo a tarifa (ver `grant_internal_vip_access` + tariff_id en Subscription).

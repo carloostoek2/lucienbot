@@ -160,6 +160,7 @@ class Subscription(Base):
     user_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
     token_id = Column(Integer, ForeignKey("tokens.id"), nullable=False)
+    tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=True)  # Direct tariff for internal grants (missions, store, admin forward). Null for legacy/manual token-based subs.
     start_date = Column(DateTime(timezone=True), server_default=func.now())
     end_date = Column(DateTime(timezone=True), nullable=False)
     is_active = Column(Boolean, default=True)
@@ -170,6 +171,7 @@ class Subscription(Base):
     user = relationship("User", back_populates="subscriptions")
     channel = relationship("Channel", back_populates="subscriptions")
     token = relationship("Token", back_populates="subscriptions")
+    tariff = relationship("Tariff")  # Direct (preferred for internal grants); fallback to token.tariff when tariff_id is None
 
 
 class PendingRequest(Base):

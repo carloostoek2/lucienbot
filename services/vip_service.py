@@ -228,6 +228,7 @@ class VIPService:
             existing_subscription.is_active = True  # Defensive: ensure active after extension
             # Mantener la nueva referencia del token aunque sea extensión
             existing_subscription.token_id = token.id
+            existing_subscription.tariff_id = token.tariff_id  # direct tariff (new convention for internals + legacy compat)
 
             # Desactivar cualquier otra suscripción activa del usuario (duplicados por bug anterior)
             db.query(Subscription).filter(
@@ -279,7 +280,11 @@ class VIPService:
             return None
 
         subscription = Subscription(
-            user_id=user_id, channel_id=vip_channel.id, token_id=token.id, end_date=end_date
+            user_id=user_id,
+            channel_id=vip_channel.id,
+            token_id=token.id,
+            tariff_id=token.tariff_id,  # direct tariff association (enables relaxed rule for internal grants)
+            end_date=end_date,
         )
 
         db.add(subscription)
@@ -368,7 +373,10 @@ class VIPService:
         now = datetime.now(UTC).replace(tzinfo=None)
         query = (
             db.query(Subscription)
-            .options(joinedload(Subscription.token).joinedload(Token.tariff))
+            .options(
+                joinedload(Subscription.token).joinedload(Token.tariff),
+                joinedload(Subscription.tariff),  # direct tariff (preferred for internal grants)
+            )
             .filter(
                 Subscription.is_active,
                 Subscription.end_date > now,
@@ -522,6 +530,108 @@ class VIPService:
             "token_code": token.token_code,
         }
         return True, LucienVoice.vip_direct_access(invite_link), metadata
+
+    async def grant_internal_vip_access(
+        self, user_id: int, tariff_id: int
+    ) -> tuple[bool, Subscription | None, dict]:
+        """
+        Otorga (o extiende) acceso VIP directamente asociado a una tarifa, sin requerir Token.
+        Usar para grants internos/programáticos: misiones, tienda (VIP_GRANT), activación admin/forward, etc.
+
+        Sigue el mismo contrato de atomicidad/extensión que redeem (pero sin token).
+        Emite EVENT_VIP_ACTIVATED (best-effort).
+        Retorna (ok, subscription_or_None, metadata).
+        """
+        tariff = self.get_tariff(tariff_id)
+        if not tariff:
+            return False, None, {"error": "tariff_not_found"}
+
+        db = self._get_db()
+        now = datetime.now(UTC)
+
+        # Verificar si el usuario ya tiene una suscripción activa
+        existing_subscription = self.get_user_subscription(user_id)
+        sub_end_date = (
+            _ensure_aware(existing_subscription.end_date)
+            if existing_subscription and existing_subscription.end_date is not None
+            else None
+        )
+
+        if existing_subscription and sub_end_date is not None and sub_end_date > now:
+            # Extender existente
+            existing_subscription.end_date = sub_end_date + timedelta(days=tariff.duration_days)
+            existing_subscription.is_active = True
+            # No tocamos token_id (puede ser None para grants internos)
+            existing_subscription.tariff_id = tariff_id
+
+            db.query(Subscription).filter(
+                Subscription.user_id == user_id,
+                Subscription.is_active,
+                Subscription.id != existing_subscription.id,
+            ).update({Subscription.is_active: False})
+
+            db.commit()
+            db.refresh(existing_subscription)
+
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            if user:
+                user.vip_entry_status = None
+                user.vip_entry_stage = None
+                db.commit()
+
+            logger.info(
+                f"vip_service | grant_internal_vip_access | extended | user_id={user_id} | tariff_id={tariff_id}"
+            )
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATED,
+                    {"user_id": user_id, "subscription_id": existing_subscription.id},
+                )
+            )
+            return True, existing_subscription, {"subscription_id": existing_subscription.id, "tariff_id": tariff_id}
+
+        # Crear nueva
+        end_date = now + timedelta(days=tariff.duration_days)
+
+        db.query(Subscription).filter(
+            Subscription.user_id == user_id, Subscription.is_active
+        ).update({Subscription.is_active: False})
+
+        vip_channel = (
+            db.query(Channel)
+            .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active)
+            .first()
+        )
+        if not vip_channel:
+            db.rollback()
+            return False, None, {"error": "no_vip_channel"}
+
+        subscription = Subscription(
+            user_id=user_id,
+            channel_id=vip_channel.id,
+            token_id=None,  # internal grant: no token required
+            tariff_id=tariff_id,
+            end_date=end_date,
+        )
+        db.add(subscription)
+        db.commit()
+        db.refresh(subscription)
+
+        user = db.query(User).filter(User.telegram_id == user_id).first()
+        if user:
+            user.vip_entry_status = None
+            user.vip_entry_stage = None
+            db.commit()
+
+        logger.info(
+            f"vip_service | grant_internal_vip_access | created | user_id={user_id} | tariff_id={tariff_id} | sub_id={subscription.id}"
+        )
+        schedule_emit(
+            get_event_bus().emit(
+                EVENT_VIP_ACTIVATED, {"user_id": user_id, "subscription_id": subscription.id}
+            )
+        )
+        return True, subscription, {"subscription_id": subscription.id, "tariff_id": tariff_id}
 
     async def resend_vip_invite_for_user(
         self, bot, user_id: int
