@@ -414,3 +414,35 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 
 **Resultado:**
 - Ventaja Kinky y La Lista despachan correctamente; caps mensuales re-verificados bajo lock.
+
+---
+
+## Observability + health docs hygiene (Item 4/34, fourth of new pool of 4)
+
+**Motivo:**
+- Inconsistent structured logging (not everywhere per root CLAUDE "módulo | acción | user_id | resultado" rule; sparse outside health/story etc).
+- /health spike from Item 11/29 needed verification + hygiene post pool 33 (tests-only reality work).
+- Docs drift: handlers/CLAUDE.md "Ejemplo Correcto" still showed legacy `with get_session() as session: service = BesitoService(session)` while hardener (tirones 25-33/Items7-11) + code use `with get_service(XXX) as svc:` + 1 call + puros + integration style (real svc + class patch).
+
+**Riesgos (mitigados):**
+- None (tight 0/0/0 hygiene + spike verify only; logs added alongside or aligned, no tx/atomic change; targeted to middlewares + health + 1 core sample; re-runs of golds protect 3 crit + contracts; no writes to gamif/narr/channel-VIP paths).
+
+**Decisión:**
+- F2: structured logging hygiene (copy HealthService format al pie) for rate_limiter (limit hit, bypass, cleanup), idempotency (dupe/skip), besito credit/debit alongside, health verify+align.
+- F3: exercise python -m scripts.health_check [--json|--verbose]; bot smoke; verify core checks (DB/bot/channels/bus/scheduler + critical_sanity) + best-effort/read-only (grep 0 mutation) in health_service.get_overall_status.
+- F4: replace drifted example in handlers/CLAUDE.md with current get_service + 1svc; update Reglas + hardener pattern section with refs to puros/integration/Items 7-11/pool33 + logging enforcement; append this Item 4/34 entry to decisions.md (mirror style + pool phrase + handoff); optional 1-line cross in services/CLAUDE for traceability.
+- GSD pre every edit/gate; ruff/greps post; leverages Item11/29 HealthService precedent al pie (read-only/best-effort, Analytics pattern, logging, get_service 1 call + is_admin, Lucien voice, 0 impact).
+- Follows hardener agile: pool of 4, self-check PASSED + verbatim pool phrase at close.
+
+**Resultado:**
+- Logging format now enforced in observability paths + middlewares + sample critical (greps post: rate 5, idemp 2, besito +2, health 15+; overall format count increased).
+- /health verified working (terminal script + bot import + get_service); core checks present and best-effort (degraded/unknown expected when no bot/scheduler/backups; db/channels/sanity ok).
+- handlers/CLAUDE.md docs 1:1 reality (get_service example, rules reference 1svc/get_service/puros/integration + hardener refs + logging note; 0 get_session in active code examples).
+- decisions.md + (if) services/CLAUDE updated for traceability.
+- ruff clean on py touched (pre-exist idemp E402 etc non-reg); greps "with get_service" + "1 service" + "puros" + "get_session" (0 in runtime, fixed in docs).
+- 0 behavior/0 atomicity/0 prod change; 3 crit + atomicity/EventBus/get_service contracts 0 impact (re-runs + greps only).
+- UI 1:1 Lucien preserved (health renders unchanged).
+- F4 safe point. Ready for F5 gates (arch/testg re-runs ruff bot-smoke greps) + F6 self-check PASSED + handoff.
+- "Item 4/34 closed. Fourth of new pool of 4. Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool. Ready for arch-enforcer + test-guardian + documentador (final pool close + ROADMAP update)."
+
+(Refs: .planning/phases/34-observability-health-docs/PLAN.md + gsd-34-observability-health-docs.log + 29-observability-health + HARDENING_ROADMAP sec5 + pool33 + health_service.py + handlers/CLAUDE.md + services/CLAUDE.md)

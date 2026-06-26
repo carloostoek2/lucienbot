@@ -21,9 +21,7 @@ from keyboards.callback_data import (
 )
 from models.models import RewardType
 from services import get_service
-from services.package_service import PackageService
 from services.reward_service import RewardService
-from services.vip_service import VIPService
 from utils.admin import is_admin
 
 logger = logging.getLogger(__name__)
@@ -53,6 +51,262 @@ class PackageFromRewardStates(StatesGroup):
     waiting_store_stock = State()
     waiting_reward_stock = State()
     confirming = State()
+
+
+# ==================== PURE HELPERS (extracted for <=50 LOC + exactly 1 service) ====================
+# Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (wizard/list/detail).
+# 1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+
+
+def build_package_selection_text_and_buttons(packages: list) -> tuple[str, list[list]]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (wizard package select).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    buttons = []
+    if packages:
+        for pkg in packages:
+            stock_text = "∞" if pkg.reward_stock == -1 else str(pkg.reward_stock)
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
+                        callback_data=RewardSelectPkgCallback(pkg_id=pkg.id).pack(),
+                    )
+                ]
+            )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="➕ Crear nuevo paquete", callback_data="create_package_for_reward"
+            )
+        ]
+    )
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
+    text = """🎩 Lucien:
+
+Paso 4 de 5: Seleccionar paquete
+
+Elige un paquete existente o crea uno nuevo:"""
+    if not packages:
+        text = """🎩 Lucien:
+
+Paso 4 de 5: Seleccionar paquete
+
+No hay paquetes disponibles para recompensas.
+
+Debes crear uno nuevo:"""
+    return text, buttons
+
+
+def build_tariff_selection_buttons(tariffs: list) -> list[list]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (tariff select).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    buttons = []
+    for tariff in tariffs:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{tariff.name} ({tariff.duration_days} dias)",
+                    callback_data=SelectTariffCallback(tariff_id=tariff.id).pack(),
+                )
+            ]
+        )
+    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
+    return buttons
+
+
+def build_pkg_confirmation_text_and_keyboard(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (pkg confirm from reward).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    name = data.get("pkg_name", "")
+    description = data.get("pkg_description", "Sin descripcion")
+    files = data.get("pkg_files", [])
+    reward_stock = data.get("pkg_reward_stock", -1)
+    stock_text = "Ilimitado" if reward_stock == -1 else str(reward_stock)
+    text = f"""🎩 Lucien:
+
+Resumen del paquete:
+
+📦 {name}
+📝 {description}
+📁 {len(files)} archivos
+🎁 Stock recompensas: {stock_text}
+🛒 Stock tienda: No disponible
+
+Crear este paquete?"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Crear paquete", callback_data="confirm_create_pkg_from_reward"
+                )
+            ],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
+        ]
+    )
+    return text, keyboard
+
+
+def compute_reward_type_text(reward_type, besito_amount=None, pkg=None, tariff=None) -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (confirm type text).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    if reward_type == RewardType.BESITOS:
+        return f"{besito_amount or 0} besitos"
+    if reward_type == RewardType.PACKAGE:
+        if pkg:
+            return f"Paquete: {pkg.name}"
+        return "Paquete: Desconocido"
+    if reward_type == RewardType.VIP_ACCESS:
+        if tariff:
+            return f"VIP: {tariff.name}"
+        return "VIP: Desconocido"
+    return ""
+
+
+def build_reward_confirm_text_and_keyboard(
+    data: dict, pkg=None, tariff=None
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (reward confirm).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    name = data.get("name", "")
+    description = data.get("description") or "Sin descripcion"
+    reward_type = data.get("reward_type")
+    type_text = compute_reward_type_text(
+        reward_type,
+        besito_amount=data.get("besito_amount"),
+        pkg=pkg,
+        tariff=tariff,
+    )
+    text = f"""🎩 Lucien:
+
+Resumen de la recompensa:
+
+🎁 {name}
+📝 {description}
+📋 Tipo: {reward_type.value if reward_type else ""}
+💎 Contenido: {type_text}
+
+Crear esta recompensa?"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Crear", callback_data="confirm_create_reward")],
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
+        ]
+    )
+    return text, keyboard
+
+
+def build_reward_list_entry_and_button(reward) -> tuple[str, list[InlineKeyboardButton]]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (list entry).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    status = "✅" if reward.is_active else "❌"
+    entry_text = f"{status} {reward.name[:30]}"
+    button = InlineKeyboardButton(
+        text=entry_text,
+        callback_data=RewardAdminDetailCallback(reward_id=reward.id).pack(),
+    )
+    return entry_text, [button]
+
+
+def build_reward_detail_text_and_keyboard(reward) -> tuple[str, InlineKeyboardMarkup]:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (detail).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    status = "✅ Activo" if reward.is_active else "❌ Inactivo"
+    content_text = ""
+    if reward.reward_type.value == "besitos":
+        content_text = f"{reward.besito_amount} besitos"
+    elif reward.reward_type.value == "package" and reward.package:
+        content_text = f"Paquete: {reward.package.name}"
+    elif reward.reward_type.value == "vip_access" and reward.tariff:
+        content_text = f"VIP: {reward.tariff.name}"
+    text = f"""🎩 Lucien:
+
+🎁 {reward.name}
+
+📝 {reward.description or "Sin descripcion"}
+
+📋 Informacion:
+   • Tipo: {reward.reward_type.value}
+   • Contenido: {content_text}
+   • Estado: {status}
+
+Que deseas hacer?"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{'Desactivar' if reward.is_active else 'Activar'}",
+                    callback_data=RewardToggleCallback(reward_id=reward.id).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑️ Eliminar",
+                    callback_data=RewardDeleteCallback(reward_id=reward.id).pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="list_rewards")],
+        ]
+    )
+    return text, keyboard
+
+
+def build_reward_delete_confirm_keyboard(reward_id: int) -> InlineKeyboardMarkup:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (delete confirm).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Si, eliminar",
+                    callback_data=RewardDeleteCallback(reward_id=reward_id, confirmed=True).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Cancelar",
+                    callback_data=RewardAdminDetailCallback(reward_id=reward_id).pack(),
+                )
+            ],
+        ]
+    )
+
+
+def build_reward_created_text(reward) -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (create success).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    return f"""🎩 Lucien:
+
+Recompensa creada exitosamente!
+
+🎁 {reward.name}
+📋 Tipo: {reward.reward_type.value}
+
+La recompensa esta lista para usarse en misiones."""
+
+
+def build_reward_error_text(action: str = "crear la recompensa") -> str:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (error).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    return f"Error al {action}."
+
+
+def build_back_only_keyboard() -> InlineKeyboardMarkup:
+    """Función pura (sin estado ni side-effects). Soporte para UI de admin rewards (back only kb).
+    1:1 de lógica previamente inline (item34, arch-enforcer). Precedent item7/8/9.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")]]
+    )
 
 
 # ==================== WIZARD CREAR RECOMPENSA ====================
@@ -205,49 +459,12 @@ async def process_besito_amount(message: Message, state: FSMContext):
 
 async def show_package_selection(callback: CallbackQuery, state: FSMContext):
     """Muestra seleccion de paquetes"""
-    with get_service(PackageService) as package_service:
-        packages = package_service.get_available_packages_for_rewards()
+    with get_service(RewardService) as reward_service:
+        packages = reward_service.get_available_packages_for_rewards()
 
-    buttons = []
-
-    if packages:
-        for pkg in packages:
-            stock_text = "∞" if pkg.reward_stock == -1 else str(pkg.reward_stock)
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{pkg.name} ({pkg.file_count} archivos, stock: {stock_text})",
-                        callback_data=RewardSelectPkgCallback(pkg_id=pkg.id).pack(),
-                    )
-                ]
-            )
-
-    buttons.append(
-        [
-            InlineKeyboardButton(
-                text="➕ Crear nuevo paquete", callback_data="create_package_for_reward"
-            )
-        ]
-    )
-    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
-
-    text = """🎩 Lucien:
-
-Paso 4 de 5: Seleccionar paquete
-
-Elige un paquete existente o crea uno nuevo:"""
-
-    if not packages:
-        text = """🎩 Lucien:
-
-Paso 4 de 5: Seleccionar paquete
-
-No hay paquetes disponibles para recompensas.
-
-Debes crear uno nuevo:"""
-
+    text, button_rows = build_package_selection_text_and_buttons(packages)
     await callback.message.edit_text(
-        text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        text, reply_markup=InlineKeyboardMarkup(inline_keyboard=button_rows)
     )
     await state.set_state(RewardWizardStates.selecting_package)
 
@@ -264,7 +481,11 @@ async def select_package_for_reward(
     await callback.answer()
 
 
-@router.callback_query(RewardWizardStates.selecting_package, F.data == "create_package_for_reward", lambda cb: is_admin(cb.from_user.id))
+@router.callback_query(
+    RewardWizardStates.selecting_package,
+    F.data == "create_package_for_reward",
+    lambda cb: is_admin(cb.from_user.id),
+)
 async def create_package_for_reward(callback: CallbackQuery, state: FSMContext):
     """Inicia creacion de paquete desde recompensa"""
     await callback.message.edit_text(
@@ -502,27 +723,16 @@ async def confirm_create_pkg_from_reward(callback: CallbackQuery, state: FSMCont
     data = await state.get_data()
 
     try:
-        with get_service(PackageService) as package_service:
-            # Crear paquete
-            package = package_service.create_package(
+        files = data.get("pkg_files", [])
+        with get_service(RewardService) as reward_service:
+            package = reward_service.create_package_for_reward_wizard(
                 name=data.get("pkg_name"),
                 description=data.get("pkg_description"),
-                store_stock=-2,  # No disponible en tienda
+                store_stock=-2,
                 reward_stock=data.get("pkg_reward_stock", -1),
+                files=files,
                 created_by=callback.from_user.id,
             )
-
-            # Agregar archivos
-            files = data.get("pkg_files", [])
-            for i, file_data in enumerate(files):
-                package_service.add_file_to_package(
-                    package_id=package.id,
-                    file_id=file_data["file_id"],
-                    file_type=file_data["file_type"],
-                    file_name=file_data.get("file_name"),
-                    order_index=i,
-                )
-
         # Guardar package_id para la recompensa
         await state.update_data(package_id=package.id)
 
@@ -561,8 +771,8 @@ Continuando con la recompensa..."""
 
 async def show_tariff_selection(callback: CallbackQuery, state: FSMContext):
     """Muestra seleccion de tarifas VIP"""
-    vip_service = VIPService()
-    tariffs = vip_service.get_all_tariffs(active_only=True)
+    with get_service(RewardService) as reward_service:
+        tariffs = reward_service.get_all_tariffs(active_only=True)
 
     if not tariffs:
         await callback.message.edit_text(
@@ -580,19 +790,7 @@ Crea una tarifa primero desde el panel VIP.""",
         await state.clear()
         return
 
-    buttons = []
-    for tariff in tariffs:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{tariff.name} ({tariff.duration_days} dias)",
-                    callback_data=SelectTariffCallback(tariff_id=tariff.id).pack(),
-                )
-            ]
-        )
-
-    buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")])
-
+    buttons = build_tariff_selection_buttons(tariffs)
     await callback.message.edit_text(
         """🎩 Lucien:
 
@@ -626,43 +824,21 @@ async def show_reward_confirmation(target, state: FSMContext):
     """Muestra confirmacion de recompensa"""
     data = await state.get_data()
 
-    name = data.get("name", "")
-    description = data.get("description", "Sin descripcion")
     reward_type = data.get("reward_type")
 
-    type_text = ""
-    if reward_type == RewardType.BESITOS:
-        type_text = f"{data.get('besito_amount', 0)} besitos"
-    elif reward_type == RewardType.PACKAGE:
-        package_id = data.get("package_id")
-        if package_id:
-            with get_service(PackageService) as package_service:
-                pkg = package_service.get_package(package_id)
-            type_text = f"Paquete: {pkg.name if pkg else 'Desconocido'}"
-    elif reward_type == RewardType.VIP_ACCESS:
-        tariff_id = data.get("tariff_id")
-        if tariff_id:
-            vip_service = VIPService()
-            tariff = vip_service.get_tariff(tariff_id)
-            type_text = f"VIP: {tariff.name if tariff else 'Desconocido'}"
+    pkg = None
+    tariff = None
+    with get_service(RewardService) as reward_service:
+        if reward_type == RewardType.PACKAGE:
+            package_id = data.get("package_id")
+            if package_id:
+                pkg = reward_service.get_package(package_id)
+        elif reward_type == RewardType.VIP_ACCESS:
+            tariff_id = data.get("tariff_id")
+            if tariff_id:
+                tariff = reward_service.get_tariff(tariff_id)
 
-    text = f"""🎩 Lucien:
-
-Resumen de la recompensa:
-
-🎁 {name}
-📝 {description}
-📋 Tipo: {reward_type.value}
-💎 Contenido: {type_text}
-
-Crear esta recompensa?"""
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Crear", callback_data="confirm_create_reward")],
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_missions")],
-        ]
-    )
+    text, keyboard = build_reward_confirm_text_and_keyboard(data, pkg=pkg, tariff=tariff)
 
     if isinstance(target, CallbackQuery):
         await target.message.edit_text(text, reply_markup=keyboard)
@@ -705,31 +881,15 @@ async def confirm_create_reward(callback: CallbackQuery, state: FSMContext):
                 )
 
             await callback.message.edit_text(
-                f"""🎩 Lucien:
-
-        Recompensa creada exitosamente!
-
-        🎁 {reward.name}
-        📋 Tipo: {reward.reward_type.value}
-
-        La recompensa esta lista para usarse en misiones.""",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")]
-                    ]
-                ),
+                build_reward_created_text(reward),
+                reply_markup=build_back_only_keyboard(),
             )
-            logger.info(f"Recompensa creada: {reward.name} por admin {callback.from_user.id}")
-
+            logger.info(f"reward_admin_handlers | confirm_create_reward | user_id={callback.from_user.id} | reward_id={reward.id} | result=success")
         except Exception as e:
             logger.error(f"Error creando recompensa: {e}")
             await callback.message.edit_text(
-                "Error al crear la recompensa.",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")]
-                    ]
-                ),
+                build_reward_error_text("crear la recompensa"),
+                reply_markup=build_back_only_keyboard(),
             )
 
         await state.clear()
@@ -760,16 +920,9 @@ async def list_rewards(callback: CallbackQuery):
         buttons = []
 
         for reward in rewards:
-            status = "✅" if reward.is_active else "❌"
-            text += f"{status} {reward.name} ({reward.reward_type.value})\n"
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{status} {reward.name[:30]}",
-                        callback_data=RewardAdminDetailCallback(reward_id=reward.id).pack(),
-                    )
-                ]
-            )
+            entry_text, button_row = build_reward_list_entry_and_button(reward)
+            text += entry_text + "\n"
+            buttons.append(button_row)
 
         buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_missions")])
 
@@ -793,50 +946,8 @@ async def reward_admin_detail(callback: CallbackQuery, callback_data: RewardAdmi
             await callback.answer("Recompensa no encontrada", show_alert=True)
             return
 
-        status = "✅ Activo" if reward.is_active else "❌ Inactivo"
-
-        # Contenido segun tipo
-        content_text = ""
-        if reward.reward_type.value == "besitos":
-            content_text = f"{reward.besito_amount} besitos"
-        elif reward.reward_type.value == "package" and reward.package:
-            content_text = f"Paquete: {reward.package.name}"
-        elif reward.reward_type.value == "vip_access" and reward.tariff:
-            content_text = f"VIP: {reward.tariff.name}"
-
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=f"{'Desactivar' if reward.is_active else 'Activar'}",
-                        callback_data=RewardToggleCallback(reward_id=reward_id).pack(),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🗑️ Eliminar",
-                        callback_data=RewardDeleteCallback(reward_id=reward_id).pack(),
-                    )
-                ],
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="list_rewards")],
-            ]
-        )
-
-        await callback.message.edit_text(
-            f"""🎩 Lucien:
-
-        🎁 {reward.name}
-
-        📝 {reward.description or "Sin descripcion"}
-
-        📋 Informacion:
-           • Tipo: {reward.reward_type.value}
-           • Contenido: {content_text}
-           • Estado: {status}
-
-        Que deseas hacer?""",
-            reply_markup=keyboard,
-        )
+        text, keyboard = build_reward_detail_text_and_keyboard(reward)
+        await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
 
 
@@ -896,23 +1007,7 @@ async def delete_reward_confirm(callback: CallbackQuery, callback_data: RewardDe
             return
 
     # Show confirmation keyboard
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Si, eliminar",
-                    callback_data=RewardDeleteCallback(reward_id=reward_id, confirmed=True).pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="❌ Cancelar",
-                    callback_data=RewardAdminDetailCallback(reward_id=reward_id).pack(),
-                )
-            ],
-        ]
-    )
-
+    keyboard = build_reward_delete_confirm_keyboard(reward_id)
     await callback.message.edit_text(
         "🎩 Lucien:\n\n"
         "Estas seguro de eliminar esta recompensa?\n\n"

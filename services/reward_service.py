@@ -4,13 +4,20 @@ Servicio de Recompensas - Lucien Bot
 Gestiona la creacion y entrega de recompensas.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, desc, or_
+
+if TYPE_CHECKING:
+    from models.models import Package, Tariff
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from keyboards.inline_keyboards import vip_access_keyboard
 from models.database import SessionLocal
 from models.models import (
     MissionFrequency,
@@ -20,7 +27,6 @@ from models.models import (
     UserMissionProgress,
     UserRewardHistory,
 )
-from keyboards.inline_keyboards import vip_access_keyboard
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.vip_service import VIPService
@@ -181,6 +187,76 @@ class RewardService:
     def get_reward_emoji(self, reward: Reward) -> tuple[str, str]:
         """Retorna (emoji, description) según tipo de recompensa. Delegate a la función pura top-level para mantener compatibilidad."""
         return get_reward_emoji(reward)
+
+    # Support added for reward_admin_handlers 1-service + pure extract (item34).
+    # Arch-enforcer long-funcs + multi-service note addressed. Precedent item7/8/9.
+    def get_available_packages_for_rewards(self) -> list[Package]:
+        """Thin delegate to PackageService.get_available_packages_for_rewards().
+        Added for item34: enables reward_admin_handlers package selection in reward wizard to call exactly 1 service (RewardService) per handlers/CLAUDE + arch rules.
+        Not core CRUD. 0 behavior change. Precedent item8/9.
+        """
+        from services.package_service import PackageService
+
+        return PackageService(db=self._get_db()).get_available_packages_for_rewards()
+
+    def get_all_tariffs(self, active_only: bool = True) -> list[Tariff]:
+        """Thin delegate to VIPService.get_all_tariffs(active_only).
+        Added for item34: enables reward_admin_handlers tariff selection for VIP rewards to call exactly 1 service (RewardService).
+        Not core CRUD. 0 behavior change. Precedent item8/9.
+        """
+        from services.vip_service import VIPService
+
+        return VIPService(db=self._get_db()).get_all_tariffs(active_only=active_only)
+
+    def get_tariff(self, tariff_id: int) -> Tariff | None:
+        """Thin delegate to VIPService.get_tariff(tariff_id).
+        Added for item34: enables reward_admin_handlers tariff lookup in confirm/display.
+        Not core CRUD. 0 behavior change. Precedent item8/9.
+        """
+        from services.vip_service import VIPService
+
+        return VIPService(db=self._get_db()).get_tariff(tariff_id)
+
+    def get_package(self, package_id: int) -> Package | None:
+        """Thin delegate to PackageService.get_package(package_id).
+        Added for item34: enables reward_admin_handlers confirm display to enrich package name without direct PackageService.
+        Not core CRUD. 0 behavior change. Precedent item8/9.
+        """
+        from services.package_service import PackageService
+        return PackageService(db=self._get_db()).get_package(package_id)
+
+    def create_package_for_reward_wizard(
+        self,
+        name: str,
+        description: str,
+        store_stock: int,
+        reward_stock: int,
+        files: list[dict],
+        created_by: int,
+    ) -> Package:
+        """Thin orchestration: create package (store_stock=-2) + add files for reward wizard.
+        Added for item34: enables reward_admin_handlers package creation sub-wizard to call exactly 1 service (RewardService).
+        Not core reward CRUD. 0 behavior change. Precedent pattern for cross in admin wizards.
+        """
+        from services.package_service import PackageService
+
+        ps = PackageService(db=self._get_db())
+        pkg = ps.create_package(
+            name=name,
+            description=description,
+            store_stock=store_stock,
+            reward_stock=reward_stock,
+            created_by=created_by,
+        )
+        for i, f in enumerate(files or []):
+            ps.add_file_to_package(
+                package_id=pkg.id,
+                file_id=f["file_id"],
+                file_type=f["file_type"],
+                file_name=f.get("file_name"),
+                order_index=i,
+            )
+        return pkg
 
     # ==================== ACTUALIZACION Y ELIMINACION ====================
 
@@ -546,16 +622,12 @@ class RewardService:
             return False
         return True
 
-    def release_mission_delivery_claim(
-        self, user_id: int, mission_id: int, reward_id: int
-    ) -> None:
+    def release_mission_delivery_claim(self, user_id: int, mission_id: int, reward_id: int) -> None:
         """Libera claim pendiente tras fallo. No borra si besitos ya fueron acreditados."""
         claim = self._get_mission_delivery_claim(user_id, mission_id, reward_id)
         if not claim or claim.details != _DELIVERY_CLAIM_MARKER:
             return
-        if self._has_mission_besitos_credit(
-            user_id, reward_id, mission_id=mission_id
-        ):
+        if self._has_mission_besitos_credit(user_id, reward_id, mission_id=mission_id):
             self._finalize_delivery_claim(user_id, mission_id, reward_id)
             return
         self.db.delete(claim)

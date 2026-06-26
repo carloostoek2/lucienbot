@@ -1,0 +1,26 @@
+{
+  "doc_path": "docs/ARCHITECTURE.md",
+  "claims_checked": 52,
+  "claims_passed": 49,
+  "claims_failed": 3,
+  "failures": [
+    {
+      "line": 6,
+      "claim": "thin handlers delegate to exactly one domain service",
+      "expected": "handlers delegate to exactly one service (per architecture rule, component diagram, and key abstractions)",
+      "actual": "cmd_start() in handlers/common_handlers.py instantiates UserService() and VIPService() (two services in a single handler function); other handlers use direct Service() instantiation"
+    },
+    {
+      "line": 15,
+      "claim": "Thin Handlers<br/>exactly one service call",
+      "expected": "component diagram accurately describes handler-to-service delegation cardinality",
+      "actual": "diagram labels handlers as 'exactly one service call' but multiple handler functions instantiate 1+ services directly (e.g. common_handlers, reward_admin_handlers, vip_user_handlers)"
+    },
+    {
+      "line": 42,
+      "claim": "Enforces the \"exactly one service per handler\" rule",
+      "expected": "get_service context manager + usage pattern enforces exactly-one service call per handler in practice",
+      "actual": "get_service exists and is used in many places, but does not universally enforce the rule; direct multi-service calls persist in handlers"
+    }
+  ]
+}

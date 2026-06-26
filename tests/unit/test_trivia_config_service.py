@@ -155,3 +155,32 @@ class TestTriviaConfigContractShape:
         cfg = svc.get_config()
         expected = set(DEFAULTS.keys())
         assert set(cfg.keys()) == expected
+
+
+@pytest.mark.unit
+class TestGamifTriviaCapsExplicit:
+    """Explicit gamif caps from TriviaConfigService (PLAN F2 hygiene).
+    Pins DEFAULTS values returned by get_config for dice/trivia limits (free/vip).
+    Real service + db. 0 beh. Re-runs protect game limits paths.
+    """
+
+    def test_get_config_explicit_caps_defaults_pinned(self, db_session):
+        """All key limits pinned explicitly per configured DEFAULTS.
+        dice_limit_free=10, dice_vip=20, trivia_* free/vip as DEFAULTS.
+        """
+        svc = TriviaConfigService(db_session)
+        cfg = svc.get_config()
+
+        # Explicit pins (caps exercised and asserted)
+        assert cfg["dice_limit_free"] == 10
+        assert cfg["dice_limit_vip"] == 20
+        assert cfg["trivia_limit_free"] == 5
+        assert cfg["trivia_limit_vip"] == 10
+        assert cfg["trivia_simple_limit_free"] == 5
+        assert cfg["trivia_simple_limit_vip"] == 10
+        assert cfg["trivia_besitos_daily_free"] == 10
+        assert cfg["trivia_besitos_daily_vip"] == 15
+        # full set present (contract)
+        for k in DEFAULTS:
+            assert k in cfg
+            assert isinstance(cfg[k], int)

@@ -10,9 +10,7 @@ pytestmark = [pytest.mark.unit]
 def _mock_backpack_ctx(mock_get_service, **methods):
     svc = MagicMock()
     for name, val in methods.items():
-        if isinstance(val, MagicMock):
-            setattr(svc, name, val)
-        elif callable(val):
+        if isinstance(val, MagicMock) or callable(val):
             setattr(svc, name, val)
         else:
             setattr(svc, name, MagicMock(return_value=val))

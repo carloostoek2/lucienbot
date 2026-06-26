@@ -142,6 +142,7 @@ class BesitoService:
             self._schedule_besitos_awarded_event(user_id, amount, source, reference_id, description)
 
             logger.info(f"Acreditados {amount} besitos a usuario {user_id} - {source.value}")
+            logger.info(f"besito_service | credit_besitos | user_id={user_id} | amount={amount} source={source.value} result=credited")
             return True
 
         except Exception as e:
@@ -208,6 +209,7 @@ class BesitoService:
                 db.commit()
 
             logger.info(f"Debitados {amount} besitos de usuario {user_id} - {source.value}")
+            logger.info(f"besito_service | debit_besitos | user_id={user_id} | amount={amount} source={source.value} result=debited")
             return True
 
         except Exception as e:

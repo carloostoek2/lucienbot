@@ -80,15 +80,15 @@ class IdempotencyMiddleware(BaseMiddleware):
             if cb_id and idempotency_cache.is_duplicate(cb_id):
                 user_id = event.from_user.id if event.from_user else "?"
                 logger.info(
-                    f"idempotency_middleware - skip_duplicate - {user_id} - "
-                    f"callback_id={cb_id} - result: skipped (dupe cb)"
+                    f"idempotency_middleware | skip_duplicate | user_id={user_id} | "
+                    f"result=skipped callback_id={cb_id}"
                 )
                 try:
                     await event.answer()
                 except Exception as e:
                     logger.warning(
-                        f"idempotency_middleware - answer_failed_on_skip - {user_id} - "
-                        f"callback_id={cb_id} - error: {e}"
+                        f"idempotency_middleware | answer_failed_on_skip | user_id={user_id} | "
+                        f"error={str(e)[:80]} callback_id={cb_id}"
                     )
                 return  # critical: do not invoke handler for duplicate callback
 

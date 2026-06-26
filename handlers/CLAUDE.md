@@ -50,10 +50,12 @@ handlers/
 
 ## Reglas de Handlers
 
-1. **UN service** por handler (exactly 1 call, usual via `with get_service(XXXService) as svc:`)
+1. **UN service** por handler (exactly 1 call, via `with get_service(XXXService) as svc:` ONLY; no direct Service() or get_session)
 2. **SIN lógica** de negocio
 3. **SIN acceso** directo a DB
-4. **Logging** de eventos recibidos (estándar "módulo | acción | user_id | resultado")
+4. **Logging** de eventos recibidos (estándar "módulo | acción | user_id | resultado") - enforced via GSD/hygiene
+
+**Hardener-enforced (tirones 25-34 / Items 7-11 + pool33):** puros (verb+context+result, "Función pura...", <=50 LOC via inspect) for long admin wizards; integration style (real svc + class patch in tests for user flows); 1:1 UI; get_service ctx manager. Refs: 27/28/29/33/34 SUMMARIES + HARDENING_ROADMAP + decisions Items.
 
 ## Patrón Probado en Hardener (tirones 25-29 / Items 7-11)
 Para handlers largos (wizards admin multi-step, lists, details, etc. >50 LOC común): 
@@ -75,9 +77,8 @@ Para handlers largos (wizards admin multi-step, lists, details, etc. >50 LOC com
 async def handle_balance(callback: CallbackQuery):
     """Solo llama al service."""
     user_id = callback.from_user.id
-    with get_session() as session:
-        service = BesitoService(session)
-        balance = service.get_balance(user_id)
+    with get_service(BesitoService) as svc:  # exactly 1 service
+        balance = svc.get_balance(user_id)
     await callback.message.edit_text(f"Tu saldo: {balance}")
 ```
 

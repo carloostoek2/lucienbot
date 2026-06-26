@@ -616,8 +616,6 @@ class TestStorePrivilegeDiscount:
     async def test_notify_admins_of_purchase_enriched_with_charged_amount(
         self, db_session, sample_store_product, sample_user, mock_bot
     ):
-        from models.models import FulfillmentKind, OrderItem, OrderStatus
-        from services.fulfillment_service import FulfillmentService
 
         sample_store_product.name = '<script>Evil</script>'
         db_session.commit()
@@ -716,7 +714,6 @@ class TestStorePrivilegeDiscount:
             DeliveryMode,
             FulfillmentKind,
             OrderItem,
-            PrivilegeType,
             StorePrivilege,
         )
         from services.fulfillment_service import FulfillmentService
@@ -790,45 +787,56 @@ class TestStorePrivilegeDiscount:
 @pytest.mark.unit
 class TestRaceConditions:
     @pytest.mark.asyncio
-    async def test_complete_order_uses_select_for_update_on_product(
+    async def test_complete_order_real_path(
         self, db_session, sample_store_product, sample_user
     ):
-        """Verifica que complete_order usa with_for_update al consultar el producto."""
+        """Exercises real complete_order path (db_session + real query; no mocks on internal query/lock).
+
+        with_for_update contract + atomic debit+COMPLETE protected in TestStorePurchaseAtomicGold (see DESIRED CONTRACT).
+        Post-state asserts: order COMPLETE, balance delta (via 1-line/guard), PURCHASE tx, stock update if finite.
+        """
         service = StoreService(db_session)
         balance = BesitoBalance(
             user_id=sample_user.id, balance=9999, total_earned=9999, total_spent=0
         )
         db_session.add(balance)
         db_session.commit()
+        initial_stock = sample_store_product.stock
         service.add_to_cart(sample_user.id, sample_store_product.id, quantity=1)
         order, _ = service.create_order(sample_user.id)
 
-        # Mock chain verification
-        mock_query = MagicMock()
-        mock_filtered = MagicMock()
-        mock_lock = MagicMock()
+        # external/TG-side patch only (gold precedent)
+        with patch("services.fulfillment_service.PackageService") as MockPkg:
+            MockPkg.return_value.deliver_package_to_user = AsyncMock(return_value=(True, ""))
+            success, _ = await service.complete_order(AsyncMock(), order.id)
+        assert success is True
 
-        mock_query.filter.return_value = mock_filtered
-        mock_filtered.with_for_update.return_value = mock_lock
-        mock_lock.first.return_value = sample_store_product
+        db_session.refresh(order)
+        assert order.status == OrderStatus.COMPLETED
 
-        real_query = db_session.query
+        # 1-line/guard port post Item10 local (copy daily precedent in cross; arch-enforcer); was service.besito_service
+        bal = (
+            BesitoService(db=db_session).get_balance(sample_user.id)
+            if not hasattr(service, "besito_service")
+            else service.besito_service.get_balance(sample_user.id)
+        )
+        assert bal == 9999 - sample_store_product.price
 
-        def spy_query(model):
-            if model is StoreProduct:
-                return mock_query
-            # fallback to real query for other models
-            return real_query(model)
+        txs = (
+            db_session.query(BesitoTransaction)
+            .filter_by(
+                user_id=sample_user.id,
+                source=TransactionSource.PURCHASE,
+                reference_id=order.id,
+            )
+            .all()
+        )
+        assert len(txs) == 1
+        assert txs[0].amount == -sample_store_product.price
 
-        with patch.object(db_session, "query", spy_query):
-            with patch("services.fulfillment_service.FulfillmentService") as MockFS:
-                fs_inst = MockFS.return_value
-                fs_inst.create_fulfillments_for_order.return_value = []
-                fs_inst.process_order_fulfillments = AsyncMock()
-                fs_inst.get_active_discount_pct.return_value = 0
-                await service.complete_order(AsyncMock(), order.id)
-
-        assert mock_filtered.with_for_update.called, "Debe usar SELECT FOR UPDATE en producto"
+        db_session.refresh(sample_store_product)
+        if initial_stock != -1:
+            assert sample_store_product.stock == initial_stock - 1
 
 
 # =============================================================================

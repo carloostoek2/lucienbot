@@ -4,13 +4,17 @@ Tests de integración para gamification_user_handlers.
 Usa SQLite en memoria + servicios reales + bot/eventos mockeados.
 Verifica el flujo completo: handler -> servicio real -> DB -> respuesta.
 """
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
 
 from models.models import (
-    BesitoTransaction, BesitoBalance, DailyGiftConfig, DailyGiftClaim,
-    TransactionType, TransactionSource
+    BesitoBalance,
+    BesitoTransaction,
+    DailyGiftClaim,
+    DailyGiftConfig,
+    TransactionSource,
+    TransactionType,
 )
 from services.besito_service import BesitoService
 from services.daily_gift_service import DailyGiftService
@@ -180,3 +184,60 @@ class TestDailyGiftIntegration:
             await daily_gift_menu(cb)
 
             cb.message.edit_text.assert_called_once()
+
+
+# =============================================================================
+# Gamif domain insuff E2E (game protection surfaced message) - PLAN F3
+# Real svc via get_service context patch + class, assert exact Lucien/hardcoded string
+# Copy pool33 insuff + UI 1:1; minimal for protection path
+# =============================================================================
+
+@pytest.mark.integration
+class TestGameProtectionInsuffIntegration:
+    """E2E for gamif/game protection insuff message surfaced to user."""
+
+    async def test_protection_accept_insufficient_besitos_shows_exact_message(
+        self, make_callback, make_user, db_session
+    ):
+        """Low balance -> protect returns False -> handler answers exact \"Besitos insuficientes para la proteccion.\" (show_alert).
+        Real StreakPromotionService injected; 0 prod change.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from models.models import BesitoBalance, UserRole
+        from models.models import User as DbUser
+        from services.streak_promotion_service import StreakPromotionService
+
+        tg = 777004001
+        u = DbUser(telegram_id=tg, username="poorprotect", first_name="P", role=UserRole.USER)
+        db_session.add(u)
+        bal = BesitoBalance(user_id=tg, balance=0, total_earned=0, total_spent=0)
+        db_session.add(bal)
+        db_session.commit()
+
+        real_svc = StreakPromotionService(db_session)
+        tg_user = make_user(user_id=tg)
+
+        # Patch get_service in game handlers to yield our real (context manager style)
+        with patch("handlers.game_user_handlers.get_service") as mock_get:
+            ctx = MagicMock()
+            ctx.__enter__.return_value = real_svc
+            ctx.__exit__.return_value = None
+            mock_get.return_value = ctx
+
+            # Force the insuff branch without full streak session setup (protect returns False)
+            with patch.object(real_svc, "protect_streak", return_value=False):
+                from handlers.game_user_handlers import handle_protection_accept
+                from keyboards.callback_data import StreakProtectAcceptCallback
+
+                cb = make_callback(user=tg_user)
+                cd = StreakProtectAcceptCallback(streak=5, game_type="trivia")
+
+                await handle_protection_accept(cb, callback_data=cd)
+
+                cb.answer.assert_called()
+                call = cb.answer.call_args
+                assert call is not None
+                text = call[0][0] if call[0] else ""
+                assert text == "Besitos insuficientes para la proteccion."
+                assert call[1].get("show_alert") is True

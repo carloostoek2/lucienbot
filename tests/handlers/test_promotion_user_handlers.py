@@ -9,9 +9,11 @@ Cubre handlers de ofertas/promociones para usuarios:
 - my_offers_history: historial de intereses
 - notify_admins_about_interest: notificacion a administradores
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 pytestmark = [pytest.mark.unit]
 
@@ -32,6 +34,7 @@ class TestOffersMenu:
         cb = make_callback(data="offers")
 
         from handlers.promotion_user_handlers import offers_menu
+
         await offers_menu(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -50,6 +53,7 @@ class TestOffersMenu:
         cb = make_callback(data="offers")
 
         from handlers.promotion_user_handlers import offers_menu
+
         await offers_menu(cb)
 
         mock_promo_svc.get_available_promotions.assert_called_once()
@@ -72,6 +76,7 @@ class TestOffersCatalog:
         cb = make_callback(data="offers_catalog")
 
         from handlers.promotion_user_handlers import offers_catalog
+
         await offers_catalog(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -99,6 +104,7 @@ class TestOffersCatalog:
         cb = make_callback(data="offers_catalog")
 
         from handlers.promotion_user_handlers import offers_catalog
+
         await offers_catalog(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -129,6 +135,7 @@ class TestOffersCatalog:
         cb = make_callback(data="offers_catalog")
 
         from handlers.promotion_user_handlers import offers_catalog
+
         await offers_catalog(cb)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -155,6 +162,7 @@ class TestOffersCatalog:
         cb = make_callback(data="offers_catalog")
 
         from handlers.promotion_user_handlers import offers_catalog
+
         await offers_catalog(cb)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -177,6 +185,7 @@ class TestViewOfferDetail:
 
         from handlers.promotion_user_handlers import view_offer_detail
         from keyboards.callback_data import ViewOfferCallback
+
         await view_offer_detail(cb, ViewOfferCallback(promo_id=999))
 
         cb.answer.assert_called_once_with(
@@ -198,11 +207,10 @@ class TestViewOfferDetail:
 
         from handlers.promotion_user_handlers import view_offer_detail
         from keyboards.callback_data import ViewOfferCallback
+
         await view_offer_detail(cb, ViewOfferCallback(promo_id=1))
 
-        cb.answer.assert_called_once_with(
-            "Esa oportunidad ya no esta disponible.", show_alert=True
-        )
+        cb.answer.assert_called_once_with("Esa oportunidad ya no esta disponible.", show_alert=True)
 
     @patch("handlers.promotion_user_handlers.get_service")
     async def test_shows_promotion_detail(self, mock_get_service, make_callback):
@@ -227,6 +235,7 @@ class TestViewOfferDetail:
 
         from handlers.promotion_user_handlers import view_offer_detail
         from keyboards.callback_data import ViewOfferCallback
+
         await view_offer_detail(cb, ViewOfferCallback(promo_id=1))
 
         cb.message.edit_text.assert_called_once()
@@ -258,6 +267,7 @@ class TestViewOfferDetail:
 
         from handlers.promotion_user_handlers import view_offer_detail
         from keyboards.callback_data import ViewOfferCallback
+
         await view_offer_detail(cb, ViewOfferCallback(promo_id=1))
 
         text = cb.message.edit_text.call_args[0][0]
@@ -285,6 +295,7 @@ class TestViewOfferDetail:
 
         from handlers.promotion_user_handlers import view_offer_detail
         from keyboards.callback_data import ViewOfferCallback
+
         await view_offer_detail(cb, ViewOfferCallback(promo_id=1))
 
         text = cb.message.edit_text.call_args[0][0]
@@ -307,6 +318,7 @@ class TestViewOfferDetail:
 
         from handlers.promotion_user_handlers import view_offer_detail
         from keyboards.callback_data import ViewOfferCallback
+
         await view_offer_detail(cb, ViewOfferCallback(promo_id=42))
 
         mock_promo_svc.get_promotion.assert_called_once_with(42)
@@ -330,6 +342,7 @@ class TestExpressInterest:
 
         from handlers.promotion_user_handlers import express_interest
         from keyboards.callback_data import OfferInterestCallback
+
         await express_interest(cb, OfferInterestCallback(promo_id=1), bot)
 
         cb.answer.assert_called_once_with(
@@ -340,7 +353,9 @@ class TestExpressInterest:
 
     @patch("handlers.promotion_user_handlers.notify_admins_about_interest")
     @patch("handlers.promotion_user_handlers.get_service")
-    async def test_already_expressed_shows_alert(self, mock_get_service, mock_notify, make_callback):
+    async def test_already_expressed_shows_alert(
+        self, mock_get_service, mock_notify, make_callback
+    ):
         """Usuario ya expreso interes, muestra alerta."""
         mock_promo_svc = MagicMock()
         mock_promo_svc.is_user_blocked.return_value = False
@@ -354,6 +369,7 @@ class TestExpressInterest:
 
         from handlers.promotion_user_handlers import express_interest
         from keyboards.callback_data import OfferInterestCallback
+
         await express_interest(cb, OfferInterestCallback(promo_id=1), bot)
 
         cb.answer.assert_called_once_with(
@@ -363,7 +379,9 @@ class TestExpressInterest:
 
     @patch("handlers.promotion_user_handlers.notify_admins_about_interest")
     @patch("handlers.promotion_user_handlers.get_service")
-    async def test_unsuccessful_interest_shows_error(self, mock_get_service, mock_notify, make_callback):
+    async def test_unsuccessful_interest_shows_error(
+        self, mock_get_service, mock_notify, make_callback
+    ):
         """express_interest retorna fallo, muestra error."""
         mock_promo_svc = MagicMock()
         mock_promo_svc.is_user_blocked.return_value = False
@@ -378,6 +396,7 @@ class TestExpressInterest:
 
         from handlers.promotion_user_handlers import express_interest
         from keyboards.callback_data import OfferInterestCallback
+
         await express_interest(cb, OfferInterestCallback(promo_id=1), bot)
 
         cb.answer.assert_called_once_with("Error al registrar", show_alert=True)
@@ -413,6 +432,7 @@ class TestExpressInterest:
 
         from handlers.promotion_user_handlers import express_interest
         from keyboards.callback_data import OfferInterestCallback
+
         await express_interest(cb, OfferInterestCallback(promo_id=1), bot)
 
         mock_notify.assert_called_once_with(bot, mock_interest, mock_promo)
@@ -452,6 +472,7 @@ class TestExpressInterest:
 
         from handlers.promotion_user_handlers import express_interest
         from keyboards.callback_data import OfferInterestCallback
+
         await express_interest(cb, OfferInterestCallback(promo_id=1), bot)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -461,32 +482,51 @@ class TestExpressInterest:
     @patch("handlers.promotion_user_handlers.notify_admins_about_interest")
     @patch("handlers.promotion_user_handlers.get_service")
     async def test_calls_express_interest_with_user_data(
-        self, mock_get_service, mock_notify, make_callback
+        self, mock_get_service, mock_notify, make_callback, db_session
     ):
-        """Llama a express_interest con datos correctos del usuario."""
-        mock_promo_svc = MagicMock()
-        mock_promo_svc.is_user_blocked.return_value = False
-        mock_promo_svc.has_user_expressed_interest.return_value = False
-        mock_promo_svc.express_interest.return_value = (True, "OK", MagicMock())
-        mock_promo_svc.get_promotion.return_value = MagicMock(name="Promo")
+        """Llama a express_interest con datos correctos del usuario (usa servicio real)."""
+        # Reduction: real PromotionService instead of MagicMock for promo_svc methods (post Item4 reduce mocks)
+        from models.models import Promotion, PromotionStatus
+        from services.promotion_service import PromotionService
+
+        promo = Promotion(
+            name="Test Promo",
+            description="desc",
+            price_mxn=10000,
+            is_active=True,
+            status=PromotionStatus.ACTIVE,
+        )
+        db_session.add(promo)
+        db_session.commit()
+        db_session.refresh(promo)
+
+        real_svc = PromotionService(db_session)
         mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
+        mock_context.__enter__.return_value = real_svc
         mock_get_service.return_value = mock_context
 
-        cb = make_callback(data="offer_interest:1")
+        cb = make_callback(data=f"offer_interest:{promo.id}")
         bot = AsyncMock()
 
         from handlers.promotion_user_handlers import express_interest
         from keyboards.callback_data import OfferInterestCallback
-        await express_interest(cb, OfferInterestCallback(promo_id=42), bot)
 
-        mock_promo_svc.express_interest.assert_called_once_with(
-            user_id=123456789,
-            promotion_id=42,
-            username="testuser",
-            first_name="Test",
-            last_name=None,
+        await express_interest(cb, OfferInterestCallback(promo_id=promo.id), bot)
+
+        # Verify DB side effect (real flow) instead of mock call assert
+        from models.models import PromotionInterest
+
+        interest = (
+            db_session.query(PromotionInterest)
+            .filter(
+                PromotionInterest.user_id == 123456789, PromotionInterest.promotion_id == promo.id
+            )
+            .first()
         )
+        assert interest is not None
+        assert interest.username == "testuser"
+        assert interest.first_name == "Test"
+        assert interest.last_name is None
 
 
 class TestMyOffersHistory:
@@ -504,6 +544,7 @@ class TestMyOffersHistory:
         cb = make_callback(data="my_offers_history")
 
         from handlers.promotion_user_handlers import my_offers_history
+
         await my_offers_history(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -532,6 +573,7 @@ class TestMyOffersHistory:
         cb = make_callback(data="my_offers_history")
 
         from handlers.promotion_user_handlers import my_offers_history
+
         await my_offers_history(cb)
 
         cb.message.edit_text.assert_called_once()
@@ -569,6 +611,7 @@ class TestMyOffersHistory:
         cb = make_callback(data="my_offers_history")
 
         from handlers.promotion_user_handlers import my_offers_history
+
         await my_offers_history(cb)
 
         text = cb.message.edit_text.call_args[0][0]
@@ -589,6 +632,7 @@ class TestMyOffersHistory:
         cb = make_callback(data="my_offers_history")
 
         from handlers.promotion_user_handlers import my_offers_history
+
         await my_offers_history(cb)
 
         mock_promo_svc.get_user_interest_history.assert_called_once_with(123456789)
@@ -614,6 +658,7 @@ class TestNotifyAdminsAboutInterest:
         mock_promo.price_display = "$999.00 MXN"
 
         from handlers.promotion_user_handlers import notify_admins_about_interest
+
         await notify_admins_about_interest(bot, mock_interest, mock_promo)
 
         assert bot.send_message.call_count == 3
@@ -639,6 +684,7 @@ class TestNotifyAdminsAboutInterest:
         mock_promo.price_display = "$100.00 MXN"
 
         from handlers.promotion_user_handlers import notify_admins_about_interest
+
         await notify_admins_about_interest(bot, mock_interest, mock_promo)
 
         assert bot.send_message.call_count == 2
@@ -660,6 +706,7 @@ class TestNotifyAdminsAboutInterest:
         mock_promo.price_display = "$500.00 MXN"
 
         from handlers.promotion_user_handlers import notify_admins_about_interest
+
         await notify_admins_about_interest(bot, mock_interest, mock_promo)
 
         text = bot.send_message.call_args[1]["text"]
@@ -684,6 +731,7 @@ class TestNotifyAdminsAboutInterest:
         mock_promo.price_display = "$100 MXN"
 
         from handlers.promotion_user_handlers import notify_admins_about_interest
+
         await notify_admins_about_interest(bot, mock_interest, mock_promo)
 
         bot.send_message.assert_not_called()
@@ -705,6 +753,7 @@ class TestNotifyAdminsAboutInterest:
         mock_promo.price_display = "$100 MXN"
 
         from handlers.promotion_user_handlers import notify_admins_about_interest
+
         await notify_admins_about_interest(bot, mock_interest, mock_promo)
 
         text = bot.send_message.call_args[1]["text"]
@@ -727,6 +776,7 @@ class TestNotifyAdminsAboutInterest:
         mock_promo.price_display = "$100 MXN"
 
         from handlers.promotion_user_handlers import notify_admins_about_interest
+
         await notify_admins_about_interest(bot, mock_interest, mock_promo)
 
         text = bot.send_message.call_args[1]["text"]

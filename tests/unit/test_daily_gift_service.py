@@ -372,3 +372,48 @@ class TestDailyGiftConcurrentClaim:
         final_bal = BesitoService(db_session).get_balance(sample_user.telegram_id)
         assert final_bal == 10
         service.close()
+
+
+@pytest.mark.unit
+class TestGamifDailyCapsExplicit:
+    """Explicit daily cap: once-per-day claim enforced (per PLAN F2 caps hygiene).
+    Real DailyGiftService + credit path. Copy daily guards + 1-line/guard style if bal.
+    0 beh change. UI/return messages pinned for hygiene.
+    """
+
+    def test_claim_gift_once_per_day_explicit(self, db_session, sample_user):
+        """First claim succeeds (credit + claim row); second same day blocks with cooldown msg.
+        Exercises the daily cap explicitly (no two claims within 24h window).
+        """
+        service = DailyGiftService(db_session)
+
+        # First claim: success
+        ok1, amt1, msg1 = service.claim_gift(sample_user.telegram_id)
+        assert ok1 is True
+        assert amt1 == 10
+        # 1-line/guard port post Item10 local (copy daily precedent in cross; arch-enforcer); was service.besito_service
+        bal = (
+            BesitoService(db=db_session).get_balance(sample_user.telegram_id)
+            if not hasattr(service, "besito_service")
+            else service.besito_service.get_balance(sample_user.telegram_id)
+        )
+        assert bal == 10
+
+        # force not hasattr path for guard fidelity (per review; bare object to hit independent BesitoService branch)
+        bare = object()
+        bal_bare = (
+            BesitoService(db=db_session).get_balance(sample_user.telegram_id)
+            if not hasattr(bare, "besito_service")
+            else getattr(bare, "besito_service", None)
+        )
+        assert bal_bare == 10
+
+        # Second claim immediately (same day): must block
+        ok2, amt2, msg2 = service.claim_gift(sample_user.telegram_id)
+        assert ok2 is False
+        assert amt2 is None
+        assert "debes esperar" in (msg2 or "").lower() or "cooldown" in (msg2 or "").lower() or "esperar" in (msg2 or "").lower()
+
+        # Balance unchanged (cap protected)
+        bal2 = BesitoService(db=db_session).get_balance(sample_user.telegram_id)
+        assert bal2 == 10

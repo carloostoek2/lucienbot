@@ -122,7 +122,7 @@ class HealthService:
             ready = len(ch.get_ready_to_approve())
             status = "ok" if pending < 50 else ("degraded" if pending < 100 else "unhealthy")
             logger.info(
-                f"health_service | check_channels_status | user_id=0 | pending={pending} ready={ready} status={status}"
+                f"health_service | check_channels_status | user_id=0 | status={status} pending={pending} ready={ready}"
             )
             return {
                 "status": status,
@@ -222,7 +222,7 @@ class HealthService:
             besito_status = "ok" if neg == 0 else "degraded"
             overall = "ok" if neg == 0 else "degraded"
             logger.info(
-                f"health_service | check_critical_services_sanity | user_id=0 | neg_besito={neg} active_vip={active} progress={progress}"
+                f"health_service | check_critical_services_sanity | user_id=0 | status={overall} neg_besito={neg} active_vip={active} progress={progress}"
             )
             return {
                 "besitos": {

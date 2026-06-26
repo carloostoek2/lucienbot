@@ -52,7 +52,7 @@ class ThrottlingMiddleware(BaseMiddleware):
             time_period=rate_limit_config.RATE_LIMIT_PERIOD,
         )
         self._limiters[user_id] = (limiter, now)
-        logger.debug(f"[rate_limit] Created per-user limiter for user {user_id}")
+        logger.debug(f"rate_limiter | create_limiter | user_id={user_id} | result=new")
         return limiter
 
     async def _cleanup_idle(self):
@@ -63,7 +63,7 @@ class ThrottlingMiddleware(BaseMiddleware):
         ]
         for uid in expired:
             del self._limiters[uid]
-            logger.debug(f"[rate_limit] Cleaned up idle limiter for user {uid}")
+            logger.debug(f"rate_limiter | cleanup_idle | user_id={uid} | result=expired")
 
     async def __call__(self, handler, event: TelegramObject, data: dict) -> Any:
         user = data.get("event_from_user")
@@ -74,6 +74,7 @@ class ThrottlingMiddleware(BaseMiddleware):
 
         # Bypass for Custodios
         if rate_limit_config.ADMIN_BYPASS and user_id in bot_config.ADMIN_IDS:
+            logger.info(f"rate_limiter | bypass | user_id={user_id} | result=admin_bypass")
             return await handler(event, data)
 
         async with self._lock:
@@ -89,7 +90,7 @@ class ThrottlingMiddleware(BaseMiddleware):
 
     async def _on_limit_exceeded(self, event: TelegramObject, user_id: int):
         """Send throttling response to user (Lucien voice, identical to legacy)."""
-        logger.info(f"rate_limiter - limit_exceeded - {user_id} - result: throttled")
+        logger.info(f"rate_limiter | limit_exceeded | user_id={user_id} | result=throttled")
         try:
             await event.answer(
                 text="🎩 <i>Lucien:</i>\n\n"
@@ -98,7 +99,7 @@ class ThrottlingMiddleware(BaseMiddleware):
                 show_alert=True,
             )
         except Exception as e:
-            logger.warning(f"Could not send throttling reply to {user_id}: {e}")
+            logger.warning(f"rate_limiter | answer_failed | user_id={user_id} | error={str(e)[:80]}")
 
 
 # Compatibility alias (some docs / transitional refs may use the old name)

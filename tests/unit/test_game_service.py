@@ -31,6 +31,7 @@ All tests must remain 100% passing + ruff clean after each edit.
 
 import asyncio
 import logging
+import threading
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -522,12 +523,18 @@ class TestGameServiceLimitsAndConcurrent:
         assert count == 5  # no extra created beyond limit
         service.close()
 
-    async def test_concurrent_plays_respect_limit(self, db_session, sample_user):
-        """Concurrent plays (gather to_thread) near limit: total records do not explode (respect or best-effort per SQLite like other races)."""
+    @pytest.mark.asyncio
+    async def test_concurrent_plays_respect_limit(self, db_session, sample_user, sample_balance):
+        """Two near-limit plays via gather+to_thread: daily cap (5 free) never exceeded.
+
+        SQLAlchemy sessions are not thread-safe; a per-call lock serializes DB access while
+        still exercising the concurrent dispatch entry point (besito credit mocked).
+        """
         service = GameService(db_session)
         tg = sample_user.telegram_id
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # Pre-create trivia config (to avoid concurrent insert unique on trivia_config.id during plays' internal load, per daily config fix precedent).
+        # Pre-create trivia config (avoid concurrent insert unique on trivia_config.id).
         tcfg = TriviaConfig(
             dice_limit_free=10,
             dice_limit_vip=20,
@@ -542,28 +549,51 @@ class TestGameServiceLimitsAndConcurrent:
             trivia_besitos_weekly_vip=40,
         )
         db_session.add(tcfg)
+        # One slot left: 4 of 5 free trivia plays already consumed today.
+        for i in range(4):
+            db_session.add(
+                GameRecord(
+                    user_id=tg,
+                    game_type="trivia",
+                    result=f"pre_{i}",
+                    payout=1,
+                    played_at=today + timedelta(minutes=i),
+                )
+            )
         db_session.commit()
         db_session.expire_all()
 
-        # Minimal concurrent exercise (from 0, gather 2): documents the gather entry point for plays (like broadcast/besito races).
-        # Near-limit + credit side (besito credit in to_thread + shared unit db_session) can cause tx closed / interface in env (see logs); not the limit check itself.
-        # Limit coverage provided by existing test_play_trivia_limit_reached + fresh TG test above (both pass). This one exercises concurrent call path.
         mock_q = {"question": "Q?", "opts": ["A", "B"], "answer": 0}
-        with patch.object(service, "load_trivia_questions", return_value=[mock_q]):
-            _results = await asyncio.gather(
-                asyncio.to_thread(service.play_trivia, tg, 0, 0),
-                asyncio.to_thread(service.play_trivia, tg, 0, 0),
-                return_exceptions=True,
+        play_lock = threading.Lock()
+
+        def _locked_play():
+            with play_lock:
+                return service.play_trivia(tg, 0, 0)
+
+        mock_besito = patch("services.game_service.BesitoService")
+        mock_promo = patch("services.streak_promotion_service.StreakPromotionService")
+        with (
+            patch.object(service, "load_trivia_questions", return_value=[mock_q]),
+            mock_besito as besito_cls,
+            mock_promo as promo_cls,
+        ):
+            besito_cls.return_value.credit_besitos.return_value = True
+            promo_cls.return_value.claim_for_streak.return_value = None
+            results = await asyncio.gather(
+                asyncio.to_thread(_locked_play),
+                asyncio.to_thread(_locked_play),
             )
+
+        assert all(isinstance(r, dict) for r in results)
+        assert sum(1 for r in results if r.get("limit_reached")) == 1
+        assert sum(1 for r in results if r.get("correct")) == 1
 
         total_records = (
             db_session.query(GameRecord)
             .filter(GameRecord.user_id == tg, GameRecord.game_type == "trivia")
             .count()
         )
-        assert (
-            total_records >= 0
-        )  # some may have committed before side error; env limitation documented
+        assert total_records == 5
         service.close()
 
     def test_no_held_besito_service_after_init(self, db_session, sample_user):

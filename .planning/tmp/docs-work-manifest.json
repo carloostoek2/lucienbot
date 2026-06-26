@@ -1,0 +1,96 @@
+{
+  "canonical_queue": [
+    {
+      "type": "readme",
+      "resolved_path": "README.md",
+      "mode": "create",
+      "preservation_mode": "regenerate",
+      "wave": 1,
+      "status": "completed"
+    },
+    {
+      "type": "architecture",
+      "resolved_path": "docs/ARCHITECTURE.md",
+      "mode": "create",
+      "preservation_mode": "regenerate",
+      "wave": 1,
+      "status": "completed"
+    },
+    {
+      "type": "configuration",
+      "resolved_path": "docs/CONFIGURATION.md",
+      "mode": "create",
+      "preservation_mode": "regenerate",
+      "wave": 1,
+      "status": "completed"
+    },
+    {
+      "type": "getting_started",
+      "resolved_path": "docs/GETTING-STARTED.md",
+      "mode": "create",
+      "preservation_mode": "regenerate",
+      "wave": 2,
+      "status": "completed"
+    },
+    {
+      "type": "development",
+      "resolved_path": "docs/DEVELOPMENT.md",
+      "mode": "create",
+      "preservation_mode": "regenerate",
+      "wave": 2,
+      "status": "completed"
+    },
+    {
+      "type": "testing",
+      "resolved_path": "docs/TESTING.md",
+      "mode": "create",
+      "preservation_mode": "regenerate",
+      "wave": 2,
+      "status": "completed"
+    }
+  ],
+  "review_queue": [
+    {"path": "AGENTS.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "architecture.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "CLAUDE.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "decisions.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "DEPLOY.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/administracion_canales.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/catalogo.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/conf_gam.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/copy-minijuegos-rediseno.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/fase_testing_review_process.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/gamificacion.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/guia-estilo.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/MIGRACION_PRODUCCION.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/narrativa.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/reporte_seguridad.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/req_fase10.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/simulacion.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/SISTEMA_MOCHILA.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/SPEC_fase_17.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/SPEC_proteccion_de_racha.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "docs/USUARIO_GUIA.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "fases_refactor_testing.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "log.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "MEMORY.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "refactor_testing.md", "type": "hand-written", "status": "pending_review"},
+    {"path": "rules.md", "type": "hand-written", "status": "pending_review"}
+  ],
+  "gap_queue": [],
+  "created_at": "2026-06-25T16:10:00Z",
+  "args": "--force",
+  "project_root": "/home/ubuntu/repos/lucienbot",
+  "doc_writer_model": "sonnet",
+  "commit_docs": true,
+  "verification_summary": {
+    "canonical": {
+      "README.md": {"checked":29,"passed":29,"failed":0},
+      "docs/ARCHITECTURE.md": {"checked":48,"passed":45,"failed":3,"fixed":true},
+      "docs/CONFIGURATION.md": {"checked":28,"passed":28,"failed":0},
+      "docs/GETTING-STARTED.md": {"checked":28,"passed":28,"failed":0},
+      "docs/DEVELOPMENT.md": {"checked":29,"passed":28,"failed":1,"fixed":true},
+      "docs/TESTING.md": {"checked":43,"passed":43,"failed":0}
+    }
+  }
+}

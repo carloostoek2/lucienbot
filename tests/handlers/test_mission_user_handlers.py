@@ -6,8 +6,9 @@ Cubre:
 - mission_detail: detalle de una misión (no encontrada, varios tipos de recompensa)
 - claim_mission_reward: catch-up de entregas pendientes (safety net)
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 pytestmark = [pytest.mark.unit]
 

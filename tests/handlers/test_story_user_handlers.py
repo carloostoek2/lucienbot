@@ -508,8 +508,8 @@ class TestProcessQuizAnswer:
         fsm = await make_fsm_context()
         await fsm.update_data(quiz_answers=[], current_question=0)
 
-        from keyboards.callback_data import QuizAnswerCallback
         from handlers.story_user_handlers import ArchetypeQuizStates, process_quiz_answer
+        from keyboards.callback_data import QuizAnswerCallback
 
         cb_data = QuizAnswerCallback(answer_idx=0)
         await fsm.set_state(ArchetypeQuizStates.answering)

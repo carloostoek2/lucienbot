@@ -230,7 +230,7 @@ class TestThrottlingMiddleware:
         with caplog.at_level(logging.WARNING):
             await mw(lambda e, d: None, event, data)
 
-        assert "Could not send throttling reply" in caplog.text
+        assert "rate_limiter | answer_failed" in caplog.text
         assert str(user_id) in caplog.text
 
         limiter.max_rate = orig_max
@@ -254,7 +254,7 @@ class TestThrottlingMiddleware:
         with caplog.at_level(logging.INFO):
             await mw(lambda e, d: None, event, data)
 
-        assert "rate_limiter - limit_exceeded" in caplog.text
+        assert "rate_limiter | limit_exceeded" in caplog.text
         assert str(user_id) in caplog.text
         assert "throttled" in caplog.text
 
