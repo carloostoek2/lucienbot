@@ -167,12 +167,19 @@ class TestProcessPromotionDescription:
 
 
 class TestSelectPackageSource:
-    """Tests para select_package_source — seleccion de paquete."""
+    """Tests para select_package_source — seleccion de paquete.
+    Ported to 1-service pattern (get_service(PromotionService) only + delegate for packages in wizard) + pure UI helpers.
+    Arch-enforcer note addressed. Precedent item 8/9/34.
+    """
 
-    @patch("handlers.promotion_admin_handlers.PackageService")
-    async def test_no_packages_shows_empty_message(self, mock_pkg_svc, make_callback, make_fsm_context):
+    @patch("handlers.promotion_admin_handlers.get_service")
+    async def test_no_packages_shows_empty_message(self, mock_get_service, make_callback, make_fsm_context):
         """Sin paquetes disponibles, muestra mensaje y boton manual."""
-        mock_pkg_svc.return_value.get_all_packages.return_value = []
+        mock_promo_svc = MagicMock()
+        mock_promo_svc.get_available_packages_for_promo_wizard.return_value = []
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_promo_svc
+        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_select_package")
         fsm = await make_fsm_context()
@@ -188,8 +195,8 @@ class TestSelectPackageSource:
         state = await fsm.get_state()
         assert state == PromotionWizardStates.selecting_source
 
-    @patch("handlers.promotion_admin_handlers.PackageService")
-    async def test_with_packages_advances_to_selecting_package(self, mock_pkg_svc, make_callback, make_fsm_context):
+    @patch("handlers.promotion_admin_handlers.get_service")
+    async def test_with_packages_advances_to_selecting_package(self, mock_get_service, make_callback, make_fsm_context):
         """Con paquetes disponibles, avanza a selecting_package."""
         from handlers.promotion_admin_handlers import select_package_source, PromotionWizardStates
 
@@ -198,7 +205,11 @@ class TestSelectPackageSource:
         mock_pkg.name = "Test Package"
         mock_pkg.is_active = True
         mock_pkg.files = [MagicMock()]
-        mock_pkg_svc.return_value.get_all_packages.return_value = [mock_pkg]
+        mock_promo_svc = MagicMock()
+        mock_promo_svc.get_available_packages_for_promo_wizard.return_value = [mock_pkg]
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_promo_svc
+        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_select_package")
         fsm = await make_fsm_context()
@@ -1222,3 +1233,111 @@ class TestPromotionStats:
 
 # Necesario para evitar NameError en la referencia de clase inline de los handlers
 from handlers.promotion_admin_handlers import PromotionWizardStates
+
+
+class TestPromotionAdminPureHelpers:
+    """Pure helper tests for promotion admin wizard/list/detail (import inside, no @patch on puros).
+    10+ cases covering exact UI strings, cbs, Paso X de 5, Lucien, empty, buttons, price, file texts.
+    Precedent item 8/9/34 + port for 1-service.
+    """
+
+    def test_build_promotion_confirm_text_basic(self):
+        from handlers.promotion_admin_handlers import build_promotion_confirm_text_and_keyboard
+        data = {"name": "Test Exp", "description": "Desc", "price_mxn": 29900, "manual_file_count": 5}
+        text, kb = build_promotion_confirm_text_and_keyboard(data)
+        assert "🎩 <b>Lucien:</b>" in text
+        assert "✨ <b>Test Exp</b>" in text
+        assert "📝 Desc" in text
+        assert "💰 <b>Inversion:</b> $299.00 MXN" in text
+        assert "📁 <b>Archivos:</b> 5 (definido manualmente)" in text
+        assert "✅ Forjar experiencia" in str(kb.inline_keyboard)
+
+    def test_build_promotion_confirm_text_with_package(self):
+        from handlers.promotion_admin_handlers import build_promotion_confirm_text_and_keyboard
+        data = {"name": "Pkg Exp", "description": None, "price_mxn": 10000, "package_id": 42}
+        text, kb = build_promotion_confirm_text_and_keyboard(data)
+        assert "Sin descripcion" in text
+        assert "📁 <b>Contenido:</b> De coleccion existente" in text
+        assert "$100.00 MXN" in text
+
+    def test_build_promotion_confirm_text_no_files(self):
+        from handlers.promotion_admin_handlers import build_promotion_confirm_text_and_keyboard
+        data = {"name": "Empty", "price_mxn": 0}
+        text, _ = build_promotion_confirm_text_and_keyboard(data)
+        assert "No especificado" in text
+
+    def test_compute_file_text_for_confirm(self):
+        from handlers.promotion_admin_handlers import compute_file_text_for_confirm
+        assert "definido manualmente" in compute_file_text_for_confirm(3, None)
+        assert "De coleccion existente" in compute_file_text_for_confirm(None, 1)
+        assert "No especificado" in compute_file_text_for_confirm(None, None)
+
+    def test_compute_promotion_price_display(self):
+        from handlers.promotion_admin_handlers import compute_promotion_price_display
+        assert compute_promotion_price_display(99900) == "$999.00 MXN"
+        assert "0.00" in compute_promotion_price_display(0)
+
+    def test_compute_dates_text(self):
+        from handlers.promotion_admin_handlers import compute_dates_text
+        from datetime import datetime
+        assert "Sin fechas" in compute_dates_text(None, None)
+        d = datetime(2026, 4, 1)
+        assert "Inicio: 2026-04-01" in compute_dates_text(d, None)
+
+    def test_build_promotion_step_text(self):
+        from handlers.promotion_admin_handlers import build_promotion_step_text
+        txt = build_promotion_step_text(3, "Definir el contenido", "Elija...", "15")
+        assert "Paso 3 de 5" in txt
+        assert "Lucien" not in txt  # header by caller
+        assert "Ejemplo: 15" in txt
+
+    def test_build_promotion_list_entry_and_button(self):
+        from handlers.promotion_admin_handlers import build_promotion_list_entry_and_button
+        p = MagicMock()
+        p.is_active = True
+        p.name = "Test Promo"
+        p.price_display = "$100.00 MXN"
+        p.id = 1
+        entry, btns = build_promotion_list_entry_and_button(p)
+        assert "✅ <b>Test Promo</b>" in entry
+        assert "💰 $100.00 MXN" in entry
+        assert "PromoDetailCallback" in str(btns) or len(btns) > 0
+
+    def test_build_promotion_detail_text_and_keyboard(self):
+        from handlers.promotion_admin_handlers import build_promotion_detail_text_and_keyboard
+        p = MagicMock()
+        p.name = "DetailP"
+        p.description = None
+        p.price_display = "$50.00 MXN"
+        p.is_active = True
+        p.is_available = True
+        p.file_count = 3
+        p.interests = []
+        p.id = 99
+        text, kb = build_promotion_detail_text_and_keyboard(p)
+        assert "✨ <b>DetailP</b>" in text
+        assert "Sin descripcion" in text
+        assert "📦 Archivos: 3" in text
+        assert "Estado: ✅ Activa" in text
+
+    def test_build_interest_list_text_and_buttons_emptyish(self):
+        from handlers.promotion_admin_handlers import build_interest_list_text_and_buttons
+        text, buttons = build_interest_list_text_and_buttons([])
+        assert "Expresiones pendientes: 0" in text
+        assert len(buttons) == 1  # only back
+
+    def test_build_blocked_user_text_and_keyboard(self):
+        from handlers.promotion_admin_handlers import build_blocked_user_text_and_keyboard
+        u = MagicMock()
+        u.username = "baduser"
+        u.first_name = None
+        u.user_id = 7
+        text, buttons = build_blocked_user_text_and_keyboard([u])
+        assert "🚫 <b>Visitantes restringidos: 1</b>" in text
+        assert "baduser" in text
+        assert len(buttons) >= 2
+
+    def test_pure_helpers_import_inside_no_side(self):
+        # ensure importable standalone
+        from handlers.promotion_admin_handlers import compute_promotion_price_display
+        assert "$1.00" in compute_promotion_price_display(100)
