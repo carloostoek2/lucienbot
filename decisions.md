@@ -446,3 +446,45 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 - "Item 4/34 closed. Fourth of new pool of 4. Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool. Ready for arch-enforcer + test-guardian + documentador (final pool close + ROADMAP update)."
 
 (Refs: .planning/phases/34-observability-health-docs/PLAN.md + gsd-34-observability-health-docs.log + 29-observability-health + HARDENING_ROADMAP sec5 + pool33 + health_service.py + handlers/CLAUDE.md + services/CLAUDE.md)
+
+## Expand EventBus + structured logging coverage (Item 3/35, third of new pool of 4)
+
+**Motivo:**
+- Expand EventBus coverage with high-value purely observational listeners (e.g. streak promo for award receipt logging/stats per impact + precedents).
+- Align structured logging "módulo | acción | user_id=... | resultado=..." (copy health_service + pool34 item4 hygiene al pie) in besito emitter (credit/debit/_schedule paths) + touched files.
+- Update central explicit reg in bot.py + comments with "+ Item 3/35".
+- Extend test_event_bus + caplog assertions; port hygiene.
+- Re-run golds protecting atomicity/EventBus contracts + 3 crit. 0 behavior/0 atomicity/0 prod change.
+- Builds on Item1/5/6/10 (eventbus + locals + obs listeners), Item11 health logging, pool34 hygiene.
+
+**Riesgos (mitigados):**
+- New listener accidentally mutates (re-entrancy). Mit: copy template verbatim ("MUST NOT credit, debit, or mutate besitos state here" + DESIRED + best-effort + F1 analysis only safe obs + greps/tests assert no credit calls in listener).
+- Logging change affects parsing. Mit: exact format copy + hygiene only on touched (besito + listener).
+- Reg order/duplicate. Mit: explicit central block update; bot smoke + health check.
+- Test caplog brittle. Mit: exact substring match as precedents.
+- LOW overall (mature EventBus precedent; obs-only; golds protect).
+
+**Decisión:**
+- F1 prep: reads/greps/ruff/golds baseline on listeners/emit/logs/"MUST NOT"/schedule_emit + current reg (5 besitos); confirm streak/promo safe obs-only (streak debit only, no credit path).
+- F2: add 1 high-value obs listener in services/streak_promotion_service.py (copy exact template + "streak | besitos_awarded_received" + Item 3/35 comment; 0 mutation).
+- F3: align structured in besito_service (credit/debit/_schedule to full "besito_service | ... | user_id=... | ... result=..."; remove plain; arch comment; touched streak already good).
+- F4: bot.py import + register + extend comment ("... + Item 3/35 ...") + logger.info (now 6 besitos regs + "; + Item 3/35 logging expansion").
+- F5: extend tests/unit/test_event_bus.py (new test_streak..._per_item3_35 with caplog + import inside); no other 1-line needed (F1 no held exposed).
+- F6: ruff (preexist only); exact golds re-runs (all green 0 attrib reg); bot smoke + manual reg+emit; greps (0 held in new, MUST NOT + logs + Item 3/35 + reg=6 + patch schedule_emit + DESIRED exercised in cross).
+- GSD pre every; copy al pie listener template/"MUST NOT"/DESIRED/logging/central reg/patch atomic golds; decisions append + self-check at F7.
+- 3 crit always protected (obs only + greps/golds); 0/0/0.
+
+**Resultado:**
+- 1 safe obs listener added (streak); logging aligned in besito (structured primary, Item 3/35 comment); bot reg updated to 6 + comments.
+- test_event_bus extended with caplog for streak + "Item 3/35".
+- All exact golds: event_bus/cross (24p), reaction/daily (57p), besito/health/listener (474p), broader smoke (1003p) green; 0 attributable regressions (xf preexist only).
+- Ruff: preexist only (lazy imports conv in tests/lazy, N806 gold tol, long pre in bot/streak etc).
+- Greps: 0 held in streak (only local debit for protection), listeners MUST NOT verbatim, domain logs, bot reg 6 + Item 3/35, format, schedule_emit in atomicity gold, patch/DESIRED/"credit survives deliver False"/"post-credit best effort (misiones + listeners)" exercised.
+- Bot smoke + manual reg/emit ok; health check_event_bus_listeners will report +1.
+- 0 behavior/0 atomicity/0 prod/0 mutation on 3 crit (gamif/narr/channels-VIP) or contracts (EventBus/get_service/atomicity protected by golds + "MUST NOT").
+- GSD log: .planning/quick/gsd-35-eventbus-logging-expansion.log (30+ entries, pre every + wc).
+- decisions.md + PLAN + gsd + (post) SUMMARY/ROADMAP via documentador.
+- F6 safe point. F7 self-check PASSED + handoff.
+- "Item 3/35 closed. Third of new pool of 4. Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool. Ready for arch-enforcer + test-guardian + documentador (final pool close + ROADMAP update)."
+
+(Refs: .planning/phases/35-eventbus-logging-expansion/PLAN.md + gsd-35-eventbus-logging-expansion.log + impact excerpts + HARDENING_ROADMAP pool34 + 23/24/28/29/34 precedents + services/event_bus.py + bot.py + besito/health + listeners in story/reward/broadcast/game/store/streak + tests/unit/test_event_bus.py + golds cross/reaction etc.)

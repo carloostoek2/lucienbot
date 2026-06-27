@@ -1,0 +1,61 @@
+# Tirón / Pool 35 Documentation Report (documentador) — 3/4 Items: Full Redis rate/idemp + promotion admin wizard 1svc+puros + EventBus + logging expansion
+
+**Pool context:** Pool 35 (new pool of 4, hardener-agile standard). Completed items 1 (Full Redis rate/idemp middleware optional redis ctor + exact in-mem fallback), 2 (promotion admin wizard 1svc+puros), 3 (EventBus + structured logging expansion: streak obs listener + besito hygiene + central reg). All via full 6-agent sequences (impact→gsd-planner→gsd-executor self-check PASSED + GSD pre + arch-enforcer PASS/PASS WITH NOTES 0 crit + test-guardian "suite protege adecuadamente" + golds re-runs 0 attributable reg + self-checks + pool phrase). Source of truth: gsd-35-*.log + arch/test reports + PLANs + prior ROADMAP + CLAUDEs. No code changes by documentador. 0/0/0 scope per items.
+
+**Date:** 2026-06-26  
+**Agent:** documentador (per .claude/agents/documentador.md + root CLAUDE.md hardener workflow + GSD pre + pool phrase mandatory)  
+**Sources read (via read_file + grep-tool/rg + list_dir + run with eza/rg/fd/bat/wc; GSD pre every major step before reads/writes):** 
+- gsd logs: .planning/quick/gsd-35-full-redis-rate-idemp-middleware.log (36+ lines, self-check, golds, phrase), gsd-35-promotion-admin-wizard.log (157+ lines), gsd-35-eventbus-logging-expansion.log (30+ lines)
+- Arch reports: .claude/agent-memory/arch-enforcer/35-item1-redis-rate-idemp-arch-audit.md (PASS WITH NOTES 0 critical), 35-promotion-admin-wizard-arch-audit.md (PASS WITH NOTES 0 critical), 35-item3-eventbus-logging-expansion-arch-audit.md (PASS WITH NOTES 0 critical)
+- Test reports: .claude/agent-memory/test-guardian/35-item1-redis-rate-idemp-test-report.md ("suite protege adecuadamente"), 35-promotion-admin-wizard-test-report.md ("suite protege adecuadamente"), 35-item3-eventbus-logging-expansion-test-report.md ("suite protege adecuadamente")
+- .planning/phases/35-*/PLAN.md (3), .planning/HARDENING_ROADMAP.md (pool34 close + proposed redis/EventBus + phrase), CLAUDE.md (hardener + 3 crit + pool phrase + logging/EventBus/get_service), .claude/agent-memory/documentador/MEMORY.md + prior tiron-*.md, decisions.md (Item entries), bot.py/middlewares/services for context (rg)
+- Precedents: pool 33/34/29/27/25/ etc SUMMARYs + agent reports for patterns (1svc+puros, locals+obs, hygiene, Test*PureHelpers, listener "MUST NOT"/DESIRED, GSD, phrase)
+- GSD logs for documentador pre: .planning/quick/gsd-documentador-35-pool-progress.log (multiple + wc)
+
+**Items of this pool (3/4 closed, per explicit sources + self-checks + vereds):**
+
+- **Item 1/35 (Full Redis backing for rate/idemp middlewares, first of pool):** middlewares/rate_limiter.py (ThrottlingMiddleware __init__ redis: Redis|None=None + ZSET _check for sliding parity + exact else: in-mem), idempotency.py (IdempotencyCache redis=None + SET NX EX check_and_mark + exact fallback is_duplicate; skip guarantee critical before handler/credit), bot.py (create_storage return (storage, redis_client|None) shared + wiring Idemp(redis=) before Throttling + order comments + "guarantees skip before credit on dupe CB across instances" + Item 1/35), tests (in-mem 100% untouched + minimal redis opt tests). GSD 36+ lines. self-check PASSED. Golds re-runs per PLAN: 48p (mw+atomic), 57p (reaction/daily/invariants), 533p (store+...), 1002p broader (8/13 xf pre only) — 0 attributable. Arch: **PASS WITH NOTES (0 critical)**. Test-guardian: **"suite protege adecuadamente"**. Bot smoke + no-arg ctors + fallback logs OK. 3 crit + contracts: gamif protected (idemp skip before credit + rate parity; golds hold "credit survives deliver False" + "post-credit best effort"); narr/channel 0 touch; atomicity/EventBus/get_service untouched. Public API unchanged. Verbatim phrase + "Item 1/35 closed. First of new pool of 4." Handoff to arch/testg/documentador.
+
+- **Item 2/35 (promotion admin wizard 1svc+puros, second of pool):** handlers/promotion_admin_handlers.py (18x `with get_service(PromotionService) as ...` for all entrypoints incl wizard 5 pasos; removed Package bare; 13 puros: build_promotion_confirm_text_and_keyboard etc "Función pura..." verb+context+result + 1:1 UI; slimmed long to <=50 per inspect e.g. confirm_create 32L, select 37L); services/promotion_service.py (thin delegate get_available_packages_for_promo_wizard + exact "Added for item 2/35... Precedent item 8/9/34. Not core CRUD. 0 behavior change."); tests/handlers/test_promotion_admin_handlers.py (ports to get_service + promo delegate + TestPromotionAdminPureHelpers 12+ import-inside covering Paso X de 5 / Lucien / Forjar experiencia / Gabinete esta vacio / price / file / empty / cbs). GSD 157+ lines. self-check PASSED. Golds: 67p handler + 12p pure + 526p broader (0 attr reg, pre only). Arch: **PASS WITH NOTES (0 critical)** (rg: 18 withs, 0 Package, 13 puros exact, LOC<=50, UI1:1 Lucien "Paso X de 5" etc, delegates+comments, 3crit orthogonal). Test-guardian: **"suite protege adecuadamente"** (ports faithful, no @patch on puros, import-inside, golds untouched, UI 1:1 pinned, prior covered). ruff pre-tol only in test. 3 crit protected (promo admin config read+mutate orthogonal to gamif credits/reactions/daily; narr/channel 0). Verbatim phrase + "Item 2/35 closed. Second of new pool of 4." Handoff.
+
+- **Item 3/35 (EventBus + logging expansion, third of pool):** services/streak_promotion_service.py (1 high-value obs listener on_besitos_awarded_streak_promotion_observer exact template "# Cross-domain..." + "MUST NOT credit, debit, or mutate besitos state here." + DESIRED CONTRACT + "streak | besitos_awarded_received | user_id=... | ..." + best-effort + "No side effects..." + "Item 3/35..." ); services/besito_service.py (structured hygiene on credit/debit/_schedule: "besito_service | credit_besitos | user_id=... | amount=... source=... result=credited" + debit/emit_failed + Item comment); bot.py (import + reg 6th in cross block after store; extended comment + log "... store, streak; ... + Item 3/35"); tests/unit/test_event_bus.py (new test_streak... with fresh bus + import inside + caplog assert "streak | ..." + "Item 3/35"); decisions.md (Item 3/35 entry). GSD 30+ lines. self-check PASSED. Golds re-runs: 24p event_bus/cross, 57p reaction/daily/inv, 474p besito/... , 1003p broader (0 attr, 9/13 xf pre). Patch schedule_emit + DESIRED + contracts exercised. Arch: **PASS WITH NOTES (0 critical)** (template exact, logging aligned, central reg only, "MUST NOT", 3crit protected). Test-guardian: **"suite protege adecuadamente"** (new caplog/"MUST NOT"/wiring; structured logs; reg+health=6; golds/contracts hold; 0 attr). Health listener count +1. 3 crit: gamif (pure obs + MUST NOT + F1 safe debit-only + golds protect credits/reactions/atomic); narr/channel 0. Verbatim phrase + "Item 3/35 closed. Third of new pool of 4." Ready for item 4 or full close + documentador.
+
+**Outcomes + Verifs (from self-checks + arch/testg/gsd + golds verbatim):**
+- All golds green per exact PLAN flags (-q --tb=line -p no:cov --override-ini="addopts="): counts above; 0 attributable regressions (pre xf/warns only, e.g. MovedIn20, unawaited emit, daily flakes; documented non-reg per precedents).
+- 3 critical systems (gamif/narrative/channel-VIP) + atomicity/EventBus/get_service contracts: protected/enhanced (idemp/rate guards pre-credit for gamif; obs listeners "MUST NOT mutate" + best-effort + golds "credit survives deliver False" + "post-credit best effort (misiones + listeners)" hold; orthogonal for promo admin; narr/channel untouched; get_service unchanged; EventBus explicit central reg only).
+- Arch: consistent PASS WITH NOTES (0 critical) across 3. Scope tight (listed files only); patterns (optional ctor+fallback, puros+1svc, listener template) copied al pie; UI/Lucien 1:1; GSD+phrase+self.
+- Test-guardian: "suite protege adecuadamente" x3. New coverage (redis opts, puros 13, streak listener+caplog); hygiene (in-mem untouched 100%, no @patch puros, ports faithful, golds untouched); 1:1 UI pins; 0 attr reg.
+- GSD discipline: pre every (36+/157+/30+ lines per item + docu pre); self-checks PASSED full (DoD, 0/0/0, 3crit, copy al pie, phrase).
+- Traceability: PLAN/SUMMARY self-checks + gsd + agent reports + code comments + decisions entries + this.
+- Pool/BATCH: 3 items completed in this tirón (pool 35 of 4); "Item X/35 closed. Nth of new pool of 4."
+
+**Learnings / Patterns extracted (reusable, from SUMMARYs/gsd/arch/testg):**
+- Optional redis ctor + exact in-mem fallback + shared client wiring (public API 0 change; TYPE_CHECKING; if/else parity ZSET/SETNX for distributed safety on gamif rate/idemp; protects multi-inst dupe/spam without breaking single).
+- Puros for wizard long funcs + 1svc via get_service (13 puros + thin delegate in svc + Test*PureHelpers import-inside; LOC<=50 inspect; UI 1:1 "Paso X de 5"/Lucien/"Gabinete de Oportunidades"/price/file/empty exact; precedent from 27/34/26/8/9).
+- Safe obs listener + hygiene (exact "MUST NOT... DESIRED CONTRACT" template + domain log "streak | besitos_awarded_received"; logging "módulo | acción | user_id=... | resultado=..." on credit paths copy health/pool34; central bot reg only + health count; 0 mutation on atomic/gamif; F1 safe analysis for host (debit-only)).
+- Tight pools of 4 work (focused clusters from mapeo; 0 creep; full 6-seq + arch/testg + phrase + self-check enforce; GSD pre + documentador at 3/4 for living ROADMAP; 3 crit + contracts always verified 0 impact).
+- Hygiene non-reg: pre-existing (E501 bot, long debit~65L out scope, ruff tol in tests, some error logs) handled as "do not count as regression" per pattern.
+
+**Roadmap Updates (this invocation):**
+- Sec4 "What Has Been Done": appended dedicated subsection for Pool 35 (new pool of 4; 3/4 items closed); structured per item (objective, key files, outcomes, verifs citing arch/testg/gsd/golds/self); metrics (GSD lines, golds p counts, 0 attr, arch/test vereds); pool phrase verbatim x multiple; note on remaining ~1 cluster; 3 crit/contracts progress (protected).
+- Sec5 "What Is Missing / Roadmap" + "Proposed Next (max 4)": refreshed with remaining ~1 cluster (e.g. full pool item4 if any; broader clusters from initial like full Redis already addressed here, further EventBus/logging if surfaced, additional wizard paths or test hygiene); updated with surfaced from pool35 (optional ctor patterns, obs hygiene for streak/racha promo).
+- Metrics of Success: added/updated for this pool (3 items; arch PWN 0c x3; testg suite x3; golds 0 attr; GSD discipline; 1svc+puros + optional+fallback + safe listener; 3crit protected).
+- Pool/BATCH notes + verbatim phrase multiple.
+- Trace: every fact cites (e.g. "per 35-item1 arch-audit.md", "gsd-35-...log 36 lines self-check", "testg veredict").
+
+**Next Steps / Handoff:**
+- Pool 35 3/4 items closed (tests passing per user). Hand off: pool ready for item 4 or full close when user calls for the 4th.
+- Persisted: this report at .claude/agent-memory/documentador/35-pool-progress.md + MEMORY.md pointer + gsd-documentador-35-pool-progress.log (pre + wc) + ROADMAP appends.
+- "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool." (verbatim multiple; in SUMMARYs/gsd/self/arch/testg/hand offs/ROADMAP).
+
+**Pool phrase (verbatim, mandated in all artifacts):**  
+Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool.
+
+**Output summary:** Pool 35 3/4 items closed (tests passing per user).  
+"Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
+
+**References (primary, all read with GSD pre):** gsd-35-*.log (self-checks + golds + phrases), 35-*-arch-audit.md (PWN 0c), *-test-report.md (suite protege), PLANs, ROADMAP pool34, CLAUDE hardener, agent-memory priors, decisions Item entries, code via rg.
+
+**Fin del pool 35 partial. Listo para item 4 o close completo.** 🎩
+
+**Handoff:** Pool 35 3/4 items closed (tests passing per user). Ready for item 4 (or full close on user call) + documentador final if 4th. ROADMAP + report + MEMORY updated. 3 crit/contracts protected. GSD total + phrase discipline.
