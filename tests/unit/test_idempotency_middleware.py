@@ -8,13 +8,12 @@ Covers:
 - robustness: answer() failure on skip does not propagate / does not call handler
 - logging of skip (optional, via caplog if needed)
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from aiogram.types import CallbackQuery, Message
 
 from middlewares.idempotency import IdempotencyMiddleware
-
 
 pytestmark = [pytest.mark.unit]
 
@@ -169,3 +168,47 @@ class TestIdempotencyMiddleware:
             cb.answer.assert_not_called()
             handler.assert_called_once()
             assert result == "ok-no-id"
+
+    @pytest.mark.asyncio
+    async def test_redis_optional_path_constructs_and_uses_atomic_set(self):
+        """Minimal optional redis path (F5): mw(redis=) uses per-cache check_and_mark; asserts SET NX EX call + dupe/allow semantics equiv to in-mem.
+        Global in-mem tests above unchanged (patch compat via is_duplicate direct in fallback). No real redis.
+        """
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_redis = AsyncMock()
+        # first call: not dupe (set succeeds)
+        mock_redis.set = AsyncMock(return_value="OK")  # truthy -> not dupe
+        mw = IdempotencyMiddleware(redis=mock_redis)
+
+        cb = MagicMock(spec=CallbackQuery)
+        cb.id = "redis-first-123"
+        cb.from_user = MagicMock()
+        cb.from_user.id = 555
+        cb.answer = AsyncMock()
+
+        handler = AsyncMock(return_value="redis-ok")
+
+        result = await mw(handler, cb, {})
+
+        mock_redis.set.assert_awaited_once()
+        # check call had NX EX
+        call_kwargs = mock_redis.set.call_args.kwargs
+        assert call_kwargs.get("nx") is True
+        assert "ex" in call_kwargs
+        handler.assert_called_once()
+        assert result == "redis-ok"
+
+        # second: dupe (set returns None)
+        mock_redis.set.return_value = None
+        handler2 = AsyncMock()
+        cb2 = MagicMock(spec=CallbackQuery)
+        cb2.id = "redis-first-123"
+        cb2.from_user = MagicMock(id=555)
+        cb2.answer = AsyncMock()
+
+        res2 = await mw(handler2, cb2, {})
+
+        handler2.assert_not_called()
+        cb2.answer.assert_awaited()
+        assert res2 is None

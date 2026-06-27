@@ -291,3 +291,44 @@ class TestThrottlingMiddleware:
         finally:
             rate_limit_config.ADMIN_BYPASS = orig_bypass
             bot_config.ADMIN_IDS = orig_ids
+
+    @pytest.mark.asyncio
+    async def test_redis_optional_path_constructs_and_parity_branch(self):
+        """Minimal optional redis path (F5): constructs with redis=; exercises ZSET branch + in-mem fallback remains 100% for default ctor.
+        Uses AsyncMock to avoid real redis dep; asserts calls + equiv allow/limit semantics. In-mem tests above cover fallback exactly.
+        """
+        from unittest.mock import AsyncMock
+
+        mock_redis = AsyncMock()
+        mock_redis.zremrangebyscore = AsyncMock()
+        mock_redis.zcard = AsyncMock(return_value=0)  # under limit -> allow
+        mock_redis.zadd = AsyncMock()
+        mock_redis.expire = AsyncMock()
+
+        mw = ThrottlingMiddleware(redis=mock_redis)
+
+        handler_called = False
+
+        async def mock_handler(event, data):
+            nonlocal handler_called
+            handler_called = True
+            return "handled-redis"
+
+        event = MockEvent()
+        data = {"event_from_user": MockUser(424242)}
+
+        result = await mw(mock_handler, event, data)
+
+        assert handler_called is True
+        assert result == "handled-redis"
+        mock_redis.zcard.assert_awaited()
+        mock_redis.zadd.assert_awaited()
+
+        # now simulate limit exceeded via zcard
+        mock_redis.zcard.return_value = 99
+        handler_called = False
+        event2 = MockEvent()
+        await mw(mock_handler, event2, {"event_from_user": MockUser(424243)})
+
+        assert event2.answered is True
+        assert handler_called is False
