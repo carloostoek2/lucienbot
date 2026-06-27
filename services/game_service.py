@@ -190,6 +190,16 @@ class GameService:
             "El examen ha terminado... por ahora. Diana aprecia la mesura sobre la obsesión.",
             "Diana guarda las preguntas para mañana. El verdadero sabio sabe cuándo descansar.",
         ],
+        "cap_warning": [
+            "⚠️ Quedan {remaining} besitos por ganar en trivia. ¡Aproveche!",
+            "⚠️ Se aproxima al limite de besitos: solo {remaining} mas por hoy.",
+            "⚠️ Atencion: le restan {remaining} besitos antes de llegar al tope.",
+        ],
+        "cap_exhausted": [
+            "⏸️ Ha alcanzado el limite de besitos por trivia. Puede seguir jugando, pero no acumulara mas besitos hasta que se renueve el contador.",
+            "⏸️ Los besitos de trivia estan en pausa por hoy. El conocimiento sigue siendo suyo, la recompensa debera esperar.",
+            "⏸️ Limite de besitos alcanzado. Continue con la trivia si lo desea; los besitos se reanudaran cuando el contador se renueve.",
+        ],
     }
 
     TRIVIA_VIP_TEMPLATES = {
@@ -241,6 +251,16 @@ class GameService:
             "Ha agotado sus preguntas secretas por hoy. Diana aprecia su persistencia, pero también la mesura.",
             "El examen VIP ha terminado... por ahora. Regrese mañana para más desafíos.",
             "Diana ha guardado sus preguntas VIP para mañana. El verdadero connaisseur sabe esperar.",
+        ],
+        "cap_warning": [
+            "⚠️ Quedan {remaining} besitos VIP por ganar en trivia. ¡Aproveche!",
+            "⚠️ Se aproxima al limite de besitos VIP: solo {remaining} mas.",
+            "⚠️ Atencion: le restan {remaining} besitos VIP antes del tope.",
+        ],
+        "cap_exhausted": [
+            "⏸️ Ha alcanzado el limite de besitos VIP por trivia. Puede seguir jugando, pero no acumulara mas hasta que se renueve el contador.",
+            "⏸️ Los besitos VIP de trivia estan en pausa. El conocimiento intimo sigue, la recompensa debera esperar.",
+            "⏸️ Limite VIP alcanzado. Continue si lo desea; los besitos se reanudaran cuando el contador se renueve.",
         ],
     }
 
@@ -301,6 +321,16 @@ class GameService:
             "Ha respondido todas las preguntas disponibles hoy. El conocimiento se renueva al amanecer.",
             "El mazo esta completo por hoy. Regrese manana para mas desafios.",
             "Ha agotado el saber de esta jornada. El alba traera nuevas preguntas.",
+        ],
+        "cap_warning": [
+            "⚠️ Quedan {remaining} besitos especiales por ganar. ¡Aproveche!",
+            "⚠️ Se aproxima al limite especial: solo {remaining} besitos mas.",
+            "⚠️ Atencion: le restan {remaining} besitos especiales antes del tope.",
+        ],
+        "cap_exhausted": [
+            "⏸️ Ha alcanzado el limite de besitos especiales. Puede seguir jugando, pero no acumulara mas hasta que se renueve.",
+            "⏸️ Los besitos especiales estan en pausa. La dinamica sigue, la recompensa debera esperar.",
+            "⏸️ Limite especial alcanzado. Continue si lo desea; los besitos se reanudaran pronto.",
         ],
     }
 
@@ -440,9 +470,21 @@ class GameService:
             lines.extend(["", parts["streak_text"]])
         if parts.get("promo_code_line"):
             lines.extend(["", parts["promo_code_line"]])
+        if parts.get("cap_message"):
+            lines.extend(["", parts["cap_message"]])
         if parts.get("encouragement"):
             lines.extend(["", parts["encouragement"]])
         return "\n".join(lines)
+
+    def _build_cap_message(self, remaining_before: int, remaining_after: int, templates: dict) -> str | None:
+        """Construye mensaje de aviso de limite de besitos (caps)."""
+        if remaining_before <= 0:
+            return self._select_template(templates["cap_exhausted"])
+        if remaining_after <= 0:
+            return self._select_template(templates["cap_exhausted"])
+        if 0 < remaining_after <= 3:
+            return self._select_template(templates["cap_warning"]).format(remaining=remaining_after)
+        return None
 
     # ==================== VIP DETECTION ====================
 
@@ -935,7 +977,13 @@ class GameService:
         # 7. Calcular recompensa deseada + aplicar caps de besitos ganados
         besitos = 0
         streak_bonus = 0
+        cap_message = None
         if is_correct:
+            cap_limits = self.get_trivia_besitos_limits(user_id)
+            cap_remaining_before = min(
+                cap_limits["remaining_daily"], cap_limits["remaining_weekly"]
+            )
+
             desired_base = self.TRIVIA_WIN_BESITOS
             desired_bonus = 0
             if new_streak in self.STREAK_MILESTONES:
@@ -965,6 +1013,11 @@ class GameService:
                     source=TransactionSource.TRIVIA,
                     description=f"Bonus por racha de {new_streak} en trivia",
                 )
+
+            cap_remaining_after = max(0, cap_remaining_before - (besitos + streak_bonus))
+            cap_message = self._build_cap_message(
+                cap_remaining_before, cap_remaining_after, self.TRIVIA_TEMPLATES
+            )
 
         # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
@@ -1003,6 +1056,7 @@ class GameService:
             streak_message,
             remaining_after,
             promo_code=promo_code_info,
+            cap_message=cap_message,
         )
 
         # 11. Construir mensaje final
@@ -1101,6 +1155,7 @@ class GameService:
         streak_message: str | None,
         remaining: int,
         promo_code: dict | None = None,
+        cap_message: str | None = None,
     ) -> dict:
         """Construye las partes del mensaje de trivia"""
         # Respuesta correcta (para formatear templates)
@@ -1124,7 +1179,7 @@ class GameService:
 
         # Recompensa
         reward_text = None
-        if is_correct:
+        if is_correct and besitos > 0:
             reward_text = f"+{besitos} besitos 💋"
 
         # Mensaje de racha
@@ -1155,6 +1210,7 @@ class GameService:
             "streak_text": streak_text,
             "encouragement": encouragement,
             "promo_code_line": promo_code_line,
+            "cap_message": cap_message,
         }
 
     # ==================== TRIVIA VIP ====================
@@ -1342,7 +1398,13 @@ class GameService:
         # 7. Calcular recompensa deseada + aplicar caps de besitos ganados
         besitos = 0
         streak_bonus = 0
+        cap_message = None
         if is_correct:
+            cap_limits = self.get_trivia_besitos_limits(user_id)
+            cap_remaining_before = min(
+                cap_limits["remaining_daily"], cap_limits["remaining_weekly"]
+            )
+
             desired_base = self.TRIVIA_VIP_WIN_BESITOS
             desired_bonus = 0
             if new_streak in self.STREAK_MILESTONES:
@@ -1372,6 +1434,11 @@ class GameService:
                     source=TransactionSource.TRIVIA,
                     description=f"Bonus por racha de {new_streak} en trivia VIP",
                 )
+
+            cap_remaining_after = max(0, cap_remaining_before - (besitos + streak_bonus))
+            cap_message = self._build_cap_message(
+                cap_remaining_before, cap_remaining_after, self.TRIVIA_VIP_TEMPLATES
+            )
 
         # 8. Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
@@ -1410,6 +1477,7 @@ class GameService:
             streak_message,
             remaining_after,
             promo_code=promo_code_info,
+            cap_message=cap_message,
         )
 
         # 11. Construir mensaje final
@@ -1453,6 +1521,7 @@ class GameService:
         streak_message: str | None,
         remaining: int,
         promo_code: dict | None = None,
+        cap_message: str | None = None,
     ) -> dict:
         """Construye las partes del mensaje de trivia VIP"""
         correct_letter = ["A", "B", "C", "D"][question["answer"]]
@@ -1468,7 +1537,7 @@ class GameService:
         correct_answer = None
 
         reward_text = None
-        if is_correct:
+        if is_correct and besitos > 0:
             reward_text = f"+{besitos} besitos 💋💋💋💋💋"
 
         streak_text = streak_message
@@ -1497,6 +1566,7 @@ class GameService:
             "streak_text": streak_text,
             "encouragement": encouragement,
             "promo_code_line": promo_code_line,
+            "cap_message": cap_message,
         }
 
     def _build_trivia_vip_message(self, parts: dict) -> str:
@@ -1508,6 +1578,8 @@ class GameService:
             lines.extend(["", parts["streak_text"]])
         if parts.get("promo_code_line"):
             lines.extend(["", parts["promo_code_line"]])
+        if parts.get("cap_message"):
+            lines.extend(["", parts["cap_message"]])
         if parts.get("encouragement"):
             lines.extend(["", parts["encouragement"]])
         return "\n".join(lines)
@@ -1706,7 +1778,13 @@ class GameService:
 
         besitos = 0
         streak_bonus = 0
+        cap_message = None
         if is_correct:
+            cap_limits = self.get_trivia_besitos_limits(user_id)
+            cap_remaining_before = min(
+                cap_limits["remaining_daily"], cap_limits["remaining_weekly"]
+            )
+
             desired_base = (
                 self.TRIVIA_SIMPLE_VIP_WIN_BESITOS
                 if self.is_user_vip(user_id)
@@ -1740,6 +1818,11 @@ class GameService:
                     source=TransactionSource.TRIVIA,
                     description=f"Bonus por racha de {new_streak} en trivia simple",
                 )
+
+            cap_remaining_after = max(0, cap_remaining_before - (besitos + streak_bonus))
+            cap_message = self._build_cap_message(
+                cap_remaining_before, cap_remaining_after, self.TRIVIA_SIMPLE_TEMPLATES
+            )
 
         # Registrar jugada (BEFORE claim_for_streak — its commit commits this too)
         record = GameRecord(
@@ -1777,6 +1860,7 @@ class GameService:
             streak_bonus,
             remaining_after,
             promo_code=promo_code_info,
+            cap_message=cap_message,
         )
         message = self._build_trivia_simple_message(message_parts)
 
@@ -1819,6 +1903,7 @@ class GameService:
         streak_bonus: int,
         remaining: int,
         promo_code: dict | None = None,
+        cap_message: str | None = None,
     ) -> dict:
         """Construye las partes del mensaje de trivia simple."""
         correct_letter = ["A", "B", "C", "D"][question["answer"]]
@@ -1831,10 +1916,14 @@ class GameService:
             header = header_template.format(correct_answer=correct_answer_text)
 
         reward_text = None
-        if is_correct:
-            reward_text = f"+{besitos} besitos \U0001f48b"
+        if is_correct and (besitos > 0 or streak_bonus > 0):
+            if besitos > 0:
+                reward_text = f"+{besitos} besitos \U0001f48b"
             if streak_bonus > 0:
-                reward_text += f"\n+BONUS racha: +{streak_bonus} besitos"
+                if reward_text:
+                    reward_text += f"\n+BONUS racha: +{streak_bonus} besitos"
+                else:
+                    reward_text = f"+BONUS racha: +{streak_bonus} besitos"
 
         streak_text = streak_message
 
@@ -1860,6 +1949,7 @@ class GameService:
             "streak_text": streak_text,
             "encouragement": encouragement,
             "promo_code_line": promo_code_line,
+            "cap_message": cap_message,
         }
 
     def _build_trivia_simple_message(self, parts: dict) -> str:
@@ -1871,6 +1961,8 @@ class GameService:
             lines.extend(["", parts["streak_text"]])
         if parts.get("promo_code_line"):
             lines.extend(["", parts["promo_code_line"]])
+        if parts.get("cap_message"):
+            lines.extend(["", parts["cap_message"]])
         if parts.get("encouragement"):
             lines.extend(["", parts["encouragement"]])
         return "\n".join(lines)
