@@ -241,3 +241,39 @@ async def test_vip_activated_listener_is_invoked_and_logs(caplog):
     )
     assert found, "nurture vip_activated listener was not invoked or did not log as specified (R3)"
     # best-effort: errors swallowed (no exception to caller, logged per listener) -- covered by gold pattern
+
+
+@pytest.mark.asyncio
+async def test_streak_promotion_listener_is_invoked_and_logs_per_item3_35(caplog):
+    """
+    Item 3/35: explicit coverage for new streak promotion observational listener (added F2).
+    Mirrors narrative/broadcast/game listener tests exactly (fresh InternalEventBus + register +
+    emit + caplog for domain log "streak | besitos_awarded_received"). Proves wiring + "MUST NOT credit"
+    contract observability (no mutation asserted in credit golds). Best effort, errors swallowed.
+    Port hygiene: import inside per conv.
+    """
+    from services.streak_promotion_service import on_besitos_awarded_streak_promotion_observer
+    from services.event_bus import EVENT_BESITOS_AWARDED, InternalEventBus
+
+    bus = InternalEventBus()
+    bus.register(EVENT_BESITOS_AWARDED, on_besitos_awarded_streak_promotion_observer)
+
+    payload = {
+        "user_id": 424245,
+        "amount": 3,
+        "source": "trivia",
+        "reference_id": 77,
+        "description": "test streak promo award",
+        "timestamp": "2026-06-26T12:00:00+00:00",
+    }
+
+    with caplog.at_level(logging.INFO):
+        await bus.emit(EVENT_BESITOS_AWARDED, payload)
+
+    found = any(
+        "streak | besitos_awarded_received" in rec.message and "user_id=424245" in rec.message
+        and "amount=3" in rec.message and "source=trivia" in rec.message
+        for rec in caplog.records
+    )
+    assert found, "streak promotion observer (Item 3/35) not invoked or did not log per contract"
+    # contract: obs only (0 impact on gamif credits/atomicity golds/protection debits)

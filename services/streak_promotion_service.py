@@ -563,3 +563,34 @@ class StreakPromotionService:
                 StreakPromotionLevel.promotion_id == promo_id
             )
         return query.order_by(StreakPromotionRedemption.redeemed_at.desc()).all()
+
+
+# =============================================================================
+# Cross-domain event listeners (registered explicitly from bot.py on startup).
+# The listener lives here (streak promotion domain ownership). It is a plain async callable
+# receiving the standard payload dict. It MUST NOT call back into credit/debit besitos
+# (to avoid any re-entrancy with streak protection debit paths or future extensions; streak
+# protection contracts and partial-failure behavior are authoritative in the debit flow).
+# This is observational only (best effort; errors swallowed by bus).
+# =============================================================================
+# Item 3/35 eventbus logging expansion (high-value obs listener for award receipt in racha promo context; 0 mutation)
+
+
+async def on_besitos_awarded_streak_promotion_observer(payload: dict) -> None:
+    """
+    Streak-promotion-domain listener for "besitos_awarded" events (emitted by BesitoService.credit_besitos
+    post-commit; high-value obs for streak promo even if protection is debits -- wiring + future stats/hints).
+
+    DESIRED CONTRACT (copy of narrative precedent + Reward Item5 + broadcast Item6 + game/store): log reception with full context (user_id/amount/source/ref);
+    purely observational + wiring proof for this domain. MUST NOT credit, debit, or mutate besitos state here.
+    Future extensions (e.g. promo level on awards) belong in this module and should use
+    get_service(StreakPromotionService) or direct models if a fresh DB session is required.
+    """
+    uid = payload.get("user_id")
+    amt = payload.get("amount")
+    src = payload.get("source")
+    ref = payload.get("reference_id")
+    logger.info(
+        f"streak | besitos_awarded_received | user_id={uid} | amount={amt} | source={src} | ref={ref}"
+    )
+    # No side effects that mutate besitos here (best effort, non-authoritative; 0 impact on protection debit contracts or gamif atomicity golds).

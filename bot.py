@@ -31,6 +31,7 @@ from handlers import (
     channel_router,
     common_router,
     free_channel_router,
+    fulfillment_admin_router,
     # Phase 14 - Minijuegos
     game_user_router,
     gamification_admin_router,
@@ -48,7 +49,6 @@ from handlers import (
     promotion_user_router,
     reward_admin_router,
     reward_user_router,
-    fulfillment_admin_router,
     store_admin_router,
     # Fase 4 - Tienda
     store_user_router,
@@ -82,6 +82,7 @@ from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
 from services.store_service import on_besitos_awarded_store_observer
 from services.story_service import on_besitos_awarded_from_gamification
+from services.streak_promotion_service import on_besitos_awarded_streak_promotion_observer
 from services.vip_service import VIPService
 
 # Bot start time (Item 11 / observability-health). Captured as early as possible in the
@@ -107,8 +108,12 @@ def create_storage():
 
     Uses RedisStorage when REDIS_URL is set (production/Redis available).
     Falls back to MemoryStorage for local dev without Redis.
+
+    Returns (storage, redis_client_or_None). The redis_client (when present) is
+    shared with middlewares for full Redis backing on rate/idemp (pool35 Item 1/35).
     """
     redis_url = os.getenv("REDIS_URL")
+    redis_client = None
     if redis_url:
         try:
             redis_client = Redis.from_url(redis_url)
@@ -119,14 +124,17 @@ def create_storage():
                 data_ttl=timedelta(days=1),
             )
             logger.info("FSM storage: RedisStorage (state will persist across restarts)")
-            return storage
+            logger.info("rate/idemp redis client: available")
+            return storage, redis_client
         except Exception as e:
             logger.warning(f"Redis connection failed ({e}) -- falling back to MemoryStorage")
+            logger.info("rate/idemp redis client: None (in-mem fallback)")
     else:
         logger.warning(
             "REDIS_URL not set -- FSM state will not persist across restarts (using MemoryStorage)"
         )
-    return MemoryStorage()
+        logger.info("rate/idemp redis client: None (in-mem fallback)")
+    return MemoryStorage(), None
 
 
 async def check_expired_subscriptions_on_startup(bot: Bot):
@@ -213,16 +221,17 @@ async def on_startup(bot: Bot):
     logger.info("Scheduler iniciado")
 
     # Cross-domain listeners (explicit, central, no import side-effects).
-    # Fase 3 of eventbus-poc + Item 5 + Item 6 + Item 10 store: narrative + rewards + broadcast + game + store domains.
+    # Fase 3 of eventbus-poc + Item 5 + Item 6 + Item 10 store + Item 3/35 eventbus logging expansion: narrative + rewards + broadcast + game + store + streak domains.
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_from_gamification)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_rewards_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_broadcast_reaction_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_game_award_observer)
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_store_observer)
+    get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_streak_promotion_observer)
     # Nurture / lifecycle: VIP activation triggers per-user sequence enrollment + scheduling (no batch)
     get_event_bus().register(EVENT_VIP_ACTIVATED, on_vip_activated)
     logger.info(
-        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store; vip_activated -> nurture)"
+        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store, streak; vip_activated -> nurture); + Item 3/35 logging expansion"
     )
 
     # Health/observability (Item 11 spike)
@@ -299,9 +308,10 @@ async def main():
 
     # Crear bot y dispatcher
     bot = Bot(token=bot_config.TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    storage = create_storage()
+    storage, redis_client = create_storage()
     dp = Dispatcher(storage=storage)
 
+    # Redis backing for middlewares (pool35 Item 1/35): shared client from create_storage when REDIS_URL; exact fallback when None (in-mem parity); registration order preserved: Error → Idemp (cb) → Throttle (cb/msg). Guarantees skip before credit on dupe CB across instances.
     # Middlewares registration order (gsd-mw-hardening plan, section 4 + 8):
     # ErrorHandler as *outer* (catches exceptions from all inner mws + handlers)
     # IdempotencyMiddleware for callback_query only (central dedup of TG CB retries)
@@ -310,9 +320,9 @@ async def main():
     # This order: Error outer → Idempotency (cb) → Throttling (cb); Throttling (messages)
     dp.message.outer_middleware(ErrorHandlerMiddleware())
     dp.callback_query.outer_middleware(ErrorHandlerMiddleware())
-    dp.callback_query.middleware(IdempotencyMiddleware())
-    dp.callback_query.middleware(ThrottlingMiddleware())
-    dp.message.middleware(ThrottlingMiddleware())
+    dp.callback_query.middleware(IdempotencyMiddleware(redis=redis_client))
+    dp.callback_query.middleware(ThrottlingMiddleware(redis=redis_client))
+    dp.message.middleware(ThrottlingMiddleware(redis=redis_client))
 
     # Registrar routers
     dp.include_router(common_router)

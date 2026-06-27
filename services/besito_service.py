@@ -101,7 +101,7 @@ class BesitoService:
             schedule_emit(bus.emit(EVENT_BESITOS_AWARDED, payload))
         except Exception as emit_err:
             logger.warning(
-                f"event_bus | emit_failed_post_credit | user_id={user_id} | error={emit_err}"
+                f"besito_service | schedule_besitos_awarded_event | user_id={user_id} | result=emit_failed error={emit_err}"
             )
 
     def credit_besitos(
@@ -139,9 +139,9 @@ class BesitoService:
             db.commit()
 
             # Post-commit best-effort event (observational; never affects return/rollback).
+            # Item 3/35 logging hygiene + EventBus expansion: structured format "besito_service | ... | user_id=... | ... result=..." (copy health_service + pool34 al pie)
             self._schedule_besitos_awarded_event(user_id, amount, source, reference_id, description)
 
-            logger.info(f"Acreditados {amount} besitos a usuario {user_id} - {source.value}")
             logger.info(f"besito_service | credit_besitos | user_id={user_id} | amount={amount} source={source.value} result=credited")
             return True
 
@@ -208,7 +208,6 @@ class BesitoService:
             if commit:
                 db.commit()
 
-            logger.info(f"Debitados {amount} besitos de usuario {user_id} - {source.value}")
             logger.info(f"besito_service | debit_besitos | user_id={user_id} | amount={amount} source={source.value} result=debited")
             return True
 
