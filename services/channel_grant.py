@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from sqlalchemy.orm import Session
 
 from keyboards.inline_keyboards import social_links_keyboard
@@ -108,13 +108,13 @@ async def _send_welcome_after_grant(bot, request: PendingRequest, channel: Chann
             f"channel_grant | welcome_sent | user_id={request.user_id} | "
             f"channel_tg={channel.channel_id}"
         )
+    except TelegramForbiddenError:
+        logger.warning(
+            f"channel_grant | welcome_forbidden | user_id={request.user_id} | "
+            f"channel_tg={channel.channel_id}"
+        )
+        return
     except Exception as e:
-        if "bot was blocked by the user" in str(e):
-            logger.warning(
-                f"channel_grant | welcome_blocked | user_id={request.user_id} | "
-                f"channel_tg={channel.channel_id}"
-            )
-            return
         logger.error(f"Error enviando bienvenida a user={request.user_id}: {e}")
 
 

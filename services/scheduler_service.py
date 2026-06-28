@@ -15,6 +15,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramForbiddenError
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -97,6 +98,10 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
 
         logger.info(f"Mensaje ritual enviado: user={user_id}, channel={channel_id}")
 
+    except TelegramForbiddenError:
+        logger.warning(
+            f"Mensaje ritual no enviable (forbidden): user={user_id}, channel={channel_id}"
+        )
     except Exception as e:
         logger.error(f"Error enviando mensaje ritual a user={user_id}: {e}")
     finally:
