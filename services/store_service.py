@@ -823,6 +823,21 @@ class StoreService:
             q = q.filter(StoreTier.is_active)
         return q.order_by(StoreTier.order_index).all()
 
+    def get_tiers_for_shop(self, active_only: bool = True) -> list:
+        """Tiers activos con al menos un producto visible en tienda."""
+        tiers = self.get_all_tiers(active_only=active_only)
+        if not tiers:
+            return []
+        visible_ids = {
+            row[0]
+            for row in self._get_db()
+            .query(StoreProduct.tier_id)
+            .filter(StoreProduct.is_active, StoreProduct.tier_id.isnot(None))
+            .distinct()
+            .all()
+        }
+        return [tier for tier in tiers if tier.id in visible_ids]
+
     def get_products_by_tier(self, tier_id: int, active_only: bool = True) -> list[StoreProduct]:
         q = self._get_db().query(StoreProduct).filter(StoreProduct.tier_id == tier_id)
         if active_only:

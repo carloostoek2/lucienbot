@@ -278,6 +278,11 @@ This document draws from initial hardener analysis, all impact/planner/executor/
 
 (End of pool 35 4/4 entry. Documentador used per role at full close.)
 
+**Pool 36 (new pool of 4; 2026-06-28; item 1/1 ad-hoc store UX fix via /hardener-agile):**
+
+- **Item 1/36 (34-store-catalog-tier-nav, first/only):** Unificar navegación tienda visitante: "Recorrer las estanterías" y callback legacy `store_categories` muestran **tiers del catálogo Kinky** (IMPULSO→MÍTICO, `docs/catalogo.md`), no categorías de paquetes (`Category`). `StoreService.get_tiers_for_shop()` (patrón `get_categories_for_shop`); `shop_menu` apunta a `store_tiers` (eliminado botón duplicado "Ver por niveles"); `store_categories` thin delegate → `store_tiers_menu`; botones secundarios `store_tiers`; `store_category_products` conservado para callbacks antiguos. GSD 34-store-catalog-tier-nav.log. self-check PASSED. Arch: **PASS WITH NOTES 0 critical**. Test-guardian: **suite protege adecuadamente** (108p store + 89p gold smoke 0 attr). 0/0/0 (0 compra/atomicity/fulfillment). 3 crit orthogonal. Pool phrase verbatim.
+- **Handoff:** Pool 36 item 1 closed (tests passing per user). "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
+
 ---
 
 ## 5. What Is Missing / Roadmap (Gaps + Proposed Next)

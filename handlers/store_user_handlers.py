@@ -89,7 +89,7 @@ def _build_product_buttons(
             [InlineKeyboardButton(text=LucienVoice.store_button_more_products(), callback_data=more_products_callback)]
         )
         buttons.append(
-            [InlineKeyboardButton(text=LucienVoice.store_button_by_categories(), callback_data="store_categories")]
+            [InlineKeyboardButton(text=LucienVoice.store_button_by_categories(), callback_data="store_tiers")]
         )
     else:
         buttons.append(
@@ -154,13 +154,7 @@ async def shop_menu(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=LucienVoice.store_button_search(), callback_data="store_search")],
-            [InlineKeyboardButton(text=LucienVoice.store_button_categories(), callback_data="store_categories")],
-            [
-                InlineKeyboardButton(
-                    text=LucienVoice.store_tier_menu_button(),
-                    callback_data="store_tiers",
-                )
-            ],
+            [InlineKeyboardButton(text=LucienVoice.store_button_categories(), callback_data="store_tiers")],
             [InlineKeyboardButton(text=LucienVoice.store_button_catalog(), callback_data="store_catalog")],
             [
                 InlineKeyboardButton(
@@ -184,9 +178,9 @@ async def shop_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "store_tiers", lambda cb: not is_admin(cb.from_user.id))
 async def store_tiers_menu(callback: CallbackQuery):
-    """Menú de tiers del catálogo."""
+    """Menú de tiers del catálogo (estanterías Kinky: IMPULSO → MÍTICO)."""
     with get_service(StoreService) as store_service:
-        tiers = store_service.get_all_tiers()
+        tiers = store_service.get_tiers_for_shop(active_only=True)
     if not tiers:
         await callback.answer(LucienVoice.store_catalog_unavailable(), show_alert=True)
         return
@@ -293,51 +287,8 @@ async def store_catalog(callback: CallbackQuery):
 
 @router.callback_query(F.data == "store_categories", lambda cb: not is_admin(cb.from_user.id))
 async def store_categories(callback: CallbackQuery):
-    """Muestra categorias disponibles"""
-    with get_service(StoreService) as store_service:
-        categories = store_service.get_categories_for_shop(active_only=True)
-
-        if not categories:
-            await callback.message.edit_text(
-                LucienVoice.store_categories_empty(),
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text=LucienVoice.store_button_catalog(), callback_data="store_catalog"
-                            )
-                        ],
-                        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
-                    ]
-                ),
-                parse_mode="HTML",
-            )
-            await callback.answer()
-            return
-
-        text = LucienVoice.store_categories_intro()
-
-        buttons = []
-        for category in categories:
-            product_count = store_service.count_products_in_category(category.id, active_only=True)
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"📁 {category.name} ({product_count})",
-                        callback_data=StoreCategoryCallback(category_id=category.id).pack(),
-                    )
-                ]
-            )
-
-        buttons.append(
-            [InlineKeyboardButton(text=LucienVoice.store_button_see_all(), callback_data="store_catalog")]
-        )
-        buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-        await callback.answer()
+    """Backward compat: callback antiguo redirige al menú de tiers del catálogo."""
+    await store_tiers_menu(callback)
 
 
 @router.callback_query(StoreCategoryCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
@@ -360,7 +311,7 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
                     [
                         InlineKeyboardButton(
                             text=LucienVoice.store_button_other_categories(),
-                            callback_data="store_categories",
+                            callback_data="store_tiers",
                         )
                     ],
                     [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
@@ -393,7 +344,7 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
         buttons.append(row)
 
     buttons.append(
-        [InlineKeyboardButton(text=LucienVoice.store_button_other_categories(), callback_data="store_categories")]
+        [InlineKeyboardButton(text=LucienVoice.store_button_other_categories(), callback_data="store_tiers")]
     )
     buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
 

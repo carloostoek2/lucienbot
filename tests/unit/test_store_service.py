@@ -1600,6 +1600,27 @@ class TestStorePurchaseAtomicGold:
         finally:
             service.close()
 
+    def test_get_tiers_for_shop_only_with_products(self, db_session):
+        empty_tier = StoreTier(
+            slug="empty", name="EMPTY", price_min=1, price_max=2, order_index=0, is_active=True
+        )
+        filled_tier = StoreTier(
+            slug="filled", name="FILLED", price_min=10, price_max=20, order_index=1, is_active=True
+        )
+        db_session.add_all([empty_tier, filled_tier])
+        db_session.commit()
+        db_session.refresh(empty_tier)
+        db_session.refresh(filled_tier)
+        prod = StoreProduct(name="TierProd", tier_id=filled_tier.id, price=80, is_active=True)
+        db_session.add(prod)
+        db_session.commit()
+        service = StoreService(db_session)
+        try:
+            visible = service.get_tiers_for_shop(active_only=True)
+            assert [t.id for t in visible] == [filled_tier.id]
+        finally:
+            service.close()
+
     def test_get_categories_for_shop_only_with_products(self, db_session):
         empty_cat = Category(name="EmptyShelf", order_index=0, is_active=True)
         filled_cat = Category(name="FilledShelf", order_index=1, is_active=True)

@@ -57,6 +57,26 @@ class TestShopMenu:
         assert "gabinete" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
+    async def test_menu_categories_points_to_tiers_not_package_categories(
+        self, mock_get_service, make_callback
+    ):
+        """Estanterías del menú apuntan a store_tiers (catálogo Kinky), sin botón duplicado."""
+        _mock_store_ctx(mock_get_service, get_shop_balance_display=500)
+        cb = make_callback(data="shop")
+
+        from handlers.store_user_handlers import shop_menu
+        from utils.lucien_voice import LucienVoice
+
+        await shop_menu(cb)
+
+        markup = cb.message.edit_text.call_args[1].get("reply_markup")
+        callbacks = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        texts = [btn.text for row in markup.inline_keyboard for btn in row]
+        assert "store_tiers" in callbacks
+        assert "store_categories" not in callbacks
+        assert LucienVoice.store_tier_menu_button() not in texts
+
+    @patch("handlers.store_user_handlers.get_service")
     async def test_calls_service_with_user_id(self, mock_get_service, make_callback):
         """Llama a get_balance con el user_id correcto."""
         store = _mock_store_ctx(mock_get_service, get_shop_balance_display=500)
@@ -161,93 +181,50 @@ class TestStoreCatalog:
 
 
 class TestStoreCategories:
-    """Tests para store_categories - categorias disponibles."""
-
-    async def test_empty_categories_shows_message(self, make_callback):
-        """Cuando no hay categorias, muestra mensaje de catalogo sin secciones."""
-        cb = make_callback(data="store_categories")
-
-        from handlers.store_user_handlers import store_categories
-        await store_categories(cb)
-
-        cb.message.edit_text.assert_called_once()
-        text = cb.message.edit_text.call_args[0][0]
-        assert "secciones" in text.lower()
+    """Tests para store_categories — backward compat delega a tiers del catálogo."""
 
     @patch("handlers.store_user_handlers.get_service")
-    async def test_displays_categories_with_counts(self, mock_get_service, make_callback):
-        """Muestra categorias con conteo de productos activos."""
-        cat1 = model_mock(Category)
-        cat1.id = 1
-        cat1.name = "Fotos"
-        cat2 = model_mock(Category)
-        cat2.id = 2
-        cat2.name = "Videos"
+    async def test_delegates_to_tiers_menu(self, mock_get_service, make_callback):
+        """Callback antiguo store_categories muestra menú de tiers."""
+        tier = MagicMock(id=1, name="IMPULSO", price_min=50, price_max=120)
         store = _mock_store_ctx(mock_get_service)
-        store.get_categories_for_shop.return_value = [cat1, cat2]
-        store.count_products_in_category.side_effect = lambda cid, **_: 2 if cid == 1 else 0
+        store.get_tiers_for_shop.return_value = [tier]
         cb = make_callback(data="store_categories")
 
         from handlers.store_user_handlers import store_categories
         await store_categories(cb)
 
+        store.get_tiers_for_shop.assert_called_once_with(active_only=True)
         cb.message.edit_text.assert_called_once()
         markup = cb.message.edit_text.call_args[1].get("reply_markup")
         button_texts = [btn.text for row in markup.inline_keyboard for btn in row]
-        assert any("Fotos" in t for t in button_texts)
-        assert any("Videos" in t for t in button_texts)
+        assert any("IMPULSO" in t for t in button_texts)
 
     @patch("handlers.store_user_handlers.get_service")
-    async def test_category_count_shows_active_products_only(self, mock_get_service, make_callback):
-        """El conteo muestra productos activos en la categoría."""
-        cat = model_mock(Category)
-        cat.id = 1
-        cat.name = "Mix"
+    async def test_empty_tiers_shows_unavailable_alert(self, mock_get_service, make_callback):
+        """Sin tiers visibles, muestra alerta de catálogo no disponible."""
         store = _mock_store_ctx(mock_get_service)
-        store.get_categories_for_shop.return_value = [cat]
-        store.count_products_in_category.return_value = 2
-        cb = make_callback(data="store_categories")
-
-        from handlers.store_user_handlers import store_categories
-        await store_categories(cb)
-
-        markup = cb.message.edit_text.call_args[1].get("reply_markup")
-        button_texts = [btn.text for row in markup.inline_keyboard for btn in row]
-        assert any("(2)" in t for t in button_texts)
-
-    async def test_calls_service_with_active_only(self, make_callback):
-        """Llama a get_all_categories con active_only=True."""
-        cb = make_callback(data="store_categories")
-
-        from handlers.store_user_handlers import store_categories
-        await store_categories(cb)
-
-    async def test_calls_answer(self, make_callback):
-        """Siempre llama a callback.answer()."""
+        store.get_tiers_for_shop.return_value = []
         cb = make_callback(data="store_categories")
 
         from handlers.store_user_handlers import store_categories
         await store_categories(cb)
 
         cb.answer.assert_called_once()
+        assert cb.answer.call_args[1].get("show_alert") is True
 
-    async def test_closes_service(self, make_callback):
-        """PackageService se cierra en finally."""
+    @patch("handlers.store_user_handlers.get_service")
+    async def test_calls_answer(self, mock_get_service, make_callback):
+        """Siempre llama a callback.answer() cuando hay tiers."""
+        tier = MagicMock(id=1, name="DESEO", price_min=150, price_max=350)
+        store = _mock_store_ctx(mock_get_service)
+        store.get_tiers_for_shop.return_value = [tier]
         cb = make_callback(data="store_categories")
 
         from handlers.store_user_handlers import store_categories
         await store_categories(cb)
 
-    async def test_category_without_packages_does_not_crash(self, make_callback):
-        """Categoria con packages=None no causa error."""
-        cat = model_mock(Category)
-        cat.id = 1
-        cat.name = "Empty"
-        cat.packages = None
-        cb = make_callback(data="store_categories")
-
-        from handlers.store_user_handlers import store_categories
-        await store_categories(cb)
+        cb.answer.assert_called_once()
 
         cb.message.edit_text.assert_called_once()
 
@@ -1697,11 +1674,12 @@ class TestStoreTierNavigation:
     async def test_store_tiers_menu(self, mock_get_service, make_callback):
         tier = MagicMock(id=1, name="IMPULSO", price_min=50, price_max=120)
         store = _mock_store_ctx(mock_get_service)
-        store.get_all_tiers.return_value = [tier]
+        store.get_tiers_for_shop.return_value = [tier]
         cb = make_callback(data="store_tiers")
         from handlers.store_user_handlers import store_tiers_menu
 
         await store_tiers_menu(cb)
+        store.get_tiers_for_shop.assert_called_once_with(active_only=True)
         cb.message.edit_text.assert_called_once()
 
     @patch("handlers.store_user_handlers.get_service")
