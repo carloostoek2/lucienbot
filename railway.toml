@@ -1,13 +1,13 @@
-# 🎩 Lucien Bot - Configuración para Railway (solo servicio lucienbot)
+# 🎩 Lucien Bot - Configuración para Railway (SOLO servicio lucienbot)
 # https://railway.app
 #
-# Este archivo vive en el repo del bot. Postgres usa imagen Docker propia
-# y NO debe redeployarse manualmente desde este repo.
+# IMPORTANTE: Todo está bajo [services.lucienbot] para NO afectar Postgres.
+# Postgres usa su propia imagen Docker y NO debe recibir esta configuración.
 
-[build]
+[services.lucienbot.build]
 builder = "nixpacks"
 
-[deploy]
+[services.lucienbot.deploy]
 startCommand = "alembic upgrade head && python bot.py"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
