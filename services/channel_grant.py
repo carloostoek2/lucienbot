@@ -141,6 +141,14 @@ async def grant_pending_request(db: Session, request: PendingRequest, bot) -> Gr
         )
         return GrantResult(success=True, request_id=request_id)
 
+    except TelegramForbiddenError as e:
+        err = str(e)
+        _commit_request_rejected(db, request)
+        logger.warning(
+            f"channel_grant | forbidden_terminal | request_id={request_id} | "
+            f"user_id={user_id} | error={err[:120]} | result=rejected_terminal"
+        )
+        return GrantResult(success=False, request_id=request_id, error=err)
     except TelegramBadRequest as e:
         err = str(e)
         if "USER_ALREADY_PARTICIPANT" in err:
