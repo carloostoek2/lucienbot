@@ -5,20 +5,21 @@ Cubre handlers de tienda: menu, catalogo, categorias, detalle de producto,
 preview, compra directa, historial, busqueda y filtros.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 from datetime import datetime
+
+from tests.helpers import model_mock
+from services.store_service import StoreService
+from models.models import StoreProduct, Category, Order
 
 pytestmark = [pytest.mark.unit]
 
 
 def _mock_store_ctx(mock_get_service, **kwargs):
-    """Mock get_service(StoreService) context manager."""
-    mock_store = MagicMock()
+    """Mock get_service(StoreService) context manager con autospec."""
+    mock_store = create_autospec(StoreService, spec_set=True, instance=True)
     for key, val in kwargs.items():
-        if isinstance(val, MagicMock):
-            setattr(mock_store, key, val)
-        else:
-            setattr(mock_store, key, MagicMock(return_value=val))
+        getattr(mock_store, key).return_value = val
     mock_ctx = MagicMock()
     mock_ctx.__enter__.return_value = mock_store
     mock_get_service.return_value = mock_ctx
@@ -176,10 +177,10 @@ class TestStoreCategories:
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_categories_with_counts(self, mock_get_service, make_callback):
         """Muestra categorias con conteo de productos activos."""
-        cat1 = MagicMock()
+        cat1 = model_mock(Category)
         cat1.id = 1
         cat1.name = "Fotos"
-        cat2 = MagicMock()
+        cat2 = model_mock(Category)
         cat2.id = 2
         cat2.name = "Videos"
         store = _mock_store_ctx(mock_get_service)
@@ -199,7 +200,7 @@ class TestStoreCategories:
     @patch("handlers.store_user_handlers.get_service")
     async def test_category_count_shows_active_products_only(self, mock_get_service, make_callback):
         """El conteo muestra productos activos en la categoría."""
-        cat = MagicMock()
+        cat = model_mock(Category)
         cat.id = 1
         cat.name = "Mix"
         store = _mock_store_ctx(mock_get_service)
@@ -239,7 +240,7 @@ class TestStoreCategories:
 
     async def test_category_without_packages_does_not_crash(self, make_callback):
         """Categoria con packages=None no causa error."""
-        cat = MagicMock()
+        cat = model_mock(Category)
         cat.id = 1
         cat.name = "Empty"
         cat.packages = None
@@ -274,7 +275,7 @@ class TestStoreCategoryProducts:
     async def test_category_empty_products(self, mock_get_service, make_callback):
         """Categoria sin productos muestra mensaje de estanteria vacia."""
         from keyboards.callback_data import StoreCategoryCallback
-        category = MagicMock()
+        category = model_mock(Category)
         category.id = 1
         category.name = "Fotos Exclusivas"
         category.description = "Fotos que pocos veran"
@@ -296,7 +297,7 @@ class TestStoreCategoryProducts:
     async def test_displays_category_products(self, mock_get_service, make_callback):
         """Muestra productos de la categoria con descripcion."""
         from keyboards.callback_data import StoreCategoryCallback
-        category = MagicMock()
+        category = model_mock(Category)
         category.id = 1
         category.name = "Fotos"
         category.description = "Descripcion de la categoria"
@@ -374,7 +375,7 @@ class TestProductDetail:
     async def test_sufficient_balance_shows_buy_button(self, mock_get_service, make_callback):
         """Con saldo suficiente, muestra boton de comprar."""
         from keyboards.callback_data import ProductDetailCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Producto X"
         product.description = "Descripcion"
@@ -404,7 +405,7 @@ class TestProductDetail:
     async def test_insufficient_balance_shows_needed_amount(self, mock_get_service, make_callback):
         """Con saldo insuficiente, muestra cuanto falta."""
         from keyboards.callback_data import ProductDetailCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Producto Caro"
         product.description = "Caro"
@@ -436,7 +437,7 @@ class TestProductDetail:
         """Nivel bloqueado muestra candado y no el boton de compra."""
         from keyboards.callback_data import DirectBuyCallback, ProductDetailCallback
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 9
         product.name = "Tesoro Bloqueado"
         product.description = "Requiere nivel previo"
@@ -470,7 +471,7 @@ class TestProductDetail:
     async def test_product_not_available_shows_agotado(self, mock_get_service, make_callback):
         """Producto no disponible muestra boton de agotado."""
         from keyboards.callback_data import ProductDetailCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Agotado"
         product.description = "No hay"
@@ -497,7 +498,7 @@ class TestProductDetail:
     async def test_unlimited_stock_displays_infinity(self, mock_get_service, make_callback):
         """Stock -1 se muestra como infinito."""
         from keyboards.callback_data import ProductDetailCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Ilimitado"
         product.description = "Sin limites"
@@ -521,7 +522,7 @@ class TestProductDetail:
     async def test_calls_answer(self, mock_get_service, make_callback):
         """Siempre llama a callback.answer()."""
         from keyboards.callback_data import ProductDetailCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Test"
         product.description = ""
@@ -543,7 +544,7 @@ class TestProductDetail:
     async def test_calls_services_with_correct_params(self, mock_get_service, make_callback):
         """Llama a servicios con parametros correctos."""
         from keyboards.callback_data import ProductDetailCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 42
         product.name = "Test"
         product.description = ""
@@ -567,7 +568,7 @@ class TestProductDetail:
     ):
         from keyboards.callback_data import ProductDetailCallback
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Con Descuento"
         product.description = "Desc"
@@ -598,7 +599,7 @@ class TestProductDetail:
     ):
         from keyboards.callback_data import ProductDetailCallback
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Cap Agotado"
         product.description = "Desc"
@@ -646,7 +647,7 @@ class TestProductPreview:
     async def test_sends_photo_preview(self, mock_get_service, make_callback):
         """Envia preview en foto cuando el archivo es photo."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Foto Preview"
         product.description = "Una foto"
@@ -674,7 +675,7 @@ class TestProductPreview:
     async def test_sends_video_preview(self, mock_get_service, make_callback):
         """Envia preview en video cuando el archivo es video."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Video Preview"
         product.description = "Un video"
@@ -703,7 +704,7 @@ class TestProductPreview:
         """Tras el preview, el detalle mantiene el boton de candado."""
         from keyboards.callback_data import DirectBuyCallback, ProductPreviewCallback
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 9
         product.name = "Tesoro Bloqueado"
         product.description = "Requiere nivel previo"
@@ -738,7 +739,7 @@ class TestProductPreview:
     async def test_no_package_files_sends_no_preview(self, mock_get_service, make_callback):
         """Sin archivos en el paquete, no envia preview."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Sin Preview"
         product.description = "No hay"
@@ -761,7 +762,7 @@ class TestProductPreview:
     async def test_preview_shows_effective_price(self, mock_get_service, make_callback):
         from keyboards.callback_data import ProductPreviewCallback
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Preview Discount"
         product.description = "Desc"
@@ -789,7 +790,7 @@ class TestProductPreview:
     async def test_no_package_shows_no_preview(self, mock_get_service, make_callback):
         """Producto sin paquete no envia preview."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Sin Paquete"
         product.description = ""
@@ -812,7 +813,7 @@ class TestProductPreview:
     async def test_preview_send_error_caught_gracefully(self, mock_get_service, make_callback):
         """Error al enviar preview se captura y no rompe el flujo."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Error Preview"
         product.description = ""
@@ -840,7 +841,7 @@ class TestProductPreview:
         """Con varios archivos en el paquete, solo envia el primero como preview."""
         from keyboards.callback_data import ProductPreviewCallback
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Varios archivos"
         product.description = "Paquete grande"
@@ -871,7 +872,7 @@ class TestProductPreview:
     async def test_sends_preview_and_product_card(self, mock_get_service, make_callback):
         """Envia preview y luego la tarjeta del producto."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Completo"
         product.description = "Desc"
@@ -896,7 +897,7 @@ class TestProductPreview:
     async def test_calls_answer_preview_sent(self, mock_get_service, make_callback):
         """Responde con 'Preview enviado!'."""
         from keyboards.callback_data import ProductPreviewCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Test"
         product.description = ""
@@ -949,7 +950,7 @@ class TestDirectBuy:
     async def test_insufficient_balance(self, mock_get_service, make_callback):
         """Saldo insuficiente muestra alerta."""
         from keyboards.callback_data import DirectBuyCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.price = 500
         self._setup_direct_buy(mock_get_service, product, balance=200)
@@ -969,7 +970,7 @@ class TestDirectBuy:
         from keyboards.callback_data import DirectBuyCallback
         from utils.lucien_voice import LucienVoice
 
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 7
         product.name = "Cap Product"
         product.price = 200
@@ -993,7 +994,7 @@ class TestDirectBuy:
     async def test_sufficient_balance_shows_confirmation(self, mock_get_service, make_callback):
         """Saldo suficiente muestra pantalla de confirmacion."""
         from keyboards.callback_data import DirectBuyCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 42
         product.name = "Producto Test"
         product.price = 200
@@ -1015,7 +1016,7 @@ class TestDirectBuy:
     async def test_correct_balance_after_purchase_displayed(self, mock_get_service, make_callback):
         """Muestra el saldo resultante despues de la compra."""
         from keyboards.callback_data import DirectBuyCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Test"
         product.price = 300
@@ -1033,7 +1034,7 @@ class TestDirectBuy:
     async def test_calls_answer(self, mock_get_service, make_callback):
         """Llama a callback.answer en caso exitoso."""
         from keyboards.callback_data import DirectBuyCallback
-        product = MagicMock()
+        product = model_mock(StoreProduct)
         product.id = 1
         product.name = "Test"
         product.price = 100
@@ -1246,7 +1247,7 @@ class TestPurchaseHistory:
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_orders(self, mock_get_service, make_callback):
         """Muestra ordenes del historial."""
-        order = MagicMock()
+        order = model_mock(Order)
         order.id = 42
         order.status = MagicMock()
         order.status.value = "completed"
@@ -1270,7 +1271,7 @@ class TestPurchaseHistory:
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_pending_status(self, mock_get_service, make_callback):
         """Orden pendiente se marca con reloj."""
-        order = MagicMock()
+        order = model_mock(Order)
         order.id = 1
         order.status = MagicMock()
         order.status.value = "pending"
@@ -1289,7 +1290,7 @@ class TestPurchaseHistory:
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_cancelled_status(self, mock_get_service, make_callback):
         """Orden cancelada se marca con X."""
-        order = MagicMock()
+        order = model_mock(Order)
         order.id = 1
         order.status = MagicMock()
         order.status.value = "cancelled"

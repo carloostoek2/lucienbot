@@ -1,6 +1,6 @@
 """Handler tests for backpack fulfillment callbacks."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 
@@ -8,12 +8,12 @@ pytestmark = [pytest.mark.unit]
 
 
 def _mock_backpack_ctx(mock_get_service, **methods):
-    svc = MagicMock()
+    """Mock get_service(BackpackService) context manager con autospec."""
+    from services.backpack_service import BackpackService
+
+    svc = create_autospec(BackpackService, spec_set=True, instance=True)
     for name, val in methods.items():
-        if isinstance(val, MagicMock) or callable(val):
-            setattr(svc, name, val)
-        else:
-            setattr(svc, name, MagicMock(return_value=val))
+        getattr(svc, name).return_value = val
     ctx = MagicMock()
     ctx.__enter__.return_value = svc
     ctx.__exit__.return_value = False
@@ -26,7 +26,7 @@ class TestBackpackFulfillmentCallbacks:
     async def test_fulfillment_retry_success(self, mock_get_service, make_callback):
         svc = _mock_backpack_ctx(
             mock_get_service,
-            retry_fulfillment_delivery=AsyncMock(return_value=(True, "Entregado")),
+            retry_fulfillment_delivery=(True, "Entregado"),
         )
         from keyboards.callback_data import BackpackFulfillmentRetryCallback
 
@@ -49,9 +49,7 @@ class TestBackpackFulfillmentCallbacks:
     ):
         svc = _mock_backpack_ctx(
             mock_get_service,
-            retry_fulfillment_delivery=AsyncMock(
-                return_value=(True, "<b>Entregado</b> con éxito")
-            ),
+            retry_fulfillment_delivery=(True, "<b>Entregado</b> con éxito"),
         )
         from keyboards.callback_data import BackpackFulfillmentRetryCallback
 
@@ -69,9 +67,7 @@ class TestBackpackFulfillmentCallbacks:
     async def test_activate_vip_shows_link(self, mock_get_service, make_callback):
         svc = _mock_backpack_ctx(
             mock_get_service,
-            resend_vip_invite_for_fulfillment=AsyncMock(
-                return_value=(True, "VIP access message")
-            ),
+            resend_vip_invite_for_fulfillment=(True, "VIP access message"),
         )
         from keyboards.callback_data import BackpackActivateVipCallback
 
@@ -171,7 +167,7 @@ class TestBackpackFulfillmentCallbacks:
     async def test_process_backpack_input_submits(self, mock_get_service, make_message):
         svc = _mock_backpack_ctx(
             mock_get_service,
-            submit_fulfillment_input=AsyncMock(return_value=(True, "Recibido")),
+            submit_fulfillment_input=(True, "Recibido"),
         )
         state = AsyncMock()
         state.get_data = AsyncMock(return_value={"fulfillment_id": 9})
@@ -240,9 +236,7 @@ class TestBackpackInputFSM:
 
         svc = _mock_backpack_ctx(
             mock_get_service,
-            submit_fulfillment_input=AsyncMock(
-                return_value=(False, LucienVoice.fulfillment_input_invalid_length(3, 100))
-            ),
+            submit_fulfillment_input=(False, LucienVoice.fulfillment_input_invalid_length(3, 100)),
         )
         state = AsyncMock()
         state.get_data = AsyncMock(return_value={"fulfillment_id": 5})
@@ -263,9 +257,7 @@ class TestBackpackInputFSM:
 
         _mock_backpack_ctx(
             mock_get_service,
-            submit_fulfillment_input=AsyncMock(
-                return_value=(False, LucienVoice.fulfillment_input_already_submitted())
-            ),
+            submit_fulfillment_input=(False, LucienVoice.fulfillment_input_already_submitted()),
         )
         state = AsyncMock()
         state.get_data = AsyncMock(return_value={"fulfillment_id": 5})

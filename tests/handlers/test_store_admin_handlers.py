@@ -10,11 +10,23 @@ Cubre handlers del panel de administración de tienda:
 - StoreStats: estadísticas de tienda
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
+
+from tests.helpers import model_mock
+from models.models import StoreProduct, StoreTier
 
 import pytest
 
+from services.store_service import StoreService
+
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_store_admin_ctx(mock_get_service):
+    """Mock get_service(StoreService) context manager con autospec."""
+    svc = create_autospec(StoreService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 class TestAdminStoreMenu:
@@ -23,7 +35,7 @@ class TestAdminStoreMenu:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_store_menu_with_stats(self, mock_get_service, make_callback):
         """Muestra el menú con estadísticas correctas."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_store_stats.return_value = {
             "available_products": 5,
             "total_products": 10,
@@ -32,9 +44,6 @@ class TestAdminStoreMenu:
         }
         mock_store.get_low_stock_products.return_value = []
         mock_store.get_out_of_stock_products.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_store")
 
@@ -53,9 +62,9 @@ class TestAdminStoreMenu:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_low_stock_warning(self, mock_get_service, make_callback):
         """Muestra advertencia cuando hay productos con stock bajo."""
-        mock_low_product = MagicMock()
+        mock_low_product = model_mock(StoreProduct)
         mock_low_product.name = "Bajo Stock"
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_store_stats.return_value = {
             "available_products": 5,
             "total_products": 10,
@@ -64,9 +73,6 @@ class TestAdminStoreMenu:
         }
         mock_store.get_low_stock_products.return_value = [mock_low_product]
         mock_store.get_out_of_stock_products.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_store")
 
@@ -81,9 +87,9 @@ class TestAdminStoreMenu:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_out_of_stock_warning(self, mock_get_service, make_callback):
         """Muestra advertencia cuando hay productos agotados."""
-        mock_out_product = MagicMock()
+        mock_out_product = model_mock(StoreProduct)
         mock_out_product.name = "Agotado"
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_store_stats.return_value = {
             "available_products": 5,
             "total_products": 10,
@@ -92,9 +98,6 @@ class TestAdminStoreMenu:
         }
         mock_store.get_low_stock_products.return_value = []
         mock_store.get_out_of_stock_products.return_value = [mock_out_product]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_store")
 
@@ -109,7 +112,7 @@ class TestAdminStoreMenu:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_calls_answer(self, mock_get_service, make_callback):
         """Siempre llama a callback.answer()."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_store_stats.return_value = {
             "available_products": 5,
             "total_products": 10,
@@ -118,9 +121,6 @@ class TestAdminStoreMenu:
         }
         mock_store.get_low_stock_products.return_value = []
         mock_store.get_out_of_stock_products.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_store")
 
@@ -208,14 +208,11 @@ class TestProcessProductDescription:
         """/skip establece description=None y muestra tiers."""
         from handlers.store_admin_handlers import ProductWizardStates, process_product_description
 
-        mock_store = MagicMock()
-        mock_tier = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
+        mock_tier = model_mock(StoreTier)
         mock_tier.id = 1
         mock_tier.name = "Reservado"
         mock_store.get_all_tiers.return_value = [mock_tier]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         msg = make_message(text="/skip")
         fsm = await make_fsm_context()
@@ -234,14 +231,11 @@ class TestProcessProductDescription:
         """Descripción textual se guarda y se muestran tiers."""
         from handlers.store_admin_handlers import ProductWizardStates, process_product_description
 
-        mock_store = MagicMock()
-        mock_tier = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
+        mock_tier = model_mock(StoreTier)
         mock_tier.id = 1
         mock_tier.name = "Reservado"
         mock_store.get_all_tiers.return_value = [mock_tier]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Un pack de fotos exclusivas")
         fsm = await make_fsm_context()
@@ -256,11 +250,8 @@ class TestProcessProductDescription:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_no_tiers_clears_state(self, mock_get_service, make_message, make_fsm_context):
         """Sin tiers disponibles, limpia estado."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_all_tiers.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Descripción test")
         fsm = await make_fsm_context()
@@ -280,14 +271,11 @@ class TestProcessProductDescription:
         """Con tiers disponibles, avanza a selecting_tier."""
         from handlers.store_admin_handlers import ProductWizardStates, process_product_description
 
-        mock_store = MagicMock()
-        mock_tier = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
+        mock_tier = model_mock(StoreTier)
         mock_tier.id = 2
         mock_tier.name = "Mitico"
         mock_store.get_all_tiers.return_value = [mock_tier]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Descripción")
         fsm = await make_fsm_context()
@@ -447,14 +435,11 @@ class TestConfirmCreateProduct:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Crea el producto y muestra mensaje de éxito."""
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.name = "Pack Fotos"
         mock_product.price = 150
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.create_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_product")
         fsm = await make_fsm_context()
@@ -491,11 +476,8 @@ class TestConfirmCreateProduct:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Cuando create_product lanza excepción, muestra error."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.create_product.side_effect = Exception("DB error")
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_product")
         fsm = await make_fsm_context()
@@ -522,14 +504,11 @@ class TestConfirmCreateProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_clears_state_on_success(self, mock_get_service, make_callback, make_fsm_context):
         """Limpia el estado FSM después de crear."""
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.name = "Test"
         mock_product.price = 100
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.create_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_product")
         fsm = await make_fsm_context()
@@ -548,14 +527,11 @@ class TestConfirmCreateProduct:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Usa stock por defecto -1 si no está en data."""
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.name = "Test"
         mock_product.price = 100
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.create_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_product")
         fsm = await make_fsm_context()
@@ -577,11 +553,8 @@ class TestListProducts:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_empty_message_when_no_products(self, mock_get_service, make_callback):
         """Cuando no hay productos, muestra mensaje vacío."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_all_products.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_products")
 
@@ -597,25 +570,22 @@ class TestListProducts:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_lists_products_with_status(self, mock_get_service, make_callback):
         """Muestra productos con su estado y stock."""
-        mock_prod_active = MagicMock()
+        mock_prod_active = model_mock(StoreProduct)
         mock_prod_active.name = "Producto Activo"
         mock_prod_active.is_active = True
         mock_prod_active.stock = -1
         mock_prod_active.is_low_stock = False
         mock_prod_active.price = 100
 
-        mock_prod_inactive = MagicMock()
+        mock_prod_inactive = model_mock(StoreProduct)
         mock_prod_inactive.name = "Producto Inactivo"
         mock_prod_inactive.is_active = False
         mock_prod_inactive.stock = 0
         mock_prod_inactive.is_low_stock = False
         mock_prod_inactive.price = 50
 
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_all_products.return_value = [mock_prod_active, mock_prod_inactive]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_products")
 
@@ -635,11 +605,8 @@ class TestListProducts:
         self, mock_get_service, make_callback
     ):
         """Llama a get_all_products(active_only=False)."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_all_products.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_products")
 
@@ -656,14 +623,11 @@ class TestToggleProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_toggles_active_product_to_inactive(self, mock_get_service, make_callback):
         """Producto activo se desactiva y muestra detalle."""
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.is_active = True
         mock_product.id = 1
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
 
@@ -680,14 +644,11 @@ class TestToggleProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_toggles_inactive_product_to_active(self, mock_get_service, make_callback):
         """Producto inactivo se activa y muestra detalle."""
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.is_active = False
         mock_product.id = 1
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
 
@@ -704,11 +665,8 @@ class TestToggleProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_product_not_found_shows_alert(self, mock_get_service, make_callback):
         """Producto no encontrado muestra alerta."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_product.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
 
@@ -725,14 +683,11 @@ class TestToggleProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_calls_product_admin_detail_after_toggle(self, mock_get_service, make_callback):
         """Después de toggle, llama a product_admin_detail."""
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.is_active = True
         mock_product.id = 1
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import ToggleProductCallback
 
@@ -761,10 +716,7 @@ class TestHandleDeleteProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_unconfirmed_shows_confirmation(self, mock_get_service, make_callback):
         """Sin confirmación, muestra diálogo de confirmación."""
-        mock_store = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
+        mock_store = _mock_store_admin_ctx(mock_get_service)
 
         from keyboards.callback_data import DeleteProductCallback
 
@@ -784,11 +736,8 @@ class TestHandleDeleteProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_confirmed_deletes_successfully(self, mock_get_service, make_callback):
         """Confirmado y eliminación exitosa, muestra mensaje."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.delete_product.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
 
@@ -808,11 +757,8 @@ class TestHandleDeleteProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_confirmed_delete_fails_shows_error(self, mock_get_service, make_callback):
         """Confirmado pero eliminación falla, muestra error."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.delete_product.return_value = False
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
 
@@ -832,11 +778,8 @@ class TestHandleDeleteProduct:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_calls_delete_product_with_correct_id(self, mock_get_service, make_callback):
         """Llama a delete_product con el product_id correcto."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.delete_product.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import DeleteProductCallback
 
@@ -856,7 +799,7 @@ class TestStoreStats:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_store_statistics(self, mock_get_service, make_callback):
         """Muestra estadísticas completas de la tienda."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_store_stats.return_value = {
             "available_products": 8,
             "total_products": 15,
@@ -864,9 +807,6 @@ class TestStoreStats:
             "total_orders": 30,
             "total_besitos_spent": 2500,
         }
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="store_stats")
 
@@ -887,7 +827,7 @@ class TestStoreStats:
     @patch("handlers.store_admin_handlers.get_service")
     async def test_calls_answer(self, mock_get_service, make_callback):
         """Siempre llama a callback.answer()."""
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_store_stats.return_value = {
             "available_products": 0,
             "total_products": 0,
@@ -895,9 +835,6 @@ class TestStoreStats:
             "total_orders": 0,
             "total_besitos_spent": 0,
         }
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="store_stats")
 
@@ -963,7 +900,7 @@ class TestStoreAdminPureHelpers:
     def test_build_product_edit_menu_text(self):
         from handlers.store_admin_handlers import build_product_edit_menu_text
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.name = "Pack VIP"
         mock_product.description = "Contenido exclusivo"
         mock_product.price = 200
@@ -982,7 +919,7 @@ class TestStoreAdminPureHelpers:
     def test_build_product_edit_menu_keyboard(self):
         from handlers.store_admin_handlers import build_product_edit_menu_keyboard
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.id = 7
         mock_product.fulfillment_kind = "package"
 
@@ -1023,7 +960,7 @@ class TestStoreAdminPureHelpers:
             build_product_edit_menu_text,
         )
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.id = 1
         mock_product.name = "VIP Pack"
         mock_product.description = "Desc"
@@ -1044,7 +981,7 @@ class TestStoreAdminPureHelpers:
         from models.models import FulfillmentKind
         from handlers.store_admin_handlers import build_product_edit_menu_keyboard
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.id = 3
         mock_product.fulfillment_kind = FulfillmentKind.PACKAGE
 
@@ -1082,7 +1019,7 @@ class TestStoreAdminPureHelpers:
     def test_build_product_list_entry_and_button(self):
         from handlers.store_admin_handlers import build_product_list_entry_and_button
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.is_active = True
         mock_product.name = "Sample Product Name That Is Long"
         mock_product.stock = 7
@@ -1103,14 +1040,11 @@ class TestProductWizardFulfillmentSteps:
     async def test_wizard_select_tier_advances_to_delivery_mode(
         self, mock_get_service, make_callback, make_fsm_context
     ):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         tier = MagicMock()
         tier.id = 3
         tier.name = "Reservado"
         mock_store.get_all_tiers.return_value = [tier]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from handlers.store_admin_handlers import ProductWizardStates, wizard_select_tier
 
@@ -1187,11 +1121,8 @@ class TestWizardSelectTariff:
         mock_tariff = MagicMock()
         mock_tariff.id = 2
         mock_tariff.name = "VIP 30 dias"
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_tariffs_for_product_wizard.return_value = [mock_tariff]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import SelectTariffStoreWizardCallback
         from handlers.store_admin_handlers import ProductWizardStates, wizard_select_tariff
@@ -1221,11 +1152,8 @@ class TestWizardSelectStoryNode:
         mock_node = MagicMock()
         mock_node.id = 7
         mock_node.title = "Capitulo 1"
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_story_nodes_for_product_wizard.return_value = [mock_node]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import SelectStoryNodeStoreWizardCallback
         from handlers.store_admin_handlers import ProductWizardStates, wizard_select_story_node
@@ -1252,11 +1180,8 @@ class TestWizardEmptyTariffs:
     async def test_empty_list_shows_no_tariffs_and_clears_fsm(
         self, mock_get_service, make_callback, make_fsm_context
     ):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_tariffs_for_product_wizard.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from handlers.store_admin_handlers import _wizard_prompt_tariff_selection
 
@@ -1279,11 +1204,8 @@ class TestWizardEmptyStoryNodes:
     async def test_empty_list_shows_no_story_nodes(
         self, mock_get_service, make_callback, make_fsm_context
     ):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_story_nodes_for_product_wizard.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from handlers.store_admin_handlers import _wizard_prompt_story_node_selection
 
@@ -1310,11 +1232,8 @@ class TestWizardRouteAfterKind:
         mock_tariff.id = 1
         mock_tariff.name = "VIP 7 dias"
         mock_tariff.duration_days = 7
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_tariffs_for_product_wizard.return_value = [mock_tariff]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from models.models import FulfillmentKind
         from handlers.store_admin_handlers import (
@@ -1338,7 +1257,7 @@ class TestEditProductTariff:
         from models.models import FulfillmentKind
         from handlers.store_admin_handlers import build_product_edit_menu_keyboard
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.id = 10
         mock_product.fulfillment_kind = FulfillmentKind.VIP_GRANT
 
@@ -1350,11 +1269,8 @@ class TestEditProductTariff:
     async def test_edit_tariff_updates_product(
         self, mock_get_service, make_callback, make_fsm_context
     ):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.update_product.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import SelectTariffEditProductCallback
         from handlers.store_admin_handlers import (
@@ -1380,7 +1296,7 @@ class TestEditProductStoryNode:
         from models.models import FulfillmentKind
         from handlers.store_admin_handlers import build_product_edit_menu_keyboard
 
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.id = 11
         mock_product.fulfillment_kind = FulfillmentKind.STORY_UNLOCK
 
@@ -1394,18 +1310,15 @@ class TestEditProductMenu:
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_edit_menu(self, mock_get_service, make_callback):
-        mock_product = MagicMock()
+        mock_product = model_mock(StoreProduct)
         mock_product.name = "Producto Test"
         mock_product.description = "Desc"
         mock_product.price = 100
         mock_product.stock = -1
         mock_product.package.name = "Paquete A"
 
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_product.return_value = mock_product
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import EditProductCallback
 
@@ -1425,11 +1338,8 @@ class TestEditProductMenu:
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_product_not_found(self, mock_get_service, make_callback):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.get_product.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import EditProductCallback
 
@@ -1448,11 +1358,8 @@ class TestProcessEditProductName:
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_updates_name_successfully(self, mock_get_service, make_message, make_fsm_context):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.update_product.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from handlers.store_admin_handlers import ProductEditStates, process_edit_product_name
 
@@ -1489,11 +1396,8 @@ class TestProcessEditProductPrice:
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_updates_price_successfully(self, mock_get_service, make_message, make_fsm_context):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.update_product.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from handlers.store_admin_handlers import ProductEditStates, process_edit_product_price
 
@@ -1527,11 +1431,8 @@ class TestProcessEditProductPackage:
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_updates_package_successfully(self, mock_get_service, make_callback, make_fsm_context):
-        mock_store = MagicMock()
+        mock_store = _mock_store_admin_ctx(mock_get_service)
         mock_store.update_product.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_store
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import SelectPkgEditProductCallback
         from handlers.store_admin_handlers import ProductEditStates, process_edit_product_package

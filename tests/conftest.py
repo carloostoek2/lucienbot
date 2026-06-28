@@ -6,7 +6,7 @@ Fixtures y configuración para tests de Lucien Bot.
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 from sqlalchemy import create_engine
@@ -503,6 +503,33 @@ def mock_dispatcher():
     """Crea un mock del dispatcher."""
     dp = MagicMock()
     return dp
+
+
+def mock_service_ctx(mock_get_service, service_class, **methods):
+    """Crea un service mock con create_autospec para handler tests.
+
+    Valida que los métodos mockeados existan realmente en el service class.
+    Cada kwarg es un `nombre_metodo=valor_retorno`.
+
+    Uso::
+        @patch("handlers.foo.get_service")
+        async def test_foo(self, mock_get_service):
+            svc = mock_service_ctx(mock_get_service, StoreService,
+                get_all_products=[],
+                get_product=product,
+            )
+            await handler(cb)
+            svc.get_product.assert_called_once_with(1)
+    """
+    svc = create_autospec(service_class, spec_set=True, instance=True)
+    for name, val in methods.items():
+        method_mock = getattr(svc, name)
+        method_mock.return_value = val
+    ctx = MagicMock()
+    ctx.__enter__.return_value = svc
+    ctx.__exit__.return_value = False
+    mock_get_service.return_value = ctx
+    return svc
 
 
 @pytest.fixture

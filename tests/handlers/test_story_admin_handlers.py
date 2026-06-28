@@ -12,11 +12,21 @@ Cubre:
 - achievement wizard: AchievementWizardStates
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
-from models.models import NodeType, ArchetypeType
+from tests.helpers import model_mock
+from models.models import Archetype, ArchetypeType, NodeType, StoryNode
+
+from services.story_service import StoryService
 
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_story_ctx(mock_get_service):
+    """Mock get_service(StoryService) context manager con autospec."""
+    svc = create_autospec(StoryService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +41,7 @@ class TestAdminNarrativeMenu:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_shows_menu_with_stats(self, mock_get_service, make_callback):
         """Muestra el menu con estadisticas de la narrativa."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_story_stats.return_value = {
             "total_nodes": 10,
             "total_chapters": 3,
@@ -39,9 +49,6 @@ class TestAdminNarrativeMenu:
             "completed_users": 5,
             "total_achievements": 8,
         }
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_narrative")
 
@@ -271,14 +278,11 @@ class TestCreateNodeWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Confirmacion crea el nodo exitosamente."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.id = 1
         mock_node.title = "Test Node"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.create_node.return_value = mock_node
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_node")
         fsm = await make_fsm_context()
@@ -319,11 +323,8 @@ class TestCreateNodeWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Error al crear nodo muestra mensaje de error."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.create_node.side_effect = Exception("DB Error")
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_node")
         fsm = await make_fsm_context()
@@ -350,11 +351,8 @@ class TestListNodes:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_no_nodes_shows_empty(self, mock_get_service, make_callback):
         """Sin nodos: muestra mensaje de vacio."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_all_nodes.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_nodes")
 
@@ -369,23 +367,20 @@ class TestListNodes:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_lists_nodes_by_chapter(self, mock_get_service, make_callback):
         """Con nodos: los lista organizados por capitulo."""
-        mock_node1 = MagicMock()
+        mock_node1 = model_mock(StoryNode)
         mock_node1.chapter = 1
         mock_node1.title = "Capitulo Uno"
         mock_node1.is_active = True
         mock_node1.node_type = MagicMock(value="NARRATIVE")
 
-        mock_node2 = MagicMock()
+        mock_node2 = model_mock(StoryNode)
         mock_node2.chapter = 1
         mock_node2.title = "Segundo Fragmento"
         mock_node2.is_active = False
         mock_node2.node_type = MagicMock(value="DECISION")
 
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_all_nodes.return_value = [mock_node1, mock_node2]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_nodes")
 
@@ -405,15 +400,12 @@ class TestManageArchetypes:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_shows_archetypes_list(self, mock_get_service, make_callback):
         """Muestra lista de arquetipos existentes."""
-        mock_arch1 = MagicMock()
+        mock_arch1 = model_mock(Archetype)
         mock_arch1.name = "El Explorador"
         mock_arch1.archetype_type = MagicMock()
         mock_arch1.archetype_type.value = "explorador"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_all_archetypes.return_value = [mock_arch1]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="manage_archetypes")
 
@@ -448,14 +440,11 @@ class TestToggleNode:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_toggles_active_to_inactive(self, mock_get_service, make_callback):
         """Nodo activo se desactiva."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.is_active = True
         mock_node.id = 1
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_node.return_value = mock_node
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_node_toggle:1")
 
@@ -472,14 +461,11 @@ class TestToggleNode:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_toggles_inactive_to_active(self, mock_get_service, make_callback):
         """Nodo inactivo se activa."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.is_active = False
         mock_node.id = 1
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_node.return_value = mock_node
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_node_toggle:1")
 
@@ -496,11 +482,8 @@ class TestToggleNode:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_node_not_found_shows_alert(self, mock_get_service, make_callback):
         """Nodo no encontrado muestra alerta."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_node.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_node_toggle:999")
 
@@ -520,10 +503,7 @@ class TestDeleteNode:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_unconfirmed_shows_confirmation(self, mock_get_service, make_callback):
         """Sin confirmacion, muestra dialogo de confirmacion."""
-        mock_story = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
+        mock_story = _mock_story_ctx(mock_get_service)
 
         cb = make_callback(data="story_node_delete:1")
 
@@ -542,11 +522,8 @@ class TestDeleteNode:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_confirmed_deletes_successfully(self, mock_get_service, make_callback):
         """Confirmado y eliminacion exitosa."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.delete_node.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_node_delete:1")
 
@@ -565,11 +542,8 @@ class TestDeleteNode:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_confirmed_delete_fails_shows_error(self, mock_get_service, make_callback):
         """Confirmado pero eliminacion falla."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.delete_node.return_value = False
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_node_delete:1")
 
@@ -592,13 +566,10 @@ class TestManageChoices:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_no_decision_nodes_shows_empty(self, mock_get_service, make_callback):
         """Sin nodos de decision: muestra mensaje."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.node_type = MagicMock(value="NARRATIVE")
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_all_nodes.return_value = [mock_node]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="manage_choices")
 
@@ -613,15 +584,12 @@ class TestManageChoices:
     @patch("handlers.story_admin_handlers.get_service")
     async def test_lists_decision_nodes(self, mock_get_service, make_callback):
         """Con nodos de decision: los lista."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.node_type = NodeType.DECISION
         mock_node.id = 1
         mock_node.title = "Decision Point"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_all_nodes.return_value = [mock_node]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="manage_choices")
 
@@ -642,14 +610,11 @@ class TestChoiceWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Inicia el wizard de opcion estableciendo waiting_text."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.id = 1
         mock_node.title = "Test Node"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_node.return_value = mock_node
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_add_choices:1")
         fsm = await make_fsm_context()
@@ -670,11 +635,8 @@ class TestChoiceWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Nodo no encontrado: muestra alerta."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_node.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_add_choices:999")
         fsm = await make_fsm_context()
@@ -706,14 +668,11 @@ class TestChoiceWizard:
         self, mock_get_service, make_message, make_fsm_context
     ):
         """Texto valido guarda y avanza a selecting_next_node."""
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.id = 1
         mock_node.title = "Target Node"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_all_nodes.return_value = [mock_node]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         msg = make_message(text="Aceptar la invitacion")
         fsm = await make_fsm_context()
@@ -773,11 +732,8 @@ class TestChoiceWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Confirmacion crea la opcion exitosamente."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.create_choice.return_value = MagicMock(id=1)
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_choice")
         fsm = await make_fsm_context()
@@ -831,11 +787,8 @@ class TestArchetypeWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Seleccion de tipo de arquetipo guarda y avanza a waiting_name."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_archetype.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_new_archetype:explorador")
         fsm = await make_fsm_context()
@@ -857,11 +810,8 @@ class TestArchetypeWizard:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Arquetipo ya existente muestra alerta."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_archetype.return_value = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_new_archetype:explorador")
         fsm = await make_fsm_context()
@@ -910,11 +860,8 @@ class TestArchetypeWizard:
         """Confirmacion crea arquetipo exitosamente."""
         mock_archetype = MagicMock()
         mock_archetype.name = "El Explorador"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.create_archetype.return_value = mock_archetype
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_archetype")
         fsm = await make_fsm_context()
@@ -1008,11 +955,8 @@ class TestAchievementWizard:
         mock_achievement = MagicMock()
         mock_achievement.name = "El Primer Paso"
         mock_achievement.icon = "🌹"
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.create_achievement.return_value = mock_achievement
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_achievement")
         fsm = await make_fsm_context()

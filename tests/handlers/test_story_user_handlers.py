@@ -13,11 +13,23 @@ Cubre:
 - my_story_achievements: con/sin logros
 - quiz completion, admin deny filter
 """
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
+
+from tests.helpers import model_mock
+from models.models import Archetype, StoryChoice, StoryNode, UserStoryProgress
 
 import pytest
 
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_story_ctx(mock_get_service):
+    """Mock get_service(StoryService) context manager con autospec."""
+    from services.story_service import StoryService
+
+    svc = create_autospec(StoryService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 class TestNarrativeMenu:
@@ -28,12 +40,9 @@ class TestNarrativeMenu:
         self, mock_get_service, make_callback
     ):
         """Sin historia iniciada y sin arquetipo: muestra mensaje con 'Comenzar'."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.has_started_story.return_value = False
         mock_story.get_user_archetype.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="narrative")
         fsm = AsyncMock()
@@ -53,17 +62,14 @@ class TestNarrativeMenu:
         self, mock_get_service, make_callback
     ):
         """Con historia iniciada y arquetipo: muestra 'Bienvenido de vuelta' y arquetipo."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.has_started_story.return_value = True
         mock_archetype = MagicMock()
         mock_archetype.value = "explorador"
         mock_story.get_user_archetype.return_value = mock_archetype
-        mock_progress = MagicMock()
+        mock_progress = model_mock(UserStoryProgress)
         mock_progress.current_chapter = 2
         mock_story.get_user_progress.return_value = mock_progress
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="narrative")
         fsm = AsyncMock()
@@ -82,15 +88,12 @@ class TestNarrativeMenu:
     @patch("handlers.story_user_handlers.get_service")
     async def test_started_no_archetype(self, mock_get_service, make_callback):
         """Con historia iniciada pero sin arquetipo: no muestra texto de arquetipo."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.has_started_story.return_value = True
         mock_story.get_user_archetype.return_value = None
-        mock_progress = MagicMock()
+        mock_progress = model_mock(UserStoryProgress)
         mock_progress.current_chapter = 1
         mock_story.get_user_progress.return_value = mock_progress
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="narrative")
         fsm = AsyncMock()
@@ -115,11 +118,8 @@ class TestStartStory:
         self, mock_get_service, make_callback
     ):
         """Si ya inicio la historia, llama a continue_story."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.has_started_story.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="start_story")
 
@@ -134,13 +134,10 @@ class TestStartStory:
         self, mock_get_service, make_callback
     ):
         """Sin nodo inicial, muestra mensaje de 'aun siendo tejidos'."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.has_started_story.return_value = False
         mock_story.get_starting_node.return_value = None
         mock_story.create_user_progress.return_value = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="start_story")
 
@@ -158,15 +155,12 @@ class TestStartStory:
         self, mock_get_service, make_callback
     ):
         """Con nodo inicial, llama advance_to_node y luego show_node."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.has_started_story.return_value = False
-        mock_node = MagicMock()
+        mock_node = model_mock(StoryNode)
         mock_node.id = 1
         mock_story.get_starting_node.return_value = mock_node
         mock_story.advance_to_node.return_value = (True, None, MagicMock())
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="start_story")
 
@@ -185,13 +179,10 @@ class TestContinueStory:
         self, mock_get_service, make_callback
     ):
         """Con progreso y current_node_id, muestra el nodo."""
-        mock_story = MagicMock()
-        mock_progress = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_progress = model_mock(UserStoryProgress)
         mock_progress.current_node_id = 3
         mock_story.get_user_progress.return_value = mock_progress
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="continue_story")
 
@@ -208,11 +199,8 @@ class TestContinueStory:
         self, mock_get_service, make_callback
     ):
         """Sin progreso o sin current_node_id, llama a start_story."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_user_progress.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="continue_story")
 
@@ -229,13 +217,10 @@ class TestContinueStory:
         self, mock_get_service, make_callback
     ):
         """Progreso sin current_node_id redirige a start_story."""
-        mock_story = MagicMock()
-        mock_progress = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_progress = model_mock(UserStoryProgress)
         mock_progress.current_node_id = None
         mock_story.get_user_progress.return_value = mock_progress
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="continue_story")
 
@@ -256,12 +241,9 @@ class TestGoToNode:
         self, mock_get_service, make_callback
     ):
         """Valida transicion, advance_to_node y luego show_node."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.validate_continue_transition.return_value = (True, None)
         mock_story.advance_to_node.return_value = (True, None, MagicMock())
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_continue:5")
 
@@ -281,14 +263,11 @@ class TestGoToNode:
         self, mock_get_service, make_callback
     ):
         """Transicion invalida: alerta y sin advance/show."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.validate_continue_transition.return_value = (
             False,
             "Fragmento no disponible",
         )
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_continue:99")
         from keyboards.callback_data import ContinueStoryCallback
@@ -312,11 +291,8 @@ class TestMakeChoice:
         self, mock_get_service, make_callback
     ):
         """Opcion no encontrada: muestra alerta 'ya no esta disponible'."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_choice.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_choice:99")
 
@@ -333,15 +309,12 @@ class TestMakeChoice:
         self, mock_get_service, make_callback
     ):
         """Opcion valida con next_node_id: llama a advance_to_node y show_node."""
-        mock_story = MagicMock()
-        mock_choice = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_choice = model_mock(StoryChoice)
         mock_choice.next_node_id = 10
         mock_choice.additional_cost = 0
         mock_story.get_choice.return_value = mock_choice
         mock_story.advance_to_node.return_value = (True, None, MagicMock())
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_choice:1")
 
@@ -362,14 +335,11 @@ class TestMakeChoice:
         self, mock_get_service, make_callback
     ):
         """advance_to_node retorna fallo: muestra alerta con el mensaje."""
-        mock_story = MagicMock()
-        mock_choice = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_choice = model_mock(StoryChoice)
         mock_choice.next_node_id = 10
         mock_story.get_choice.return_value = mock_choice
         mock_story.advance_to_node.return_value = (False, "No tienes suficientes besitos", None)
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_choice:1")
 
@@ -386,15 +356,12 @@ class TestMakeChoice:
         self, mock_get_service, make_callback
     ):
         """Opcion terminal: advance_to_node en nodo actual + mensaje de fin."""
-        mock_story = MagicMock()
-        mock_choice = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_choice = model_mock(StoryChoice)
         mock_choice.next_node_id = None
         mock_choice.node_id = 5
         mock_story.get_choice.return_value = mock_choice
         mock_story.advance_to_node.return_value = (True, None, MagicMock())
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="story_choice:1")
 
@@ -424,12 +391,9 @@ class TestStartArchetypeQuiz:
         mock_questions = [
             {"question": "Q1?", "options": [{"text": "A", "points": {"explorador": 3}}]}
         ]
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_user_archetype.return_value = None
         mock_story.get_archetype_quiz_questions.return_value = mock_questions
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="discover_archetype")
         fsm = await make_fsm_context()
@@ -454,14 +418,11 @@ class TestProcessQuizAnswer:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Agrega la respuesta al estado y avanza a la siguiente pregunta."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_archetype_quiz_questions.return_value = [
             {"question": "Q1?", "options": [{"text": "A", "points": {"a": 3}}]},
             {"question": "Q2?", "options": [{"text": "B", "points": {"b": 3}}]},
         ]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="quiz_answer:0")
         fsm = await make_fsm_context()
@@ -488,7 +449,7 @@ class TestProcessQuizAnswer:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Ultima respuesta: show_quiz_question debe ejecutarse antes de cerrar sesion."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_archetype_quiz_questions.return_value = [
             {"question": "Q1?", "options": [{"text": "A", "points": {"a": 3}}]},
         ]
@@ -530,11 +491,8 @@ class TestShowNode:
 
     @patch("handlers.story_user_handlers.get_service")
     async def test_node_not_found_shows_desvanecido(self, mock_get_service, make_callback):
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_node.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback()
         from handlers.story_user_handlers import show_node
@@ -546,8 +504,8 @@ class TestShowNode:
 
     @patch("handlers.story_user_handlers.get_service")
     async def test_vip_denial_blocks_content(self, mock_get_service, make_callback):
-        mock_story = MagicMock()
-        mock_node = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_node = model_mock(StoryNode)
         mock_node.title = "VIP Fragment"
         mock_node.content = "secret"
         mock_node.chapter = 1
@@ -557,9 +515,6 @@ class TestShowNode:
         ).NodeType.NARRATIVE
         mock_story.get_node.return_value = mock_node
         mock_story.can_access_node.return_value = (False, "Este fragmento requiere acceso a El Diván")
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback()
         from handlers.story_user_handlers import show_node
@@ -574,8 +529,8 @@ class TestShowNode:
     async def test_ending_node_shows_archetype_button(self, mock_get_service, make_callback):
         from models.models import NodeType
 
-        mock_story = MagicMock()
-        mock_node = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_node = model_mock(StoryNode)
         mock_node.title = "Fin"
         mock_node.content = "the end"
         mock_node.chapter = 1
@@ -584,9 +539,6 @@ class TestShowNode:
         mock_story.get_node.return_value = mock_node
         mock_story.can_access_node.return_value = (True, None)
         mock_story.get_node_choices.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback()
         from handlers.story_user_handlers import show_node
@@ -602,8 +554,8 @@ class TestShowNode:
         from keyboards.callback_data import StoryChoiceCallback
         from models.models import NodeType
 
-        mock_story = MagicMock()
-        mock_node = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_node = model_mock(StoryNode)
         mock_node.id = 7
         mock_node.title = "Choose"
         mock_node.content = "pick one"
@@ -612,14 +564,11 @@ class TestShowNode:
         mock_node.node_type = NodeType.DECISION
         mock_story.get_node.return_value = mock_node
         mock_story.can_access_node.return_value = (True, None)
-        mock_choice = MagicMock()
+        mock_choice = model_mock(StoryChoice)
         mock_choice.id = 42
         mock_choice.text = "Path A"
         mock_choice.additional_cost = 10
         mock_story.get_node_choices.return_value = [mock_choice]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback()
         from handlers.story_user_handlers import show_node
@@ -638,8 +587,8 @@ class TestShowNode:
     ):
         from models.models import NodeType
 
-        mock_story = MagicMock()
-        mock_node = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
+        mock_node = model_mock(StoryNode)
         mock_node.title = "Quiz Gate"
         mock_node.content = "take the quiz"
         mock_node.chapter = 1
@@ -648,9 +597,6 @@ class TestShowNode:
         mock_story.get_node.return_value = mock_node
         mock_story.can_access_node.return_value = (True, None)
         mock_story.get_node_choices.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback()
         from handlers.story_user_handlers import show_node
@@ -670,11 +616,8 @@ class TestViewMyArchetype:
         self, mock_get_service, make_callback
     ):
         """Sin arquetipo: muestra mensaje para descubrirlo."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_user_archetype.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="view_my_archetype")
 
@@ -691,15 +634,12 @@ class TestViewMyArchetype:
         self, mock_get_service, make_callback
     ):
         """Con arquetipo: muestra detalles y progreso."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_archetype = MagicMock()
         mock_archetype.value = "seductor"
         mock_story.get_user_archetype.return_value = mock_archetype
         mock_story.get_archetype_description.return_value = "Una descripcion del seductor"
         mock_story.get_visited_node_count.return_value = 3
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="view_my_archetype")
 
@@ -721,11 +661,8 @@ class TestMyStoryAchievements:
         self, mock_get_service, make_callback
     ):
         """Sin logros: muestra mensaje de 'aun no ha desbloqueado'."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.get_user_achievements.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="my_story_achievements")
 
@@ -742,15 +679,12 @@ class TestMyStoryAchievements:
         self, mock_get_service, make_callback
     ):
         """Con logros: los lista correctamente."""
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_ua = MagicMock()
         mock_ua.achievement.name = "El Primer Paso"
         mock_ua.achievement.description = "Completa tu primer fragmento"
         mock_ua.unlocked_at.strftime.return_value = "15/06/2024"
         mock_story.get_user_achievements.return_value = [mock_ua]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="my_story_achievements")
 
@@ -773,14 +707,11 @@ class TestQuizCompletion:
     ):
         from models.models import ArchetypeType
 
-        mock_story = MagicMock()
+        mock_story = _mock_story_ctx(mock_get_service)
         mock_story.calculate_archetype_from_quiz.return_value = ArchetypeType.SEDUCTOR
         mock_story.has_started_story.return_value = False
         mock_story.create_user_progress.return_value = MagicMock()
         mock_story.get_archetype_description.return_value = "Un seductor nato"
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_story
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="discover_archetype")
         fsm = await make_fsm_context()

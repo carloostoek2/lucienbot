@@ -17,9 +17,12 @@ Prioridad alta: game_user_handlers tenía ~14% cobertura (la más baja), es el s
 Abarca el sistema completo de handlers de usuario para minijuegos.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
+
+from services.game_service import GameService
+from services.streak_promotion_service import StreakPromotionService
 
 from keyboards.callback_data import (
     StreakProtectAcceptCallback,
@@ -33,16 +36,15 @@ pytestmark = [pytest.mark.unit]
 
 
 def _mock_game_ctx(mock_get_service):
-    """Helper para mockear el context de get_service(GameService)."""
-    mock_instance = MagicMock()
+    """Helper para mockear el context de get_service(GameService) con autospec."""
+    mock_instance = create_autospec(GameService, spec_set=True, instance=True)
     mock_get_service.return_value.__enter__.return_value = mock_instance
     return mock_instance
 
 
 def _mock_streak_ctx(mock_get_service):
-    """Helper para StreakPromotionService (usado en protection paths)."""
-    mock_instance = MagicMock()
-    # Para casos donde get_service se llama múltiples veces, el patch maneja
+    """Helper para StreakPromotionService (usado en protection paths) con autospec."""
+    mock_instance = create_autospec(StreakPromotionService, spec_set=True, instance=True)
     return mock_instance
 
 
@@ -245,7 +247,7 @@ class TestStreakProtection:
     @patch("handlers.game_user_handlers._redirect_to_trivia", new_callable=AsyncMock)
     @patch("handlers.game_user_handlers.get_service")
     async def test_handle_protection_accept(self, mock_get_service, mock_redirect, make_callback):
-        mock_svc = MagicMock()
+        mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
         mock_get_service.return_value.__enter__.return_value = mock_svc
         mock_svc.protect_streak.return_value = True
         mock_svc.calculate_protection_cost.return_value = 10
@@ -262,7 +264,7 @@ class TestStreakProtection:
     @patch("handlers.game_user_handlers._redirect_to_trivia", new_callable=AsyncMock)
     @patch("handlers.game_user_handlers.get_service")
     async def test_handle_protection_decline(self, mock_get_service, mock_redirect, make_callback):
-        mock_svc = MagicMock()
+        mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
         mock_get_service.return_value.__enter__.return_value = mock_svc
         mock_svc.get_active_session.return_value = MagicMock(id=99)
         cb = make_callback(data="streak_protect_decline:99")
@@ -277,7 +279,7 @@ class TestStreakProtection:
 
     @patch("handlers.game_user_handlers.get_service")
     async def test_handle_streak_retire(self, mock_get_service, make_callback):
-        mock_svc = MagicMock()
+        mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
         session = MagicMock()
         session.codes_delivered = '["CODE1"]'
         mock_svc.get_active_session.return_value = session
@@ -294,7 +296,7 @@ class TestStreakProtection:
 
     @patch("handlers.game_user_handlers.get_service")
     async def test_handle_streak_continue(self, mock_get_service, make_callback):
-        mock_svc = MagicMock()
+        mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
         mock_get_service.return_value.__enter__.return_value = mock_svc
         cb = make_callback(data="streak_continue:1")
 

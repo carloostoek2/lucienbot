@@ -14,8 +14,8 @@ pytestmark = [pytest.mark.unit]
 
 
 class TestFreeChannelJoin:
-    @patch("handlers.free_channel_handlers.UserService")
-    @patch("handlers.free_channel_handlers.ChannelService")
+    @patch("handlers.free_channel_handlers.UserService", autospec=True)
+    @patch("handlers.free_channel_handlers.ChannelService", autospec=True)
     @patch("handlers.free_channel_handlers.get_scheduler")
     async def test_handle_join_request_basic(
         self, mock_sched, mock_ch_svc, mock_user_svc, make_message
@@ -42,7 +42,7 @@ class TestFreeChannelJoin:
 
 
 class TestMemberEvents:
-    @patch("handlers.free_channel_handlers.ChannelService")
+    @patch("handlers.free_channel_handlers.ChannelService", autospec=True)
     async def test_handle_member_leave(self, mock_ch, make_message):
         event = MagicMock()
         event.from_user.id = 123
@@ -52,7 +52,7 @@ class TestMemberEvents:
 
         await handle_member_leave(event)
 
-    @patch("handlers.free_channel_handlers.ChannelService")
+    @patch("handlers.free_channel_handlers.ChannelService", autospec=True)
     async def test_handle_member_join(self, mock_ch, make_message):
         event = MagicMock()
         event.from_user.id = 123

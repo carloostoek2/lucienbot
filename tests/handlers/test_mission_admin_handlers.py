@@ -18,10 +18,11 @@ Cubre:
 - missions_stats: estadisticas generales
 - mission_detail_stats: estadisticas detalladas por mision
 """
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from tests.helpers import model_mock
 from keyboards.callback_data import (
     MissionDeleteCallback,
     MissionDetailCallback,
@@ -31,9 +32,17 @@ from keyboards.callback_data import (
     MissionTypeSelectCallback,
     SelectRewardMissionCallback,
 )
-from models.models import MissionFrequency, MissionType
+from services.mission_service import MissionService
+from models.models import Mission, MissionFrequency, MissionType, Reward
 
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_mission_ctx(mock_get_service):
+    """Mock get_service(MissionService) context manager con autospec."""
+    svc = create_autospec(MissionService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 class TestAdminMissionsMenu:
@@ -289,10 +298,7 @@ class TestSelectFrequency:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Sin recompensas configurables, muestra mensaje y limpia estado."""
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_rewards_for_mission_wizard.return_value = []
         cb_data = MissionFreqSelectCallback(frequency=MissionFrequency.ONE_TIME.value)
         cb = make_callback(data=cb_data.pack())
@@ -316,14 +322,8 @@ class TestSelectFrequency:
     ):
         """Con recompensas disponibles, avanza a selecting_reward."""
         from handlers.mission_admin_handlers import MissionWizardStates, select_frequency
-        mock_reward = MagicMock()
-        mock_reward.id = 1
-        mock_reward.name = "Test Reward"
-        mock_reward.reward_type = MagicMock(value="besitos")
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_reward = model_mock(Reward, id=1, name="Test Reward", reward_type=MagicMock(value="besitos"))
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_rewards_for_mission_wizard.return_value = [mock_reward]
 
         cb_data = MissionFreqSelectCallback(frequency=MissionFrequency.RECURRING.value)
@@ -350,13 +350,8 @@ class TestSelectRewardForMission:
     ):
         """Muestra resumen de la mision y avanza a confirming."""
         from handlers.mission_admin_handlers import MissionWizardStates, select_reward_for_mission
-        mock_reward = MagicMock()
-        mock_reward.name = "Test Reward"
-        mock_reward.reward_type = MagicMock(value="besitos")
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_reward = model_mock(Reward, name="Test Reward", reward_type=MagicMock(value="besitos"))
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_reward_for_mission_wizard.return_value = mock_reward
 
         cb_data = SelectRewardMissionCallback(reward_id=1)
@@ -391,10 +386,7 @@ class TestSelectRewardForMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra 'Una vez' cuando frequency es ONE_TIME y recompensa es nula."""
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_reward_for_mission_wizard.return_value = None
 
         cb_data = SelectRewardMissionCallback(reward_id=1)
@@ -422,13 +414,8 @@ class TestSelectRewardForMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra 'Recurrente' cuando frequency es RECURRING."""
-        mock_reward = MagicMock()
-        mock_reward.name = "Bonus"
-        mock_reward.reward_type = MagicMock(value="besitos")
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_reward = model_mock(Reward, name="Bonus", reward_type=MagicMock(value="besitos"))
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_reward_for_mission_wizard.return_value = mock_reward
 
         cb_data = SelectRewardMissionCallback(reward_id=2)
@@ -455,10 +442,7 @@ class TestSelectRewardForMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Muestra 'Sin descripcion' cuando description es None."""
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_reward_for_mission_wizard.return_value = None
 
         cb_data = SelectRewardMissionCallback(reward_id=1)
@@ -489,16 +473,9 @@ class TestConfirmCreateMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Crea la mision y muestra mensaje de exito."""
-        mock_mission = MagicMock()
-        mock_mission.name = "Test Mission"
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-
-        mock_mission_svc = MagicMock()
+        mock_mission = model_mock(Mission, name="Test Mission", mission_type=MagicMock(value="reaction_count"), target_value=10)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.create_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_mission")
         fsm = await make_fsm_context()
@@ -537,11 +514,8 @@ class TestConfirmCreateMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Cuando create_mission lanza excepcion, muestra error."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.create_mission.side_effect = Exception("DB error")
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_mission")
         fsm = await make_fsm_context()
@@ -570,16 +544,9 @@ class TestConfirmCreateMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Limpia el estado FSM despues de crear."""
-        mock_mission = MagicMock()
-        mock_mission.name = "Test"
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-
-        mock_mission_svc = MagicMock()
+        mock_mission = model_mock(Mission, name="Test", mission_type=MagicMock(value="reaction_count"), target_value=10)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.create_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_mission")
         fsm = await make_fsm_context()
@@ -597,16 +564,9 @@ class TestConfirmCreateMission:
         self, mock_get_service, make_callback, make_fsm_context
     ):
         """Usa None para campos opcionales si no estan en state."""
-        mock_mission = MagicMock()
-        mock_mission.name = "Test"
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-
-        mock_mission_svc = MagicMock()
+        mock_mission = model_mock(Mission, name="Test", mission_type=MagicMock(value="reaction_count"), target_value=10)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.create_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_mission")
         fsm = await make_fsm_context()
@@ -631,11 +591,8 @@ class TestListMissions:
         self, mock_get_service, make_callback
     ):
         """Cuando no hay misiones, muestra mensaje vacio."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_missions.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_missions")
 
@@ -650,25 +607,12 @@ class TestListMissions:
     @patch("handlers.mission_admin_handlers.get_service")
     async def test_lists_missions_with_status(self, mock_get_service, make_callback):
         """Muestra misiones con su estado."""
-        mock_mission_active = MagicMock()
-        mock_mission_active.name = "Mission Active"
-        mock_mission_active.is_active = True
-        mock_mission_active.mission_type = MagicMock(value="reaction_count")
-        mock_mission_active.id = 1
-
-        mock_mission_inactive = MagicMock()
-        mock_mission_inactive.name = "Mission Inactive"
-        mock_mission_inactive.is_active = False
-        mock_mission_inactive.mission_type = MagicMock(value="daily_gift_streak")
-        mock_mission_inactive.id = 2
-
-        mock_mission_svc = MagicMock()
+        mock_mission_active = model_mock(Mission, name="Mission Active", is_active=True, mission_type=MagicMock(value="reaction_count"), id=1)
+        mock_mission_inactive = model_mock(Mission, name="Mission Inactive", is_active=False, mission_type=MagicMock(value="daily_gift_streak"), id=2)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_missions.return_value = [
             mock_mission_active, mock_mission_inactive
         ]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_missions")
 
@@ -688,11 +632,8 @@ class TestListMissions:
         self, mock_get_service, make_callback
     ):
         """Llama a get_all_missions(active_only=False)."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_missions.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_missions")
 
@@ -708,11 +649,8 @@ class TestMissionAdminDetail:
     @patch("handlers.mission_admin_handlers.get_service")
     async def test_mission_not_found_shows_alert(self, mock_get_service, make_callback):
         """Mision no encontrada muestra alerta."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionDetailCallback(mission_id=999)
         cb = make_callback(data=cb_data.pack())
@@ -726,25 +664,10 @@ class TestMissionAdminDetail:
     @patch("handlers.mission_admin_handlers.get_service")
     async def test_shows_mission_detail(self, mock_get_service, make_callback):
         """Muestra detalle completo de la mision."""
-        mock_reward = MagicMock()
-        mock_reward.name = "Test Reward"
-        mock_reward.reward_type = MagicMock(value="besitos")
-
-        mock_mission = MagicMock()
-        mock_mission.name = "Test Mission"
-        mock_mission.description = "A test description"
-        mock_mission.is_active = True
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-        mock_mission.id = 1
-        mock_mission.frequency = MissionFrequency.ONE_TIME
-        mock_mission.reward = mock_reward
-
-        mock_mission_svc = MagicMock()
+        mock_reward = model_mock(Reward, name="Test Reward", reward_type=MagicMock(value="besitos"))
+        mock_mission = model_mock(Mission, name="Test Mission", description="A test description", is_active=True, mission_type=MagicMock(value="reaction_count"), target_value=10, id=1, frequency=MissionFrequency.ONE_TIME, reward=mock_reward)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionDetailCallback(mission_id=1)
         cb = make_callback(data=cb_data.pack())
@@ -764,21 +687,9 @@ class TestMissionAdminDetail:
     @patch("handlers.mission_admin_handlers.get_service")
     async def test_shows_no_reward_text(self, mock_get_service, make_callback):
         """Muestra 'Sin recompensa' cuando mision no tiene recompensa."""
-        mock_mission = MagicMock()
-        mock_mission.name = "Mission No Reward"
-        mock_mission.description = "No reward"
-        mock_mission.is_active = False
-        mock_mission.mission_type = MagicMock(value="vip_active")
-        mock_mission.target_value = 1
-        mock_mission.id = 2
-        mock_mission.frequency = MissionFrequency.RECURRING
-        mock_mission.reward = None
-
-        mock_mission_svc = MagicMock()
+        mock_mission = model_mock(Mission, name="Mission No Reward", description="No reward", is_active=False, mission_type=MagicMock(value="vip_active"), target_value=1, id=2, frequency=MissionFrequency.RECURRING, reward=None)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionDetailCallback(mission_id=2)
         cb = make_callback(data=cb_data.pack())
@@ -800,11 +711,8 @@ class TestToggleMission:
         self, mock_get_service, make_callback
     ):
         """Mision no encontrada muestra alerta."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionToggleCallback(mission_id=999)
         cb = make_callback(data=cb_data.pack())
@@ -820,21 +728,9 @@ class TestToggleMission:
         self, mock_get_service, make_callback
     ):
         """Mision activa se desactiva."""
-        mock_mission = MagicMock()
-        mock_mission.is_active = True
-        mock_mission.id = 1
-        mock_mission.name = "Test"
-        mock_mission.description = "Desc"
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-        mock_mission.frequency = MissionFrequency.ONE_TIME
-        mock_mission.reward = None
-
-        mock_mission_svc = MagicMock()
+        mock_mission = model_mock(Mission, is_active=True, id=1, name="Test", description="Desc", mission_type=MagicMock(value="reaction_count"), target_value=10, frequency=MissionFrequency.ONE_TIME, reward=None)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionToggleCallback(mission_id=1)
         cb = make_callback(data=cb_data.pack())
@@ -850,21 +746,9 @@ class TestToggleMission:
         self, mock_get_service, make_callback
     ):
         """Mision inactiva se activa."""
-        mock_mission = MagicMock()
-        mock_mission.is_active = False
-        mock_mission.id = 2
-        mock_mission.name = "Test"
-        mock_mission.description = "Desc"
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-        mock_mission.frequency = MissionFrequency.ONE_TIME
-        mock_mission.reward = None
-
-        mock_mission_svc = MagicMock()
+        mock_mission = model_mock(Mission, is_active=False, id=2, name="Test", description="Desc", mission_type=MagicMock(value="reaction_count"), target_value=10, frequency=MissionFrequency.ONE_TIME, reward=None)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionToggleCallback(mission_id=2)
         cb = make_callback(data=cb_data.pack())
@@ -880,25 +764,10 @@ class TestToggleMission:
         self, mock_get_service, make_callback
     ):
         """Despues de toggle, el detalle muestra la recompensa si existe."""
-        mock_reward = MagicMock()
-        mock_reward.name = "Test Reward"
-        mock_reward.reward_type = MagicMock(value="besitos")
-
-        mock_mission = MagicMock()
-        mock_mission.is_active = True
-        mock_mission.id = 3
-        mock_mission.name = "Test"
-        mock_mission.description = "Desc"
-        mock_mission.mission_type = MagicMock(value="reaction_count")
-        mock_mission.target_value = 10
-        mock_mission.frequency = MissionFrequency.ONE_TIME
-        mock_mission.reward = mock_reward
-
-        mock_mission_svc = MagicMock()
+        mock_reward = model_mock(Reward, name="Test Reward", reward_type=MagicMock(value="besitos"))
+        mock_mission = model_mock(Mission, is_active=True, id=3, name="Test", description="Desc", mission_type=MagicMock(value="reaction_count"), target_value=10, frequency=MissionFrequency.ONE_TIME, reward=mock_reward)
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission.return_value = mock_mission
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionToggleCallback(mission_id=3)
         cb = make_callback(data=cb_data.pack())
@@ -919,10 +788,7 @@ class TestDeleteMissionConfirm:
         self, mock_get_service, make_callback
     ):
         """Sin confirmacion, muestra dialogo de confirmacion."""
-        mock_mission_svc = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
 
         cb_data = MissionDeleteCallback(mission_id=1, confirmed=False)
         cb = make_callback(data=cb_data.pack())
@@ -942,11 +808,8 @@ class TestDeleteMissionConfirm:
         self, mock_get_service, make_callback
     ):
         """Confirmado y eliminacion exitosa, muestra mensaje."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.delete_mission.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionDeleteCallback(mission_id=1, confirmed=True)
         cb = make_callback(data=cb_data.pack())
@@ -965,11 +828,8 @@ class TestDeleteMissionConfirm:
         self, mock_get_service, make_callback
     ):
         """Confirmado pero eliminacion falla, muestra error."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.delete_mission.return_value = False
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionDeleteCallback(mission_id=1, confirmed=True)
         cb = make_callback(data=cb_data.pack())
@@ -987,11 +847,8 @@ class TestDeleteMissionConfirm:
         self, mock_get_service, make_callback
     ):
         """Llama a delete_mission con el mission_id correcto."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.delete_mission.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionDeleteCallback(mission_id=42, confirmed=True)
         cb = make_callback(data=cb_data.pack())
@@ -1010,23 +867,13 @@ class TestMissionsStats:
         self, mock_get_service, make_callback
     ):
         """Muestra estadisticas con botones para misiones activas."""
-        mock_mission_active = MagicMock()
-        mock_mission_active.is_active = True
-        mock_mission_active.name = "Active Mission"
-        mock_mission_active.id = 1
+        mock_mission_active = model_mock(Mission, is_active=True, name="Active Mission", id=1)
+        mock_mission_inactive = model_mock(Mission, is_active=False, name="Inactive Mission", id=2)
 
-        mock_mission_inactive = MagicMock()
-        mock_mission_inactive.is_active = False
-        mock_mission_inactive.name = "Inactive Mission"
-        mock_mission_inactive.id = 2
-
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_missions.return_value = [
             mock_mission_active, mock_mission_inactive
         ]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="missions_stats")
 
@@ -1043,11 +890,8 @@ class TestMissionsStats:
     @patch("handlers.mission_admin_handlers.get_service")
     async def test_shows_no_active_missions(self, mock_get_service, make_callback):
         """Sin misiones activas muestra estadisticas sin botones."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_all_missions.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="missions_stats")
 
@@ -1067,11 +911,8 @@ class TestMissionDetailStats:
         self, mock_get_service, make_callback
     ):
         """Mision no encontrada muestra alerta."""
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission_stats.return_value = {}
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionStatsCallback(mission_id=999)
         cb = make_callback(data=cb_data.pack())
@@ -1091,11 +932,8 @@ class TestMissionDetailStats:
             "in_progress": 3,
             "completion_rate": 70.0,
         }
-        mock_mission_svc = MagicMock()
+        mock_mission_svc = _mock_mission_ctx(mock_get_service)
         mock_mission_svc.get_mission_stats.return_value = mock_stats
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_mission_svc
-        mock_get_service.return_value = mock_context
 
         cb_data = MissionStatsCallback(mission_id=1)
         cb = make_callback(data=cb_data.pack())
@@ -1137,10 +975,7 @@ class TestMissionAdminPureHelpers:
         from handlers.mission_admin_handlers import build_mission_confirm_text_and_keyboard
         from models.models import MissionFrequency
         data = {"name": "Test Mision", "description": "Desc", "mission_type": MagicMock(value="reaccion"), "target_value": 10, "frequency": MissionFrequency.ONE_TIME}
-        reward = MagicMock()
-        reward.name = "Recompensa X"
-        reward.reward_type = MagicMock()
-        reward.reward_type.value = "besitos"
+        reward = model_mock(Reward, name="Recompensa X", reward_type=MagicMock(value="besitos"))
         text, kb = build_mission_confirm_text_and_keyboard(data, reward)
         assert "Resumen de la mision:" in text
         assert "📋 Nombre: Test Mision" in text
@@ -1160,16 +995,8 @@ class TestMissionAdminPureHelpers:
 
     def test_build_reward_select_buttons(self):
         from handlers.mission_admin_handlers import build_reward_select_buttons
-        r1 = MagicMock()
-        r1.id = 1
-        r1.name = "R1"
-        r1.reward_type = MagicMock()
-        r1.reward_type.value = "besitos"
-        r2 = MagicMock()
-        r2.id = 2
-        r2.name = "R2"
-        r2.reward_type = MagicMock()
-        r2.reward_type.value = "paquete"
+        r1 = model_mock(Reward, id=1, name="R1", reward_type=MagicMock(value="besitos"))
+        r2 = model_mock(Reward, id=2, name="R2", reward_type=MagicMock(value="paquete"))
         kbs = build_reward_select_buttons([r1, r2])
         assert len(kbs) == 3  # 2 rewards + cancel
         assert "R1 (besitos)" in kbs[0][0].text
@@ -1179,11 +1006,7 @@ class TestMissionAdminPureHelpers:
 
     def test_build_mission_list_entry_and_button(self):
         from handlers.mission_admin_handlers import build_mission_list_entry_and_button
-        m = MagicMock()
-        m.is_active = True
-        m.name = "Mi Mision Larga Nombre Aqui Para Trunc"
-        m.mission_type = MagicMock()
-        m.mission_type.value = "reaccion"
+        m = model_mock(Mission, is_active=True, name="Mi Mision Larga Nombre Aqui Para Trunc", mission_type=MagicMock(value="reaccion"))
         entry, btn = build_mission_list_entry_and_button(m)
         assert "✅" in entry and "Mi Mision Larga Nombre Aqui Para Trunc" in entry
         assert "reaccion" in entry
@@ -1192,19 +1015,7 @@ class TestMissionAdminPureHelpers:
 
     def test_build_mission_detail_text_and_keyboard(self):
         from handlers.mission_admin_handlers import build_mission_detail_text_and_keyboard
-        m = MagicMock()
-        m.is_active = True
-        m.name = "D"
-        m.description = "dd"
-        m.mission_type = MagicMock()
-        m.mission_type.value = "t"
-        m.target_value = 5
-        m.frequency = MagicMock()
-        m.frequency.value = "one_time"
-        m.reward = MagicMock()
-        m.reward.name = "RR"
-        m.reward.reward_type = MagicMock()
-        m.reward.reward_type.value = "b"
+        m = model_mock(Mission, is_active=True, name="D", description="dd", mission_type=MagicMock(value="t"), target_value=5, frequency=MagicMock(value="one_time"), reward=model_mock(Reward, name="RR", reward_type=MagicMock(value="b")))
         text, kb = build_mission_detail_text_and_keyboard(m)
         assert "🎩 Lucien" in text
         assert "📋 D" in text
@@ -1221,16 +1032,7 @@ class TestMissionAdminPureHelpers:
 
     def test_build_mission_detail_text_and_keyboard_no_reward(self):
         from handlers.mission_admin_handlers import build_mission_detail_text_and_keyboard
-        m = MagicMock()
-        m.is_active = False
-        m.name = "X"
-        m.description = None
-        m.mission_type = MagicMock()
-        m.mission_type.value = "t"
-        m.target_value = 1
-        m.frequency = MagicMock()
-        m.frequency.value = "one_time"
-        m.reward = None
+        m = model_mock(Mission, is_active=False, name="X", description=None, mission_type=MagicMock(value="t"), target_value=1, frequency=MagicMock(value="one_time"), reward=None)
         text, kb = build_mission_detail_text_and_keyboard(m)
         assert "Sin descripcion" in text
         assert "Sin recompensa" in text
@@ -1247,12 +1049,8 @@ class TestMissionAdminPureHelpers:
 
     def test_build_mission_stats_text_and_buttons(self):
         from handlers.mission_admin_handlers import build_mission_stats_text_and_buttons
-        m1 = MagicMock()
-        m1.is_active = True
-        m1.name = "Activa Larga"
-        m2 = MagicMock()
-        m2.is_active = False
-        m2.name = "Inact"
+        m1 = model_mock(Mission, is_active=True, name="Activa Larga")
+        m2 = model_mock(Mission, is_active=False, name="Inact")
         text, buttons = build_mission_stats_text_and_buttons([m1, m2])
         assert "📊 Estadisticas de Misiones" in text
         assert "Activas: 1" in text
@@ -1267,9 +1065,6 @@ class TestMissionAdminPureHelpers:
         from models.models import MissionFrequency
         assert compute_freq_text(MissionFrequency.ONE_TIME) == "Una vez"
         assert compute_freq_text(MissionFrequency.RECURRING) == "Recurrente"
-        r = MagicMock()
-        r.name = "R"
-        r.reward_type = MagicMock()
-        r.reward_type.value = "b"
+        r = model_mock(Reward, name="R", reward_type=MagicMock(value="b"))
         assert "R (b)" in compute_reward_text(r)
         assert "Sin recompensa" in compute_reward_text(None)

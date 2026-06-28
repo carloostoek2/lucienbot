@@ -17,7 +17,7 @@ No behavior change to existing flows. Golds stay green.
 Follows handler test conventions (patch order, make_message/make_callback/make_fsm_context, async).
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 from aiogram.types import MessageOriginUser
@@ -25,6 +25,15 @@ from aiogram.types import MessageOriginUser
 from keyboards.callback_data import SelectTariffCallback
 
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_vip_ctx(mock_get_service):
+    """Mock get_service(VIPService) context manager con autospec."""
+    from services.vip_service import VIPService
+
+    svc = create_autospec(VIPService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 # =============================================================================
@@ -111,12 +120,8 @@ async def test_process_forwarded_vip_candidate_detects_and_uses_exactly_1_svc(
     mock_get_service, _mock_is_admin, make_message, make_fsm_context
 ):
     """Detection path calls tariffs svc once, sets forward state, shows tariffs."""
-    mock_svc = MagicMock()
+    mock_svc = _mock_vip_ctx(mock_get_service)
     mock_svc.get_all_tariffs.return_value = [MagicMock(id=1, name="Mensual", duration_days=30)]
-    cm = MagicMock()
-    cm.__enter__.return_value = mock_svc
-    cm.__exit__.return_value = False
-    mock_get_service.return_value = cm
 
     msg = make_message(text="forwarded candidate msg")
     # simulate forward
@@ -182,7 +187,7 @@ async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_di
     cb.bot.get_me = AsyncMock(return_value=MagicMock(username="lucienbot"))
 
     # grant returns success + meta
-    mock_svc = MagicMock()
+    mock_svc = _mock_vip_ctx(mock_get_service)
     mock_svc.grant_vip_from_tariff = AsyncMock(
         return_value=(
             True,
@@ -190,10 +195,6 @@ async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_di
             {"token_code": "FWD123", "vip_activated": True},
         )
     )
-    cm = MagicMock()
-    cm.__enter__.return_value = mock_svc
-    cm.__exit__.return_value = False
-    mock_get_service.return_value = cm
 
     from handlers.vip_handlers import confirm_forward_vip_activation
 
@@ -229,14 +230,10 @@ async def test_confirm_forward_vip_activation_blocked_falls_back_to_admin_with_d
     cb.bot.send_message = AsyncMock(side_effect=Exception("bot was blocked by the user"))
     cb.bot.get_me = AsyncMock(return_value=MagicMock(username="lucienbot"))
 
-    mock_svc = MagicMock()
+    mock_svc = _mock_vip_ctx(mock_get_service)
     mock_svc.grant_vip_from_tariff = AsyncMock(
         return_value=(True, "access...", {"token_code": "BLK999"})
     )
-    cm = MagicMock()
-    cm.__enter__.return_value = mock_svc
-    cm.__exit__.return_value = False
-    mock_get_service.return_value = cm
 
     from handlers.vip_handlers import confirm_forward_vip_activation
 
@@ -269,12 +266,8 @@ async def test_confirm_forward_vip_grant_fails_shows_error_no_send(
     cb.bot = AsyncMock()
     cb.bot.send_message = AsyncMock()
 
-    mock_svc = MagicMock()
+    mock_svc = _mock_vip_ctx(mock_get_service)
     mock_svc.grant_vip_from_tariff = AsyncMock(return_value=(False, "Tarifa inválida", {}))
-    cm = MagicMock()
-    cm.__enter__.return_value = mock_svc
-    cm.__exit__.return_value = False
-    mock_get_service.return_value = cm
 
     from handlers.vip_handlers import confirm_forward_vip_activation
 

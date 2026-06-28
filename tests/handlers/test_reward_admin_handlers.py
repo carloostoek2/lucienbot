@@ -8,7 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from models.models import RewardType
+from tests.helpers import model_mock
+from models.models import Package, Reward, RewardType, Tariff
 
 pytestmark = [pytest.mark.unit]
 
@@ -37,7 +38,7 @@ class TestRewardAdminPureHelpers:
     def test_build_reward_confirm_text_with_package(self):
         from handlers.reward_admin_handlers import build_reward_confirm_text_and_keyboard
 
-        pkg = MagicMock()
+        pkg = model_mock(Package)
         pkg.name = "PkgX"
         data = {"name": "P", "description": None, "reward_type": RewardType.PACKAGE}
         text, _ = build_reward_confirm_text_and_keyboard(data, pkg=pkg)
@@ -47,7 +48,7 @@ class TestRewardAdminPureHelpers:
     def test_build_reward_confirm_text_with_tariff(self):
         from handlers.reward_admin_handlers import build_reward_confirm_text_and_keyboard
 
-        tariff = MagicMock()
+        tariff = model_mock(Tariff)
         tariff.name = "VIP30"
         data = {"name": "V", "description": "d", "reward_type": RewardType.VIP_ACCESS}
         text, _ = build_reward_confirm_text_and_keyboard(data, tariff=tariff)
@@ -63,12 +64,12 @@ class TestRewardAdminPureHelpers:
     def test_build_package_selection_text_and_buttons_with_pkgs(self):
         from handlers.reward_admin_handlers import build_package_selection_text_and_buttons
 
-        p1 = MagicMock()
+        p1 = model_mock(Package)
         p1.id = 1
         p1.name = "P1"
         p1.file_count = 3
         p1.reward_stock = -1
-        p2 = MagicMock()
+        p2 = model_mock(Package)
         p2.id = 2
         p2.name = "P2"
         p2.file_count = 1
@@ -81,7 +82,7 @@ class TestRewardAdminPureHelpers:
     def test_build_tariff_selection_buttons(self):
         from handlers.reward_admin_handlers import build_tariff_selection_buttons
 
-        t = MagicMock()
+        t = model_mock(Tariff)
         t.id = 9
         t.name = "T"
         t.duration_days = 30
@@ -102,7 +103,7 @@ class TestRewardAdminPureHelpers:
     def test_build_reward_list_entry_and_button(self):
         from handlers.reward_admin_handlers import build_reward_list_entry_and_button
 
-        r = MagicMock(is_active=True, name="A" * 40, id=5)
+        r = model_mock(Reward, is_active=True, name="A" * 40, id=5)
         entry, button = build_reward_list_entry_and_button(r)
         assert "✅" in entry
         assert "A" * 30 in entry  # truncated
@@ -111,9 +112,9 @@ class TestRewardAdminPureHelpers:
     def test_build_reward_detail_text_and_keyboard_active_package(self):
         from handlers.reward_admin_handlers import build_reward_detail_text_and_keyboard
 
-        pkg = MagicMock()
+        pkg = model_mock(Package)
         pkg.name = "Pkg"
-        r = MagicMock()
+        r = model_mock(Reward)
         r.is_active = True
         r.name = "R"
         r.description = None
@@ -142,10 +143,10 @@ class TestRewardAdminPureHelpers:
         from handlers.reward_admin_handlers import compute_reward_type_text
 
         assert "10 besitos" in compute_reward_type_text(RewardType.BESITOS, besito_amount=10)
-        pkg = MagicMock()
+        pkg = model_mock(Package)
         pkg.name = "P"
         assert "Paquete: P" in compute_reward_type_text(RewardType.PACKAGE, pkg=pkg)
-        tariff = MagicMock()
+        tariff = model_mock(Tariff)
         tariff.name = "T"
         assert "VIP: T" in compute_reward_type_text(RewardType.VIP_ACCESS, tariff=tariff)
 
@@ -161,6 +162,6 @@ class TestRewardAdminPureHelpers:
             build_reward_error_text,
         )
 
-        r = MagicMock(name="X", reward_type=MagicMock(value="besitos"))
+        r = model_mock(Reward, name="X", reward_type=MagicMock(value="besitos"))
         assert "creada exitosamente" in build_reward_created_text(r)
         assert "Error al crear" in build_reward_error_text()

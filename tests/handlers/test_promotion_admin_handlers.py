@@ -11,10 +11,21 @@ Cubre handlers del panel de administracion de promociones:
 - show_blocked_users / unblock_user: gestion de bloqueos
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 from datetime import datetime
 
+from tests.helpers import model_mock
+from services.promotion_service import PromotionService
+from models.models import Package, Promotion
+
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_promo_ctx(mock_get_service):
+    """Mock get_service(PromotionService) context manager con autospec."""
+    svc = create_autospec(PromotionService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 class TestAdminPromotionsMenu:
@@ -23,7 +34,7 @@ class TestAdminPromotionsMenu:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_shows_menu_with_stats(self, mock_get_service, make_callback):
         """Muestra el menu con estadisticas correctas."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion_stats.return_value = {
             "active_promotions": 3,
             "total_promotions": 10,
@@ -31,9 +42,6 @@ class TestAdminPromotionsMenu:
             "attended_interests": 8,
             "blocked_users": 2,
         }
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_promotions")
 
@@ -52,14 +60,11 @@ class TestAdminPromotionsMenu:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_calls_answer(self, mock_get_service, make_callback):
         """Siempre llama a callback.answer()."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion_stats.return_value = {
             "active_promotions": 0, "total_promotions": 0,
             "pending_interests": 0, "attended_interests": 0, "blocked_users": 0,
         }
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="admin_promotions")
 
@@ -175,11 +180,8 @@ class TestSelectPackageSource:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_no_packages_shows_empty_message(self, mock_get_service, make_callback, make_fsm_context):
         """Sin paquetes disponibles, muestra mensaje y boton manual."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_available_packages_for_promo_wizard.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_select_package")
         fsm = await make_fsm_context()
@@ -200,16 +202,13 @@ class TestSelectPackageSource:
         """Con paquetes disponibles, avanza a selecting_package."""
         from handlers.promotion_admin_handlers import select_package_source, PromotionWizardStates
 
-        mock_pkg = MagicMock()
+        mock_pkg = model_mock(Package)
         mock_pkg.id = 1
         mock_pkg.name = "Test Package"
         mock_pkg.is_active = True
         mock_pkg.files = [MagicMock()]
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_available_packages_for_promo_wizard.return_value = [mock_pkg]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_select_package")
         fsm = await make_fsm_context()
@@ -560,14 +559,11 @@ class TestConfirmCreatePromotion:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_creates_promotion_successfully(self, mock_get_service, make_callback, make_fsm_context):
         """Crea la promocion y muestra mensaje de exito."""
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.name = "Coleccion Primavera"
         mock_promo.price_display = "$999.00 MXN"
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.create_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_promotion")
         fsm = await make_fsm_context()
@@ -607,11 +603,8 @@ class TestConfirmCreatePromotion:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_handles_creation_exception(self, mock_get_service, make_callback, make_fsm_context):
         """Cuando create_promotion lanza excepcion, muestra error."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.create_promotion.side_effect = Exception("DB error")
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_promotion")
         fsm = await make_fsm_context()
@@ -631,14 +624,11 @@ class TestConfirmCreatePromotion:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_clears_state_on_success(self, mock_get_service, make_callback, make_fsm_context):
         """Limpia el estado FSM despues de crear."""
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.name = "Test"
         mock_promo.price_display = "$100 MXN"
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.create_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="confirm_create_promotion")
         fsm = await make_fsm_context()
@@ -658,11 +648,8 @@ class TestListPromotions:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_shows_empty_message_when_no_promotions(self, mock_get_service, make_callback):
         """Cuando no hay promociones, muestra mensaje de vacio."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_all_promotions.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_promotions")
 
@@ -677,21 +664,18 @@ class TestListPromotions:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_lists_promotions_with_status(self, mock_get_service, make_callback):
         """Muestra promociones con su estado activo/inactivo."""
-        mock_active = MagicMock()
+        mock_active = model_mock(Promotion)
         mock_active.name = "Promo Activa"
         mock_active.is_active = True
         mock_active.price_display = "$999.00 MXN"
 
-        mock_inactive = MagicMock()
+        mock_inactive = model_mock(Promotion)
         mock_inactive.name = "Promo Inactiva"
         mock_inactive.is_active = False
         mock_inactive.price_display = "$500.00 MXN"
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_all_promotions.return_value = [mock_active, mock_inactive]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_promotions")
 
@@ -709,11 +693,8 @@ class TestListPromotions:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_calls_get_all_promotions(self, mock_get_service, make_callback):
         """Llama a get_all_promotions sin filtro."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_all_promotions.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="list_promotions")
 
@@ -730,14 +711,11 @@ class TestTogglePromotion:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_toggles_active_to_inactive(self, mock_get_service, mock_detail, make_callback):
         """Promocion activa se desactiva."""
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.id = 1
         mock_promo.is_active = True
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import TogglePromoCallback
         cb = make_callback(data=TogglePromoCallback(promo_id=1).pack())
@@ -753,14 +731,11 @@ class TestTogglePromotion:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_toggles_inactive_to_active(self, mock_get_service, mock_detail, make_callback):
         """Promocion inactiva se activa."""
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.id = 1
         mock_promo.is_active = False
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import TogglePromoCallback
         cb = make_callback(data=TogglePromoCallback(promo_id=1).pack())
@@ -774,11 +749,8 @@ class TestTogglePromotion:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_promotion_not_found_shows_alert(self, mock_get_service, make_callback):
         """Promocion no encontrada muestra alerta."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import TogglePromoCallback
         cb = make_callback(data=TogglePromoCallback(promo_id=999).pack())
@@ -814,11 +786,8 @@ class TestDeletePromotionConfirm:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_confirmed_deletes_successfully(self, mock_get_service, make_callback):
         """Confirmado y eliminacion exitosa, muestra mensaje."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.delete_promotion.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoDeleteCallback
         cb_data = PromoDeleteCallback(promo_id=1, confirmed=True)
@@ -836,11 +805,8 @@ class TestDeletePromotionConfirm:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_confirmed_delete_fails_shows_error(self, mock_get_service, make_callback):
         """Confirmado pero eliminacion falla, muestra error."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.delete_promotion.return_value = False
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoDeleteCallback
         cb_data = PromoDeleteCallback(promo_id=1, confirmed=True)
@@ -860,11 +826,8 @@ class TestShowPendingInterests:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_empty_shows_empty_message(self, mock_get_service, make_callback):
         """Sin intereses pendientes, muestra mensaje."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_pending_interests.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_pending_interests")
 
@@ -887,11 +850,8 @@ class TestShowPendingInterests:
         mock_interest.promotion = MagicMock()
         mock_interest.promotion.name = "Promo Test"
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_pending_interests.return_value = [mock_interest]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_pending_interests")
 
@@ -907,11 +867,8 @@ class TestShowPendingInterests:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_calls_get_pending_interests(self, mock_get_service, make_callback):
         """Llama a get_pending_interests()."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_pending_interests.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_pending_interests")
 
@@ -927,11 +884,8 @@ class TestShowPromotionInterests:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_promotion_not_found_shows_alert(self, mock_get_service, make_callback):
         """Promocion no encontrada muestra alerta."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoInterestsCallback
         cb = make_callback(data=PromoInterestsCallback(promo_id=999).pack())
@@ -944,15 +898,12 @@ class TestShowPromotionInterests:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_no_pending_shows_empty_message(self, mock_get_service, make_callback):
         """Sin intereses pendientes, muestra mensaje."""
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.name = "Promo Test"
         mock_promo.interests = []
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoInterestsCallback
         cb = make_callback(data=PromoInterestsCallback(promo_id=1).pack())
@@ -977,15 +928,12 @@ class TestShowPromotionInterests:
         mock_interest.user_id = 123
         mock_interest.status = InterestStatus.PENDING
 
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.name = "Promo Test"
         mock_promo.interests = [mock_interest]
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoInterestsCallback
         cb = make_callback(data=PromoInterestsCallback(promo_id=1).pack())
@@ -1005,11 +953,8 @@ class TestShowBlockedUsers:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_empty_shows_empty_message(self, mock_get_service, make_callback):
         """Sin usuarios bloqueados, muestra mensaje."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_blocked_users.return_value = []
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_blocked_users")
 
@@ -1029,11 +974,8 @@ class TestShowBlockedUsers:
         mock_blocked.username = "blockeduser"
         mock_blocked.first_name = "Blocked"
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_blocked_users.return_value = [mock_blocked]
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_blocked_users")
 
@@ -1053,11 +995,8 @@ class TestUnblockUser:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_unblock_successful_redirects(self, mock_get_service, mock_show_blocked, make_callback):
         """Desbloqueo exitoso redirige a show_blocked_users."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.unblock_user.return_value = True
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import UnblockUserCallback
         cb = make_callback(data=UnblockUserCallback(user_id=123).pack())
@@ -1072,11 +1011,8 @@ class TestUnblockUser:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_unblock_failure_shows_error(self, mock_get_service, make_callback):
         """Desbloqueo fallido muestra alerta de error."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.unblock_user.return_value = False
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import UnblockUserCallback
         cb = make_callback(data=UnblockUserCallback(user_id=999).pack())
@@ -1101,11 +1037,8 @@ class TestShowBlockedUserDetail:
         mock_blocked.reason = "Comportamiento inapropiado"
         mock_blocked.blocked_at = datetime(2026, 3, 15, 10, 30)
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_blocked_user_info.return_value = mock_blocked
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import BlockedUserDetailCallback
         cb = make_callback(data=BlockedUserDetailCallback(user_id=123).pack())
@@ -1124,11 +1057,8 @@ class TestShowBlockedUserDetail:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_user_not_found_shows_alert(self, mock_get_service, make_callback):
         """Usuario bloqueado no encontrado muestra alerta."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_blocked_user_info.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import BlockedUserDetailCallback
         cb = make_callback(data=BlockedUserDetailCallback(user_id=999).pack())
@@ -1150,7 +1080,7 @@ class TestPromotionAdminDetail:
         mock_interest = MagicMock()
         mock_interest.status = InterestStatus.PENDING
 
-        mock_promo = MagicMock()
+        mock_promo = model_mock(Promotion)
         mock_promo.name = "Promo Test"
         mock_promo.description = "Descripcion"
         mock_promo.price_display = "$999.00 MXN"
@@ -1159,11 +1089,8 @@ class TestPromotionAdminDetail:
         mock_promo.file_count = 5
         mock_promo.interests = [mock_interest]
 
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoDetailCallback
         cb = make_callback(data=PromoDetailCallback(promo_id=1).pack())
@@ -1181,11 +1108,8 @@ class TestPromotionAdminDetail:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_promotion_not_found_shows_alert(self, mock_get_service, make_callback):
         """Promocion no encontrada muestra alerta."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion.return_value = None
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         from keyboards.callback_data import PromoDetailCallback
         cb = make_callback(data=PromoDetailCallback(promo_id=999).pack())
@@ -1202,7 +1126,7 @@ class TestPromotionStats:
     @patch("handlers.promotion_admin_handlers.get_service")
     async def test_shows_statistics(self, mock_get_service, make_callback):
         """Muestra estadisticas completas."""
-        mock_promo_svc = MagicMock()
+        mock_promo_svc = _mock_promo_ctx(mock_get_service)
         mock_promo_svc.get_promotion_stats.return_value = {
             "active_promotions": 3,
             "total_promotions": 10,
@@ -1211,9 +1135,6 @@ class TestPromotionStats:
             "total_interests": 15,
             "blocked_users": 2,
         }
-        mock_context = MagicMock()
-        mock_context.__enter__.return_value = mock_promo_svc
-        mock_get_service.return_value = mock_context
 
         cb = make_callback(data="promo_stats")
 
@@ -1293,7 +1214,7 @@ class TestPromotionAdminPureHelpers:
 
     def test_build_promotion_list_entry_and_button(self):
         from handlers.promotion_admin_handlers import build_promotion_list_entry_and_button
-        p = MagicMock()
+        p = model_mock(Promotion)
         p.is_active = True
         p.name = "Test Promo"
         p.price_display = "$100.00 MXN"
@@ -1305,7 +1226,7 @@ class TestPromotionAdminPureHelpers:
 
     def test_build_promotion_detail_text_and_keyboard(self):
         from handlers.promotion_admin_handlers import build_promotion_detail_text_and_keyboard
-        p = MagicMock()
+        p = model_mock(Promotion)
         p.name = "DetailP"
         p.description = None
         p.price_display = "$50.00 MXN"

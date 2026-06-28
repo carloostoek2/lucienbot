@@ -1,19 +1,19 @@
 """Tests para fulfillment_admin_handlers."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
+
+from services.fulfillment_service import FulfillmentService
 
 pytestmark = [pytest.mark.unit]
 
 
 def _mock_fulfill_ctx(mock_get_service, **kwargs):
-    svc = MagicMock()
+    """Mock get_service(FulfillmentService) context manager con autospec."""
+    svc = create_autospec(FulfillmentService, spec_set=True, instance=True)
     for key, val in kwargs.items():
-        if isinstance(val, MagicMock) or callable(val):
-            setattr(svc, key, val)
-        else:
-            setattr(svc, key, MagicMock(return_value=val))
+        getattr(svc, key).return_value = val
     ctx = MagicMock()
     ctx.__enter__.return_value = svc
     mock_get_service.return_value = ctx
@@ -209,10 +209,9 @@ class TestFulfillmentAdminDeliver:
     async def test_deliver_package_success(
         self, mock_get_service, _admin, make_callback, admin_user
     ):
-        deliver = AsyncMock(return_value=(True, "Entregado"))
         svc = _mock_fulfill_ctx(
             mock_get_service,
-            admin_deliver_package_from_queue=deliver,
+            admin_deliver_package_from_queue=(True, "Entregado"),
         )
         cb = make_callback(data="fulfill_deliver:1:2", user=admin_user)
         from keyboards.callback_data import FulfillmentAdminDeliverCallback
@@ -229,8 +228,7 @@ class TestFulfillmentAdminDeliver:
     async def test_deliver_package_error_shows_alert(
         self, mock_get_service, _admin, make_callback, admin_user
     ):
-        deliver = AsyncMock(return_value=(False, "Error"))
-        _mock_fulfill_ctx(mock_get_service, admin_deliver_package_from_queue=deliver)
+        _mock_fulfill_ctx(mock_get_service, admin_deliver_package_from_queue=(False, "Error"))
         cb = make_callback(data="fulfill_deliver:1:2", user=admin_user)
         from keyboards.callback_data import FulfillmentAdminDeliverCallback
         from handlers.fulfillment_admin_handlers import fulfillment_admin_deliver_package

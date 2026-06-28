@@ -10,7 +10,7 @@ Follows patterns from test_mission_admin_handlers.py / test_store_admin_handlers
 import logging
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock, create_autospec
 
 from aiogram.types import CallbackQuery, Message, User as TgUser
 from aiogram.fsm.context import FSMContext
@@ -32,6 +32,13 @@ from keyboards.callback_data import (
     NurtureTestSendCallback,
 )
 from services.nurture_service import NurtureService  # for class in asserts (gold pattern)
+
+
+def _mock_nurture_ctx(mock_get):
+    """Mock get_service(NurtureService) context manager con autospec."""
+    svc = create_autospec(NurtureService, spec_set=True, instance=True)
+    mock_get.return_value.__enter__.return_value = svc
+    return svc
 
 
 @pytest.fixture
@@ -56,11 +63,8 @@ def mock_state():
 @pytest.mark.asyncio
 async def test_manage_nurture_menu_uses_nurture_only(mock_callback):
     with patch("handlers.nurture_admin_handlers.get_service") as mock_get:
-        mock_n = MagicMock()
+        mock_n = _mock_nurture_ctx(mock_get)
         mock_n.get_all_sequences.return_value = []
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_n
-        mock_get.return_value = mock_ctx
 
         await manage_nurture_menu(mock_callback)
 
@@ -82,12 +86,9 @@ async def test_detail_uses_nurture_enriched_and_pure(mock_callback):
     ]
 
     with patch("handlers.nurture_admin_handlers.get_service") as mock_get:
-        mock_n = MagicMock()
+        mock_n = _mock_nurture_ctx(mock_get)
         mock_n.get_sequence.return_value = fake_seq
         mock_n.get_steps_with_package_info.return_value = enriched
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_n
-        mock_get.return_value = mock_ctx
 
         cb_data = NurtureSequenceDetailCallback(sequence_id=1)
         await nurture_sequence_detail(mock_callback, cb_data)
@@ -118,11 +119,8 @@ async def test_test_send_uses_nurture_delegate_only(mock_callback):
     mock_callback.from_user.id = 999
 
     with patch("handlers.nurture_admin_handlers.get_service") as mock_get:
-        mock_n = MagicMock()
+        mock_n = _mock_nurture_ctx(mock_get)
         mock_n.deliver_test_package = AsyncMock(return_value=(True, "delivered pkg"))
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_n
-        mock_get.return_value = mock_ctx
 
         await nurture_test_send(mock_callback, cb_data)
 
@@ -149,13 +147,10 @@ async def test_step_detail_uses_nurture_only_pkg_delegate_and_pure(mock_callback
     info = {"step": fake_step, "pkg_name": "pkgX", "has_fallback": False}
 
     with patch("handlers.nurture_admin_handlers.get_service") as mock_get:
-        mock_n = MagicMock()
+        mock_n = _mock_nurture_ctx(mock_get)
         mock_n.get_step.return_value = fake_step
         mock_n.get_sequence.return_value = fake_seq
         mock_n.get_step_with_package_info.return_value = info
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_n
-        mock_get.return_value = mock_ctx
 
         cb_data = NurtureStepDetailCallback(step_id=10)
         await nurture_step_detail(mock_callback, cb_data)
@@ -175,11 +170,8 @@ async def test_no_packages_wizard_fallback_path_and_fallback_test_send(mock_call
     Fallback test_send alerts without crash.
     """
     with patch("handlers.nurture_admin_handlers.get_service") as mock_get:
-        mock_n = MagicMock()
+        mock_n = _mock_nurture_ctx(mock_get)
         mock_n.get_available_packages_for_steps.return_value = []  # no pkgs
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_n
-        mock_get.return_value = mock_ctx
 
         # simulate the delay message handler reaching the no-pkgs branch (via state data)
         # (in real would be after process_delay message; here direct setup for edge)

@@ -2,7 +2,10 @@
 Tests para channel_handlers — Phase 30 Channel Admin Hardening.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
+
+from tests.helpers import model_mock
+from models.models import Channel, PendingRequest
 
 import pytest
 
@@ -24,8 +27,16 @@ from keyboards.callback_data import (
     RejectOneCallback,
 )
 from services.channel_grant import ApproveAllResult, GrantResult
+from services.channel_service import ChannelService
 
 pytestmark = [pytest.mark.unit]
+
+
+def _mock_channel_ctx(mock_get_service):
+    """Mock get_service(ChannelService) context manager con autospec."""
+    svc = create_autospec(ChannelService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
 
 
 class TestPureHelpers:
@@ -42,7 +53,7 @@ class TestPureHelpers:
         assert len(truncate_message_preview(long_text)) == 120
 
     def test_format_pending_request_line_escapes_html(self):
-        req = MagicMock()
+        req = model_mock(PendingRequest)
         req.username = None
         req.first_name = "<script>"
         req.scheduled_approval_at = MagicMock(strftime=MagicMock(return_value="12:00"))
@@ -76,7 +87,7 @@ class TestPureHelpers:
         assert PendingPageCallback(channel_id=1, page=1).pack() in flat
 
     def test_build_pending_list_text_uses_format_line(self):
-        req = MagicMock()
+        req = model_mock(PendingRequest)
         req.username = "user1"
         req.first_name = None
         req.scheduled_approval_at = MagicMock(strftime=MagicMock(return_value="09:00"))
@@ -132,13 +143,10 @@ class TestConfigMessagesHandlers:
     async def test_config_messages_menu_renders(self, mock_get_service, make_callback):
         from handlers.channel_handlers import config_messages_menu
 
-        mock_channel = MagicMock()
+        mock_channel = model_mock(Channel)
         mock_channel.channel_name = "Test Vestíbulo"
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.get_channel_by_db_id.return_value = mock_channel
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ConfigMessagesCallback(channel_id=5)
@@ -154,10 +162,7 @@ class TestConfigMessagesHandlers:
     async def test_save_welcome_message_calls_service(self, mock_get_service, make_message):
         from handlers.channel_handlers import save_welcome_message
 
-        mock_svc = MagicMock()
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
+        mock_svc = _mock_channel_ctx(mock_get_service)
 
         msg = make_message(text="Bienvenida custom")
         state = AsyncMock()
@@ -172,10 +177,7 @@ class TestConfigMessagesHandlers:
     async def test_save_welcome_message_blank_saves_none(self, mock_get_service, make_message):
         from handlers.channel_handlers import save_welcome_message
 
-        mock_svc = MagicMock()
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
+        mock_svc = _mock_channel_ctx(mock_get_service)
 
         msg = make_message(text="   ")
         state = AsyncMock()
@@ -195,17 +197,14 @@ class TestIndividualApproveReject:
     ):
         from handlers.channel_handlers import approve_one_request
 
-        mock_req = MagicMock()
+        mock_req = model_mock(PendingRequest)
         mock_req.username = "testuser"
         mock_req.first_name = None
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.get_valid_pending_request.return_value = mock_req
         mock_svc.approve_request_now = AsyncMock(
             return_value=GrantResult(success=True, request_id=10)
         )
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ApproveOneCallback(request_id=10, channel_id=2, page=1)
@@ -226,11 +225,8 @@ class TestIndividualApproveReject:
         """approve_one con request inválida usa toast plain-text sin HTML."""
         from handlers.channel_handlers import approve_one_request
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.get_valid_pending_request.return_value = None
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ApproveOneCallback(request_id=99, channel_id=2, page=0)
@@ -246,14 +242,11 @@ class TestIndividualApproveReject:
     async def test_reject_one_requires_confirmation(self, mock_get_service, make_callback):
         from handlers.channel_handlers import reject_one_request
 
-        mock_req = MagicMock()
+        mock_req = model_mock(PendingRequest)
         mock_req.username = "testuser"
         mock_req.first_name = "Test"
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.get_valid_pending_request.return_value = mock_req
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = RejectOneCallback(request_id=7, channel_id=4, page=2)
@@ -275,11 +268,8 @@ class TestIndividualApproveReject:
     async def test_confirm_reject_success(self, mock_get_service, mock_render, make_callback):
         from handlers.channel_handlers import confirm_reject_request
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.reject_request_now = AsyncMock(return_value=True)
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ConfirmRejectCallback(request_id=5, channel_id=3, page=1)
@@ -297,11 +287,8 @@ class TestIndividualApproveReject:
     ):
         from handlers.channel_handlers import confirm_reject_request
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.reject_request_now = AsyncMock(return_value=False)
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ConfirmRejectCallback(request_id=5, channel_id=3, page=0)
@@ -318,15 +305,12 @@ class TestIndividualApproveReject:
     ):
         from handlers.channel_handlers import confirm_reject_request
 
-        mock_req = MagicMock()
+        mock_req = model_mock(PendingRequest)
         mock_req.username = "doneuser"
         mock_req.first_name = None
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.get_valid_pending_request.return_value = mock_req
         mock_svc.reject_request_now = AsyncMock(return_value=True)
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ConfirmRejectCallback(request_id=5, channel_id=3, page=1)
@@ -346,13 +330,10 @@ class TestApproveAllHandler:
     async def test_approve_all_requests_surfaces_errors(self, mock_get_service, make_callback):
         from handlers.channel_handlers import approve_all_requests
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.approve_all_pending_now = AsyncMock(
             return_value=ApproveAllResult(approved=1, failed=1, errors=["req 2: boom"])
         )
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ApproveAllCallback(channel_id=9)
@@ -367,11 +348,8 @@ class TestApproveAllHandler:
     async def test_approve_all_empty_batch(self, mock_get_service, make_callback):
         from handlers.channel_handlers import approve_all_requests
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.count_pending_requests.return_value = 0
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ApproveAllCallback(channel_id=9)
@@ -387,13 +365,10 @@ class TestApproveAllHandler:
     async def test_approve_all_all_failed_alert(self, mock_get_service, make_callback):
         from handlers.channel_handlers import approve_all_requests
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.approve_all_pending_now = AsyncMock(
             return_value=ApproveAllResult(approved=0, failed=2, errors=["req 1: err"])
         )
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = ApproveAllCallback(channel_id=9)
@@ -410,12 +385,9 @@ class TestPendingPagination:
     async def test_pending_list_pagination(self, mock_get_service, make_callback):
         from handlers.channel_handlers import pending_page_nav
 
-        mock_svc = MagicMock()
+        mock_svc = _mock_channel_ctx(mock_get_service)
         mock_svc.count_pending_requests.return_value = 20
         mock_svc.get_pending_requests_by_channel.return_value = [MagicMock()] * 20
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__.return_value = mock_svc
-        mock_get_service.return_value = mock_ctx
 
         cb = make_callback()
         cb_data = PendingPageCallback(channel_id=1, page=1)
