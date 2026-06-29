@@ -134,9 +134,9 @@ class GameService:
             "<b>{dice1}</b> y <b>{dice2}</b>. Ah, la ironía del azar. Un momento desalentador, certamente, pero ¿quién sabe? Quizás mañana el destino sea más... generoso.",
         ],
         "limit_reached": [
-            "Ha completado todos sus rituales del día. El destino, como Diana misma, aprecia la mesura sobre la obsesión.",
-            "Los dados descansan... al igual que usted debería. Hasta mañana.",
-            "Su tiempo con la fortuna ha terminado por hoy. Regrese mañana... hay quienes dicen que la suerte cambia después del descanso.",
+            "Ha usado todas sus jugadas de dados por hoy. Vuelva mañana.",
+            "Límite diario de dados alcanzado. Las jugadas se renuevan mañana.",
+            "No le quedan lanzamientos de dados hoy. Regrese mañana.",
         ],
     }
 
@@ -153,8 +153,8 @@ class GameService:
         ],
         "counter": [
             "Oportunidades restantes: {remaining} de {limit}",
-            "Tiene {remaining} caminos de {limit} disponibles...",
-            "{remaining} de {limit} intentos aguardan su sabiduría.",
+            "Le quedan {remaining} preguntas de {limit} hoy.",
+            "{remaining} de {limit} preguntas disponibles hoy.",
         ],
         "correct": [
             "🎩 <b>Lucien:</b>\n<i>¡Correcto! Diana asiente con aprobación...</i>",
@@ -186,19 +186,19 @@ class GameService:
             ],
         },
         "limit_reached": [
-            "Ha agotado sus preguntas por hoy. El conocimiento, como el buen vino, requiere pausas.",
-            "El examen ha terminado... por ahora. Diana aprecia la mesura sobre la obsesión.",
-            "Diana guarda las preguntas para mañana. El verdadero sabio sabe cuándo descansar.",
+            "Ha usado todas sus preguntas de trivia por hoy. Vuelva mañana.",
+            "Límite diario de trivia alcanzado. Nuevas preguntas mañana.",
+            "No le quedan preguntas de trivia hoy. Regrese mañana.",
         ],
         "cap_warning": [
-            "⚠️ Quedan {remaining} besitos por ganar en trivia. ¡Aproveche!",
-            "⚠️ Se aproxima al limite de besitos: solo {remaining} mas por hoy.",
-            "⚠️ Atencion: le restan {remaining} besitos antes de llegar al tope.",
+            "⚠️ Le quedan {remaining} besitos por ganar en trivia hoy.",
+            "⚠️ Cerca del tope de besitos: solo {remaining} más por ganar hoy.",
+            "⚠️ Atención: puede ganar {remaining} besitos más en trivia hoy.",
         ],
         "cap_exhausted": [
-            "⏸️ Ha alcanzado el limite de besitos por trivia. Puede seguir jugando, pero no acumulara mas besitos hasta que se renueve el contador.",
-            "⏸️ Los besitos de trivia estan en pausa por hoy. El conocimiento sigue siendo suyo, la recompensa debera esperar.",
-            "⏸️ Limite de besitos alcanzado. Continue con la trivia si lo desea; los besitos se reanudaran cuando el contador se renueve.",
+            "⏸️ Ha alcanzado el tope de besitos que puede ganar hoy en trivia. Puede seguir jugando si le interesa el conocimiento; vuelva mañana para más recompensas.",
+            "⏸️ Ya no puede ganar más besitos en trivia hoy. Puede seguir respondiendo preguntas; las recompensas se renuevan mañana.",
+            "⏸️ Tope de besitos de trivia alcanzado por hoy. Sin más besitos hasta mañana, pero puede seguir jugando.",
         ],
     }
 
@@ -215,8 +215,8 @@ class GameService:
         ],
         "counter": [
             "Oportunidades VIP restantes: {remaining} de {limit}",
-            "Tiene {remaining} preguntas secretas de {limit}...",
-            "{remaining} de {limit} caminos exclusivos aguardan.",
+            "Le quedan {remaining} preguntas VIP de {limit} hoy.",
+            "{remaining} de {limit} preguntas VIP disponibles hoy.",
         ],
         "correct": [
             "🎩 <b>Lucien:</b>\n<i>¡Impresionante! Diana está complacida...</i>",
@@ -248,19 +248,19 @@ class GameService:
             ],
         },
         "limit_reached": [
-            "Ha agotado sus preguntas secretas por hoy. Diana aprecia su persistencia, pero también la mesura.",
-            "El examen VIP ha terminado... por ahora. Regrese mañana para más desafíos.",
-            "Diana ha guardado sus preguntas VIP para mañana. El verdadero connaisseur sabe esperar.",
+            "Ha usado todas sus preguntas VIP por hoy. Vuelva mañana.",
+            "Límite diario de trivia VIP alcanzado. Nuevas preguntas mañana.",
+            "No le quedan preguntas VIP hoy. Regrese mañana.",
         ],
         "cap_warning": [
-            "⚠️ Quedan {remaining} besitos VIP por ganar en trivia. ¡Aproveche!",
-            "⚠️ Se aproxima al limite de besitos VIP: solo {remaining} mas.",
-            "⚠️ Atencion: le restan {remaining} besitos VIP antes del tope.",
+            "⚠️ Le quedan {remaining} besitos VIP por ganar en trivia hoy.",
+            "⚠️ Cerca del tope VIP: solo {remaining} besitos más por ganar hoy.",
+            "⚠️ Atención: puede ganar {remaining} besitos VIP más hoy.",
         ],
         "cap_exhausted": [
-            "⏸️ Ha alcanzado el limite de besitos VIP por trivia. Puede seguir jugando, pero no acumulara mas hasta que se renueve el contador.",
-            "⏸️ Los besitos VIP de trivia estan en pausa. El conocimiento intimo sigue, la recompensa debera esperar.",
-            "⏸️ Limite VIP alcanzado. Continue si lo desea; los besitos se reanudaran cuando el contador se renueve.",
+            "⏸️ Ha alcanzado el tope de besitos VIP que puede ganar hoy. Puede seguir jugando; vuelva mañana para más recompensas.",
+            "⏸️ Ya no puede ganar más besitos VIP en trivia hoy. Puede seguir respondiendo; las recompensas se renuevan mañana.",
+            "⏸️ Tope de besitos VIP alcanzado por hoy. Sin más besitos hasta mañana, pero puede seguir jugando.",
         ],
     }
 
@@ -313,24 +313,24 @@ class GameService:
             ],
         },
         "limit_reached": [
-            "Ha agotado sus oportunidades por hoy. La dinamica especial continuara manana.",
-            "El desafio especial ha terminado... por ahora. Regrese manana.",
-            "Diana guarda el saber para manana. Sepa esperar.",
+            "Ha usado todas sus jugadas de trivia especial por hoy. Vuelva mañana.",
+            "Límite diario de trivia especial alcanzado. Nuevas jugadas mañana.",
+            "No le quedan jugadas de trivia especial hoy. Regrese mañana.",
         ],
         "deck_exhausted": [
-            "Ha respondido todas las preguntas disponibles hoy. El conocimiento se renueva al amanecer.",
-            "El mazo esta completo por hoy. Regrese manana para mas desafios.",
-            "Ha agotado el saber de esta jornada. El alba traera nuevas preguntas.",
+            "Ya respondió todas las preguntas de esta categoría hoy. Vuelva mañana.",
+            "No hay más preguntas nuevas en esta dinámica hoy. Regrese mañana.",
+            "Completó el mazo de preguntas de hoy. Nuevas preguntas mañana.",
         ],
         "cap_warning": [
-            "⚠️ Quedan {remaining} besitos especiales por ganar. ¡Aproveche!",
-            "⚠️ Se aproxima al limite especial: solo {remaining} besitos mas.",
-            "⚠️ Atencion: le restan {remaining} besitos especiales antes del tope.",
+            "⚠️ Le quedan {remaining} besitos por ganar en trivia especial hoy.",
+            "⚠️ Cerca del tope especial: solo {remaining} besitos más por ganar hoy.",
+            "⚠️ Atención: puede ganar {remaining} besitos más en trivia especial hoy.",
         ],
         "cap_exhausted": [
-            "⏸️ Ha alcanzado el limite de besitos especiales. Puede seguir jugando, pero no acumulara mas hasta que se renueve.",
-            "⏸️ Los besitos especiales estan en pausa. La dinamica sigue, la recompensa debera esperar.",
-            "⏸️ Limite especial alcanzado. Continue si lo desea; los besitos se reanudaran pronto.",
+            "⏸️ Ha alcanzado el tope de besitos que puede ganar hoy en trivia especial. Puede seguir jugando; vuelva mañana para más recompensas.",
+            "⏸️ Ya no puede ganar más besitos en trivia especial hoy. Puede seguir respondiendo; las recompensas se renuevan mañana.",
+            "⏸️ Tope de besitos de trivia especial alcanzado por hoy. Sin más besitos hasta mañana, pero puede seguir jugando.",
         ],
     }
 
@@ -579,15 +579,15 @@ class GameService:
         if played >= limit:
             is_vip = self.is_user_vip(user_id)
             if is_vip:
-                return False, played, limit, "Ha alcanzado su límite diario. Regrese mañana."
+                return False, played, limit, "Ha alcanzado su límite diario de jugadas. Vuelva mañana."
             else:
                 return (
                     False,
                     played,
                     limit,
                     (
-                        "Ha alcanzado su límite diario de juegos.\n"
-                        "¡Pero! Los miembros VIP tienen el doble de oportunidades..."
+                        "Ha alcanzado su límite diario de jugadas. Vuelva mañana.\n"
+                        "Los miembros VIP tienen más jugadas diarias."
                     ),
                 )
         return True, played, limit, None
@@ -837,7 +837,7 @@ class GameService:
         if remaining > 0:
             encouragement = f"Oportunidades restantes: {remaining}"
         else:
-            encouragement = "Ha agotado sus oportunidades por hoy."
+            encouragement = "No le quedan jugadas de dados por hoy. Vuelva mañana."
 
         return {
             "header": header,
@@ -862,7 +862,7 @@ class GameService:
             limit_message = self._select_template(self.TRIVIA_TEMPLATES["limit_reached"])
             is_vip = self.is_user_vip(user_id)
             if not is_vip:
-                limit_message += "\n\nLos caminos de VIP siempre tienen más oportunidades..."
+                limit_message += "\n\nLos miembros VIP tienen más preguntas diarias."
 
         logger.info(
             f"game_service - get_trivia_entry_data - {user_id} - remaining:{remaining}, streak:{streak}"
@@ -1190,7 +1190,7 @@ class GameService:
         if remaining > 0:
             encouragement = f"Oportunidades restantes: {remaining}"
         else:
-            encouragement = "Ha agotado sus preguntas por hoy."
+            encouragement = "No le quedan preguntas de trivia por hoy. Vuelva mañana."
 
         # Phase 17: Promo code line
         promo_code_line = None
@@ -1546,7 +1546,7 @@ class GameService:
         if remaining > 0:
             encouragement = f"Oportunidades VIP restantes: {remaining}"
         else:
-            encouragement = "Ha agotado sus preguntas secretas por hoy."
+            encouragement = "No le quedan preguntas VIP por hoy. Vuelva mañana."
 
         # Phase 17: Promo code line
         promo_code_line = None
@@ -1931,7 +1931,7 @@ class GameService:
         if remaining > 0:
             encouragement = f"Oportunidades simples restantes: {remaining}"
         else:
-            encouragement = "Ha agotado sus preguntas simples por hoy."
+            encouragement = "No le quedan jugadas de trivia especial por hoy. Vuelva mañana."
 
         # Phase 17: Promo code line
         promo_code_line = None

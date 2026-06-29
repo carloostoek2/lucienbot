@@ -126,7 +126,7 @@ async def game_trivia(callback: CallbackQuery):
 
         if question is None:
             await callback.message.edit_text(
-                "Las preguntas están en el taller de Lucien. Regresa más tarde.",
+                "No hay preguntas de trivia disponibles en este momento. Intente más tarde.",
                 reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
@@ -228,7 +228,7 @@ async def game_trivia_vip(callback: CallbackQuery):
 
         if question is None:
             await callback.message.edit_text(
-                "Las preguntas secretas están en el taller de Lucien. Regresa más tarde.",
+                "No hay preguntas VIP disponibles en este momento. Intente más tarde.",
                 reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
@@ -350,7 +350,7 @@ async def game_trivia_simple(callback: CallbackQuery):
             return
         if question is None:
             await callback.message.edit_text(
-                "Los pergaminos especiales estan en el taller de Lucien.",
+                "No hay preguntas especiales disponibles en este momento. Intente más tarde.",
                 reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
