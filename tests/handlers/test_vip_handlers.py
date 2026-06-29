@@ -131,7 +131,9 @@ def test_build_forward_besitos_helpers_pure():
     assert "424242" in build_forward_action_menu_text("Cand", 424242)
     assert "50 besitos" in build_forward_besitos_confirm_text("Cand", 424242, 50)
     assert "50" in build_forward_besitos_success_text(50, 150)
-    assert "50" in build_forward_besitos_visitor_notify(50, 150)
+    notify = build_forward_besitos_visitor_notify(50, 150)
+    assert "50" in notify
+    assert "gesto especial" in notify.lower()
     assert parse_positive_besito_amount("50") == 50
     assert parse_positive_besito_amount("0") is None
     assert parse_positive_besito_amount("-1") is None

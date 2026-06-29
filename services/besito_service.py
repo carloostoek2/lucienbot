@@ -260,12 +260,13 @@ class BesitoService:
             )
             return False, 0
         desc = f"Otorgamiento manual por Custodio (admin_id={admin_id})"
+        # reference_id queda None: admin_id es Telegram BigInt y reference_id en BD es Integer.
         ok = self.credit_besitos(
             target_user_id,
             amount,
             TransactionSource.ADMIN,
             description=desc,
-            reference_id=admin_id,
+            reference_id=None,
         )
         balance = self.get_balance(target_user_id) if ok else 0
         logger.info(

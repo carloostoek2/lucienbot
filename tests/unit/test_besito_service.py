@@ -127,7 +127,21 @@ class TestBesitoTransactions:
         )
         assert len(txs) == 1
         assert txs[0].amount == amount
-        assert txs[0].reference_id == admin_id
+        assert txs[0].reference_id is None
+        assert str(admin_id) in (txs[0].description or "")
+
+    def test_grant_manual_admin_besitos_large_admin_telegram_id(self, db_session, sample_user):
+        """Admin Telegram IDs > INT32 must not break grant (reference_id is Integer in DB)."""
+        service = BesitoService(db_session)
+        large_admin_id = 6_181_290_784  # production custodio ID from 2026-06-29 incident
+
+        with patch("services.event_bus.schedule_emit"):
+            ok, balance = service.grant_manual_admin_besitos(
+                sample_user.telegram_id, 500, large_admin_id
+            )
+
+        assert ok is True
+        assert balance == 500
 
     def test_grant_manual_admin_besitos_respects_max(self, db_session, sample_user):
         """Admin manual grant rejects amounts above MAX_ADMIN_BESITO_GRANT."""

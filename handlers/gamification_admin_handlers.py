@@ -23,7 +23,12 @@ from keyboards.callback_data import (
     ToggleEmojiCallback,
 )
 from keyboards.inline_keyboards import back_keyboard, cancel_keyboard
-from services.besito_service import BesitoService
+from handlers.vip_handlers import (
+    notify_forward_besitos_result,
+    parse_positive_besito_amount,
+    parse_positive_telegram_user_id,
+)
+from services.besito_service import BesitoService, MAX_ADMIN_BESITO_GRANT
 from services.broadcast_service import BroadcastService
 from services import get_service
 from services.daily_gift_service import DailyGiftService
@@ -52,6 +57,12 @@ class ButtonConfigStates(StatesGroup):
     waiting_url = State()
     waiting_description = State()  # opcional
     edit_waiting_field = State()   # para edición de label/url/desc
+
+
+class AdminBesitoGrantStates(StatesGroup):
+    waiting_user_id = State()
+    waiting_amount = State()
+    confirming = State()
 
 
 # ==================== MENU DE GAMIFICACION ADMIN ====================
@@ -142,6 +153,12 @@ async def config_besitos_menu(callback: CallbackQuery):
 
     keyboard_buttons.extend(
         [
+            [
+                InlineKeyboardButton(
+                    text="💋 Otorgar besitos a visitante",
+                    callback_data="admin_grant_besitos",
+                )
+            ],
             [InlineKeyboardButton(text="➕ Agregar emoji", callback_data="add_emoji")],
             [InlineKeyboardButton(text="🔗 Gestionar botones de enlace", callback_data="config_buttons")],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_gamification")],
@@ -151,6 +168,120 @@ async def config_besitos_menu(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
     await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+# ==================== OTORGAR BESITOS MANUAL (MENÚ ADMIN) ====================
+
+
+@router.callback_query(F.data == "admin_grant_besitos", lambda cb: is_admin(cb.from_user.id))
+async def admin_grant_besitos_start(callback: CallbackQuery, state: FSMContext):
+    """Inicia otorgamiento manual de besitos desde menú admin (0 svc)."""
+    admin_id = callback.from_user.id
+    logger.info(f"{__name__} | iniciar_grant_besitos_menu | user_id={admin_id}")
+    await callback.message.edit_text(
+        LucienVoice.admin_besitos_grant_user_id_prompt(),
+        reply_markup=cancel_keyboard("config_besitos"),
+        parse_mode="HTML",
+    )
+    await state.set_state(AdminBesitoGrantStates.waiting_user_id)
+    await callback.answer()
+
+
+@router.message(AdminBesitoGrantStates.waiting_user_id, lambda m: is_admin(m.from_user.id))
+async def process_admin_besito_user_id(message: Message, state: FSMContext):
+    """Captura ID del visitante y pide cantidad (0 svc)."""
+    target_user_id = parse_positive_telegram_user_id(message.text)
+    if target_user_id is None:
+        await message.answer(
+            "🎩 <b>Lucien:</b>\n\n<i>ID inválido. Indique un número entero positivo de Telegram.</i>",
+            reply_markup=cancel_keyboard("config_besitos"),
+            parse_mode="HTML",
+        )
+        return
+    admin_id = message.from_user.id
+    logger.info(
+        f"{__name__} | capturar_id_grant_besitos_menu | user_id={admin_id} | "
+        f"target_user_id={target_user_id}"
+    )
+    await state.update_data(grant_target_user_id=target_user_id)
+    await message.answer(
+        LucienVoice.admin_besitos_grant_amount_prompt(target_user_id),
+        reply_markup=cancel_keyboard("config_besitos"),
+        parse_mode="HTML",
+    )
+    await state.set_state(AdminBesitoGrantStates.waiting_amount)
+
+
+@router.message(AdminBesitoGrantStates.waiting_amount, lambda m: is_admin(m.from_user.id))
+async def process_admin_besito_amount(message: Message, state: FSMContext):
+    """Captura cantidad y muestra confirmación (0 svc)."""
+    amount = parse_positive_besito_amount(message.text)
+    if amount is None:
+        await message.answer(
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>Cantidad inválida. Indique un entero entre 1 y {MAX_ADMIN_BESITO_GRANT}.</i>",
+            reply_markup=cancel_keyboard("config_besitos"),
+            parse_mode="HTML",
+        )
+        return
+    data = await state.get_data()
+    target_user_id = data.get("grant_target_user_id")
+    admin_id = message.from_user.id
+    logger.info(
+        f"{__name__} | capturar_cantidad_grant_besitos_menu | user_id={admin_id} | "
+        f"target_user_id={target_user_id} | amount={amount}"
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Confirmar", callback_data="admin_besito_grant_confirm"),
+                InlineKeyboardButton(text="❌ Cancelar", callback_data="config_besitos"),
+            ]
+        ]
+    )
+    await message.answer(
+        LucienVoice.admin_besitos_grant_confirm_text(target_user_id, amount),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await state.update_data(besito_amount=amount)
+    await state.set_state(AdminBesitoGrantStates.confirming)
+
+
+@router.callback_query(
+    AdminBesitoGrantStates.confirming,
+    F.data == "admin_besito_grant_confirm",
+    lambda cb: is_admin(cb.from_user.id),
+)
+async def confirm_admin_besito_grant(callback: CallbackQuery, state: FSMContext):
+    """Confirma y ejecuta grant besitos (EXACTLY 1 svc) + notificación al visitante."""
+    data = await state.get_data()
+    target_user_id = data.get("grant_target_user_id")
+    amount = data.get("besito_amount")
+    admin_id = callback.from_user.id
+    logger.info(
+        f"{__name__} | confirmar_grant_besitos_menu | user_id={admin_id} | "
+        f"target_user_id={target_user_id} | amount={amount}"
+    )
+    if not target_user_id or not amount:
+        await callback.answer("Datos incompletos", show_alert=True)
+        await state.clear()
+        return
+    ok, balance = False, 0
+    with get_service(BesitoService) as besito_service:
+        ok, balance = besito_service.grant_manual_admin_besitos(target_user_id, amount, admin_id)
+    await notify_forward_besitos_result(
+        callback.bot,
+        callback.message,
+        target_user_id,
+        ok,
+        amount,
+        balance,
+        admin_id,
+        success_keyboard=back_keyboard("config_besitos"),
+    )
+    await state.clear()
     await callback.answer()
 
 

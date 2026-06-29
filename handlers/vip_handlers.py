@@ -132,11 +132,18 @@ def build_forward_besitos_success_text(amount: int, new_balance: int) -> str:
 
 def build_forward_besitos_visitor_notify(amount: int, balance: int) -> str:
     """Construye notificación al visitante tras grant besitos. Función pura (sin estado ni side-effects)."""
-    return (
-        f"🎩 <b>Lucien:</b>\n\n"
-        f"<i>Diana le ha otorgado {amount} besitos como gesto especial.</i>\n\n"
-        f"Su saldo actual: {balance} besitos."
-    )
+    return LucienVoice.admin_besitos_granted_visitor_notify(amount, balance)
+
+
+def parse_positive_telegram_user_id(text: str) -> int | None:
+    """Parsea ID de Telegram positivo para grant admin. Función pura (sin estado ni side-effects)."""
+    raw = (text or "").strip()
+    if not raw.isdigit():
+        return None
+    user_id = int(raw)
+    if user_id <= 0:
+        return None
+    return user_id
 
 
 def build_forward_besitos_error_text(reason: str) -> str:
@@ -212,8 +219,11 @@ async def notify_forward_besitos_result(
     amount: int,
     balance: int,
     admin_id: int,
+    *,
+    success_keyboard=None,
 ) -> None:
-    """Notifica resultado del grant besitos forward (visitante o fallback admin). Thin helper (0 svc)."""
+    """Notifica resultado del grant besitos (visitante o fallback admin). Thin helper (0 svc)."""
+    admin_keyboard = success_keyboard or vip_management_keyboard()
     if ok:
         try:
             await bot.send_message(
@@ -227,7 +237,7 @@ async def notify_forward_besitos_result(
             )
             await target_message.edit_text(
                 build_forward_besitos_success_text(amount, balance),
-                reply_markup=vip_management_keyboard(),
+                reply_markup=admin_keyboard,
                 parse_mode="HTML",
             )
         except Exception as e:
@@ -245,7 +255,7 @@ async def notify_forward_besitos_result(
     else:
         await target_message.edit_text(
             build_forward_besitos_error_text("No pude acreditar los besitos. Intente de nuevo."),
-            reply_markup=vip_management_keyboard(),
+            reply_markup=admin_keyboard,
             parse_mode="HTML",
         )
 

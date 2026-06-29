@@ -2186,6 +2186,41 @@ Lucien prefiere no preguntar por qué tardó tanto.</i>"""
         )
 
     @staticmethod
+    def admin_besitos_granted_visitor_notify(amount: int, balance: int) -> str:
+        """Notifica al visitante que Diana le otorgó besitos manualmente (admin/reenvío)."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Un gesto especial de Diana ha llegado hasta usted...</i>
+
+💋 <b>{amount} besitos</b> han sido acreditados a su favor.
+Su saldo actual: <b>{balance}</b> besitos.
+
+<i>Diana anota el gesto con interés moderado.</i>"""
+
+    @staticmethod
+    def admin_besitos_grant_user_id_prompt() -> str:
+        return (
+            "🎩 <b>Lucien:</b>\n\n"
+            "<i>Indique el ID de Telegram del visitante que recibirá los besitos.</i>\n\n"
+            "Ejemplo: <code>123456789</code>"
+        )
+
+    @staticmethod
+    def admin_besitos_grant_amount_prompt(target_user_id: int) -> str:
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>¿Cuántos besitos otorgará Diana al visitante (ID {target_user_id})?</i>\n\n"
+            "Ejemplo: <code>50</code>"
+        )
+
+    @staticmethod
+    def admin_besitos_grant_confirm_text(target_user_id: int, amount: int) -> str:
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>¿Confirmar otorgamiento de {amount} besitos al visitante (ID {target_user_id})?</i>"
+        )
+
+    @staticmethod
     def reward_besitos_received(amount: int, balance: int) -> str:
         return f"Has recibido {amount} besitos! Tu saldo es: {balance}"
 
