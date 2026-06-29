@@ -488,3 +488,23 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 - "Item 3/35 closed. Third of new pool of 4. Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool. Ready for arch-enforcer + test-guardian + documentador (final pool close + ROADMAP update)."
 
 (Refs: .planning/phases/35-eventbus-logging-expansion/PLAN.md + gsd-35-eventbus-logging-expansion.log + impact excerpts + HARDENING_ROADMAP pool34 + 23/24/28/29/34 precedents + services/event_bus.py + bot.py + besito/health + listeners in story/reward/broadcast/game/store/streak + tests/unit/test_event_bus.py + golds cross/reaction etc.)
+
+## Admin forward besitos grant (Item 36 / pool de 1)
+
+**Motivo:** Custodios necesitaban otorgar besitos manualmente a visitantes identificados por reenvío de mensaje. El flujo VIP forward ya existía; se extendió con menú de acción sin duplicar detección de usuario.
+
+**Riesgos (mitigados):**
+- Regresión VIP forward (antes auto-tarifa). Mit: tests regression + rama VIP intacta tras botón «Activar VIP».
+- Atomicidad/EventBus en nuevo crédito ADMIN. Mit: reusa `credit_besitos` (FOR UPDATE + commit + schedule_emit best-effort); golds cross/reaction/daily/invariants verdes.
+- Double grant por retry CB. Mit: `IdempotencyMiddleware` en confirm + 1 svc en confirm handler.
+
+**Decisión:**
+- Reenvío admin → menú `Activar VIP | Otorgar besitos | Cancelar` (0 svc en detección).
+- FSM `AdminForwardStates` (reemplaza `VIPForwardActivationStates`).
+- `BesitoService.grant_manual_admin_besitos` con `TransactionSource.ADMIN`, `MAX_ADMIN_BESITO_GRANT=10000`, `reference_id=admin_id`.
+- Puros `build_forward_*` + `parse_positive_besito_amount`; `notify_forward_besitos_result` thin (0 svc).
+- Handlers: 1 svc en `confirm_forward_besitos_grant` y `confirm_forward_vip_activation`; 1 svc en `select_forward_action_vip` (tarifas).
+
+**Resultado:**
+- 5 archivos tocados; 111 tests gate verdes; arch-enforcer PASS WITH NOTES (0 critical); test-guardian «suite protege adecuadamente».
+- Refs: `.planning/phases/36-admin-forward-besitos-grant/PLAN.md` + SUMMARY + gsd log + impact/arch/test-guardian reports item36.

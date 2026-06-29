@@ -109,6 +109,37 @@ class TestBesitoTransactions:
             assert result is False
             mock_schedule.assert_not_called()
 
+    def test_grant_manual_admin_besitos_success(self, db_session, sample_user):
+        """Admin manual grant credits with ADMIN source and returns new balance."""
+        service = BesitoService(db_session)
+        admin_id = 999001
+        amount = 40
+
+        with patch("services.event_bus.schedule_emit"):
+            ok, balance = service.grant_manual_admin_besitos(
+                sample_user.telegram_id, amount, admin_id
+            )
+
+        assert ok is True
+        assert balance == amount
+        txs = service.get_transactions_by_source(
+            sample_user.telegram_id, TransactionSource.ADMIN, limit=5
+        )
+        assert len(txs) == 1
+        assert txs[0].amount == amount
+        assert txs[0].reference_id == admin_id
+
+    def test_grant_manual_admin_besitos_respects_max(self, db_session, sample_user):
+        """Admin manual grant rejects amounts above MAX_ADMIN_BESITO_GRANT."""
+        from services.besito_service import MAX_ADMIN_BESITO_GRANT
+
+        service = BesitoService(db_session)
+        ok, balance = service.grant_manual_admin_besitos(
+            sample_user.telegram_id, MAX_ADMIN_BESITO_GRANT + 1, 999001
+        )
+        assert ok is False
+        assert balance == 0
+
     def test_debit_besitos_success(self, db_session, sample_balance):
         """Test debitar besitos exitosamente"""
         service = BesitoService(db_session)

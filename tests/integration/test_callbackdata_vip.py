@@ -8,8 +8,20 @@ Verifica que los CallbackData migrados funcionan correctamente:
 import pytest
 from unittest.mock import MagicMock
 
-from keyboards.callback_data import SelectTariffCallback, CopyTokenCallback
-from keyboards.inline_keyboards import tariffs_keyboard, token_actions_keyboard
+from keyboards.callback_data import (
+    CopyTokenCallback,
+    ForwardActionCallback,
+    ForwardCancelCallback,
+    ForwardConfirmCallback,
+    SelectTariffCallback,
+)
+from keyboards.inline_keyboards import (
+    forward_action_keyboard,
+    forward_cancel_keyboard,
+    forward_confirm_keyboard,
+    tariffs_keyboard,
+    token_actions_keyboard,
+)
 
 
 class TestSelectTariffCallback:
@@ -37,6 +49,38 @@ class TestSelectTariffCallback:
         # Es un CallbackQueryFilter de aiogram
         assert callback_filter is not None
         assert callable(callback_filter)
+
+
+class TestForwardAdminCallbacks:
+    """Tests para callbacks de reenvío admin (VIP | besitos)."""
+
+    def test_forward_action_packs(self):
+        assert ForwardActionCallback(action="vip").pack() == "fwd_action:vip"
+        assert ForwardActionCallback(action="besitos").pack() == "fwd_action:besitos"
+
+    def test_forward_confirm_packs(self):
+        assert ForwardConfirmCallback(action="vip").pack() == "fwd_confirm:vip"
+        assert ForwardConfirmCallback(action="besitos").pack() == "fwd_confirm:besitos"
+
+    def test_forward_cancel_packs(self):
+        assert ForwardCancelCallback().pack() == "fwd_cancel:cancel"
+
+    def test_forward_action_keyboard_uses_callbacks(self):
+        kb = forward_action_keyboard()
+        callbacks = [row[0].callback_data for row in kb.inline_keyboard]
+        assert "fwd_action:vip" in callbacks
+        assert "fwd_action:besitos" in callbacks
+        assert "fwd_cancel:cancel" in callbacks
+
+    def test_forward_confirm_keyboard_uses_callbacks(self):
+        kb = forward_confirm_keyboard("besitos")
+        row = kb.inline_keyboard[0]
+        assert row[0].callback_data == "fwd_confirm:besitos"
+        assert row[1].callback_data == "fwd_cancel:cancel"
+
+    def test_forward_cancel_keyboard_uses_callback(self):
+        kb = forward_cancel_keyboard()
+        assert kb.inline_keyboard[0][0].callback_data == "fwd_cancel:cancel"
 
 
 class TestCopyTokenCallback:

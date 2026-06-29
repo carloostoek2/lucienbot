@@ -344,6 +344,62 @@ def broadcast_back_keyboard(current_step: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def forward_action_keyboard() -> InlineKeyboardMarkup:
+    """Menú de acción tras reenvío admin: VIP o besitos."""
+    from keyboards.callback_data import ForwardActionCallback, ForwardCancelCallback
+
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="👑 Activar VIP",
+                callback_data=ForwardActionCallback(action="vip").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="💋 Otorgar besitos",
+                callback_data=ForwardActionCallback(action="besitos").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Cancelar",
+                callback_data=ForwardCancelCallback().pack(),
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def forward_confirm_keyboard(action: str) -> InlineKeyboardMarkup:
+    """Confirmación Sí/No para grant forward admin (action: vip | besitos)."""
+    from keyboards.callback_data import ForwardCancelCallback, ForwardConfirmCallback
+
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="✅ Confirmar",
+                callback_data=ForwardConfirmCallback(action=action).pack(),
+            ),
+            InlineKeyboardButton(
+                text="❌ Cancelar",
+                callback_data=ForwardCancelCallback().pack(),
+            ),
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def forward_cancel_keyboard() -> InlineKeyboardMarkup:
+    """Solo cancelar en flujo forward admin."""
+    from keyboards.callback_data import ForwardCancelCallback
+
+    buttons = [
+        [InlineKeyboardButton(text="❌ Cancelar", callback_data=ForwardCancelCallback().pack())]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def vip_management_keyboard() -> InlineKeyboardMarkup:
     """Menú de gestión VIP"""
     buttons = [

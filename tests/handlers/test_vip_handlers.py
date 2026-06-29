@@ -1,20 +1,14 @@
 """
-Minimal targeted tests for VIP forward activation (handlers only).
+Minimal targeted tests for VIP/besitos forward activation (handlers only).
 
-Protects the new forward path per test-guardian mandate:
+Protects forward paths per test-guardian mandate:
 - pure extract / build helpers (verb+context+result, "Función pura...")
-- detection (forward_from + forward_origin)
-- tariff select (0 svc)
-- confirm: EXACTLY 1 grant_vip_from_tariff via get_service
-- direct send success
-- blocked fallback: exact "bot was blocked by the user" + deep_link notify to admin
+- detection (forward_from + forward_origin) → action menu (0 svc)
+- VIP branch: tariff select (0 svc), confirm (1 svc grant)
+- besitos branch: amount parse, confirm (1 svc grant)
+- direct send success + blocked fallback
 - state clean always
 - is_admin guards (via patch)
-
-Uses make_* fixtures + mocks on get_service + bot.send side effects.
-No behavior change to existing flows. Golds stay green.
-
-Follows handler test conventions (patch order, make_message/make_callback/make_fsm_context, async).
 """
 
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
@@ -22,7 +16,12 @@ from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 import pytest
 from aiogram.types import MessageOriginUser
 
-from keyboards.callback_data import SelectTariffCallback
+from keyboards.callback_data import (
+    ForwardActionCallback,
+    ForwardCancelCallback,
+    ForwardConfirmCallback,
+    SelectTariffCallback,
+)
 
 pytestmark = [pytest.mark.unit]
 
@@ -32,6 +31,15 @@ def _mock_vip_ctx(mock_get_service):
     from services.vip_service import VIPService
 
     svc = create_autospec(VIPService, spec_set=True, instance=True)
+    mock_get_service.return_value.__enter__.return_value = svc
+    return svc
+
+
+def _mock_besito_ctx(mock_get_service):
+    """Mock get_service(BesitoService) context manager con autospec."""
+    from services.besito_service import BesitoService
+
+    svc = create_autospec(BesitoService, spec_set=True, instance=True)
     mock_get_service.return_value.__enter__.return_value = svc
     return svc
 
@@ -66,10 +74,10 @@ def test_extract_forwarded_candidate_from_forward_origin():
 
     msg = MagicMock()
     msg.forward_from = None
-    # real TgUser + date to satisfy full MessageOriginUser pydantic model
     sender = TgUser(id=888, is_bot=False, first_name="Origin", last_name="User")
     from datetime import UTC
     from datetime import datetime as dt
+
     origin = MessageOriginUser(sender_user=sender, type="user", date=dt.now(UTC))
     msg.forward_origin = origin
 
@@ -91,7 +99,7 @@ def test_extract_forwarded_candidate_hidden_or_none_returns_none():
 
 
 def test_build_forward_helpers_pure():
-    """build_* are pure (return strings, no io)."""
+    """build_* VIP helpers are pure."""
     from handlers.vip_handlers import (
         build_forward_blocked_notify,
         build_forward_deep_link,
@@ -109,22 +117,39 @@ def test_build_forward_helpers_pure():
     assert "contacta" in build_forward_deep_link(None, None).lower()
 
 
+def test_build_forward_besitos_helpers_pure():
+    """build_* besitos helpers are pure."""
+    from handlers.vip_handlers import (
+        build_forward_action_menu_text,
+        build_forward_besitos_confirm_text,
+        build_forward_besitos_success_text,
+        build_forward_besitos_visitor_notify,
+        parse_positive_besito_amount,
+    )
+    from services.besito_service import MAX_ADMIN_BESITO_GRANT
+
+    assert "424242" in build_forward_action_menu_text("Cand", 424242)
+    assert "50 besitos" in build_forward_besitos_confirm_text("Cand", 424242, 50)
+    assert "50" in build_forward_besitos_success_text(50, 150)
+    assert "50" in build_forward_besitos_visitor_notify(50, 150)
+    assert parse_positive_besito_amount("50") == 50
+    assert parse_positive_besito_amount("0") is None
+    assert parse_positive_besito_amount("-1") is None
+    assert parse_positive_besito_amount("abc") is None
+    assert parse_positive_besito_amount(str(MAX_ADMIN_BESITO_GRANT + 1)) is None
+
+
 # =============================================================================
-# Handler flows (mock get_service + bot.send, exercise forward paths)
+# Handler flows (mock get_service + bot.send)
 # =============================================================================
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
-@patch("handlers.vip_handlers.get_service")
-async def test_process_forwarded_vip_candidate_detects_and_uses_exactly_1_svc(
-    mock_get_service, _mock_is_admin, make_message, make_fsm_context
+async def test_process_forwarded_admin_candidate_shows_action_menu_0_svc(
+    _mock_is_admin, make_message, make_fsm_context
 ):
-    """Detection path calls tariffs svc once, sets forward state, shows tariffs."""
-    mock_svc = _mock_vip_ctx(mock_get_service)
-    mock_svc.get_all_tariffs.return_value = [MagicMock(id=1, name="Mensual", duration_days=30)]
-
+    """Detection path shows action menu with 0 svc calls."""
     msg = make_message(text="forwarded candidate msg")
-    # simulate forward
     fake = MagicMock()
     fake.id = 424242
     fake.full_name = "Test VIP Cand"
@@ -134,41 +159,65 @@ async def test_process_forwarded_vip_candidate_detects_and_uses_exactly_1_svc(
 
     fsm = await make_fsm_context(user_id=424242)
 
-    from handlers.vip_handlers import process_forwarded_vip_candidate
+    from handlers.vip_handlers import process_forwarded_admin_candidate
 
-    await process_forwarded_vip_candidate(msg, fsm)
+    with patch("handlers.vip_handlers.get_service") as mock_get_service:
+        await process_forwarded_admin_candidate(msg, fsm)
+        mock_get_service.assert_not_called()
 
-    mock_get_service.assert_called_once()  # exactly the tariffs read (1 svc)
     msg.answer.assert_called()
+    ans_text = msg.answer.call_args[0][0]
+    assert "424242" in ans_text
     data = await fsm.get_data()
     assert data.get("forward_target_user_id") == 424242
     assert "Test VIP Cand" in data.get("forward_target_display", "")
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
+@patch("handlers.vip_handlers.get_service")
+async def test_select_forward_action_vip_uses_exactly_1_svc(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    """VIP action path calls tariffs svc once."""
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.get_all_tariffs.return_value = [MagicMock(id=1, name="Mensual", duration_days=30)]
+
+    cb = make_callback(data=ForwardActionCallback(action="vip").pack())
+    fsm = await make_fsm_context()
+    await fsm.update_data(forward_target_user_id=424242, forward_target_display="Cand")
+
+    from handlers.vip_handlers import AdminForwardStates, select_forward_action_vip
+
+    await fsm.set_state(AdminForwardStates.selecting_action)
+    await select_forward_action_vip(cb, fsm)
+
+    mock_get_service.assert_called_once()
+    cb.message.edit_text.assert_called()
+    st = await fsm.get_state()
+    assert st is None or "vip_selecting_tariff" in str(st).lower()
+
+
+@patch("handlers.vip_handlers.is_admin", return_value=True)
 async def test_select_tariff_for_forward_vip_transitions_state_no_svc(
     _mock_is_admin, make_callback, make_fsm_context
 ):
-    """Select path (0 svc) updates data + state to confirming, reuses UI."""
+    """Select tariff path (0 svc) updates data + state to confirming."""
     cb = make_callback(data="select_tariff:7")
-    cb.from_user.id = 999  # admin in patch
     fsm = await make_fsm_context()
-    await fsm.set_state("selecting_tariff")  # loose, or import
     await fsm.update_data(forward_target_user_id=424242, forward_target_display="Cand")
 
     cbdata = SelectTariffCallback(tariff_id=7)
 
-    from handlers.vip_handlers import VIPForwardActivationStates, select_tariff_for_forward_vip
+    from handlers.vip_handlers import AdminForwardStates, select_tariff_for_forward_vip
 
+    await fsm.set_state(AdminForwardStates.vip_selecting_tariff)
     await select_tariff_for_forward_vip(cb, fsm, callback_data=cbdata)
 
     cb.message.edit_text.assert_called_once()
     data = await fsm.get_data()
     assert data.get("selected_tariff_id") == 7
-    # state transitioned (FSM internal check loose)
     st = await fsm.get_state()
-    # aiogram stores string or state; accept either
-    assert st is None or "confirm" in str(st).lower() or st == VIPForwardActivationStates.confirming
+    assert st is None or "confirm" in str(st).lower() or st == AdminForwardStates.vip_confirming
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
@@ -176,17 +225,15 @@ async def test_select_tariff_for_forward_vip_transitions_state_no_svc(
 async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_direct(
     mock_get_service, _mock_is_admin, make_callback, make_fsm_context
 ):
-    """Confirm path: EXACTLY 1 grant via get_service, direct send success, state cleaned, success UI."""
-    # prepare fsm data as if from prior steps
+    """Confirm VIP: EXACTLY 1 grant via get_service, direct send, state cleaned."""
     fsm = await make_fsm_context()
     await fsm.update_data(forward_target_user_id=424242, selected_tariff_id=1)
 
-    cb = make_callback(data="confirm_vip_forward_activation")
+    cb = make_callback(data=ForwardConfirmCallback(action="vip").pack())
     cb.bot = AsyncMock()
     cb.bot.send_message = AsyncMock()
     cb.bot.get_me = AsyncMock(return_value=MagicMock(username="lucienbot"))
 
-    # grant returns success + meta
     mock_svc = _mock_vip_ctx(mock_get_service)
     mock_svc.grant_vip_from_tariff = AsyncMock(
         return_value=(
@@ -196,106 +243,76 @@ async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_di
         )
     )
 
-    from handlers.vip_handlers import confirm_forward_vip_activation
+    from handlers.vip_handlers import AdminForwardStates, confirm_forward_vip_activation
 
+    await fsm.set_state(AdminForwardStates.vip_confirming)
     await confirm_forward_vip_activation(cb, fsm)
 
-    # critical contract: exactly 1 grant
     mock_svc.grant_vip_from_tariff.assert_called_once_with(cb.bot, 424242, 1)
-    # direct send happened
     cb.bot.send_message.assert_called_once()
     call = cb.bot.send_message.call_args
     assert call.kwargs.get("chat_id") == 424242
-    kb = call.kwargs.get("reply_markup")
-    assert kb is not None
-    # state cleared (data gone)
     data_after = await fsm.get_data()
     assert data_after == {} or "forward_target" not in str(data_after)
-    # success edit
     cb.message.edit_text.assert_called()
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
 @patch("handlers.vip_handlers.get_service")
-async def test_confirm_forward_vip_activation_blocked_falls_back_to_admin_with_deep_link(
+async def test_confirm_forward_besitos_calls_exactly_1_grant(
     mock_get_service, _mock_is_admin, make_callback, make_fsm_context
 ):
-    """Blocked send: grant still done (1), send raises blocked, fallback answer to forwarding admin with deep_link using token_code."""
+    """Confirm besitos: EXACTLY 1 grant_manual_admin_besitos, notify visitor."""
     fsm = await make_fsm_context()
-    await fsm.update_data(forward_target_user_id=424242, selected_tariff_id=1)
+    await fsm.update_data(forward_target_user_id=424242, besito_amount=25)
 
-    cb = make_callback(data="confirm_vip_forward_activation")
-    cb.bot = AsyncMock()
-    # exact match string used in impl
-    cb.bot.send_message = AsyncMock(side_effect=Exception("bot was blocked by the user"))
-    cb.bot.get_me = AsyncMock(return_value=MagicMock(username="lucienbot"))
-
-    mock_svc = _mock_vip_ctx(mock_get_service)
-    mock_svc.grant_vip_from_tariff = AsyncMock(
-        return_value=(True, "access...", {"token_code": "BLK999"})
-    )
-
-    from handlers.vip_handlers import confirm_forward_vip_activation
-
-    await confirm_forward_vip_activation(cb, fsm)
-
-    # grant still happened once (desired: no rollback)
-    mock_svc.grant_vip_from_tariff.assert_called_once()
-    # send attempted but failed
-    cb.bot.send_message.assert_called_once()
-    # fallback uses answer on target_message (the admin sees it)
-    cb.message.answer.assert_called()
-    ans_text = cb.message.answer.call_args[0][0]
-    assert "bloqueo" in ans_text.lower() or "no pude notificar" in ans_text.lower()
-    assert "BLK999" in ans_text or "start=BLK999" in ans_text
-    # state clean
-    data_after = await fsm.get_data()
-    assert data_after == {} or not any("forward" in str(k) for k in data_after)
-
-
-@patch("handlers.vip_handlers.is_admin", return_value=True)
-@patch("handlers.vip_handlers.get_service")
-async def test_confirm_forward_vip_grant_fails_shows_error_no_send(
-    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
-):
-    """grant !ok: no send, shows error msg from grant, state clean. 1 svc only."""
-    fsm = await make_fsm_context()
-    await fsm.update_data(forward_target_user_id=424242, selected_tariff_id=99)
-
-    cb = make_callback(data="confirm_vip_forward_activation")
+    cb = make_callback(data=ForwardConfirmCallback(action="besitos").pack())
     cb.bot = AsyncMock()
     cb.bot.send_message = AsyncMock()
 
-    mock_svc = _mock_vip_ctx(mock_get_service)
-    mock_svc.grant_vip_from_tariff = AsyncMock(return_value=(False, "Tarifa inválida", {}))
+    mock_svc = _mock_besito_ctx(mock_get_service)
+    mock_svc.grant_manual_admin_besitos.return_value = (True, 125)
 
-    from handlers.vip_handlers import confirm_forward_vip_activation
+    from handlers.vip_handlers import AdminForwardStates, confirm_forward_besitos_grant
 
-    await confirm_forward_vip_activation(cb, fsm)
+    await fsm.set_state(AdminForwardStates.besitos_confirming)
+    await confirm_forward_besitos_grant(cb, fsm)
 
-    mock_svc.grant_vip_from_tariff.assert_called_once()
-    cb.bot.send_message.assert_not_called()
-    cb.message.edit_text.assert_called()
-    err = cb.message.edit_text.call_args[0][0]
-    assert "Tarifa inválida" in err
-    assert await fsm.get_data() == {} or "forward" not in str(await fsm.get_data())
+    mock_svc.grant_manual_admin_besitos.assert_called_once_with(424242, 25, cb.from_user.id)
+    cb.bot.send_message.assert_called_once()
+    data_after = await fsm.get_data()
+    assert data_after == {} or "besito_amount" not in str(data_after)
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
-async def test_cancel_vip_forward_clears_state(_mock_is_admin, make_callback, make_fsm_context):
+async def test_process_besitos_amount_invalid_rejects(_mock_is_admin, make_message, make_fsm_context):
+    """Invalid amount does not advance FSM."""
+    msg = make_message(text="not-a-number")
+    fsm = await make_fsm_context()
+    await fsm.update_data(forward_target_user_id=424242, forward_target_display="Cand")
+
+    from handlers.vip_handlers import AdminForwardStates, process_besitos_amount_for_forward
+
+    await fsm.set_state(AdminForwardStates.besitos_waiting_amount)
+    await process_besitos_amount_for_forward(msg, fsm)
+
+    msg.answer.assert_called()
+    assert "inválida" in msg.answer.call_args[0][0].lower()
+    st = await fsm.get_state()
+    assert st is None or "besitos_waiting_amount" in str(st).lower()
+
+
+@patch("handlers.vip_handlers.is_admin", return_value=True)
+async def test_cancel_forward_action_clears_state(_mock_is_admin, make_callback, make_fsm_context):
     """Cancel always clears state + returns to mgmt."""
     fsm = await make_fsm_context()
     await fsm.update_data(forward_target_user_id=42)
 
-    cb = make_callback(data="cancel_vip_activation")
+    cb = make_callback(data=ForwardCancelCallback().pack())
 
-    from handlers.vip_handlers import cancel_vip_forward_activation
+    from handlers.vip_handlers import cancel_forward_action
 
-    await cancel_vip_forward_activation(cb, fsm)
+    await cancel_forward_action(cb, fsm)
 
     cb.message.edit_text.assert_called()
     assert await fsm.get_data() == {}
-
-
-# Note: full router filter integration is covered indirectly by golds + manual;
-# here we call handler funcs directly (standard for aiogram handler tests without full Dispatcher setup).

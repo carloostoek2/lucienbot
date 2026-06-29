@@ -96,6 +96,24 @@ class VipPromoInterestCallback(CallbackData, prefix="vip_promo_interest"):
     promo_id: int
 
 
+class ForwardActionCallback(CallbackData, prefix="fwd_action"):
+    """Acción tras reenvío admin: activar VIP u otorgar besitos."""
+
+    action: str  # "vip" | "besitos"
+
+
+class ForwardConfirmCallback(CallbackData, prefix="fwd_confirm"):
+    """Confirmar grant tras reenvío admin."""
+
+    action: str  # "vip" | "besitos"
+
+
+class ForwardCancelCallback(CallbackData, prefix="fwd_cancel"):
+    """Cancelar flujo forward admin."""
+
+    action: str = "cancel"
+
+
 # ==================== STORE ====================
 
 
