@@ -96,10 +96,13 @@ def _commit_request_rejected(db: Session, request: PendingRequest) -> None:
 
 
 async def _send_welcome_after_grant(bot, request: PendingRequest, channel: Channel) -> None:
+    from utils.telegram_delivery import resolve_private_chat_id
+
     try:
         message = build_welcome_payload(channel)
+        dm_chat_id = resolve_private_chat_id(request.user_id, request.user_chat_id)
         await bot.send_message(
-            chat_id=request.user_id,
+            chat_id=dm_chat_id,
             text=message,
             parse_mode="HTML",
             reply_markup=social_links_keyboard(),

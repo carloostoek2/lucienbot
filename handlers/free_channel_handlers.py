@@ -70,8 +70,10 @@ async def handle_join_request(join_request: ChatJoinRequest):
 
         # Crear solicitud pendiente
         try:
+            user_chat_id = getattr(join_request, "user_chat_id", None)
             pending = channel_service.create_pending_request(
                 user_id=user.id,
+                user_chat_id=user_chat_id,
                 channel_id=channel.id,
                 username=user.username,
                 first_name=user.first_name,
@@ -82,7 +84,7 @@ async def handle_join_request(join_request: ChatJoinRequest):
             # _send_free_welcome_job usa get_channel_by_id que espera Telegram channel ID.
             scheduler = get_scheduler()
             if scheduler:
-                scheduler.schedule_free_welcome(user.id, chat.id)
+                scheduler.schedule_free_welcome(user.id, chat.id, user_chat_id=user_chat_id)
 
             logger.info(
                 f"Solicitud pendiente creada: id={pending.id}, approve_at={pending.scheduled_approval_at}"

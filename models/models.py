@@ -181,6 +181,11 @@ class PendingRequest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
+    user_chat_id = Column(
+        BigInteger,
+        nullable=True,
+        doc="ChatJoinRequest.user_chat_id (ventana DM Telegram post-solicitud)",
+    )
     channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
     username = Column(String(100), nullable=True)
     first_name = Column(String(100), nullable=True)

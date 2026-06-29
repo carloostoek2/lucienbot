@@ -452,7 +452,10 @@ class RewardService:
             return False, LucienVoice.reward_stock_depleted()
 
         success, message = await self.package_service.deliver_package_to_user(
-            bot=bot, user_id=user_id, package_id=reward.package_id
+            bot=bot,
+            user_id=user_id,
+            package_id=reward.package_id,
+            delivery_source="reward",
         )
         if not success:
             # Fallo permanente: el usuario nunca podrá recibir este paquete

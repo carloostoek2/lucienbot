@@ -73,7 +73,9 @@ async def _run_backup_job():
         logger.error(f"Error running backup: {e}")
 
 
-async def _send_free_welcome_job(user_id: int, channel_id: int):
+async def _send_free_welcome_job(
+    user_id: int, channel_id: int, user_chat_id: int | None = None
+):
     """Envía el mensaje ritual de entrada al canal Free tras 30s de espera.
 
     Job handler de módulo para evitar errores de serialización con APScheduler.
@@ -87,16 +89,21 @@ async def _send_free_welcome_job(user_id: int, channel_id: int):
             logger.warning(f"Canal {channel_id} no encontrado o inactivo para welcome job")
             return
 
-        bot = _get_bot()
+        from utils.telegram_delivery import resolve_private_chat_id
 
+        bot = _get_bot()
+        dm_chat_id = resolve_private_chat_id(user_id, user_chat_id)
         await bot.send_message(
-            chat_id=user_id,
+            chat_id=dm_chat_id,
             text=build_approval_payload(channel),
             parse_mode="HTML",
             reply_markup=social_links_keyboard(),
         )
 
-        logger.info(f"Mensaje ritual enviado: user={user_id}, channel={channel_id}")
+        logger.info(
+            f"Mensaje ritual enviado: user={user_id} | dm_chat_id={dm_chat_id} | "
+            f"user_chat_id={user_chat_id} | channel={channel_id}"
+        )
 
     except TelegramForbiddenError:
         logger.warning(
@@ -252,7 +259,7 @@ async def _perform_nurture_content_delivery(bot, user_id: int, step, db) -> tupl
         pkg_svc = PackageService(db)  # shares
         try:
             success, result_msg = await pkg_svc.deliver_package_to_user(
-                bot, user_id, step.package_id
+                bot, user_id, step.package_id, delivery_source="nurture"
             )
             delivered = success
         finally:
@@ -510,7 +517,9 @@ class SchedulerService:
         self.running = True
         logger.info("Scheduler started (APScheduler + SQLAlchemyJobStore)")
 
-    def schedule_free_welcome(self, user_id: int, channel_id: int):
+    def schedule_free_welcome(
+        self, user_id: int, channel_id: int, user_chat_id: int | None = None
+    ):
         """Programa el mensaje ritual de entrada con 30s de delay.
 
         Usa DateTrigger para un job one-shot que se ejecuta 30 segundos
@@ -523,7 +532,11 @@ class SchedulerService:
             trigger=DateTrigger(run_date=run_date),
             id=job_id,
             replace_existing=True,
-            kwargs={"user_id": user_id, "channel_id": channel_id},
+            kwargs={
+                "user_id": user_id,
+                "channel_id": channel_id,
+                "user_chat_id": user_chat_id,
+            },
         )
         logger.info(
             f"Scheduled free welcome job: user={user_id}, channel={channel_id}, run_at={run_date}"

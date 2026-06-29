@@ -164,7 +164,12 @@ class ChannelService:
     # ==================== SOLICITUDES PENDIENTES ====================
 
     def create_pending_request(
-        self, user_id: int, channel_id: int, username: str = None, first_name: str = None
+        self,
+        user_id: int,
+        channel_id: int,
+        username: str = None,
+        first_name: str = None,
+        user_chat_id: int | None = None,
     ) -> PendingRequest:
         """Crea una solicitud pendiente de acceso"""
         db = self._get_db()
@@ -176,6 +181,7 @@ class ChannelService:
 
         request = PendingRequest(
             user_id=user_id,
+            user_chat_id=user_chat_id,
             channel_id=channel_id,
             username=username,
             first_name=first_name,

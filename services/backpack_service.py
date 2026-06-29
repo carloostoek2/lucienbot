@@ -360,7 +360,10 @@ class BackpackService:
             return False, LucienVoice.package_not_found()
 
         success, message = await package_service.deliver_package_to_user(
-            bot=bot, user_id=user_id, package_id=package_id
+            bot=bot,
+            user_id=user_id,
+            package_id=package_id,
+            delivery_source="backpack",
         )
 
         logger.info(

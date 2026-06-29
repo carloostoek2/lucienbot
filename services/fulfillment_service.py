@@ -286,7 +286,10 @@ class FulfillmentService:
         for _ in range(qty):
             try:
                 ok, msg = await pkg_svc.deliver_package_to_user(
-                    bot=bot, user_id=row.user_id, package_id=product.package_id
+                    bot=bot,
+                    user_id=row.user_id,
+                    package_id=product.package_id,
+                    delivery_source="fulfillment_auto",
                 )
                 if not ok:
                     errors.append(msg)
@@ -640,7 +643,10 @@ class FulfillmentService:
             return False, LucienVoice.fulfillment_admin_invalid_status()
         pkg_svc = PackageService(self._get_db())
         ok, msg = await pkg_svc.deliver_package_to_user(
-            bot=bot, user_id=row.user_id, package_id=package_id
+            bot=bot,
+            user_id=row.user_id,
+            package_id=package_id,
+            delivery_source="fulfillment_admin",
         )
         if ok:
             row.status = FulfillmentStatus.FULFILLED

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 from models.database import SessionLocal
 from models.models import Category, Package, PackageFile
 from utils.lucien_voice import LucienVoice
+from utils.telegram_delivery import classify_bad_request_error, classify_forbidden_error
 
 logger = logging.getLogger(__name__)
 
@@ -319,7 +320,14 @@ class PackageService:
 
         return media_groups, individual_files
 
-    async def deliver_package_to_user(self, bot, user_id: int, package_id: int) -> tuple[bool, str]:
+    async def deliver_package_to_user(
+        self,
+        bot,
+        user_id: int,
+        package_id: int,
+        *,
+        delivery_source: str = "unknown",
+    ) -> tuple[bool, str]:
         """
         Entrega un paquete a un usuario enviando todos los archivos.
         Fotos y videos se agrupan en albums; animaciones y documentos se envían individual.
@@ -328,6 +336,7 @@ class PackageService:
             bot: Instancia del bot
             user_id: ID del usuario destino
             package_id: ID del paquete
+            delivery_source: Origen para logs (nurture/mission/reward/backpack/etc.)
 
         Returns:
             Tuple (éxito, mensaje)
@@ -360,30 +369,22 @@ Enviando {len(files)} archivo(s)...""",
                     parse_mode="HTML",
                 )
             except TelegramBadRequest as e:
-                if "chat not found" in str(e):
+                is_perm, code = classify_bad_request_error(e)
+                if is_perm:
                     logger.warning(
-                        f"Paquete {package_id} no entregable: chat {user_id} no existe"
+                        f"package_service | deliver | source={delivery_source} | "
+                        f"user_id={user_id} | package_id={package_id} | result={code}"
                     )
-                    return False, "permanent:chat_not_found"
+                    return False, code
                 raise
             except TelegramForbiddenError as e:
-                err_lower = str(e).lower()
-                if "bot was blocked" in err_lower:
+                is_perm, code = classify_forbidden_error(e)
+                if is_perm:
                     logger.warning(
-                        f"Paquete {package_id} no entregable: usuario {user_id} bloqueó al bot"
+                        f"package_service | deliver | source={delivery_source} | "
+                        f"user_id={user_id} | package_id={package_id} | result={code}"
                     )
-                    return False, "permanent:bot_blocked"
-                if "can't initiate conversation" in err_lower:
-                    logger.warning(
-                        f"Paquete {package_id} no entregable: usuario {user_id} "
-                        f"nunca inició chat privado con el bot"
-                    )
-                    return False, "permanent:no_private_chat"
-                if "user is deactivated" in err_lower:
-                    logger.warning(
-                        f"Paquete {package_id} no entregable: usuario {user_id} cuenta desactivada"
-                    )
-                    return False, "permanent:user_deactivated"
+                    return False, code
                 raise
 
             # Enviar media groups (fotos y videos agrupados)
@@ -408,11 +409,17 @@ Enviando {len(files)} archivo(s)...""",
                     logger.error(f"Error enviando archivo {file_entry.id}: {e}")
                     continue
 
-            logger.info(f"Paquete {package_id} entregado a usuario {user_id}")
+            logger.info(
+                f"package_service | deliver | source={delivery_source} | "
+                f"user_id={user_id} | package_id={package_id} | result=success"
+            )
             return True, LucienVoice.package_delivery_success(package.name)
 
         except Exception as e:
-            logger.error(f"Error entregando paquete {package_id}: {e}")
+            logger.error(
+                f"package_service | deliver | source={delivery_source} | "
+                f"user_id={user_id} | package_id={package_id} | error={e}"
+            )
             return False, LucienVoice.package_delivery_failed()
 
     # ==================== ESTADÍSTICAS ====================
