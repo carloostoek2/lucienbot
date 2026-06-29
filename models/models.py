@@ -548,7 +548,10 @@ class NurtureSequence(Base):
     name = Column(String(150), nullable=False, unique=True)
     description = Column(Text, nullable=True)
     audience = Column(
-        Enum(NurtureAudience), default=NurtureAudience.VIP, nullable=False, index=True
+        Enum(NurtureAudience, values_callable=str_enum_values),
+        default=NurtureAudience.VIP,
+        nullable=False,
+        index=True,
     )
     is_active = Column(Boolean, default=True, index=True)
     created_by = Column(BigInteger, nullable=True)

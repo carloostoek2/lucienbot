@@ -360,6 +360,45 @@ class TestPackageService:
         assert msg == "permanent:bot_blocked"
 
     @pytest.mark.asyncio
+    async def test_deliver_package_no_private_chat_returns_permanent(
+        self, db_session, sample_user, mock_bot
+    ):
+        """VIP de canal sin /start: 'can't initiate conversation' es fallo permanente, no bloqueo."""
+        from aiogram.exceptions import TelegramForbiddenError
+
+        mock_bot.send_message.side_effect = TelegramForbiddenError(
+            method="sendMessage",
+            message="Forbidden: bot can't initiate conversation with a user",
+        )
+        service = PackageService(db_session)
+        package = service.create_package("Test Package")
+        service.add_file_to_package(package.id, "file_id_1", "photo")
+
+        success, msg = await service.deliver_package_to_user(mock_bot, sample_user.id, package.id)
+
+        assert success is False
+        assert msg == "permanent:no_private_chat"
+
+    @pytest.mark.asyncio
+    async def test_deliver_package_user_deactivated_returns_permanent(
+        self, db_session, sample_user, mock_bot
+    ):
+        """Cuenta eliminada en Telegram retorna permanent:user_deactivated."""
+        from aiogram.exceptions import TelegramForbiddenError
+
+        mock_bot.send_message.side_effect = TelegramForbiddenError(
+            method="sendMessage", message="Forbidden: user is deactivated"
+        )
+        service = PackageService(db_session)
+        package = service.create_package("Test Package")
+        service.add_file_to_package(package.id, "file_id_1", "photo")
+
+        success, msg = await service.deliver_package_to_user(mock_bot, sample_user.id, package.id)
+
+        assert success is False
+        assert msg == "permanent:user_deactivated"
+
+    @pytest.mark.asyncio
     async def test_deliver_package_other_bad_request_is_logged_as_error(
         self, db_session, sample_user, mock_bot
     ):

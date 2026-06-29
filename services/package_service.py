@@ -367,11 +367,23 @@ Enviando {len(files)} archivo(s)...""",
                     return False, "permanent:chat_not_found"
                 raise
             except TelegramForbiddenError as e:
-                if "bot was blocked" in str(e):
+                err_lower = str(e).lower()
+                if "bot was blocked" in err_lower:
                     logger.warning(
                         f"Paquete {package_id} no entregable: usuario {user_id} bloqueó al bot"
                     )
                     return False, "permanent:bot_blocked"
+                if "can't initiate conversation" in err_lower:
+                    logger.warning(
+                        f"Paquete {package_id} no entregable: usuario {user_id} "
+                        f"nunca inició chat privado con el bot"
+                    )
+                    return False, "permanent:no_private_chat"
+                if "user is deactivated" in err_lower:
+                    logger.warning(
+                        f"Paquete {package_id} no entregable: usuario {user_id} cuenta desactivada"
+                    )
+                    return False, "permanent:user_deactivated"
                 raise
 
             # Enviar media groups (fotos y videos agrupados)
