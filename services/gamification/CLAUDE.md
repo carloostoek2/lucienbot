@@ -5,6 +5,7 @@ Sistema de puntos (besitos), niveles y recompensas.
 ## Services
 - [besito_service.py](../besito_service.py) - Puntos, transacciones, historial
 - [daily_gift_service.py](../daily_gift_service.py) - Regalo diario
+- [game_service.py](../game_service.py) - Minijuegos (dados, trivia simple/VIP/especial). Templates de mensajes al usuario **directos** (reglas explícitas, "+X besitos", límites claros) desde actualización tono 2026. Ver game_user_handlers y `docs/guia-estilo.md`.
 
 ## Handlers
 - [gamification_user_handlers.py](../../handlers/gamification_user_handlers.py) - Usuario

@@ -26,8 +26,8 @@ Si eres suscriptor VIP, verás este botón dorado. Es tu área exclusiva donde p
 
 dos opciones para ganar besitos adicionales:
 
-- **Dados del Destino** — Lanza los dados y dependiendo del resultado ganas besitos. Tiene un límite diario, así que úsalos bien.
-- **Trivia** — Responde preguntas de cultura general. Cada respuesta correcta suma besitos y mantiene tu racha. Mientras más racha, mayor la recompensa.
+- **Dados** — Lanza dos dados. Ganas 1 besito con pares o dobles. Límite diario.
+- **Trivia** — Responde correctamente y gana besitos. Mantiene racha (más puntos en rachas altas). Límite diario.
 
 ### 💋 Mi Saldo de Besitos
 
@@ -41,9 +41,9 @@ Los besitos son la moneda de este reino. Aquí puedes ver:
 
 Una vez al día puedes reclamar un regalo de besitos. Es gratis y se renueva cada día — no lo olvides.
 
-### 🛍️ Tienda de Diana
+### 🛍️ Tienda de Lucien
 
-El catálogo de contenido exclusivo de Diana. Puedes:
+El catálogo de productos de Diana. Puedes:
 
 - **Explorar por categorías** — Navega el catálogo completo organizado por temas
 - **Buscar productos** — Si buscas algo específico, usa la búsqueda

@@ -126,7 +126,7 @@ async def game_trivia(callback: CallbackQuery):
 
         if question is None:
             await callback.message.edit_text(
-                "No hay preguntas de trivia disponibles en este momento. Intente más tarde.",
+                "No hay preguntas disponibles en este momento. Intente más tarde.",
                 reply_markup=game_menu_keyboard(),
             )
             await callback.answer()

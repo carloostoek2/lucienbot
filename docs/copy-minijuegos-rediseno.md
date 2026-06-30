@@ -1,7 +1,41 @@
 # Copy Rediseñado - Sistema de Minijuegos
 ## Voz de Lucien: Elegante, Misterioso, en Tercera Persona
 
+> **NOTA (junio 2026):** Este documento contiene el diseño poético anterior de los minijuegos.  
+> Se reemplazó por lenguaje **directo y claro** (reglas explícitas, feedback simple, sin metáforas excesivas) para evitar confusiones en acciones.  
+> Ver la sección actualizada en `docs/guia-estilo.md` ("Actualización de tono — Tienda y Minijuegos") y la implementación en `utils/lucien_voice.py` + `services/game_service.py` (MENU_TEMPLATES / DICE_TEMPLATES / TRIVIA_* simplificados).  
+> Los ejemplos de abajo se conservan solo por referencia histórica.
+
+**Versión actual recomendada (directa):**
+
+```python
+# Menú simplificado
+"🎮 Minijuegos\n\nJuegue y gane besitos. Límite diario por juego.\n\n"
+"<b>Dados:</b> gane 1 besito con pares o dobles.\n<i>restantes de límite</i>\n\n"
+"<b>Trivia:</b> responda correctamente y gane besitos."
+
+# Botones
+"dice": "🎲 Dados",
+"trivia": "❓ Trivia"
+
+# Reglas dados (directas)
+"Lance dos dados. Gane besitos si obtiene pares o dobles.\n"
+"• Ambos pares: +1 besito\n• Iguales (dobles): +1 besito"
+
+# Feedback
+"¡Dobles! +1 besito."
+"¡Pares! +1 besito."
+"{dice1} y {dice2}. No ganó esta vez."
+
+# Trivia
+"Responda correctamente para ganar 1 besito."
+"¡Correcto! +1 besito."
+"Incorrecto. La respuesta era: XXX"
+```
+
 ---
+
+**Versión histórica (poética) a continuación para referencia.**
 
 ## 1. MENÚ PRINCIPAL DE JUEGOS
 

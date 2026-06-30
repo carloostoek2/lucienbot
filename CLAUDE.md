@@ -27,9 +27,9 @@ Cada dominio tiene su propio CLAUDE.md con contexto específico.
 | Dominio | Services | Descripción |
 |---------|---------|-------------|
 | **VIP** | `VIPService`, `AnonymousMessageService` | Membresías exclusivas via tokens, tarifas, suscripciones. Canal `Subscription` ↔ `Token` ↔ `Tariff`. Mensajes anónimos VIP → Diana |
-| **Gamificación** | `BesitoService`, `BroadcastService`, `DailyGiftService` | Besitos (puntos), reacciones con besitos, regalo diario |
+| **Gamificación** | `BesitoService`, `BroadcastService`, `DailyGiftService`, `GameService` | Besitos (puntos), reacciones con besitos, regalo diario, minijuegos (dados, trivia). User-facing copy de minijuegos directo (reglas y feedback claros) desde 2026. |
 | **Canales** | `ChannelService` | Canales VIP y free, auto-aprobación con wait time, `PendingRequest` |
-| **Tienda** | `StoreService`, `PackageService` | Catálogo, carrito, compras, paquetes de contenido. Stock: `-1`=ilimitado, `-2`=no disponible |
+| **Tienda** | `StoreService`, `PackageService` | Catálogo, carrito, compras, paquetes de contenido. Stock: `-1`=ilimitado, `-2`=no disponible. User-facing copy directo (Tienda de Lucien, productos, besitos) desde 2026 para claridad en flujos de acción. |
 | **Misiones** | `MissionService`, `RewardService` | Tareas recurrentes/únicas, recompensas (besitos/paquete/VIP). Entrega via `deliver_reward()` |
 | **Promociones** | `PromotionService` | "Me Interesa", precios en centavos MXN (ej: 99900 = $999.00 MXN), bloqueo de usuarios |
 | **Narrativa** | `StoryService` | Nodos de historia, arquetipos, logros. Quiz de arquetipos hardcodeado en el servicio |
@@ -82,6 +82,8 @@ Cada dominio tiene su propio CLAUDE.md con contexto específico.
 - "Visitantes" no "usuarios"
 - "Custodios" no "admins"
 - Dominio promotions usa lenguaje diferenciado ("forjar experiencias", "Gabinete de Oportunidades")
+
+**Excepción de claridad (junio 2026):** En **Tienda** y **Minijuegos** (dados + trivia), los textos para instrucciones, reglas, saldos, confirmaciones, errores y CTAs son **directos y claros** (evitando parafraseo poético que confunda las acciones del usuario). Se mantiene el "usted" y el prefijo de Lucien. Ver `docs/guia-estilo.md` (sección "Actualización de tono") y cambios en `utils/lucien_voice.py` + `services/game_service.py` + `handlers/store_user_handlers.py` + `handlers/game_user_handlers.py`. El resto del bot conserva el estilo elegante original.
 
 ---
 

@@ -13,7 +13,7 @@ El sistema de **Mochila** permite a los visitantes consultar y gestionar las rec
 - Acceder a los archivos de los paquetes adquiridos
 - Ver el detalle de besitos incluidos en cada recompensa
 
-La mochila se convierte en el repositorio personal de cada visitante, un espacio donde se acumulan los tesoros ganados en el reino de Diana.
+La mochila se convierte en el repositorio personal de cada visitante, un espacio donde se acumulan los productos y recompensas.
 
 ---
 
@@ -133,7 +133,7 @@ El sistema reutiliza las siguientes tablas existentes:
 ```
 🎩 <b>Lucien:</b>
 
-<i>Permítame mostrarle los tesoros que Diana ha acumulado
+<i>Permítame mostrarle los productos y recompensas que ha acumulado
 en su mochila a lo largo de su viaje...</i>
 
 📦 <b>Su Inventario</b>
@@ -237,7 +237,7 @@ en su mochila a lo largo de su viaje...</i>
 ```
 🎩 <b>Lucien:</b>
 
-<i>Los tesoros que ha adquirido en la tienda de Diana...</i>
+<i>Los productos que ha adquirido en la Tienda de Lucien...</i>
 
 🛒 <b>Compras Realizadas</b>
 ```

@@ -15,10 +15,11 @@ Lógica de negocio por dominio. Un service = un dominio (no fragmentar).
 | `BesitoService` | Gamificación | `besito_service.py` | close, get_or_create_balance, get_balance, get_balance_with_stats, credit_besitos, +6 más |
 | `BroadcastService` | Broadcast | `broadcast_service.py` | create_reaction_emoji, get_reaction_emoji, get_reaction_emoji_by_emoji, get_all_emojis, update_emoji_value, +12 más |
 | `DailyGiftService` | Gamificación | `daily_gift_service.py` | get_config, update_config, is_active, get_gift_amount, get_last_claim, +5 más |
+| `GameService` | Gamificación (Minijuegos) | `game_service.py` | play_dice_game, get_menu_data, get_dice_entry_data, play_trivia_game, etc. User messages directos (reglas claras, feedback simple) desde tono 2026. |
 | `PackageService` | Store | `package_service.py` | create_package, add_file_to_package, get_package, get_all_packages, get_available_packages_for_store, +11 más |
 | `MissionService` | Missions | `mission_service.py` | close, create_mission, get_mission, get_all_missions, get_available_missions, +10 más |
 | `RewardService` | Missions | `reward_service.py` | create_reward_besitos, create_reward_package, create_reward_vip, get_reward, get_all_rewards, +7 más |
-| `StoreService` | Store | `store_service.py` | close, create_product, get_product, get_all_products, get_available_products, +15 más |
+| `StoreService` | Store | `store_service.py` | close, create_product, get_product, get_all_products, get_available_products, +15 más. User-facing: copy directo en tienda (Tienda de Lucien, productos, besitos) desde 2026. |
 | `AnonymousMessageService` | VIP | `anonymous_message_service.py` | send_message, get_message, get_all_messages, get_unread_messages, mark_as_read, reply_to_message, get_sender_info, delete_message |
 
 

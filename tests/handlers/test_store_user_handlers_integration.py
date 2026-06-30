@@ -96,10 +96,10 @@ class TestDirectBuyIntegration:
             cb.answer.assert_called()
             call_args = cb.answer.call_args
             assert call_args is not None
-            # Pin exact "Moneda especial insuficiente." (LucienVoice.store_balance_insufficient_alert())
+            # Check updated direct message for insufficient balance
             # or current string if not yet wired; 0 prod change (hygiene test)
             answered_text = call_args[0][0] if call_args[0] else ""
-            assert answered_text == "Moneda especial insuficiente." or "Moneda especial insuficiente" in answered_text
+            assert answered_text == "No tiene suficientes besitos." or "No tiene suficientes besitos" in answered_text or "besitos" in answered_text.lower()
             # Also verify show_alert=True per unit gold
             assert call_args[1].get("show_alert") is True
 

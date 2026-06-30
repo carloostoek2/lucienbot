@@ -488,13 +488,13 @@ def admin_anonymous_notification_keyboard(message_id: int) -> InlineKeyboardMark
 def game_menu_keyboard(is_vip: bool = False, special_button: tuple = None) -> InlineKeyboardMarkup:
     """Menú de selección de juegos. Si special_button = (label, callback), anade boton extra."""
     buttons = [
-        [InlineKeyboardButton(text="🎲 Lanzar los dados del destino", callback_data="game_dice")],
+        [InlineKeyboardButton(text="🎲 Dados", callback_data="game_dice")],
     ]
     if special_button:
         label, cb_data = special_button
         buttons.append([InlineKeyboardButton(text=label, callback_data=cb_data)])
     buttons.append(
-        [InlineKeyboardButton(text="❓ El examen de Diana", callback_data="game_trivia")]
+        [InlineKeyboardButton(text="❓ Trivia", callback_data="game_trivia")]
     )
     buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -526,7 +526,7 @@ def trivia_keyboard(
             ]
         )
     buttons.append(
-        [InlineKeyboardButton(text="🔙 Volver al menú de juegos", callback_data=back_callback)]
+        [InlineKeyboardButton(text="🔙 Volver a minijuegos", callback_data=back_callback)]
     )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -575,7 +575,7 @@ def trivia_simple_keyboard(question: dict, question_idx: int) -> InlineKeyboardM
             ]
         )
     buttons.append(
-        [InlineKeyboardButton(text="🔙 Volver al menu de juegos", callback_data="game_menu")]
+        [InlineKeyboardButton(text="🔙 Volver a minijuegos", callback_data="game_menu")]
     )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -588,7 +588,7 @@ def trivia_simple_result_keyboard() -> InlineKeyboardMarkup:
                 text="🔄 Otra pregunta especial", callback_data="game_trivia_simple"
             )
         ],
-        [InlineKeyboardButton(text="🔙 Menu de juegos", callback_data="game_menu")],
+        [InlineKeyboardButton(text="🔙 Volver a minijuegos", callback_data="game_menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

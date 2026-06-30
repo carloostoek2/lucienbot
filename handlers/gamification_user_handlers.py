@@ -72,7 +72,7 @@ async def show_transaction_history(callback: CallbackQuery):
     else:
         text = """🎩 <b>Lucien:</b>
 
-<i>Los movimientos de su moneda especial...</i>
+<i>Historial de sus besitos:</i>
 
 📋 <b>Últimas transacciones:</b>
 

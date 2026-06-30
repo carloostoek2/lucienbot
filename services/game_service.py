@@ -61,276 +61,157 @@ class GameService:
 
     MENU_TEMPLATES = {
         "title": [
-            "🎮 Los Juegos del Destino",
-            "🎮 El Salón de las Oportunidades",
-            "🎮 Donde la Fortuna Baila",
+            "🎮 Minijuegos",
         ],
         "subtitle": [
-            "Ah... pensé que podría verle esta noche.",
-            "Diana ha preparado entretenimientos para quienes saben encontrar placer en los rituales.",
-            "Los dados y el conocimiento aguardan su decisión...",
+            "Juegue y gane besitos. Límite diario por juego.",
         ],
         "dice_description": [
-            "🎲 Dados — el azar revela el carácter",
-            "🎲 Los dados del destino guardan secretos...",
-            "🎲 En cada tirada, la suerte se revela.",
+            "🎲 Dados: gane 1 besito con pares o dobles.",
         ],
         "trivia_description": [
-            "❓ Trivia — el conocimiento es poder",
-            "❓ El examen de Diana aguarda...",
-            "❓ Las preguntas revelan quienes realmente observan.",
+            "❓ Trivia: responda correctamente y gane besitos.",
         ],
         "trivia_vip_description": [
-            "🎩 Trivia VIP — solo para los más devotos",
-            "🎩 El Examen Secreto de Diana",
-            "🎩 Demuestra tu conocimiento íntimo",
+            "🎩 Trivia VIP: más besitos por respuesta correcta.",
         ],
         "footer": [
-            "Sus oportunidades de esta noche:",
-            "¿Cuál será su elección, visitante?",
-            "Lucien observa con interés...",
+            "Oportunidades restantes hoy:",
         ],
     }
 
     DICE_TEMPLATES = {
         "entry_title": [
-            "🎲 Los Dados del Destino",
-            "🎲 El Ritual de los Números",
-            "🎲 Donde la Fortuna Gira",
+            "🎲 Dados",
         ],
         "entry_intro": [
-            "Los dados guardan secretos antiguos...",
-            "En cada cara, un destino diferente.",
-            "La suerte es un lenguaje que pocos entienden.",
+            "Lance dos dados. Gane besitos si obtiene pares o dobles.",
         ],
         "rules": [
-            "• Pares (ambos pares): +1 besito 💋\n• Dobles (iguales): +1 besito 💋",
-            "• Dobles: la perfección se recompensa 💋\n• Pares: la armonía tiene su precio 💋",
-            "• Dos iguales: la fortuna sonríe 💋\n• Dos pares: el equilibrio premia 💋",
+            "• Ambos dados pares: +1 besito\n• Dados iguales (dobles): +1 besito",
         ],
         "win_doubles": [
-            "¡DOBLES! La perfección absoluta...",
-            "¡Los dados se alinean en su honor!",
-            "¡Un espejo de números! La suerte le abraza.",
+            "¡Dobles! +1 besito.",
         ],
         "win_pairs": [
-            "¡PARES! La armonía de los pares...",
-            "Los números pares bailan para usted...",
-            "¡La simetría de la fortuna le sonríe!",
+            "¡Pares! +1 besito.",
         ],
         "near_miss_consecutive": [
-            "<i>inhala lentamente</i>... <b>{dice1}</b> y <b>{dice2}</b>. Tan cerca que duele, ¿no cree?",
-            "Oh, la ironía... <b>{dice1}</b> y <b>{dice2}</b> son vecinos, pero el destino no permite visitas.",
-            "Casi, casi... <b>{dice1}</b> y <b>{dice2}</b> le susurran al oído: 'la próxima vez, quizás'.",
+            "{dice1} y {dice2}. Casi, pero no ganó.",
         ],
         "near_miss_seven": [
-            "Siete, el número de la fortuna... pero no para usted, al parecer.",
-            "La suma perfecta en una combinación imperfecta. La vida es así de graciosa.",
-            "Siete le susurra... 'hoy no es su día'.",
+            "Suma 7. No ganó esta vez.",
         ],
         "loss": [
-            "Hmm... <b>{dice1}</b> y <b>{dice2}</b>. El destino ha decidido ser discreto con usted. No se preocupe — Diana ha visto a sus favoritos perder muchas veces antes de que todo cambie.",
-            "<b>{dice1}</b> y <b>{dice2}</b>... Interesante. Lucien observa que la fortuna le está haciendo esperar. Quizás debería intentarlo de nuevo... o no.",
-            "<b>{dice1}</b> y <b>{dice2}</b>. Ah, la ironía del azar. Un momento desalentador, certamente, pero ¿quién sabe? Quizás mañana el destino sea más... generoso.",
+            "{dice1} y {dice2}. No ganó.",
         ],
         "limit_reached": [
-            "Ha usado todas sus jugadas de dados por hoy. Vuelva mañana.",
-            "Límite diario de dados alcanzado. Las jugadas se renuevan mañana.",
-            "No le quedan lanzamientos de dados hoy. Regrese mañana.",
+            "Usó todos los intentos de dados de hoy. Vuelva mañana.",
         ],
     }
 
     TRIVIA_TEMPLATES = {
         "entry_title": [
-            "❓ El Examen de Diana",
-            "❓ Las Preguntas del Conocimiento",
-            "❓ El Desafío de la Sabiduría",
+            "❓ Trivia",
         ],
         "entry_intro": [
-            "Diana observa quién realmente presta atención...",
-            "El conocimiento revela devoción verdadera.",
-            "Solo los atentos conocen las respuestas.",
+            "Responda correctamente para ganar 1 besito.",
         ],
         "counter": [
-            "Oportunidades restantes: {remaining} de {limit}",
-            "Le quedan {remaining} preguntas de {limit} hoy.",
-            "{remaining} de {limit} preguntas disponibles hoy.",
+            "Intentos restantes: {remaining} de {limit}",
         ],
         "correct": [
-            "🎩 <b>Lucien:</b>\n<i>¡Correcto! Diana asiente con aprobación...</i>",
-            "🎩 <b>Lucien:</b>\n<i>¡La respuesta exacta! Su atención no pasa desapercibida.</i>",
-            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría revelada! Ha demostrado su devoción.</i>",
+            "🎩 <b>Lucien:</b>\n¡Correcto! +1 besito.",
         ],
         "incorrect": [
-            "🎩 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana dice que equivocarse es inevitable. Lo revelador es cómo uno continúa después.</i>",
-            "🎩 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Lucien observa que incluso los más devotos pueden distraerse. Quizás debería prestar más atención...</i>",
-            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un momento humillante, ¿verdad? Pero no se preocupe — Diana ha perdonado errores peores.</i>",
+            "🎩 <b>Lucien:</b>\nIncorrecto.\nLa respuesta era: <b>{correct_answer}</b>",
         ],
         "streak_messages": {
-            2: ["🔥 Comienza a calentar...", "🔥 Diana nota su constancia..."],
-            3: [
-                "⚡ ¡Racha de {streak}! Su mente despierta...",
-                "⚡ {streak} correctas... impresionante.",
-            ],
-            5: [
-                "🌟 ¡Imparable! La sabiduría fluye en usted.",
-                "🌟 {streak} victorias... es un prodigio.",
-            ],
-            7: [
-                "🎩 ¡Una leyenda nace! {streak} aciertos.",
-                "🎩 Los dioses envidian su conocimiento.",
-            ],
-            10: [
-                "✨ ¡DIVINO! {streak} respuestas perfectas.",
-                "✨ Es uno con la sabiduría de Diana.",
-            ],
+            2: ["Racha: 2"],
+            3: ["Racha: 3"],
+            5: ["Racha: 5"],
+            7: ["Racha: 7"],
+            10: ["Racha: 10"],
         },
         "limit_reached": [
-            "Ha usado todas sus preguntas de trivia por hoy. Vuelva mañana.",
-            "Límite diario de trivia alcanzado. Nuevas preguntas mañana.",
-            "No le quedan preguntas de trivia hoy. Regrese mañana.",
+            "Usó todos los intentos de trivia de hoy. Vuelva mañana.",
         ],
         "cap_warning": [
-            "⚠️ Le quedan {remaining} besitos por ganar en trivia hoy.",
-            "⚠️ Cerca del tope de besitos: solo {remaining} más por ganar hoy.",
-            "⚠️ Atención: puede ganar {remaining} besitos más en trivia hoy.",
+            "⚠️ Puede ganar {remaining} besitos más en trivia hoy.",
         ],
         "cap_exhausted": [
-            "⏸️ Ha alcanzado el tope de besitos que puede ganar hoy en trivia. Puede seguir jugando si le interesa el conocimiento; vuelva mañana para más recompensas.",
-            "⏸️ Ya no puede ganar más besitos en trivia hoy. Puede seguir respondiendo preguntas; las recompensas se renuevan mañana.",
-            "⏸️ Tope de besitos de trivia alcanzado por hoy. Sin más besitos hasta mañana, pero puede seguir jugando.",
+            "⏸️ Alcanzó el tope de besitos de trivia por hoy. Puede seguir jugando, las recompensas se renuevan mañana.",
         ],
     }
 
     TRIVIA_VIP_TEMPLATES = {
         "entry_title": [
-            "🎩 El Examen Secreto de Diana",
-            "🎩 La Trivia que solo los iniciados conocen",
-            "🎩 Donde el conocimiento tiene recompensa mayor",
+            "🎩 Trivia VIP",
         ],
         "entry_intro": [
-            "Solo los verdaderamente devotos conocen estas respuestas...",
-            "Diana ha preparado preguntas especiales para sus favoritos.",
-            "El conocimiento íntimo se recompensa con generosidad.",
+            "Responda correctamente. +2 besitos por acierto.",
         ],
         "counter": [
-            "Oportunidades VIP restantes: {remaining} de {limit}",
-            "Le quedan {remaining} preguntas VIP de {limit} hoy.",
-            "{remaining} de {limit} preguntas VIP disponibles hoy.",
+            "Intentos VIP restantes: {remaining} de {limit}",
         ],
         "correct": [
-            "🎩 <b>Lucien:</b>\n<i>¡Impresionante! Diana está complacida...</i>",
-            "🎩 <b>Lucien:</b>\n<i>¡La respuesta perfecta! Su devoción es innegable.</i>",
-            "🎩 <b>Lucien:</b>\n<i>¡Sabiduría de élite! Diana asiente con admiración.</i>",
+            "🎩 <b>Lucien:</b>\n¡Correcto! +2 besitos.",
         ],
         "incorrect": [
-            "🎩 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso los más cercanos pueden fallar. Continúe intentándolo...</i>",
-            "🎩 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El camino del conocimiento íntimo requiere paciencia. Diana perdona el error.</i>",
-            "🎩 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un tropiezo, certamente. Pero el verdadero devoto se levanta.</i>",
+            "🎩 <b>Lucien:</b>\nIncorrecto.\nLa respuesta era: <b>{correct_answer}</b>",
         ],
         "streak_messages": {
-            2: ["🔥 Comienza a destacar entre los demás...", "🔥 Diana nota su dedicación VIP..."],
-            3: [
-                "⚡ ¡Racha de {streak}! Es verdaderamente especial.",
-                "⚡ {streak} correctas... hay quienes pagarían por este conocimiento.",
-            ],
-            5: [
-                "🌟 ¡Imparable! La aristocracia del conocimiento.",
-                "🌟 {streak} victorias... es usted crème de la crème.",
-            ],
-            7: [
-                "🎩 ¡LEYENDA! {streak} aciertos. Diana le observa con interés.",
-                "🎩 Los dioses del conocimiento palidecen ante usted.",
-            ],
-            10: [
-                "✨ ¡DIVINO! {streak} respuestas perfectas. Es parte del círculo íntimo.",
-                "✨ Ha alcanzado la iluminación de Diana.",
-            ],
+            2: ["Racha VIP: 2"],
+            3: ["Racha VIP: 3"],
+            5: ["Racha VIP: 5"],
+            7: ["Racha VIP: 7"],
+            10: ["Racha VIP: 10"],
         },
         "limit_reached": [
-            "Ha usado todas sus preguntas VIP por hoy. Vuelva mañana.",
-            "Límite diario de trivia VIP alcanzado. Nuevas preguntas mañana.",
-            "No le quedan preguntas VIP hoy. Regrese mañana.",
+            "Usó todos los intentos VIP de trivia de hoy. Vuelva mañana.",
         ],
         "cap_warning": [
-            "⚠️ Le quedan {remaining} besitos VIP por ganar en trivia hoy.",
-            "⚠️ Cerca del tope VIP: solo {remaining} besitos más por ganar hoy.",
-            "⚠️ Atención: puede ganar {remaining} besitos VIP más hoy.",
+            "⚠️ Puede ganar {remaining} besitos VIP más en trivia hoy.",
         ],
         "cap_exhausted": [
-            "⏸️ Ha alcanzado el tope de besitos VIP que puede ganar hoy. Puede seguir jugando; vuelva mañana para más recompensas.",
-            "⏸️ Ya no puede ganar más besitos VIP en trivia hoy. Puede seguir respondiendo; las recompensas se renuevan mañana.",
-            "⏸️ Tope de besitos VIP alcanzado por hoy. Sin más besitos hasta mañana, pero puede seguir jugando.",
+            "⏸️ Tope de besitos VIP alcanzado por hoy. Puede seguir jugando; recompensas se renuevan mañana.",
         ],
     }
 
     TRIVIA_SIMPLE_TEMPLATES = {
         "entry_title": [
-            "\U0001f3ad La Trivia Especial de Diana",
-            "\U0001f3ad El Desafío del Momento",
-            "\U0001f3ad Donde el Conocimiento se Viste de Ocasion",
+            "🎭 Trivia especial",
         ],
         "entry_intro": [
-            "Diana ha preparado un desafio especial para esta ocasion...",
-            "Una dinamica especial aguarda a quienes prestan atencion.",
-            "El conocimiento especial revela devotos verdaderos.",
+            "Preguntas de la categoría actual. Gane besitos por aciertos.",
         ],
         "counter": [
-            "Oportunidades restantes: {remaining} de {limit}",
-            "Tiene {remaining} oportunidades de {limit} disponibles...",
-            "{remaining} de {limit} intentos especiales aguardan.",
+            "Intentos restantes: {remaining} de {limit}",
         ],
         "correct": [
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Respuesta correcta! El momento le favorece...</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Exacto! Diana aprecia su conocimiento.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>¡Perfecto! Ha demostrado dominio.</i>",
+            "🎩 <b>Lucien:</b>\n¡Correcto! +1 besito.",
         ],
         "incorrect": [
-            "\U0001f3a9 <b>Lucien:</b>\n<i>Ah... No exactamente.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>Diana observa que incluso en momentos especiales se puede errar.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>Hmm... No.</i>\n\nLa respuesta era: <b>{correct_answer}</b>\n\n<i>El conocimiento especial requiere dedicacion.</i>",
-            "\U0001f3a9 <b>Lucien:</b>\n<i>No...</i>\n\nLa respuesta correcta era: <b>{correct_answer}</b>\n\n<i>Un error, pero el momento siempre ensena algo.</i>",
+            "🎩 <b>Lucien:</b>\nIncorrecto.\nLa respuesta era: <b>{correct_answer}</b>",
         ],
         "streak_messages": {
-            2: [
-                "\U0001f525 La racha comienza a revelarse...",
-                "\U0001f525 Diana nota su interes...",
-            ],
-            3: [
-                "⚡ ¡Racha de {streak}! El conocimiento fluye.",
-                "⚡ {streak} aciertos... admirable.",
-            ],
-            5: [
-                "\U0001f31f ¡Experto! {streak} respuestas perfectas.",
-                "\U0001f31f El momento se rinde ante su sabiduria.",
-            ],
-            7: [
-                "\U0001f3a9 ¡Maestro! {streak} aciertos.",
-                "\U0001f3a9 Los espiritus del momento le observan con respeto.",
-            ],
-            10: [
-                "✨ ¡LEYENDA! {streak} respuestas perfectas.",
-                "✨ Es uno con la esencia del momento.",
-            ],
+            2: ["Racha: 2"],
+            3: ["Racha: 3"],
+            5: ["Racha: 5"],
+            7: ["Racha: 7"],
+            10: ["Racha: 10"],
         },
         "limit_reached": [
-            "Ha usado todas sus jugadas de trivia especial por hoy. Vuelva mañana.",
-            "Límite diario de trivia especial alcanzado. Nuevas jugadas mañana.",
-            "No le quedan jugadas de trivia especial hoy. Regrese mañana.",
+            "Usó todos los intentos de trivia especial de hoy. Vuelva mañana.",
         ],
         "deck_exhausted": [
             "Ya respondió todas las preguntas de esta categoría hoy. Vuelva mañana.",
-            "No hay más preguntas nuevas en esta dinámica hoy. Regrese mañana.",
-            "Completó el mazo de preguntas de hoy. Nuevas preguntas mañana.",
         ],
         "cap_warning": [
-            "⚠️ Le quedan {remaining} besitos por ganar en trivia especial hoy.",
-            "⚠️ Cerca del tope especial: solo {remaining} besitos más por ganar hoy.",
-            "⚠️ Atención: puede ganar {remaining} besitos más en trivia especial hoy.",
+            "⚠️ Puede ganar {remaining} besitos más en trivia especial hoy.",
         ],
         "cap_exhausted": [
-            "⏸️ Ha alcanzado el tope de besitos que puede ganar hoy en trivia especial. Puede seguir jugando; vuelva mañana para más recompensas.",
-            "⏸️ Ya no puede ganar más besitos en trivia especial hoy. Puede seguir respondiendo; las recompensas se renuevan mañana.",
-            "⏸️ Tope de besitos de trivia especial alcanzado por hoy. Sin más besitos hasta mañana, pero puede seguir jugando.",
+            "⏸️ Tope de besitos de trivia especial alcanzado por hoy. Puede seguir jugando; recompensas mañana.",
         ],
     }
 

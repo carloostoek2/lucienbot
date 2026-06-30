@@ -41,6 +41,7 @@ handlers/
 ├── reward_admin_handlers.py     # [RewardWizardStates, PackageFromRewardStates]
 ├── store_user_handlers.py
 ├── store_admin_handlers.py      # [ProductWizardStates]
+├── game_user_handlers.py        # Minijuegos (dados, trivia) - copy directo post-2026
 ├── promotion_user_handlers.py
 ├── promotion_admin_handlers.py  # [PromotionWizardStates, BlockUserStates]
 ├── story_user_handlers.py      # [ArchetypeQuizStates]
@@ -54,6 +55,8 @@ handlers/
 2. **SIN lógica** de negocio
 3. **SIN acceso** directo a DB
 4. **Logging** de eventos recibidos (estándar "módulo | acción | user_id | resultado") - enforced via GSD/hygiene
+
+**Nota copy UI (tienda + minijuegos):** store_user_handlers y game_user_handlers delegan textos a LucienVoice / service templates. Desde 2026 usan lenguaje directo para instrucciones/acciones (ver root CLAUDE "Voz de Lucien" + docs/guia-estilo).
 
 **Hardener-enforced (tirones 25-34 / Items 7-11 + pool33):** puros (verb+context+result, "Función pura...", <=50 LOC via inspect) for long admin wizards; integration style (real svc + class patch in tests for user flows); 1:1 UI; get_service ctx manager. Refs: 27/28/29/33/34 SUMMARIES + HARDENING_ROADMAP + decisions Items.
 
