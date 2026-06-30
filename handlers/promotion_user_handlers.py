@@ -225,21 +225,20 @@ async def express_interest(callback: CallbackQuery, callback_data: OfferInterest
         # Notificar a todos los administradores
         await notify_admins_about_interest(bot, interest, promo)
 
-        # Mostrar confirmacion al usuario con link a Diana
-        creator_username = getattr(bot_config, "CREATOR_USERNAME", None)
+        # Mostrar confirmacion al usuario con link a Diana (mensaje predefinido)
+        creator_contact_url = getattr(bot_config, "CREATOR_CONTACT_URL", None)
 
         keyboard_buttons = [
             [InlineKeyboardButton(text="🔙 Volver al Gabinete", callback_data="offers_catalog")],
             [InlineKeyboardButton(text="🏠 Menu principal", callback_data="back_to_main")],
         ]
 
-        # Agregar boton de contacto si hay username configurado
-        if creator_username:
+        if creator_contact_url:
             keyboard_buttons.insert(
                 0,
                 [
                     InlineKeyboardButton(
-                        text="💬 Contactar a Diana", url=f"https://t.me/{creator_username}"
+                        text="💬 Contactar a Diana", url=creator_contact_url
                     )
                 ],
             )

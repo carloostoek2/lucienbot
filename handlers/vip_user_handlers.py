@@ -283,19 +283,19 @@ async def express_vip_promo_interest(
         # Mostrar confirmación
         from config.settings import bot_config
 
-        creator_username = getattr(bot_config, "CREATOR_USERNAME", None)
+        creator_contact_url = getattr(bot_config, "CREATOR_CONTACT_URL", None)
 
         keyboard_buttons = [
             [InlineKeyboardButton(text="🔙 Volver al Mapa", callback_data="vip_map_of_desire")],
             [InlineKeyboardButton(text="🏠 El Diván", callback_data="vip_area")],
         ]
 
-        if creator_username:
+        if creator_contact_url:
             keyboard_buttons.insert(
                 0,
                 [
                     InlineKeyboardButton(
-                        text="💬 Contactar a Diana", url=f"https://t.me/{creator_username}"
+                        text="💬 Contactar a Diana", url=creator_contact_url
                     )
                 ],
             )

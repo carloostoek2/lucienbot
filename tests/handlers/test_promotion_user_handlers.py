@@ -375,7 +375,7 @@ class TestExpressInterest:
     async def test_successful_interest_with_creator(
         self, mock_config, mock_get_service, mock_notify, make_callback
     ):
-        """Interes exitoso con CREATOR_USERNAME configurado."""
+        """Interes exitoso con CREATOR_CONTACT_URL configurado."""
         mock_interest = MagicMock()
         mock_interest.id = 1
         mock_interest.username = "testuser"
@@ -389,7 +389,8 @@ class TestExpressInterest:
         mock_promo_svc.has_user_expressed_interest.return_value = False
         mock_promo_svc.express_interest.return_value = (True, "OK", mock_interest)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_config.CREATOR_USERNAME = "dianita"
+        contact_url = "https://t.me/m/IWlppkCUMGZh"
+        mock_config.CREATOR_CONTACT_URL = contact_url
 
         cb = make_callback(data="offer_interest:1")
         bot = AsyncMock()
@@ -402,8 +403,12 @@ class TestExpressInterest:
         mock_notify.assert_called_once_with(bot, mock_interest, mock_promo)
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
+        keyboard = cb.message.edit_text.call_args.kwargs["reply_markup"]
+        contact_button = keyboard.inline_keyboard[0][0]
         assert "Coleccion Primavera" in text
         assert "registrado" in text.lower()
+        assert contact_button.url == contact_url
+        assert "Contactar a Diana" in contact_button.text
         cb.answer.assert_called_once_with("Interes registrado")
 
     @patch("handlers.promotion_user_handlers.notify_admins_about_interest")
@@ -412,7 +417,7 @@ class TestExpressInterest:
     async def test_successful_interest_no_creator(
         self, mock_config, mock_get_service, mock_notify, make_callback
     ):
-        """Sin CREATOR_USERNAME, no muestra boton de contacto."""
+        """Sin CREATOR_CONTACT_URL, no muestra boton de contacto."""
         mock_interest = MagicMock()
         mock_interest.id = 1
         mock_interest.username = "testuser"
@@ -426,7 +431,7 @@ class TestExpressInterest:
         mock_promo_svc.has_user_expressed_interest.return_value = False
         mock_promo_svc.express_interest.return_value = (True, "OK", mock_interest)
         mock_promo_svc.get_promotion.return_value = mock_promo
-        mock_config.CREATOR_USERNAME = ""
+        mock_config.CREATOR_CONTACT_URL = ""
 
         cb = make_callback(data="offer_interest:1")
         bot = AsyncMock()
@@ -437,7 +442,10 @@ class TestExpressInterest:
         await express_interest(cb, OfferInterestCallback(promo_id=1), bot)
 
         text = cb.message.edit_text.call_args[0][0]
+        keyboard = cb.message.edit_text.call_args.kwargs["reply_markup"]
+        button_texts = [btn.text for row in keyboard.inline_keyboard for btn in row]
         assert "Contactar" not in text
+        assert "Contactar a Diana" not in button_texts
         mock_notify.assert_called_once()
 
     @patch("handlers.promotion_user_handlers.notify_admins_about_interest")

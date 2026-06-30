@@ -15,7 +15,7 @@ class BotConfig:
     ADMIN_IDS: list = None
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///lucien_bot.db")
     TIMEZONE: str = os.getenv("TIMEZONE", "America/Mexico_City")
-    CREATOR_USERNAME: str = os.getenv("CREATOR_USERNAME", "")
+    CREATOR_CONTACT_URL: str = os.getenv("CREATOR_CONTACT_URL", "")
 
     def __post_init__(self):
         admin_ids_str = os.getenv("ADMIN_IDS", "")
