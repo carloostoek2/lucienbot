@@ -661,3 +661,97 @@ class TestCapTierErrorBranchesIntegration:
         # Tier locked message from LucienVoice.store_tier_locked
         assert "adquiera" in str(call).lower() or "nivel" in str(call).lower() or call.kwargs.get("show_alert") is True
 
+
+class TestStorePreviewIntegration:
+    """Integración real (DB + svc + handler) para regla: 1 archivo => deshabilita preview automáticamente."""
+
+    async def test_detail_ctx_and_no_preview_button_for_single_file_product(
+        self, db_session, make_callback, make_user
+    ):
+        """Paquete con exactamente 1 archivo: can_preview=False + botón ausente en UI detalle."""
+        from models.models import Package, StoreProduct, User, UserRole
+        from services.package_service import PackageService
+        from services.store_service import StoreService
+        from unittest.mock import patch
+        from keyboards.callback_data import ProductDetailCallback
+        from handlers.store_user_handlers import product_detail
+
+        user = User(telegram_id=777006001, username="f1prev", first_name="F", role=UserRole.USER)
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+        pkg = Package(name="SingleFilePkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+
+        prod = StoreProduct(name="SingleFileProd", price=50, stock=-1, package_id=pkg.id, is_active=True)
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+
+        PackageService(db_session).add_file_to_package(pkg.id, "fonly1", "photo")
+        db_session.commit()
+
+        real_svc = StoreService(db_session)
+        ctx = real_svc.get_product_detail_context(prod.id, user.telegram_id)
+        assert ctx["file_count"] == 1
+        assert ctx.get("can_preview") is False
+
+        tg_user = make_user(user_id=user.telegram_id)
+        with patch("handlers.store_user_handlers.StoreService") as mock_cls:
+            mock_cls.return_value = real_svc
+            cb = make_callback(data=f"product_detail:{prod.id}", user=tg_user)
+            await product_detail(cb, callback_data=ProductDetailCallback(product_id=prod.id))
+
+        markup = cb.message.edit_text.call_args[1].get("reply_markup")
+        texts = [btn.text for row in markup.inline_keyboard for btn in row]
+        assert not any("vista previa" in (t or "").lower() or "👁️" in (t or "") for t in texts)
+
+    async def test_preview_cb_for_single_file_product_shows_alert_and_no_media(
+        self, db_session, make_callback, make_user
+    ):
+        """1 archivo: cb preview => alerta 'no tiene vista previa' (show_alert) + sin envío."""
+        from models.models import Package, StoreProduct, User, UserRole
+        from services.package_service import PackageService
+        from services.store_service import StoreService
+        from unittest.mock import patch, AsyncMock
+        from keyboards.callback_data import ProductPreviewCallback
+        from handlers.store_user_handlers import product_preview
+
+        user = User(telegram_id=777006002, username="f1cb", first_name="C", role=UserRole.USER)
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+        pkg = Package(name="SinglePrevCbPkg", is_active=True)
+        db_session.add(pkg)
+        db_session.commit()
+        db_session.refresh(pkg)
+
+        prod = StoreProduct(name="SinglePrevCbProd", price=99, stock=5, package_id=pkg.id, is_active=True)
+        db_session.add(prod)
+        db_session.commit()
+        db_session.refresh(prod)
+
+        PackageService(db_session).add_file_to_package(pkg.id, "fsinglecb", "photo")
+        db_session.commit()
+
+        real_svc = StoreService(db_session)
+        tg_user = make_user(user_id=user.telegram_id)
+
+        with patch("handlers.store_user_handlers.StoreService") as mock_cls:
+            mock_cls.return_value = real_svc
+            cb = make_callback(data=f"product_preview:{prod.id}", user=tg_user)
+            cb.message.answer_photo = AsyncMock()
+            cb.message.answer_video = AsyncMock()
+            await product_preview(cb, callback_data=ProductPreviewCallback(product_id=prod.id))
+
+        cb.answer.assert_called()
+        args, kw = cb.answer.call_args
+        assert "no tiene vista previa" in (args[0] if args else "").lower()
+        assert kw.get("show_alert") is True
+        cb.message.answer_photo.assert_not_called()
+        cb.message.answer_video.assert_not_called()
+

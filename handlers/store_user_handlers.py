@@ -364,7 +364,8 @@ async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCa
         if not ctx:
             await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
             return
-    text, buttons = _product_detail_card_and_buttons(ctx)
+    can_preview = ctx.get("can_preview", False)
+    text, buttons = _product_detail_card_and_buttons(ctx, include_preview=can_preview)
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -380,6 +381,9 @@ async def product_preview(callback: CallbackQuery, callback_data: ProductPreview
         ctx = store_service.get_product_detail_context(product_id, callback.from_user.id)
         if not ctx:
             await callback.answer(LucienVoice.store_product_not_found(), show_alert=True)
+            return
+        if not ctx.get("can_preview", False):
+            await callback.answer(LucienVoice.store_no_preview(), show_alert=True)
             return
         preview_files = store_service.get_preview_files_for_product(product_id, limit=1)
     if preview_files:

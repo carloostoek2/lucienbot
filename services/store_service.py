@@ -591,7 +591,11 @@ class StoreService:
         return BesitoService(db=self.db).get_balance(user_id)
 
     def get_product_preview_context(self, product_id: int) -> dict:
-        """Thin delegate: contexto de preview (file_count, can_preview)."""
+        """Thin delegate: contexto de preview (file_count, can_preview).
+
+        can_preview=True solo si >1 archivos. Si hay 1 solo archivo, preview
+        enviaría el producto completo gratis → se deshabilita automáticamente.
+        """
         product = self.get_product(product_id)
         if not product or not product.package_id:
             return {"file_count": 0, "can_preview": False}
@@ -599,7 +603,8 @@ class StoreService:
         if not pkg:
             return {"file_count": 0, "can_preview": False}
         files = self.package_service.get_package_files(product.package_id)
-        return {"file_count": len(files), "can_preview": len(files) > 0}
+        count = len(files)
+        return {"file_count": count, "can_preview": count > 1}
 
     def get_categories_for_shop(self, active_only: bool = True) -> list:
         """Categorías activas que tienen al menos un producto visible en tienda."""

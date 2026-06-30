@@ -1821,6 +1821,11 @@ Resultados para «{safe_query}»:
         return "Vista previa enviada."
 
     @staticmethod
+    def store_no_preview() -> str:
+        """Mensaje cuando el producto tiene 1 (o 0) archivo: no se ofrece ni permite preview."""
+        return "Este producto no tiene vista previa."
+
+    @staticmethod
     def store_purchase_success_alert() -> str:
         return "Compra realizada."
 
