@@ -10,6 +10,7 @@ from keyboards.callback_data import (
     FulfillmentAdminItemCallback,
     FulfillmentAdminMarkCallback,
     FulfillmentAdminQueueCallback,
+    AdminStoreTierCallback,
     StoreTierCallback,
 )
 
@@ -20,6 +21,11 @@ class TestStoreFulfillmentCallbackData:
         raw = StoreTierCallback(tier_id=3).pack()
         parsed = StoreTierCallback.unpack(raw)
         assert parsed.tier_id == 3
+
+    def test_admin_store_tier_callback_roundtrip(self):
+        raw = AdminStoreTierCallback(tier_id=5).pack()
+        parsed = AdminStoreTierCallback.unpack(raw)
+        assert parsed.tier_id == 5
 
     def test_fulfillment_admin_queue_roundtrip(self):
         raw = FulfillmentAdminQueueCallback(status="pending_input").pack()

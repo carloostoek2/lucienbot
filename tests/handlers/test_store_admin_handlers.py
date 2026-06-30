@@ -4,7 +4,8 @@ Tests unitarios para store_admin_handlers.
 Cubre handlers del panel de administración de tienda:
 - AdminStoreMenu: resumen y alertas de stock
 - CreateProductWizard: FSM de 5 pasos + confirmación
-- ListProducts: listado de todos los productos
+- ListProducts: menú de niveles con conteo
+- AdminListTierProducts: productos filtrados por nivel
 - ToggleProduct: activar/desactivar producto
 - HandleDeleteProduct: confirmación y eliminación
 - StoreStats: estadísticas de tienda
@@ -548,13 +549,14 @@ class TestConfirmCreateProduct:
 
 
 class TestListProducts:
-    """Tests para list_products — listado de todos los productos."""
+    """Tests para list_products — menú de niveles con conteo."""
 
     @patch("handlers.store_admin_handlers.get_service")
     async def test_shows_empty_message_when_no_products(self, mock_get_service, make_callback):
-        """Cuando no hay productos, muestra mensaje vacío."""
+        """Cuando no hay tiers ni productos, muestra mensaje vacío."""
         mock_store = _mock_store_admin_ctx(mock_get_service)
-        mock_store.get_all_products.return_value = []
+        mock_store.get_all_tiers.return_value = []
+        mock_store.count_products_without_tier.return_value = 0
 
         cb = make_callback(data="list_products")
 
@@ -568,24 +570,22 @@ class TestListProducts:
         cb.answer.assert_called_once()
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_lists_products_with_status(self, mock_get_service, make_callback):
-        """Muestra productos con su estado y stock."""
-        mock_prod_active = model_mock(StoreProduct)
-        mock_prod_active.name = "Producto Activo"
-        mock_prod_active.is_active = True
-        mock_prod_active.stock = -1
-        mock_prod_active.is_low_stock = False
-        mock_prod_active.price = 100
-
-        mock_prod_inactive = model_mock(StoreProduct)
-        mock_prod_inactive.name = "Producto Inactivo"
-        mock_prod_inactive.is_active = False
-        mock_prod_inactive.stock = 0
-        mock_prod_inactive.is_low_stock = False
-        mock_prod_inactive.price = 50
+    async def test_shows_tier_menu_with_product_counts(self, mock_get_service, make_callback):
+        """Muestra niveles con nombre y conteo en cada botón."""
+        tier_impulso = model_mock(StoreTier)
+        tier_impulso.id = 1
+        tier_impulso.name = "IMPULSO"
+        tier_deseo = model_mock(StoreTier)
+        tier_deseo.id = 2
+        tier_deseo.name = "DESEO"
 
         mock_store = _mock_store_admin_ctx(mock_get_service)
-        mock_store.get_all_products.return_value = [mock_prod_active, mock_prod_inactive]
+        mock_store.get_all_tiers.return_value = [tier_impulso, tier_deseo]
+        mock_store.count_products_without_tier.return_value = 0
+        mock_store.count_products_by_tier.side_effect = lambda tid, active_only=False: {
+            1: 3,
+            2: 7,
+        }[tid]
 
         cb = make_callback(data="list_products")
 
@@ -594,19 +594,20 @@ class TestListProducts:
         await list_products(cb)
 
         cb.message.edit_text.assert_called_once()
-        text = cb.message.edit_text.call_args[0][0]
-        assert "Producto Activo" in text
-        assert "Producto Inactivo" in text
-        assert "100" in text
+        kb = cb.message.edit_text.call_args[1]["reply_markup"]
+        button_texts = [row[0].text for row in kb.inline_keyboard[:-1]]
+        assert "IMPULSO (3)" in button_texts
+        assert "DESEO (7)" in button_texts
         cb.answer.assert_called_once()
 
     @patch("handlers.store_admin_handlers.get_service")
-    async def test_calls_get_all_products_with_active_only_false(
+    async def test_shows_sin_nivel_when_orphan_products_exist(
         self, mock_get_service, make_callback
     ):
-        """Llama a get_all_products(active_only=False)."""
+        """Incluye botón Sin nivel si hay productos sin tier."""
         mock_store = _mock_store_admin_ctx(mock_get_service)
-        mock_store.get_all_products.return_value = []
+        mock_store.get_all_tiers.return_value = []
+        mock_store.count_products_without_tier.return_value = 2
 
         cb = make_callback(data="list_products")
 
@@ -614,7 +615,79 @@ class TestListProducts:
 
         await list_products(cb)
 
-        mock_store.get_all_products.assert_called_once_with(active_only=False)
+        kb = cb.message.edit_text.call_args[1]["reply_markup"]
+        button_texts = [row[0].text for row in kb.inline_keyboard[:-1]]
+        assert "Sin nivel (2)" in button_texts
+
+
+class TestAdminListTierProducts:
+    """Tests para admin_list_tier_products — productos filtrados por nivel."""
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_lists_tier_products_only(self, mock_get_service, make_callback):
+        """Muestra solo productos del tier seleccionado."""
+        tier = model_mock(StoreTier)
+        tier.id = 2
+        tier.name = "DESEO"
+
+        mock_prod = model_mock(StoreProduct)
+        mock_prod.id = 10
+        mock_prod.name = "Producto Tier 2"
+        mock_prod.is_active = True
+        mock_prod.stock = 5
+        mock_prod.is_low_stock = False
+        mock_prod.price = 150
+
+        mock_store = _mock_store_admin_ctx(mock_get_service)
+        mock_store.get_all_tiers.return_value = [tier]
+        mock_store.get_products_by_tier.return_value = [mock_prod]
+
+        from keyboards.callback_data import AdminStoreTierCallback
+        from handlers.store_admin_handlers import admin_list_tier_products
+
+        cb = make_callback(data=AdminStoreTierCallback(tier_id=2).pack())
+        await admin_list_tier_products(cb, AdminStoreTierCallback(tier_id=2))
+
+        mock_store.get_products_by_tier.assert_called_once_with(2, active_only=False)
+        text = cb.message.edit_text.call_args[0][0]
+        assert "DESEO" in text
+        assert "Producto Tier 2" in text
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_tier_not_found_shows_alert(self, mock_get_service, make_callback):
+        """Tier inexistente muestra alerta."""
+        mock_store = _mock_store_admin_ctx(mock_get_service)
+        mock_store.get_all_tiers.return_value = []
+
+        from keyboards.callback_data import AdminStoreTierCallback
+        from handlers.store_admin_handlers import admin_list_tier_products
+
+        cb = make_callback(data=AdminStoreTierCallback(tier_id=99).pack())
+        await admin_list_tier_products(cb, AdminStoreTierCallback(tier_id=99))
+
+        cb.answer.assert_called_once()
+        assert cb.answer.call_args[1].get("show_alert") is True
+
+    @patch("handlers.store_admin_handlers.get_service")
+    async def test_empty_tier_shows_no_products_message(self, mock_get_service, make_callback):
+        """Tier sin productos muestra mensaje dedicado."""
+        tier = model_mock(StoreTier)
+        tier.id = 1
+        tier.name = "IMPULSO"
+
+        mock_store = _mock_store_admin_ctx(mock_get_service)
+        mock_store.get_all_tiers.return_value = [tier]
+        mock_store.get_products_by_tier.return_value = []
+
+        from keyboards.callback_data import AdminStoreTierCallback
+        from handlers.store_admin_handlers import admin_list_tier_products
+
+        cb = make_callback(data=AdminStoreTierCallback(tier_id=1).pack())
+        await admin_list_tier_products(cb, AdminStoreTierCallback(tier_id=1))
+
+        text = cb.message.edit_text.call_args[0][0]
+        assert "IMPULSO" in text
+        assert "No hay productos" in text
 
 
 class TestToggleProduct:
@@ -896,6 +969,25 @@ class TestStoreAdminPureHelpers:
         assert "42" in kb.inline_keyboard[1][0].callback_data  # packed contains id
         assert "Reabastecer" in kb.inline_keyboard[2][0].text
         assert "list_products" in kb.inline_keyboard[5][0].callback_data
+
+    def test_build_product_detail_keyboard_back_to_tier(self):
+        from handlers.store_admin_handlers import build_product_detail_keyboard
+        from keyboards.callback_data import AdminStoreTierCallback
+
+        kb = build_product_detail_keyboard(42, is_active=True, tier_id=3)
+        assert AdminStoreTierCallback(tier_id=3).pack() in kb.inline_keyboard[5][0].callback_data
+
+    def test_build_admin_tier_menu_text_and_buttons(self):
+        from handlers.store_admin_handlers import build_admin_tier_menu_text_and_buttons
+
+        tier = model_mock(StoreTier)
+        tier.id = 1
+        tier.name = "IMPULSO"
+        text, buttons = build_admin_tier_menu_text_and_buttons([(tier, 4)], sin_nivel_count=2)
+        assert "Gabinete" in text
+        assert buttons[0][0].text == "IMPULSO (4)"
+        assert buttons[1][0].text == "Sin nivel (2)"
+        assert buttons[2][0].callback_data == "admin_store"
 
     def test_build_product_edit_menu_text(self):
         from handlers.store_admin_handlers import build_product_edit_menu_text

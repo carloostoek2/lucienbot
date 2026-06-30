@@ -1600,6 +1600,34 @@ class TestStorePurchaseAtomicGold:
         finally:
             service.close()
 
+    def test_count_products_by_tier_includes_inactive(self, db_session):
+        tier = StoreTier(slug="cnt", name="COUNT", price_min=10, price_max=20, order_index=1)
+        db_session.add(tier)
+        db_session.commit()
+        db_session.refresh(tier)
+        active = StoreProduct(name="Active", tier_id=tier.id, price=10, is_active=True)
+        inactive = StoreProduct(name="Inactive", tier_id=tier.id, price=10, is_active=False)
+        db_session.add_all([active, inactive])
+        db_session.commit()
+        service = StoreService(db_session)
+        try:
+            assert service.count_products_by_tier(tier.id, active_only=False) == 2
+            assert service.count_products_by_tier(tier.id, active_only=True) == 1
+        finally:
+            service.close()
+
+    def test_get_products_without_tier(self, db_session):
+        orphan = StoreProduct(name="Orphan", tier_id=None, price=10, is_active=True)
+        db_session.add(orphan)
+        db_session.commit()
+        service = StoreService(db_session)
+        try:
+            assert service.count_products_without_tier(active_only=False) == 1
+            products = service.get_products_without_tier(active_only=False)
+            assert [p.name for p in products] == ["Orphan"]
+        finally:
+            service.close()
+
     def test_get_tiers_for_shop_only_with_products(self, db_session):
         empty_tier = StoreTier(
             slug="empty", name="EMPTY", price_min=1, price_max=2, order_index=0, is_active=True

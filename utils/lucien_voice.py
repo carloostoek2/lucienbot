@@ -1190,6 +1190,31 @@ organizado por el peso del deseo…</i>
 Seleccione un nivel para explorar."""
 
     @staticmethod
+    def store_admin_tier_menu_intro() -> str:
+        return """🎩 <b>Lucien:</b>
+
+<i>El inventario del Gabinete aguarda su custodia,
+ordenado por el peso del deseo…</i>
+
+Seleccione un nivel para revisar sus piezas."""
+
+    @staticmethod
+    def store_admin_tier_button(name: str, product_count: int) -> str:
+        return f"{name} ({product_count})"
+
+    @staticmethod
+    def store_admin_tier_products_header(tier_name: str) -> str:
+        return f"🎩 <b>Lucien:</b>\n\n<b>Nivel {tier_name}</b>\n\nProductos registrados:\n\n"
+
+    @staticmethod
+    def store_admin_tier_no_products(tier_name: str) -> str:
+        return f"🎩 <b>Lucien:</b>\n\nNo hay productos en el nivel <b>{tier_name}</b>."
+
+    @staticmethod
+    def store_admin_tier_not_found() -> str:
+        return "Nivel no encontrado."
+
+    @staticmethod
     def store_tier_intro_for_slug(slug: str) -> str:
         intros = {
             "impulso": "Curiosidad al alcance de la mano… piezas para quien no puede resistir.",

@@ -14,6 +14,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from handlers.states.package_states import PackageWizardStates
 from keyboards.callback_data import (
+    AdminStoreTierCallback,
     CancelPackageWizardCallback,
     ConfigStockAlertCallback,
     CreatePkgForProductCallback,
@@ -97,7 +98,16 @@ def compute_restock_new_stock(current_stock: int, amount: int) -> int:
     return base + amount
 
 
-def build_product_detail_keyboard(product_id: int, is_active: bool) -> InlineKeyboardMarkup:
+def _admin_product_list_back_callback(tier_id: int = 0) -> str:
+    """Callback de retorno desde detalle admin (tier específico o menú de niveles). Función pura."""
+    if tier_id:
+        return AdminStoreTierCallback(tier_id=tier_id).pack()
+    return "list_products"
+
+
+def build_product_detail_keyboard(
+    product_id: int, is_active: bool, tier_id: int = 0
+) -> InlineKeyboardMarkup:
     """Construye el teclado para detalle de producto admin (edit/toggle/restock/config/delete/back). Función pura."""
     buttons = [
         [
@@ -130,9 +140,37 @@ def build_product_detail_keyboard(product_id: int, is_active: bool) -> InlineKey
                 callback_data=DeleteProductCallback(product_id=product_id).pack(),
             )
         ],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")],
+        [
+            InlineKeyboardButton(
+                text="🔙 Volver",
+                callback_data=_admin_product_list_back_callback(tier_id),
+            )
+        ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_admin_tier_menu_button(tier_name: str, product_count: int, tier_id: int) -> InlineKeyboardButton:
+    """Botón de nivel admin con conteo de productos. Función pura."""
+    return InlineKeyboardButton(
+        text=LucienVoice.store_admin_tier_button(tier_name, product_count),
+        callback_data=AdminStoreTierCallback(tier_id=tier_id).pack(),
+    )
+
+
+def build_admin_tier_menu_text_and_buttons(
+    tiers_with_counts: list[tuple],
+    sin_nivel_count: int = 0,
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
+    """Menú admin de niveles con conteo por botón. Función pura."""
+    text = LucienVoice.store_admin_tier_menu_intro()
+    buttons: list[list[InlineKeyboardButton]] = []
+    for tier, count in tiers_with_counts:
+        buttons.append([build_admin_tier_menu_button(tier.name, count, tier.id)])
+    if sin_nivel_count > 0:
+        buttons.append([build_admin_tier_menu_button("Sin nivel", sin_nivel_count, 0)])
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
+    return text, buttons
 
 
 def build_stock_alerts_text_and_buttons(
@@ -180,19 +218,25 @@ def _product_tier_label(product) -> str:
     return tier.name if tier else "Sin nivel"
 
 
-def build_product_list_entry_and_button(product) -> tuple[str, list[InlineKeyboardButton]]:
-    """Construye entrada de texto y botón para un producto en lista admin (status + stock emoji via pure + price + detail cb + trunc). Función pura."""
+def build_product_list_entry_and_button(
+    product, *, tier_id: int = 0, show_tier: bool = True
+) -> tuple[str, list[InlineKeyboardButton]]:
+    """Construye entrada de texto y botón para un producto en lista admin. Función pura."""
     status = "✅" if product.is_active else "❌"
     emoji, stock_text = compute_stock_emoji_and_text(product.stock, product.is_low_stock)
-    tier_label = _product_tier_label(product)
+    tier_part = ""
+    if show_tier:
+        tier_part = f"✨ {_product_tier_label(product)} | "
     entry = (
         f"{status} {product.name}\n"
-        f"   ✨ {tier_label} | {emoji} Stock: {stock_text} | 💰 {product.price} besitos\n\n"
+        f"   {tier_part}{emoji} Stock: {stock_text} | 💰 {product.price} besitos\n\n"
     )
     button = [
         InlineKeyboardButton(
             text=f"{status} {product.name[:30]}",
-            callback_data=ProductAdminDetailCallback(product_id=product.id).pack(),
+            callback_data=ProductAdminDetailCallback(
+                product_id=product.id, tier_id=tier_id
+            ).pack(),
         )
     ]
     return entry, button
@@ -1302,14 +1346,21 @@ async def confirm_create_product(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "list_products", lambda cb: is_admin(cb.from_user.id))
 async def list_products(callback: CallbackQuery):
-    """Lista todos los productos"""
+    """Menú de niveles con conteo de productos por tier."""
     with get_service(StoreService) as store_service:
-        products = store_service.get_all_products(active_only=False)
+        tiers = store_service.get_all_tiers(active_only=False)
+        sin_nivel_count = store_service.count_products_without_tier(active_only=False)
+        tiers_with_counts = [
+            (tier, store_service.count_products_by_tier(tier.id, active_only=False))
+            for tier in tiers
+        ]
+        total_products = sin_nivel_count + sum(count for _, count in tiers_with_counts)
         logger.info(
-            f"store_admin_handlers | list_products | user_id={callback.from_user.id} | count={len(products)}"
+            f"store_admin_handlers | list_products | user_id={callback.from_user.id} | "
+            f"tiers={len(tiers)} | total={total_products}"
         )
 
-        if not products:
+        if not tiers and sin_nivel_count == 0:
             await callback.message.edit_text(
                 "No hay productos registrados.",
                 reply_markup=InlineKeyboardMarkup(
@@ -1321,18 +1372,70 @@ async def list_products(callback: CallbackQuery):
             await callback.answer()
             return
 
-        text = "🎩 Lucien:\n\nProductos registrados:\n\n"
-        buttons = []
+        text, buttons = build_admin_tier_menu_text_and_buttons(
+            tiers_with_counts, sin_nivel_count
+        )
 
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+
+
+@router.callback_query(AdminStoreTierCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def admin_list_tier_products(
+    callback: CallbackQuery, callback_data: AdminStoreTierCallback
+):
+    """Lista productos de un nivel (tier) en administración."""
+    tier_id = callback_data.tier_id
+    with get_service(StoreService) as store_service:
+        if tier_id == 0:
+            tier_name = "Sin nivel"
+            products = store_service.get_products_without_tier(active_only=False)
+        else:
+            tiers = {t.id: t for t in store_service.get_all_tiers(active_only=False)}
+            tier = tiers.get(tier_id)
+            if not tier:
+                await callback.answer(LucienVoice.store_admin_tier_not_found(), show_alert=True)
+                return
+            tier_name = tier.name
+            products = store_service.get_products_by_tier(tier_id, active_only=False)
+
+        logger.info(
+            f"store_admin_handlers | admin_list_tier_products | user_id={callback.from_user.id} | "
+            f"tier_id={tier_id} | count={len(products)}"
+        )
+
+        if not products:
+            await callback.message.edit_text(
+                LucienVoice.store_admin_tier_no_products(tier_name),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")]
+                    ]
+                ),
+                parse_mode="HTML",
+            )
+            await callback.answer()
+            return
+
+        text = LucienVoice.store_admin_tier_products_header(tier_name)
+        buttons = []
         for product in products:
-            entry, button = build_product_list_entry_and_button(product)
+            entry, button = build_product_list_entry_and_button(
+                product, tier_id=tier_id, show_tier=False
+            )
             text += entry
             buttons.append(button)
 
-        buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")])
+        buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="list_products")])
 
         await callback.message.edit_text(
-            text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML",
         )
         await callback.answer()
 
@@ -1354,7 +1457,9 @@ async def product_admin_detail(callback: CallbackQuery, callback_data: ProductAd
         package_name = product.package.name if product.package else "Sin paquete"
         tier_label = _product_tier_label(product)
 
-        keyboard = build_product_detail_keyboard(product_id, product.is_active)
+        keyboard = build_product_detail_keyboard(
+            product_id, product.is_active, tier_id=callback_data.tier_id
+        )
 
         await callback.message.edit_text(
             f"🎩 Lucien:\n\n"

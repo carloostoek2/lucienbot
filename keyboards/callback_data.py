@@ -163,6 +163,13 @@ class ProductAdminDetailCallback(CallbackData, prefix="prod_admin_detail"):
     """Detalle de producto (admin)"""
 
     product_id: int
+    tier_id: int = 0
+
+
+class AdminStoreTierCallback(CallbackData, prefix="admin_store_tier"):
+    """Navegación admin de productos por tier (0 = sin nivel)."""
+
+    tier_id: int
 
 
 class ConfigStockAlertCallback(CallbackData, prefix="config_stock_alert"):

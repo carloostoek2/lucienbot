@@ -844,6 +844,39 @@ class StoreService:
             q = q.filter(StoreProduct.is_active)
         return q.order_by(StoreProduct.sort_order, StoreProduct.price).all()
 
+    def count_products_by_tier(self, tier_id: int, active_only: bool = False) -> int:
+        """Cuenta productos de un tier (admin: incluye inactivos por defecto)."""
+        from sqlalchemy import func
+
+        q = (
+            self._get_db()
+            .query(func.count(StoreProduct.id))
+            .filter(StoreProduct.tier_id == tier_id)
+        )
+        if active_only:
+            q = q.filter(StoreProduct.is_active)
+        return q.scalar() or 0
+
+    def count_products_without_tier(self, active_only: bool = False) -> int:
+        """Cuenta productos sin tier asignado."""
+        from sqlalchemy import func
+
+        q = (
+            self._get_db()
+            .query(func.count(StoreProduct.id))
+            .filter(StoreProduct.tier_id.is_(None))
+        )
+        if active_only:
+            q = q.filter(StoreProduct.is_active)
+        return q.scalar() or 0
+
+    def get_products_without_tier(self, active_only: bool = False) -> list[StoreProduct]:
+        """Productos sin tier asignado."""
+        q = self._get_db().query(StoreProduct).filter(StoreProduct.tier_id.is_(None))
+        if active_only:
+            q = q.filter(StoreProduct.is_active)
+        return q.order_by(StoreProduct.sort_order, StoreProduct.price).all()
+
     def direct_purchase(self, user_id: int, product_id: int) -> tuple:
         """
         Crea una orden directa para un producto sin usar carrito.
