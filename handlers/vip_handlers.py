@@ -73,8 +73,32 @@ def extract_forwarded_candidate(message: Message) -> tuple[int | None, str]:
     return None, "desconocido"
 
 
+def build_forward_manual_delivery_notify(
+    invite_link: str, bot_access_link: str | None = None, delivery_code: str | None = None
+) -> str:
+    """Construye fallback admin cuando VIP ya está activo pero el DM falló. Función pura."""
+    reason_map = {
+        "permanent:bot_blocked": "el visitante bloqueó al bot",
+        "permanent:no_private_chat": "no hay chat privado abierto con el bot",
+        "permanent:user_deactivated": "la cuenta del visitante está desactivada",
+        "permanent:chat_not_found": "no encontré el chat privado del visitante",
+    }
+    reason = reason_map.get(delivery_code or "", "no pude enviarle el mensaje directamente")
+    bot_line = (
+        f"\n\n<i>O bien, pídale que abra:</i>\n<code>{bot_access_link}</code>"
+        if bot_access_link
+        else ""
+    )
+    return (
+        f"🎩 <b>Lucien:</b>\n\n"
+        f"<i>Activación VIP completada, pero {reason}.</i>\n\n"
+        f"Entregue este enlace de acceso al canal:\n<code>{invite_link}</code>"
+        f"{bot_line}"
+    )
+
+
 def build_forward_blocked_notify(deep_link: str) -> str:
-    """Construye mensaje de fallback para admin en caso de bloqueo de candidato. Función pura (sin estado ni side-effects)."""
+    """Legacy: fallback con deep link de token (evitar si el token ya fue canjeado). Función pura."""
     return f"🎩 <b>Lucien:</b>\n\n<i>Activación completada para el visitante, pero no pude notificarle directamente (posible bloqueo).</i>\n\nProporcione enlace manual: <code>{deep_link}</code>"
 
 
@@ -93,6 +117,40 @@ def build_forward_deep_link(bot_username: str | None, token_code: str | None) ->
     if token_code and bot_username:
         return f"https://t.me/{bot_username}?start={token_code}"
     return "contacta a Lucien para link"
+
+
+def build_forward_bot_access_link(bot_username: str | None) -> str | None:
+    """Deep link para que un VIP activo reciba su invite desde /start. Función pura."""
+    if bot_username:
+        return f"https://t.me/{bot_username}?start=acceso_vip"
+    return None
+
+
+async def try_deliver_vip_forward_message(bot, target_user_id: int, access_msg: str) -> tuple[bool, str | None]:
+    """Intenta DM al candidato; reintenta sin teclado si el primer envío falla."""
+    from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+    from utils.telegram_delivery import classify_bad_request_error, classify_forbidden_error
+
+    for with_keyboard in (True, False):
+        try:
+            kwargs = {"chat_id": target_user_id, "text": access_msg, "parse_mode": "HTML"}
+            if with_keyboard:
+                kwargs["reply_markup"] = vip_access_keyboard()
+            await bot.send_message(**kwargs)
+            return True, None
+        except TelegramForbiddenError as exc:
+            _, code = classify_forbidden_error(exc)
+            return False, code or "forbidden"
+        except TelegramBadRequest as exc:
+            _, code = classify_bad_request_error(exc)
+            if with_keyboard and not code:
+                continue
+            return False, code or str(exc)
+        except Exception as exc:
+            if with_keyboard:
+                continue
+            return False, str(exc)
+    return False, "send_failed"
 
 
 def build_forward_action_menu_text(display: str, candidate_id: int) -> str:
@@ -171,44 +229,71 @@ def parse_positive_besito_amount(text: str) -> int | None:
     return amount
 
 
+async def _answer_forward_vip_manual_fallback(
+    bot, target_message, invite_link: str | None, delivery_code: str | None
+) -> None:
+    """Envía al admin el invite del canal (y deep link acceso_vip) tras fallo de DM."""
+    await target_message.edit_text(
+        build_forward_success_text(),
+        reply_markup=vip_management_keyboard(),
+        parse_mode="HTML",
+    )
+    if not invite_link:
+        await target_message.answer(
+            build_forward_error_text(
+                "VIP activado, pero no pude generar el enlace de acceso. Reintente desde el panel."
+            ),
+            parse_mode="HTML",
+        )
+        return
+    bot_username = (await bot.get_me()).username
+    await target_message.answer(
+        build_forward_manual_delivery_notify(
+            invite_link,
+            build_forward_bot_access_link(bot_username),
+            delivery_code,
+        ),
+        parse_mode="HTML",
+    )
+
+
 async def notify_forward_vip_result(
     bot, target_message, target_user_id: int, ok: bool, access_msg: str, meta: dict, admin_id: int
 ) -> None:
-    """Notifica resultado del grant forward (directo al candidato o fallback al admin que reenvió). Thin helper (sin llamada a grant svc; el 1 with get_service queda exclusivamente en el entrypoint del handler). Copia patrones send+except blocked exact de channel_grant y reward _deliver."""
+    """Notifica resultado del grant forward (directo al candidato o fallback al admin que reenvió)."""
     if ok:
-        try:
-            await bot.send_message(
-                chat_id=target_user_id,
-                text=access_msg,
-                reply_markup=vip_access_keyboard(),
-                parse_mode="HTML",
-            )
+        delivered, delivery_code = await try_deliver_vip_forward_message(
+            bot, target_user_id, access_msg
+        )
+        if delivered:
             logger.info(
-                f"{__name__} | notificar_directo_vip_forward | user_id={admin_id} | target={target_user_id} | resultado=enviado"
+                f"{__name__} | notificar_directo_vip_forward | user_id={admin_id} | "
+                f"target={target_user_id} | resultado=enviado"
             )
             await target_message.edit_text(
                 build_forward_success_text(),
                 reply_markup=vip_management_keyboard(),
                 parse_mode="HTML",
             )
-        except Exception as e:
-            if "bot was blocked by the user" in str(e):
-                logger.warning(
-                    f"{__name__} | notificar_directo_vip_forward_bloqueado | user_id={admin_id} | target={target_user_id}"
-                )
-            else:
-                logger.error(
-                    f"{__name__} | notificar_directo_vip_forward_error | user_id={admin_id} | target={target_user_id} | error={e}"
-                )
-            bot_username = (await bot.get_me()).username
-            deep_link = build_forward_deep_link(bot_username, meta.get("token_code"))
-            await target_message.answer(build_forward_blocked_notify(deep_link), parse_mode="HTML")
-    else:
-        await target_message.edit_text(
-            build_forward_error_text(access_msg),
-            reply_markup=vip_management_keyboard(),
-            parse_mode="HTML",
+            return
+        logger.warning(
+            f"{__name__} | notificar_directo_vip_forward_fallo | user_id={admin_id} | "
+            f"target={target_user_id} | delivery_code={delivery_code} | vip_activated=True"
         )
+        await _answer_forward_vip_manual_fallback(
+            bot, target_message, meta.get("invite_link"), delivery_code
+        )
+        return
+    if meta.get("vip_activated") and meta.get("invite_link"):
+        await _answer_forward_vip_manual_fallback(
+            bot, target_message, meta["invite_link"], "invite_generation_partial"
+        )
+        return
+    await target_message.edit_text(
+        build_forward_error_text(access_msg),
+        reply_markup=vip_management_keyboard(),
+        parse_mode="HTML",
+    )
 
 
 async def notify_forward_besitos_result(

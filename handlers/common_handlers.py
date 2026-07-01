@@ -50,6 +50,23 @@ async def cmd_start(message: Message):
     )
 
     try:
+        if args == "acceso_vip":
+            if vip_service.is_user_vip(user.id):
+                ok, msg, _invite = await vip_service.resend_vip_invite_for_user(
+                    message.bot, user.id
+                )
+                if ok:
+                    await message.answer(
+                        msg, reply_markup=vip_access_keyboard(), parse_mode="HTML"
+                    )
+                else:
+                    await message.answer(msg, parse_mode="HTML")
+            else:
+                await message.answer(
+                    LucienVoice.reward_vip_not_configured(), parse_mode="HTML"
+                )
+            return
+
         # Verificar si es deep link "free"
         if args == "free":
             logger.info(f"Detectado args='free' para user_id={user.id}")
@@ -131,6 +148,15 @@ async def cmd_start(message: Message):
                 # Validar token para mensaje específico
                 token, error = vip_service.validate_token(args)
                 if error == "used":
+                    if vip_service.is_user_vip(user.id):
+                        ok, msg, _invite = await vip_service.resend_vip_invite_for_user(
+                            message.bot, user.id
+                        )
+                        if ok:
+                            await message.answer(
+                                msg, reply_markup=vip_access_keyboard(), parse_mode="HTML"
+                            )
+                            return
                     await message.answer(LucienVoice.token_used(), parse_mode="HTML")
                 elif error == "expired":
                     await message.answer(LucienVoice.token_expired(), parse_mode="HTML")

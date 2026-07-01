@@ -245,6 +245,7 @@ class TestCmdStart:
         user = make_user()
         mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(return_value=None)
         mock_vip_svc.return_value.validate_token.return_value = (None, "used")
+        mock_vip_svc.return_value.is_user_vip.return_value = False
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
@@ -254,6 +255,31 @@ class TestCmdStart:
 
         await cmd_start(msg)
 
+        msg.answer.assert_called_once()
+
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_token_used_active_vip_resends_invite(
+        self, mock_user_svc, mock_vip_svc, make_message, make_user
+    ):
+        """Token usado pero VIP activo: reenvía invite en lugar de error."""
+        user = make_user()
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(return_value=None)
+        mock_vip_svc.return_value.validate_token.return_value = (None, "used")
+        mock_vip_svc.return_value.is_user_vip.return_value = True
+        mock_vip_svc.return_value.resend_vip_invite_for_user = AsyncMock(
+            return_value=(True, "Acceso VIP listo", "https://t.me/+resend")
+        )
+        mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
+            role=MagicMock(value="user")
+        )
+        msg = make_message(text="/start USEDTOKEN", user=user)
+
+        from handlers.common_handlers import cmd_start
+
+        await cmd_start(msg)
+
+        mock_vip_svc.return_value.resend_vip_invite_for_user.assert_awaited_once()
         msg.answer.assert_called_once()
 
     @patch("handlers.common_handlers.VIPService", autospec=True)

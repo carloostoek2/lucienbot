@@ -102,19 +102,30 @@ def test_build_forward_helpers_pure():
     """build_* VIP helpers are pure."""
     from handlers.vip_handlers import (
         build_forward_blocked_notify,
+        build_forward_bot_access_link,
         build_forward_deep_link,
         build_forward_error_text,
+        build_forward_manual_delivery_notify,
         build_forward_success_text,
     )
 
     assert "bloqueo" in build_forward_blocked_notify("https://t.me/x?start=TOK").lower()
     assert "completada" in build_forward_success_text().lower()
+    manual = build_forward_manual_delivery_notify(
+        "https://t.me/+invite",
+        "https://t.me/bot?start=acceso_vip",
+        "permanent:no_private_chat",
+    )
+    assert "https://t.me/+invite" in manual
+    assert "acceso_vip" in manual
+    assert "chat privado" in manual.lower()
     assert (
         "error" in build_forward_error_text("fail msg").lower()
         or "fail" in build_forward_error_text("fail msg").lower()
     )
     assert "start=ABC" in build_forward_deep_link("botu", "ABC")
     assert "contacta" in build_forward_deep_link(None, None).lower()
+    assert "acceso_vip" in build_forward_bot_access_link("lucienbot")
 
 
 def test_build_forward_besitos_helpers_pure():
@@ -241,7 +252,10 @@ async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_di
         return_value=(
             True,
             "🎩 <b>Lucien:</b> Acceso VIP...",
-            {"token_code": "FWD123", "vip_activated": True},
+            {
+                "vip_activated": True,
+                "invite_link": "https://t.me/+fwdinvite",
+            },
         )
     )
 
@@ -302,6 +316,46 @@ async def test_process_besitos_amount_invalid_rejects(_mock_is_admin, make_messa
     assert "inválida" in msg.answer.call_args[0][0].lower()
     st = await fsm.get_state()
     assert st is None or "besitos_waiting_amount" in str(st).lower()
+
+
+@patch("handlers.vip_handlers.is_admin", return_value=True)
+@patch("handlers.vip_handlers.get_service")
+async def test_confirm_forward_vip_dm_fail_shares_invite_not_token(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    """Si el DM falla tras activar VIP, admin recibe invite link (no token ya usado)."""
+    fsm = await make_fsm_context()
+    await fsm.update_data(forward_target_user_id=424242, selected_tariff_id=1)
+
+    cb = make_callback(data=ForwardConfirmCallback(action="vip").pack())
+    cb.bot = AsyncMock()
+    cb.bot.get_me = AsyncMock(return_value=MagicMock(username="lucienbot"))
+    from aiogram.exceptions import TelegramForbiddenError
+
+    cb.bot.send_message = AsyncMock(
+        side_effect=TelegramForbiddenError(
+            method="sendMessage", message="Forbidden: bot was blocked by the user"
+        )
+    )
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.grant_vip_from_tariff = AsyncMock(
+        return_value=(
+            True,
+            "🎩 <b>Lucien:</b> Acceso VIP...",
+            {"vip_activated": True, "invite_link": "https://t.me/+manualinvite"},
+        )
+    )
+
+    from handlers.vip_handlers import AdminForwardStates, confirm_forward_vip_activation
+
+    await fsm.set_state(AdminForwardStates.vip_confirming)
+    await confirm_forward_vip_activation(cb, fsm)
+
+    fallback = cb.message.answer.call_args[0][0]
+    assert "https://t.me/+manualinvite" in fallback
+    assert "acceso_vip" in fallback
+    assert "start=USEDTOKEN" not in fallback
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
