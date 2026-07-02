@@ -12,6 +12,7 @@ from keyboards.callback_data import (
     SubscriberExtendTariffCallback,
     SubscriberListCallback,
     SubscriberProfileCallback,
+    SubscriberSearchCallback,
 )
 
 pytestmark = [pytest.mark.unit]
@@ -95,6 +96,18 @@ class TestPureHelpers:
         assert "100" in text
         assert "Mensual" in text
 
+    def test_normalize_subscriber_search_query_strips_at(self):
+        from handlers.vip_subscriber_admin_handlers import normalize_subscriber_search_query
+
+        assert normalize_subscriber_search_query("  @vipuser  ") == "vipuser"
+
+    def test_build_subscriber_search_results_text(self):
+        from handlers.vip_subscriber_admin_handlers import build_subscriber_search_results_text
+
+        text = build_subscriber_search_results_text("diana", 3)
+        assert "diana" in text
+        assert "3" in text
+
 
 class TestSubscriberListCallback:
     def test_subscriber_list_callback_pack_unpack(self):
@@ -103,6 +116,130 @@ class TestSubscriberListCallback:
         assert packed == "sub_list:5:2"
         assert SubscriberListCallback.unpack(packed).channel_id == 5
         assert SubscriberListCallback.unpack(packed).page == 2
+
+    def test_subscriber_search_callback_pack_unpack(self):
+        cb = SubscriberSearchCallback(channel_id=3)
+        packed = cb.pack()
+        assert packed == "sub_search:3"
+        assert SubscriberSearchCallback.unpack(packed).channel_id == 3
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=False)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_start_subscriber_search_requires_admin(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import start_subscriber_search
+
+    cb = make_callback(data=SubscriberSearchCallback(channel_id=0).pack())
+    cbdata = SubscriberSearchCallback(channel_id=0)
+    state = await make_fsm_context()
+    await start_subscriber_search(cb, state, cbdata)
+    cb.answer.assert_called_once_with("Acceso denegado", show_alert=True)
+    mock_get_service.assert_not_called()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+async def test_start_subscriber_search_sets_fsm(
+    _mock_is_admin, make_callback, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        start_subscriber_search,
+    )
+
+    cb = make_callback(data=SubscriberSearchCallback(channel_id=2).pack())
+    cbdata = SubscriberSearchCallback(channel_id=2)
+    state = await make_fsm_context()
+    await start_subscriber_search(cb, state, cbdata)
+    assert await state.get_state() == SubscriberAdminStates.search_waiting_query
+    data = await state.get_data()
+    assert data["search_channel_id"] == 2
+    cb.message.edit_text.assert_called_once()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_process_subscriber_search_single_match_shows_profile(
+    mock_get_service, _mock_is_admin, make_message, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        process_subscriber_search_query,
+    )
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    sub = MagicMock()
+    sub.id = 7
+    mock_svc.search_active_subscribers.return_value = [sub]
+    mock_svc.get_subscriber_admin_snapshot.return_value = {
+        "display_name": "@vip",
+        "user_id": 42,
+        "besitos_balance": 10,
+        "tariff_name": "Mensual",
+        "expiry_iso": "01/08/2026",
+        "days_remaining": 30,
+    }
+    state = await make_fsm_context()
+    await state.update_data(search_channel_id=0)
+    await state.set_state(SubscriberAdminStates.search_waiting_query)
+    msg = make_message(text="@vipuser")
+    await process_subscriber_search_query(msg, state)
+    mock_svc.search_active_subscribers.assert_called_once_with("vipuser", None)
+    msg.answer.assert_called_once()
+    assert await state.get_state() is None
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_process_subscriber_search_no_results(
+    mock_get_service, _mock_is_admin, make_message, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        process_subscriber_search_query,
+    )
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.search_active_subscribers.return_value = []
+    state = await make_fsm_context()
+    await state.update_data(search_channel_id=0)
+    await state.set_state(SubscriberAdminStates.search_waiting_query)
+    msg = make_message(text="fantasma")
+    await process_subscriber_search_query(msg, state)
+    msg.answer.assert_called_once()
+    assert "fantasma" in msg.answer.call_args[0][0]
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_process_subscriber_search_multiple_matches(
+    mock_get_service, _mock_is_admin, make_message, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        process_subscriber_search_query,
+    )
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    sub1 = MagicMock()
+    sub1.id = 1
+    sub1.user_id = 11
+    sub1.user = MagicMock(username="ana1", first_name=None)
+    sub1.end_date = datetime(2026, 12, 31, tzinfo=UTC)
+    sub2 = MagicMock()
+    sub2.id = 2
+    sub2.user_id = 22
+    sub2.user = MagicMock(username="ana2", first_name=None)
+    sub2.end_date = datetime(2026, 11, 30, tzinfo=UTC)
+    mock_svc.search_active_subscribers.return_value = [sub1, sub2]
+    state = await make_fsm_context()
+    await state.update_data(search_channel_id=0)
+    await state.set_state(SubscriberAdminStates.search_waiting_query)
+    msg = make_message(text="ana")
+    await process_subscriber_search_query(msg, state)
+    msg.answer.assert_called_once()
+    assert "2" in msg.answer.call_args[0][0]
 
 
 @patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=False)

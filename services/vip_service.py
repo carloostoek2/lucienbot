@@ -9,6 +9,7 @@ import math
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import String, case, cast, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from models.database import SessionLocal
@@ -754,6 +755,62 @@ class VIPService:
             f"page={page} | total={total} | result=ok"
         )
         return subs, total
+
+    def search_active_subscribers(
+        self,
+        query: str,
+        channel_id: int | None = None,
+        limit: int = 20,
+    ) -> list[Subscription]:
+        """Busca suscriptores activos priorizando username, luego nombre o ID."""
+        db = self._get_db()
+        normalized = query.strip().lstrip("@")
+        if not normalized:
+            return []
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        pattern = f"%{normalized}%"
+        base = (
+            db.query(Subscription)
+            .join(User, Subscription.user_id == User.telegram_id)
+            .filter(
+                Subscription.is_active,
+                Subscription.end_date > now,
+            )
+            .options(joinedload(Subscription.user))
+        )
+        if channel_id:
+            base = base.filter(Subscription.channel_id == channel_id)
+
+        match_filters = [
+            User.username.ilike(pattern),
+            User.first_name.ilike(pattern),
+            User.last_name.ilike(pattern),
+        ]
+        if normalized.isdigit():
+            tg_id = int(normalized)
+            match_filters.append(User.telegram_id == tg_id)
+
+        priority_clauses = [
+            (func.lower(User.username) == normalized.lower(), 0),
+            (User.username.ilike(pattern), 1),
+            (User.first_name.ilike(pattern), 2),
+            (User.last_name.ilike(pattern), 3),
+        ]
+        if normalized.isdigit():
+            priority_clauses.append((cast(User.telegram_id, String).ilike(pattern), 4))
+        priority = case(*priority_clauses, else_=5)
+        subs = (
+            base.filter(or_(*match_filters))
+            .order_by(priority, Subscription.end_date.asc())
+            .limit(limit)
+            .all()
+        )
+        logger.info(
+            f"vip_service | search_active_subscribers | channel_id={channel_id or 0} | "
+            f"query_len={len(normalized)} | matches={len(subs)} | result=ok"
+        )
+        return subs
 
     def get_subscriber_admin_snapshot(self, subscription_id: int) -> dict | None:
         """Snapshot read-only para perfil admin (besitos compuesto localmente)."""

@@ -121,6 +121,12 @@ class SubscriberListCallback(CallbackData, prefix="sub_list"):
     page: int = 0
 
 
+class SubscriberSearchCallback(CallbackData, prefix="sub_search"):
+    """Iniciar búsqueda de suscriptor en administración."""
+
+    channel_id: int = 0
+
+
 class SubscriberProfileCallback(CallbackData, prefix="sub_prof"):
     """Perfil admin de un suscriptor."""
 

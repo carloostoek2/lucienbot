@@ -24,6 +24,7 @@ from keyboards.callback_data import (
     SubscriberExtendTariffCallback,
     SubscriberListCallback,
     SubscriberProfileCallback,
+    SubscriberSearchCallback,
 )
 from keyboards.inline_keyboards import (
     cancel_keyboard,
@@ -31,6 +32,8 @@ from keyboards.inline_keyboards import (
     subscriber_extend_tariffs_keyboard,
     subscriber_list_keyboard,
     subscriber_profile_keyboard,
+    subscriber_search_cancel_keyboard,
+    subscriber_search_results_keyboard,
     vip_management_keyboard,
 )
 from services import BesitoService, VIPService, get_service
@@ -45,6 +48,7 @@ SUBSCRIBER_PAGE_SIZE = 8
 
 
 class SubscriberAdminStates(StatesGroup):
+    search_waiting_query = State()
     extend_confirming = State()
     besitos_grant_waiting_amount = State()
     besitos_grant_confirming = State()
@@ -114,6 +118,16 @@ def resolve_list_back_callback(channel_id: int) -> str:
     return "admin_vip"
 
 
+def normalize_subscriber_search_query(query: str) -> str:
+    """Función pura (sin estado ni side-effects). Normaliza término de búsqueda."""
+    return query.strip().lstrip("@")
+
+
+def build_subscriber_search_results_text(query: str, count: int) -> str:
+    """Función pura (sin estado ni side-effects)."""
+    return LucienVoice.admin_subscriber_search_results_header(query, count)
+
+
 def _channel_filter(channel_id: int) -> int | None:
     """Función pura (sin estado ni side-effects)."""
     return channel_id if channel_id else None
@@ -175,6 +189,23 @@ async def _render_subscriber_profile(
     await callback.answer()
 
 
+async def _send_subscriber_profile_message(
+    message: Message,
+    subscription_id: int,
+    channel_id: int,
+    page: int = 0,
+) -> bool:
+    """Envía perfil admin de un suscriptor (búsqueda única). Retorna False si no existe."""
+    with get_service(VIPService) as svc:
+        snapshot = svc.get_subscriber_admin_snapshot(subscription_id)
+    if not snapshot:
+        return False
+    text = build_subscriber_profile_text(snapshot)
+    keyboard = subscriber_profile_keyboard(subscription_id, channel_id, page)
+    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    return True
+
+
 async def _save_profile_context(
     state: FSMContext,
     subscription_id: int,
@@ -190,6 +221,87 @@ async def _save_profile_context(
         list_channel_id=channel_id,
         list_page=page,
     )
+
+
+@router.callback_query(
+    SubscriberSearchCallback.filter(),
+    lambda cb: is_admin(cb.from_user.id),
+)
+async def start_subscriber_search(
+    callback: CallbackQuery, state: FSMContext, callback_data: SubscriberSearchCallback
+):
+    """Inicia búsqueda de usuario en administración de suscriptores."""
+    if await _deny_non_admin_callback(callback):
+        return
+    await state.clear()
+    await state.update_data(search_channel_id=callback_data.channel_id)
+    admin_id = callback.from_user.id
+    logger.info(
+        f"vip_subscriber_admin_handlers | iniciar_busqueda | user_id={admin_id} | "
+        f"channel_id={callback_data.channel_id}"
+    )
+    await callback.message.edit_text(
+        LucienVoice.admin_subscriber_search_start(),
+        reply_markup=subscriber_search_cancel_keyboard(callback_data.channel_id),
+        parse_mode="HTML",
+    )
+    await state.set_state(SubscriberAdminStates.search_waiting_query)
+    await callback.answer()
+
+
+@router.message(
+    SubscriberAdminStates.search_waiting_query,
+    F.text,
+    lambda m: is_admin(m.from_user.id),
+)
+async def process_subscriber_search_query(message: Message, state: FSMContext):
+    """Procesa búsqueda de usuario (1 svc — VIPService.search_active_subscribers)."""
+    if await _deny_non_admin_message(message, state):
+        return
+    query = normalize_subscriber_search_query(message.text or "")
+    data = await state.get_data()
+    channel_id = data.get("search_channel_id", 0)
+    admin_id = message.from_user.id
+    if not query:
+        await message.answer(
+            LucienVoice.admin_subscriber_search_empty_query(),
+            reply_markup=subscriber_search_cancel_keyboard(channel_id),
+            parse_mode="HTML",
+        )
+        return
+
+    channel_filter = _channel_filter(channel_id)
+    with get_service(VIPService) as svc:
+        matches = svc.search_active_subscribers(query, channel_filter)
+    logger.info(
+        f"vip_subscriber_admin_handlers | procesar_busqueda | user_id={admin_id} | "
+        f"channel_id={channel_id} | matches={len(matches)}"
+    )
+    await state.clear()
+
+    if not matches:
+        await message.answer(
+            LucienVoice.admin_subscriber_search_no_results(query),
+            reply_markup=subscriber_search_results_keyboard([], channel_id),
+            parse_mode="HTML",
+        )
+        return
+
+    if len(matches) == 1:
+        found = await _send_subscriber_profile_message(
+            message, matches[0].id, channel_id
+        )
+        if not found:
+            await message.answer(
+                LucienVoice.admin_subscriber_search_no_results(query),
+                reply_markup=subscriber_search_results_keyboard([], channel_id),
+                parse_mode="HTML",
+            )
+        return
+
+    text = build_subscriber_search_results_text(query, len(matches))
+    keyboard = subscriber_search_results_keyboard(matches, channel_id)
+    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 @router.callback_query(

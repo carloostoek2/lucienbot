@@ -26,6 +26,7 @@ from keyboards.callback_data import (
     SubscriberExtendTariffCallback,
     SubscriberListCallback,
     SubscriberProfileCallback,
+    SubscriberSearchCallback,
     ToggleGiftCallback,
     TriviaAnswerCallback,
     TriviaSimpleAnswerCallback,
@@ -235,6 +236,12 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
                         callback_data=SubscriberListCallback(channel_id=channel_id, page=0).pack(),
                     )
                 ],
+                [
+                    InlineKeyboardButton(
+                        text="🔍 Buscar usuario",
+                        callback_data=SubscriberSearchCallback(channel_id=channel_id).pack(),
+                    )
+                ],
             ]
         )
 
@@ -406,6 +413,61 @@ def forward_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def subscriber_search_results_keyboard(
+    subs: list, channel_id: int
+) -> InlineKeyboardMarkup:
+    """Teclado con coincidencias de búsqueda (cada fila → perfil)."""
+    buttons: list[list[InlineKeyboardButton]] = []
+    for sub in subs:
+        user = getattr(sub, "user", None)
+        if user and user.username:
+            label = f"@{user.username}"
+        elif user and user.first_name:
+            label = user.first_name
+        else:
+            label = f"ID {sub.user_id}"
+        expiry = sub.end_date.strftime("%d/%m") if sub.end_date else "?"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"👤 {label[:18]} — {expiry}",
+                    callback_data=SubscriberProfileCallback(
+                        subscription_id=sub.id, channel_id=channel_id, page=0
+                    ).pack(),
+                )
+            ]
+        )
+    back_cb = (
+        ChannelDetailCallback(channel_id=channel_id).pack()
+        if channel_id
+        else "admin_vip"
+    )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🔍 Nueva búsqueda",
+                callback_data=SubscriberSearchCallback(channel_id=channel_id).pack(),
+            )
+        ]
+    )
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data=back_cb)])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def subscriber_search_cancel_keyboard(channel_id: int) -> InlineKeyboardMarkup:
+    """Cancelar búsqueda y volver al menú anterior."""
+    back_cb = (
+        ChannelDetailCallback(channel_id=channel_id).pack()
+        if channel_id
+        else "admin_vip"
+    )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancelar", callback_data=back_cb)]
+        ]
+    )
+
+
 def subscriber_list_keyboard(
     subs: list, channel_id: int, page: int, total_count: int, page_size: int = 8
 ) -> InlineKeyboardMarkup:
@@ -571,6 +633,12 @@ def vip_management_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="👥 Ver suscriptores activos",
                 callback_data=SubscriberListCallback(channel_id=0, page=0).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔍 Buscar usuario",
+                callback_data=SubscriberSearchCallback(channel_id=0).pack(),
             )
         ],
         [InlineKeyboardButton(text="🔙 Volver al sanctum", callback_data="back_to_admin")],

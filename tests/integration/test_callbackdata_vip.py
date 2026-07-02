@@ -19,6 +19,7 @@ from keyboards.callback_data import (
     SubscriberExtendTariffCallback,
     SubscriberListCallback,
     SubscriberProfileCallback,
+    SubscriberSearchCallback,
 )
 from keyboards.inline_keyboards import (
     forward_action_keyboard,
@@ -66,6 +67,13 @@ class TestSubscriberAdminCallbacks:
         unpacked = SubscriberListCallback.unpack(packed)
         assert unpacked.channel_id == 3
         assert unpacked.page == 1
+
+    def test_subscriber_search_callback_pack_unpack(self):
+        cb = SubscriberSearchCallback(channel_id=4)
+        packed = cb.pack()
+        assert packed == "sub_search:4"
+        unpacked = SubscriberSearchCallback.unpack(packed)
+        assert unpacked.channel_id == 4
 
     def test_subscriber_profile_callback_pack(self):
         cb = SubscriberProfileCallback(subscription_id=42, channel_id=2, page=0)

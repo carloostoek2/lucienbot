@@ -1012,6 +1012,80 @@ class TestSubscriberAdminVIPService:
         service = VIPService(db_session)
         assert service.get_subscriber_admin_snapshot(sample_expired_subscription.id) is None
 
+    def test_search_active_subscribers_by_username(
+        self, db_session, sample_user, sample_subscription
+    ):
+        service = VIPService(db_session)
+        matches = service.search_active_subscribers("testuser")
+        assert len(matches) == 1
+        assert matches[0].id == sample_subscription.id
+
+    def test_search_active_subscribers_by_at_username(
+        self, db_session, sample_user, sample_subscription
+    ):
+        service = VIPService(db_session)
+        matches = service.search_active_subscribers("@testuser")
+        assert len(matches) == 1
+
+    def test_search_active_subscribers_by_telegram_id(
+        self, db_session, sample_user, sample_subscription
+    ):
+        service = VIPService(db_session)
+        matches = service.search_active_subscribers(str(sample_user.telegram_id))
+        assert len(matches) == 1
+
+    def test_search_active_subscribers_by_first_name(
+        self, db_session, sample_user, sample_subscription
+    ):
+        service = VIPService(db_session)
+        matches = service.search_active_subscribers("Test")
+        assert len(matches) == 1
+
+    def test_search_active_subscribers_no_results(self, db_session, sample_subscription):
+        service = VIPService(db_session)
+        assert service.search_active_subscribers("inexistente") == []
+
+    def test_search_active_subscribers_respects_channel_filter(
+        self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
+    ):
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        channel2 = Channel(
+            channel_id=-100222333444,
+            channel_name="VIP 2",
+            channel_type=ChannelType.VIP,
+            is_active=True,
+        )
+        db_session.add(channel2)
+        db_session.commit()
+        db_session.refresh(channel2)
+        tok2 = Token(token_code="SEARCH2", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(tok2)
+        db_session.commit()
+        db_session.refresh(tok2)
+        sub1 = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=10),
+            is_active=True,
+        )
+        sub2 = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=channel2.id,
+            token_id=tok2.id,
+            end_date=now + timedelta(days=20),
+            is_active=True,
+        )
+        db_session.add_all([sub1, sub2])
+        db_session.commit()
+
+        all_matches = service.search_active_subscribers("testuser")
+        assert len(all_matches) == 2
+        filtered = service.search_active_subscribers("testuser", channel_id=sample_vip_channel.id)
+        assert len(filtered) == 1
+        assert filtered[0].id == sub1.id
+
     async def test_admin_revoke_deactivated_only_when_other_active(
         self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
     ):

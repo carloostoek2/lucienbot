@@ -552,6 +552,42 @@ El reino descansa tranquilo por ahora."""
 """
 
     @staticmethod
+    def admin_subscriber_search_start() -> str:
+        """Prompt para iniciar búsqueda de usuario."""
+        return """🎩 <b>Lucien:</b>
+
+<i>Buscar usuario</i>
+
+Escriba el nombre de usuario, nombre o ID de Telegram del visitante que desea localizar."""
+
+    @staticmethod
+    def admin_subscriber_search_empty_query() -> str:
+        """Búsqueda sin término válido."""
+        return """🎩 <b>Lucien:</b>
+
+<i>Indique un término de búsqueda para localizar al visitante.</i>"""
+
+    @staticmethod
+    def admin_subscriber_search_no_results(query: str) -> str:
+        """Sin coincidencias en búsqueda."""
+        safe_query = html.escape(query)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Lucien no halló a ningún visitante con «{safe_query}».</i>
+
+El usuario no existe entre los suscriptores activos de El Diván."""
+
+    @staticmethod
+    def admin_subscriber_search_results_header(query: str, count: int) -> str:
+        """Encabezado de lista de coincidencias."""
+        safe_query = html.escape(query)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Coincidencias para «{safe_query}» — <b>{count}</b> resultados</i>
+
+Seleccione un visitante para ver su perfil:"""
+
+    @staticmethod
     def admin_subscriber_list_empty() -> str:
         """Sin suscriptores activos en El Diván."""
         return """🎩 <b>Lucien:</b>
