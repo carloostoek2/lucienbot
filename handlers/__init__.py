@@ -11,6 +11,9 @@ from .channel_handlers import router as channel_router
 from .common_handlers import router as common_router
 from .free_channel_handlers import router as free_channel_router
 
+# Fase 4 - Tienda
+from .fulfillment_admin_handlers import router as fulfillment_admin_router
+
 # Phase 14 - Minijuegos
 from .game_user_handlers import router as game_user_router
 from .gamification_admin_handlers import router as gamification_admin_router
@@ -34,9 +37,6 @@ from .promotion_user_handlers import router as promotion_user_router
 from .reward_admin_handlers import router as reward_admin_router
 from .reward_user_handlers import router as reward_user_router
 from .store_admin_handlers import router as store_admin_router
-
-# Fase 4 - Tienda
-from .fulfillment_admin_handlers import router as fulfillment_admin_router
 from .store_user_handlers import router as store_user_router
 from .story_admin_handlers import router as story_admin_router
 
@@ -54,6 +54,7 @@ from .trivia_streak_admin_handlers import router as trivia_streak_admin_router
 from .vip_handlers import router as vip_router
 
 # Phase 12 - Mensajes Anónimos VIP
+from .vip_subscriber_admin_handlers import router as vip_subscriber_admin_router
 from .vip_user_handlers import router as vip_user_router
 
 __all__ = [
@@ -61,6 +62,7 @@ __all__ = [
     "admin_router",
     "channel_router",
     "vip_router",
+    "vip_subscriber_admin_router",
     "free_channel_router",
     # Fase 1 - Gamificacion
     "gamification_user_router",

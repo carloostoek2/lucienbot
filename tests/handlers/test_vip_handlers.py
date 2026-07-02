@@ -358,6 +358,19 @@ async def test_confirm_forward_vip_dm_fail_shares_invite_not_token(
     assert "start=USEDTOKEN" not in fallback
 
 
+def test_vip_forward_flow_unchanged_no_list_subscribers():
+    """Regression: list_subscribers removed; forward helpers intact."""
+    import inspect
+
+    import handlers.vip_handlers as mod
+
+    source = inspect.getsource(mod)
+    assert 'F.data == "list_subscribers"' not in source
+    assert "process_forwarded_admin_candidate" in source
+    assert "confirm_forward_besitos_grant" in source
+    assert "confirm_forward_vip_activation" in source
+
+
 @patch("handlers.vip_handlers.is_admin", return_value=True)
 async def test_cancel_forward_action_clears_state(_mock_is_admin, make_callback, make_fsm_context):
     """Cancel always clears state + returns to mgmt."""

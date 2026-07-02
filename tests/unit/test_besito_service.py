@@ -154,6 +154,46 @@ class TestBesitoTransactions:
         assert ok is False
         assert balance == 0
 
+    def test_debit_manual_admin_besitos_success(self, db_session, sample_balance):
+        """Admin manual debit reduces balance with ADMIN source."""
+        service = BesitoService(db_session)
+        initial = sample_balance.balance
+        ok, balance = service.debit_manual_admin_besitos(
+            sample_balance.user_id, 30, 999001
+        )
+        assert ok is True
+        assert balance == initial - 30
+        txs = service.get_transactions_by_source(
+            sample_balance.user_id, TransactionSource.ADMIN, limit=5
+        )
+        assert len(txs) == 1
+        assert txs[0].amount == -30
+
+    def test_debit_manual_admin_besitos_insufficient_balance(
+        self, db_session, sample_balance
+    ):
+        """Admin manual debit rejects when balance too low."""
+        service = BesitoService(db_session)
+        ok, balance = service.debit_manual_admin_besitos(
+            sample_balance.user_id, 999999, 999001
+        )
+        assert ok is False
+        assert balance == 0
+
+    def test_debit_manual_admin_besitos_invalid_amount(self, db_session, sample_balance):
+        """Admin manual debit rejects zero and above-max amounts."""
+        from services.besito_service import MAX_ADMIN_BESITO_GRANT
+
+        service = BesitoService(db_session)
+        ok_zero, bal_zero = service.debit_manual_admin_besitos(
+            sample_balance.user_id, 0, 999001
+        )
+        ok_max, bal_max = service.debit_manual_admin_besitos(
+            sample_balance.user_id, MAX_ADMIN_BESITO_GRANT + 1, 999001
+        )
+        assert ok_zero is False and bal_zero == 0
+        assert ok_max is False and bal_max == 0
+
     def test_debit_besitos_success(self, db_session, sample_balance):
         """Test debitar besitos exitosamente"""
         service = BesitoService(db_session)

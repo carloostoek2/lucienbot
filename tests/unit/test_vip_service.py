@@ -940,6 +940,232 @@ class TestVIPServiceLifecycleOrGetServiceContext:
         assert getattr(svc, "db", None) is None or svc._owns_session is False
 
 
+@pytest.mark.unit
+class TestSubscriberAdminVIPService:
+    """Tests para métodos admin de suscriptores (phase 36)."""
+
+    def test_get_subscriber_list_page_pagination(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        tokens = []
+        for i in range(9):
+            tok = Token(
+                token_code=f"PAGETOK{i}",
+                tariff_id=sample_tariff.id,
+                status=TokenStatus.ACTIVE,
+            )
+            db_session.add(tok)
+            tokens.append(tok)
+        db_session.commit()
+        for i, tok in enumerate(tokens):
+            db_session.refresh(tok)
+            sub = Subscription(
+                user_id=sample_user.telegram_id,
+                channel_id=sample_vip_channel.id,
+                token_id=tok.id,
+                end_date=now + timedelta(days=i + 1),
+                is_active=True,
+            )
+            db_session.add(sub)
+        db_session.commit()
+
+        page0, total = service.get_subscriber_list_page(page=0, page_size=8)
+        assert total == 9
+        assert len(page0) == 8
+        page1, _ = service.get_subscriber_list_page(page=1, page_size=8)
+        assert len(page1) == 1
+
+    def test_get_subscriber_list_page_clamps_high_page_before_fetch(
+        self, db_session, sample_user, sample_vip_channel, sample_token
+    ):
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        sub = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=5),
+            is_active=True,
+        )
+        db_session.add(sub)
+        db_session.commit()
+        subs, total = service.get_subscriber_list_page(page=99, page_size=8)
+        assert total == 1
+        assert len(subs) == 1
+        assert subs[0].id == sub.id
+
+    def test_get_subscriber_admin_snapshot_includes_besitos(
+        self, db_session, sample_subscription, sample_balance
+    ):
+        service = VIPService(db_session)
+        snapshot = service.get_subscriber_admin_snapshot(sample_subscription.id)
+        assert snapshot is not None
+        assert snapshot["besitos_balance"] == sample_balance.balance
+        assert snapshot["user_id"] == sample_subscription.user_id
+        assert "tariff_name" in snapshot
+
+    def test_get_subscriber_admin_snapshot_inactive_returns_none(
+        self, db_session, sample_expired_subscription
+    ):
+        service = VIPService(db_session)
+        assert service.get_subscriber_admin_snapshot(sample_expired_subscription.id) is None
+
+    async def test_admin_revoke_deactivated_only_when_other_active(
+        self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
+    ):
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        channel2 = Channel(
+            channel_id=-100222333444,
+            channel_name="VIP 2",
+            channel_type=ChannelType.VIP,
+            is_active=True,
+        )
+        db_session.add(channel2)
+        db_session.commit()
+        db_session.refresh(channel2)
+        tok2 = Token(token_code="REVOKE2", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(tok2)
+        db_session.commit()
+        db_session.refresh(tok2)
+        sub1 = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=10),
+            is_active=True,
+        )
+        sub2 = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=channel2.id,
+            token_id=tok2.id,
+            end_date=now + timedelta(days=20),
+            is_active=True,
+        )
+        db_session.add_all([sub1, sub2])
+        db_session.commit()
+        db_session.refresh(sub1)
+
+        bot = AsyncMock()
+        ok, code, _meta = await service.admin_revoke_subscription(bot, sub1.id, 999001)
+        assert ok is True
+        assert code == "deactivated_only"
+        bot.ban_chat_member.assert_not_called()
+        db_session.refresh(sub1)
+        assert sub1.is_active is False
+
+    async def test_admin_revoke_ban_unban_when_only_subscription(
+        self, db_session, sample_subscription, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        bot = AsyncMock()
+        ok, code, meta = await service.admin_revoke_subscription(
+            bot, sample_subscription.id, 999001
+        )
+        assert ok is True
+        assert code == "kicked"
+        bot.ban_chat_member.assert_called_once_with(
+            chat_id=sample_vip_channel.channel_id,
+            user_id=sample_subscription.user_id,
+        )
+        bot.unban_chat_member.assert_called_once()
+        bot.send_message.assert_called_once()
+        assert meta["user_id"] == sample_subscription.user_id
+
+    async def test_grant_internal_vip_access_for_subscription_targets_specific_sub(
+        self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
+    ):
+        """Extiende la suscripción indicada, no la primera de get_user_subscription."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        channel2 = Channel(
+            channel_id=-100333444555,
+            channel_name="VIP Alt",
+            channel_type=ChannelType.VIP,
+            is_active=True,
+        )
+        db_session.add(channel2)
+        db_session.commit()
+        db_session.refresh(channel2)
+        tok2 = Token(token_code="EXT2", tariff_id=sample_tariff.id, status=TokenStatus.ACTIVE)
+        db_session.add(tok2)
+        db_session.commit()
+        db_session.refresh(tok2)
+        sub_soon = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=sample_token.id,
+            end_date=now + timedelta(days=5),
+            is_active=True,
+        )
+        sub_later = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=channel2.id,
+            token_id=tok2.id,
+            end_date=now + timedelta(days=30),
+            is_active=True,
+        )
+        db_session.add_all([sub_soon, sub_later])
+        db_session.commit()
+        db_session.refresh(sub_soon)
+        db_session.refresh(sub_later)
+        original_later_end = sub_later.end_date
+
+        with patch("services.vip_service.schedule_emit"):
+            ok, extended, _meta = await service.grant_internal_vip_access_for_subscription(
+                sub_soon.id, sample_tariff.id
+            )
+
+        assert ok is True
+        assert extended.id == sub_soon.id
+        db_session.refresh(sub_soon)
+        db_session.refresh(sub_later)
+        assert sub_soon.end_date > now + timedelta(days=5)
+        assert sub_later.end_date == original_later_end
+        assert sub_later.is_active is True
+
+    async def test_grant_internal_vip_access_for_subscription_rejects_inactive_tariff(
+        self, db_session, sample_subscription, sample_tariff
+    ):
+        service = VIPService(db_session)
+        sample_tariff.is_active = False
+        db_session.commit()
+        ok, sub, meta = await service.grant_internal_vip_access_for_subscription(
+            sample_subscription.id, sample_tariff.id
+        )
+        assert ok is False
+        assert sub is None
+        assert meta.get("error") == "tariff_inactive"
+
+    def test_get_subscriber_extend_context(
+        self, db_session, sample_subscription, sample_tariff
+    ):
+        service = VIPService(db_session)
+        snapshot, tariffs = service.get_subscriber_extend_context(sample_subscription.id)
+        assert snapshot is not None
+        assert snapshot["subscription_id"] == sample_subscription.id
+        assert any(t.id == sample_tariff.id for t in tariffs)
+
+    async def test_admin_revoke_channel_inactive(
+        self, db_session, sample_subscription, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        sample_vip_channel.is_active = False
+        db_session.commit()
+        bot = AsyncMock()
+        ok, code, meta = await service.admin_revoke_subscription(
+            bot, sample_subscription.id, 999001
+        )
+        assert ok is True
+        assert code == "channel_inactive"
+        bot.ban_chat_member.assert_not_called()
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.is_active is False
+        assert meta["subscription_id"] == sample_subscription.id
+
+
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
 # (has_other check + conditional ban/unban + direct User state clear + send + commit/rollback per sub)
 # + similar in bot.py startup remain in place. Unit tests here target the pure VIPService

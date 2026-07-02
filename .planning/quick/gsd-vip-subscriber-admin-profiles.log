@@ -1,0 +1,61 @@
+# GSD Executor Log — VIP Subscriber Admin Profiles (Phase 36)
+# Started: 2026-07-02
+
+[F1] Starting CallbackData + keyboards + LucienVoice foundation
+[F1] EDIT keyboards/callback_data.py — add Subscriber* CallbackData classes
+[F1] EDIT keyboards/inline_keyboards.py — subscriber keyboards + wire dead callbacks
+[F1] EDIT utils/lucien_voice.py — admin subscriber copy methods
+[F1] COMPLETE — running F1 gate
+[F2] EDIT services/vip_service.py — list page, snapshot, admin_revoke
+[F2] EDIT services/besito_service.py — debit_manual_admin_besitos
+[F2] COMPLETE
+[F3-F5] CREATE handlers/vip_subscriber_admin_handlers.py — full router + FSM
+[F2-fix] EDIT services/vip_service.py — get_subscriber_extend_context (1-svc composite)
+[F3] EDIT handlers/vip_subscriber_admin_handlers.py — fix extend 1-svc + kick back kb
+[F3] EDIT handlers/vip_handlers.py — remove list_subscribers handler
+[F3] EDIT handlers/__init__.py + bot.py — register router
+[F6] CREATE tests/handlers/test_vip_subscriber_admin_handlers.py
+[F6] EDIT tests/unit/test_vip_service.py + test_besito_service.py + test_callbackdata_vip.py
+[F6] Gates: G1=16p G2=257p/1f(preexist store) G3=13p G4=14p G5=83p
+[F6] SUMMARY + decisions.md Item 36 written
+[F1-F6] Self-check:
+[✓] F1–F6 completadas en orden
+[✓] SUBSCRIBER_PAGE_SIZE = 8
+[✓] Dead callback list_subscribers_{channel_id} cableado
+[✓] list_subscribers eliminado de vip_handlers (forward intacto)
+[✓] is_admin en 100% entrypoints vip_subscriber_admin_handlers
+[✓] Handlers confirm: 1 get_service por handler
+[✓] admin_revoke: has_other_active test PASS
+[✓] debit_manual_admin: insufficient balance test PASS
+[✓] extend: solo grant_internal_vip_access
+[✓] Gates 1,3–5 pytest green; G2 1 fail pre-existente no atribuible
+[✓] ruff clean en archivos nuevos/tocados (preexist en lucien_voice/vip_handlers tol)
+[✓] decisions.md append Item 36
+[✓] LOC ≤50 funciones nuevas (puros extraídos)
+[✓] 0 regresión test_vip_handlers forward (14 passed)
+SELF-CHECK: PASSED
+
+[HARDENER-REVIEW] P0 fixes starting — FSM clear, escape, pagination, extend by subscription_id
+[HARDENER] P0-1 state.clear() open_subscriber_profile + cancel via SubscriberProfileCallback
+[HARDENER] P0-2 remove html.escape from format_subscriber_display_name
+[HARDENER] P0-3 clamp page before offset in get_subscriber_list_page
+[HARDENER] P0-4 extend_confirming FSM guard on confirm_subscriber_extend
+[HARDENER] P0-5 grant_internal_vip_access_for_subscription in VIPService
+[HARDENER] P0-6 validate_fsm_subscription_id on all confirm handlers
+[HARDENER] P0-7 extend success via LucienVoice (no 2nd get_service)
+[HARDENER] P0-8 start_subscriber_extend refactored ≤50 LOC + build_tariff_map
+[HARDENER] P1-9 channel_inactive kick copy
+[HARDENER] P1-10 tariff_id validation in select_extend_tariff
+[HARDENER] P1-11 +8 tests handler/unit
+[HARDENER] P1-12 admin_subscriber_debit_success + extend_success LucienVoice
+[HARDENER] P2-16 top-level InlineKeyboard imports in kick confirm
+[HARDENER] Gates: 24p subscriber_admin + 14p forward regression
+[HARDENER] SUMMARY updated — ALL REVIEW ISSUES FIXED
+SELF-CHECK: PASSED (post-hardener)
+
+[R2-FINAL] state.clear() at start of all start_subscriber_* handlers
+[R2-FINAL] grant_internal_vip_access_for_subscription rejects inactive tariff
+[R2-FINAL] +6 tests (extend invalid tariff, extend fail, channel_inactive kick, profile not found, extend context)
+[R2-FINAL] Gate: 29 passed (subscriber_admin or admin_revoke or debit_manual_admin)
+[R2-FINAL] ALL ISSUES CLOSED — ready for re-review
+SELF-CHECK: PASSED (r2-final)

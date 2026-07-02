@@ -6,10 +6,10 @@ Teclados personalizados con la estética elegante de Diana.
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from utils.lucien_voice import LucienVoice
 from keyboards.callback_data import (
     AnonViewCallback,
     ApproveAllCallback,
+    ChannelDetailCallback,
     ConfigInviteCallback,
     ConfigMessagesCallback,
     ConfigWaitCallback,
@@ -21,6 +21,11 @@ from keyboards.callback_data import (
     StreakProtectAcceptCallback,
     StreakProtectDeclineCallback,
     StreakRetireCallback,
+    SubscriberActionCallback,
+    SubscriberConfirmCallback,
+    SubscriberExtendTariffCallback,
+    SubscriberListCallback,
+    SubscriberProfileCallback,
     ToggleGiftCallback,
     TriviaAnswerCallback,
     TriviaSimpleAnswerCallback,
@@ -28,6 +33,7 @@ from keyboards.callback_data import (
     WaitTimeCallback,
 )
 from models.models import Tariff
+from utils.lucien_voice import LucienVoice
 
 
 def main_menu_keyboard(is_vip: bool = False) -> InlineKeyboardMarkup:
@@ -226,7 +232,7 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
                 [
                     InlineKeyboardButton(
                         text="📋 Ver suscriptores activos",
-                        callback_data=f"list_subscribers_{channel_id}",
+                        callback_data=SubscriberListCallback(channel_id=channel_id, page=0).pack(),
                     )
                 ],
             ]
@@ -400,6 +406,161 @@ def forward_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def subscriber_list_keyboard(
+    subs: list, channel_id: int, page: int, total_count: int, page_size: int = 8
+) -> InlineKeyboardMarkup:
+    """Teclado paginado de suscriptores activos (filas clicables → perfil)."""
+    import math
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    for sub in subs:
+        user = getattr(sub, "user", None)
+        if user and user.username:
+            label = f"@{user.username}"
+        elif user and user.first_name:
+            label = user.first_name
+        else:
+            label = f"ID {sub.user_id}"
+        expiry = sub.end_date.strftime("%d/%m") if sub.end_date else "?"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"👤 {label[:18]} — {expiry}",
+                    callback_data=SubscriberProfileCallback(
+                        subscription_id=sub.id, channel_id=channel_id, page=page
+                    ).pack(),
+                )
+            ]
+        )
+    total_pages = max(1, math.ceil(total_count / page_size))
+    nav: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav.append(
+            InlineKeyboardButton(
+                text="◀️ Anterior",
+                callback_data=SubscriberListCallback(channel_id=channel_id, page=page - 1).pack(),
+            )
+        )
+    if page < total_pages - 1:
+        nav.append(
+            InlineKeyboardButton(
+                text="Siguiente ▶️",
+                callback_data=SubscriberListCallback(channel_id=channel_id, page=page + 1).pack(),
+            )
+        )
+    if nav:
+        buttons.append(nav)
+    back_cb = (
+        ChannelDetailCallback(channel_id=channel_id).pack()
+        if channel_id
+        else "admin_vip"
+    )
+    buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data=back_cb)])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def subscriber_profile_keyboard(
+    subscription_id: int, channel_id: int = 0, page: int = 0
+) -> InlineKeyboardMarkup:
+    """Acciones admin sobre un suscriptor + volver a lista."""
+    ctx = {"subscription_id": subscription_id, "channel_id": channel_id, "page": page}
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="⏳ Extender VIP",
+                callback_data=SubscriberActionCallback(action="extend", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="💋 Otorgar besitos",
+                callback_data=SubscriberActionCallback(action="grant_besitos", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="💸 Debitar besitos",
+                callback_data=SubscriberActionCallback(action="debit_besitos", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🚪 Expulsar",
+                callback_data=SubscriberActionCallback(action="kick", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔙 Volver a lista",
+                callback_data=SubscriberListCallback(channel_id=channel_id, page=page).pack(),
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def subscriber_extend_tariffs_keyboard(
+    tariffs: list, subscription_id: int, channel_id: int = 0, page: int = 0
+) -> InlineKeyboardMarkup:
+    """Tarifas activas para extender VIP."""
+    buttons: list[list[InlineKeyboardButton]] = []
+    for tariff in tariffs:
+        if not tariff.is_active:
+            continue
+        text = f"{tariff.name} — {tariff.duration_days}d"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=text,
+                    callback_data=SubscriberExtendTariffCallback(
+                        subscription_id=subscription_id,
+                        tariff_id=tariff.id,
+                        channel_id=channel_id,
+                        page=page,
+                    ).pack(),
+                )
+            ]
+        )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🔙 Volver al perfil",
+                callback_data=SubscriberProfileCallback(
+                    subscription_id=subscription_id, channel_id=channel_id, page=page
+                ).pack(),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def subscriber_confirm_keyboard(
+    action: str, subscription_id: int, channel_id: int = 0, page: int = 0
+) -> InlineKeyboardMarkup:
+    """Confirmar o cancelar acción admin sobre suscriptor."""
+    ctx = {
+        "action": action,
+        "subscription_id": subscription_id,
+        "channel_id": channel_id,
+        "page": page,
+    }
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="✅ Confirmar",
+                callback_data=SubscriberConfirmCallback(**ctx).pack(),
+            ),
+            InlineKeyboardButton(
+                text="❌ Cancelar",
+                callback_data=SubscriberProfileCallback(
+                    subscription_id=subscription_id, channel_id=channel_id, page=page
+                ).pack(),
+            ),
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def vip_management_keyboard() -> InlineKeyboardMarkup:
     """Menú de gestión VIP"""
     buttons = [
@@ -408,7 +569,8 @@ def vip_management_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📋 Ver tokens generados", callback_data="list_tokens")],
         [
             InlineKeyboardButton(
-                text="👥 Ver suscriptores activos", callback_data="list_subscribers"
+                text="👥 Ver suscriptores activos",
+                callback_data=SubscriberListCallback(channel_id=0, page=0).pack(),
             )
         ],
         [InlineKeyboardButton(text="🔙 Volver al sanctum", callback_data="back_to_admin")],

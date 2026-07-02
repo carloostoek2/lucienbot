@@ -14,6 +14,11 @@ from keyboards.callback_data import (
     ForwardCancelCallback,
     ForwardConfirmCallback,
     SelectTariffCallback,
+    SubscriberActionCallback,
+    SubscriberConfirmCallback,
+    SubscriberExtendTariffCallback,
+    SubscriberListCallback,
+    SubscriberProfileCallback,
 )
 from keyboards.inline_keyboards import (
     forward_action_keyboard,
@@ -49,6 +54,40 @@ class TestSelectTariffCallback:
         # Es un CallbackQueryFilter de aiogram
         assert callback_filter is not None
         assert callable(callback_filter)
+
+
+class TestSubscriberAdminCallbacks:
+    """Tests para callbacks de admin suscriptores VIP (phase 36)."""
+
+    def test_subscriber_list_callback_pack_unpack(self):
+        cb = SubscriberListCallback(channel_id=3, page=1)
+        packed = cb.pack()
+        assert packed == "sub_list:3:1"
+        unpacked = SubscriberListCallback.unpack(packed)
+        assert unpacked.channel_id == 3
+        assert unpacked.page == 1
+
+    def test_subscriber_profile_callback_pack(self):
+        cb = SubscriberProfileCallback(subscription_id=42, channel_id=2, page=0)
+        assert cb.pack() == "sub_prof:42:2:0"
+
+    def test_subscriber_action_callback_pack(self):
+        cb = SubscriberActionCallback(
+            action="kick", subscription_id=5, channel_id=1, page=0
+        )
+        assert "kick" in cb.pack()
+
+    def test_subscriber_extend_tariff_callback_pack(self):
+        cb = SubscriberExtendTariffCallback(
+            subscription_id=1, tariff_id=7, channel_id=0, page=0
+        )
+        assert cb.pack() == "sub_ext_tar:1:7:0:0"
+
+    def test_subscriber_confirm_callback_pack(self):
+        cb = SubscriberConfirmCallback(
+            action="grant_besitos", subscription_id=3, channel_id=0, page=1
+        )
+        assert "grant_besitos" in cb.pack()
 
 
 class TestForwardAdminCallbacks:

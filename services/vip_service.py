@@ -5,6 +5,7 @@ Gestiona la lógica de tokens, tarifas y suscripciones VIP.
 """
 
 import logging
+import math
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
@@ -633,6 +634,60 @@ class VIPService:
         )
         return True, subscription, {"subscription_id": subscription.id, "tariff_id": tariff_id}
 
+    async def grant_internal_vip_access_for_subscription(
+        self, subscription_id: int, tariff_id: int
+    ) -> tuple[bool, Subscription | None, dict]:
+        """
+        Extiende una suscripción VIP específica por ID (admin perfil suscriptor).
+        No usa get_user_subscription — apunta al subscription_id del perfil.
+        """
+        tariff = self.get_tariff(tariff_id)
+        if not tariff:
+            return False, None, {"error": "tariff_not_found"}
+        if not tariff.is_active:
+            logger.warning(
+                f"vip_service | grant_internal_vip_access_for_subscription | "
+                f"subscription_id={subscription_id} | tariff_id={tariff_id} | result=tariff_inactive"
+            )
+            return False, None, {"error": "tariff_inactive"}
+
+        db = self._get_db()
+        now = datetime.now(UTC)
+        subscription = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+        if not subscription:
+            return False, None, {"error": "subscription_not_found"}
+
+        sub_end_date = _ensure_aware(subscription.end_date)
+        if not subscription.is_active or sub_end_date is None or sub_end_date <= now:
+            return False, None, {"error": "subscription_inactive"}
+
+        subscription.end_date = sub_end_date + timedelta(days=tariff.duration_days)
+        subscription.is_active = True
+        subscription.tariff_id = tariff_id
+        db.commit()
+        db.refresh(subscription)
+
+        user = db.query(User).filter(User.telegram_id == subscription.user_id).first()
+        if user:
+            user.vip_entry_status = None
+            user.vip_entry_stage = None
+            db.commit()
+
+        logger.info(
+            f"vip_service | grant_internal_vip_access_for_subscription | extended | "
+            f"subscription_id={subscription_id} | tariff_id={tariff_id}"
+        )
+        schedule_emit(
+            get_event_bus().emit(
+                EVENT_VIP_ACTIVATED,
+                {"user_id": subscription.user_id, "subscription_id": subscription.id},
+            )
+        )
+        return True, subscription, {
+            "subscription_id": subscription.id,
+            "tariff_id": tariff_id,
+        }
+
     async def resend_vip_invite_for_user(
         self, bot, user_id: int
     ) -> tuple[bool, str, str | None]:
@@ -664,3 +719,181 @@ class VIPService:
             db.commit()
             return True
         return False
+
+    def get_subscriber_list_page(
+        self,
+        channel_id: int | None = None,
+        page: int = 0,
+        page_size: int = 8,
+    ) -> tuple[list[Subscription], int]:
+        """Página de suscripciones activas ordenadas por end_date ASC + total."""
+        db = self._get_db()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        base = db.query(Subscription).filter(
+            Subscription.is_active,
+            Subscription.end_date > now,
+        )
+        if channel_id:
+            base = base.filter(Subscription.channel_id == channel_id)
+        total = base.count()
+        total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
+        clamped_page = max(0, min(page, total_pages - 1)) if total > 0 else 0
+        subs = (
+            base.options(
+                joinedload(Subscription.user),
+                joinedload(Subscription.tariff),
+                joinedload(Subscription.token).joinedload(Token.tariff),
+            )
+            .order_by(Subscription.end_date.asc())
+            .offset(clamped_page * page_size)
+            .limit(page_size)
+            .all()
+        )
+        logger.info(
+            f"vip_service | get_subscriber_list_page | channel_id={channel_id or 0} | "
+            f"page={page} | total={total} | result=ok"
+        )
+        return subs, total
+
+    def get_subscriber_admin_snapshot(self, subscription_id: int) -> dict | None:
+        """Snapshot read-only para perfil admin (besitos compuesto localmente)."""
+        db = self._get_db()
+        now = datetime.now(UTC)
+        sub = (
+            db.query(Subscription)
+            .options(
+                joinedload(Subscription.user),
+                joinedload(Subscription.tariff),
+                joinedload(Subscription.token).joinedload(Token.tariff),
+                joinedload(Subscription.channel),
+            )
+            .filter(Subscription.id == subscription_id)
+            .first()
+        )
+        if not sub or not sub.is_active:
+            return None
+        end_date = _ensure_aware(sub.end_date)
+        if end_date is None or end_date <= now:
+            return None
+
+        from services.besito_service import BesitoService
+
+        besito_svc = BesitoService(db=db)
+        balance = besito_svc.get_balance(sub.user_id)
+
+        if sub.tariff:
+            tariff_name = sub.tariff.name
+        elif sub.token and sub.token.tariff:
+            tariff_name = sub.token.tariff.name
+        else:
+            tariff_name = "—"
+
+        user = sub.user
+        if user and user.username:
+            display_name = f"@{user.username}"
+        elif user and user.first_name:
+            display_name = user.first_name
+        else:
+            display_name = f"ID:{sub.user_id}"
+
+        days_remaining = max(0, (end_date - now).days)
+        snapshot = {
+            "subscription_id": sub.id,
+            "user_id": sub.user_id,
+            "display_name": display_name,
+            "besitos_balance": balance,
+            "tariff_name": tariff_name,
+            "expiry_iso": end_date.strftime("%d/%m/%Y"),
+            "days_remaining": days_remaining,
+            "channel_db_id": sub.channel_id,
+        }
+        logger.info(
+            f"vip_service | get_subscriber_admin_snapshot | subscription_id={subscription_id} | "
+            f"user_id={sub.user_id} | result=ok"
+        )
+        return snapshot
+
+    def get_subscriber_extend_context(
+        self, subscription_id: int
+    ) -> tuple[dict | None, list]:
+        """Snapshot + tarifas activas para flujo extend (1 llamada de negocio compuesta)."""
+        snapshot = self.get_subscriber_admin_snapshot(subscription_id)
+        tariffs = self.get_all_tariffs(active_only=True)
+        return snapshot, tariffs
+
+    async def admin_revoke_subscription(
+        self, bot, subscription_id: int, admin_id: int
+    ) -> tuple[bool, str, dict]:
+        """
+        Revoca suscripción admin (kick).
+        Contrato idéntico a scheduler _process_expired_subscriptions.
+        """
+        db = self._get_db()
+        subscription = (
+            db.query(Subscription)
+            .options(joinedload(Subscription.channel))
+            .filter(Subscription.id == subscription_id)
+            .first()
+        )
+        if not subscription or not subscription.is_active:
+            logger.warning(
+                f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | result=not_found"
+            )
+            return False, "not_found", {}
+
+        channel = subscription.channel
+        if not channel or not channel.is_active:
+            subscription.is_active = False
+            db.commit()
+            logger.info(
+                f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | result=channel_inactive"
+            )
+            return True, "channel_inactive", {"subscription_id": subscription_id}
+
+        other_active = self.has_other_active_subscription(
+            subscription.user_id, subscription.id
+        )
+        if other_active:
+            subscription.is_active = False
+            db.commit()
+            logger.info(
+                f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | result=deactivated_only"
+            )
+            return True, "deactivated_only", {"subscription_id": subscription_id}
+
+        try:
+            await bot.ban_chat_member(
+                chat_id=channel.channel_id, user_id=subscription.user_id
+            )
+            await bot.unban_chat_member(
+                chat_id=channel.channel_id, user_id=subscription.user_id
+            )
+            subscription.is_active = False
+            user = db.query(User).filter(User.telegram_id == subscription.user_id).first()
+            if user and user.vip_entry_status is not None:
+                user.vip_entry_status = None
+                user.vip_entry_stage = None
+            db.commit()
+            await bot.send_message(
+                chat_id=subscription.user_id,
+                text=LucienVoice.vip_expired(),
+                parse_mode="HTML",
+            )
+            logger.info(
+                f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | target={subscription.user_id} | result=kicked"
+            )
+            return True, "kicked", {
+                "subscription_id": subscription_id,
+                "user_id": subscription.user_id,
+            }
+        except Exception as exc:
+            db.rollback()
+            logger.error(
+                f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | result=error | error={exc}"
+            )
+            return False, "error", {"error": str(exc)}

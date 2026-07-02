@@ -62,6 +62,7 @@ from handlers import (
     # Phase 17 - Promociones por Racha
     trivia_streak_admin_router,
     vip_router,
+    vip_subscriber_admin_router,
     # Phase 12 - Mensajes Anónimos VIP
     vip_user_router,
 )
@@ -329,6 +330,7 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(channel_router)
     dp.include_router(vip_router)
+    dp.include_router(vip_subscriber_admin_router)
     dp.include_router(free_channel_router)
     # Fase 1 - Gamificacion
     dp.include_router(gamification_user_router)

@@ -508,3 +508,25 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 **Resultado:**
 - 5 archivos tocados; 111 tests gate verdes; arch-enforcer PASS WITH NOTES (0 critical); test-guardian «suite protege adecuadamente».
 - Refs: `.planning/phases/36-admin-forward-besitos-grant/PLAN.md` + SUMMARY + gsd log + impact/arch/test-guardian reports item36.
+
+## VIP Subscriber Admin Profiles Etapa 1 (Item 36 — vip-subscriber-admin-profiles)
+
+**Motivo:** `list_subscribers` en `vip_handlers.py` era plano (10 max), sin `is_admin`, sin paginación, sin perfil ni acciones; callback `list_subscribers_{channel_id}` muerto en teclado de canal.
+
+**Riesgos (mitigados):**
+- Kick sin `has_other_active` → expulsión indebida. Mit: `admin_revoke_subscription` copia contrato scheduler; tests unit mock bot.
+- Débito besitos saldo negativo/EventBus. Mit: `has_sufficient_balance` + `debit_besitos` ADMIN sin emit; tests insufficient.
+- Extend bypass `grant_internal_vip_access`. Mit: confirm handler llama solo ese método; test grep.
+
+**Decisión:**
+- Nuevo `handlers/vip_subscriber_admin_handlers.py`: lista 8/página, perfil, FSM extend/grant/debit/kick.
+- `VIPService`: `get_subscriber_list_page`, `get_subscriber_admin_snapshot` (BesitoService local), `admin_revoke_subscription(bot)`.
+- `BesitoService.debit_manual_admin_besitos` espejo grant.
+- 5 `Subscriber*` CallbackData + 4 keyboards; wire `vip_management_keyboard` + channel VIP button.
+- Eliminar handler `list_subscribers` de `vip_handlers.py`; forward L707+ intacto.
+- Router registrado en `bot.py` tras `vip_router`.
+
+**Resultado:**
+- Gates 1/3–5 verdes (16+13+14+83); gate 2: 257 pass, 1 fail pre-existente store (no atribuible).
+- Dead callback resuelto; `is_admin` 100% entrypoints; 1 svc/confirm; LucienVoice copy admin.
+- Refs: `.planning/phases/36-vip-subscriber-admin-profiles/PLAN.md` + SUMMARY + `.planning/quick/gsd-vip-subscriber-admin-profiles.log`

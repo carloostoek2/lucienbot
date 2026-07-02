@@ -702,51 +702,7 @@ async def toggle_gift(callback: CallbackQuery, callback_data: ToggleGiftCallback
         vip_service.close()
 
 
-# ==================== LISTAR SUSCRIPTORES ====================
-
-
-@router.callback_query(F.data == "list_subscribers")
-async def list_subscribers(callback: CallbackQuery):
-    """Lista suscriptores VIP activos"""
-    vip_service = VIPService()
-    try:
-        subscriptions = vip_service.get_active_subscriptions()
-
-        if not subscriptions:
-            await callback.message.edit_text(
-                "🎩 <b>Lucien:</b>\n\n"
-                "<i>No hay miembros en El Diván actualmente...</i>\n\n"
-                "Los selectos aún no han llegado.",
-                reply_markup=vip_management_keyboard(),
-                parse_mode="HTML",
-            )
-            await callback.answer()
-            return
-
-        text = f"""🎩 <b>Lucien:</b>
-
-<i>Los privilegiados de El Diván...</i>
-
-👑 <b>Suscriptores activos:</b> {len(subscriptions)}
-
-"""
-
-        for sub in subscriptions[:10]:  # Mostrar primeros 10
-            username = (
-                f"@{sub.user.username}" if sub.user and sub.user.username else f"ID:{sub.user_id}"
-            )
-            expiry = sub.end_date.strftime("%d/%m/%Y")
-            text += f"• {username} - Vence: {expiry}\n"
-
-        if len(subscriptions) > 10:
-            text += f"\n<i>...y {len(subscriptions) - 10} más.</i>"
-
-        await callback.message.edit_text(
-            text, reply_markup=vip_management_keyboard(), parse_mode="HTML"
-        )
-    finally:
-        vip_service.close()
-    await callback.answer()
+# list_subscribers → vip_subscriber_admin_handlers (phase 36)
 
 
 # ==================== ACCIÓN ADMIN POR REENVÍO (VIP | besitos) ====================

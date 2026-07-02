@@ -552,6 +552,157 @@ El reino descansa tranquilo por ahora."""
 """
 
     @staticmethod
+    def admin_subscriber_list_empty() -> str:
+        """Sin suscriptores activos en El Diván."""
+        return """🎩 <b>Lucien:</b>
+
+<i>No hay miembros en El Diván actualmente...</i>
+
+Los selectos aún no han llegado. El Diván aguarda en silencio."""
+
+    @staticmethod
+    def admin_subscriber_list_header(total: int, page: int, total_pages: int) -> str:
+        """Encabezado de lista paginada de suscriptores."""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Los privilegiados de El Diván — <b>{total}</b> suscriptores activos</i>
+<i>Página {page + 1}/{total_pages}</i>
+
+"""
+
+    @staticmethod
+    def admin_subscriber_list_line(index: int, display: str, expiry: str) -> str:
+        """Línea numerada de suscriptor en lista."""
+        safe_display = html.escape(display)
+        return f"{index}. 👤 <b>{safe_display}</b> — Vence: {expiry}\n"
+
+    @staticmethod
+    def admin_subscriber_profile(snapshot: dict) -> str:
+        """Perfil detallado de suscriptor para custodio."""
+        display = html.escape(snapshot.get("display_name", "Desconocido"))
+        user_id = snapshot.get("user_id", 0)
+        besitos = snapshot.get("besitos_balance", 0)
+        tariff = html.escape(snapshot.get("tariff_name", "—"))
+        expiry = snapshot.get("expiry_iso", "—")
+        days = snapshot.get("days_remaining", 0)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Perfil del visitante en El Diván...</i>
+
+👤 <b>{display}</b>
+🆔 ID: <code>{user_id}</code>
+💋 Besitos: <b>{besitos}</b>
+💎 Tarifa: <b>{tariff}</b>
+📅 Vencimiento: <b>{expiry}</b>
+⏳ Días restantes: <b>{days}</b>"""
+
+    @staticmethod
+    def admin_subscriber_extend_tariff_prompt(display: str, user_id: int) -> str:
+        """Elegir tarifa para extender VIP."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Seleccione tarifa para extender VIP de {safe} (ID {user_id})...</i>"""
+
+    @staticmethod
+    def admin_subscriber_extend_confirm(display: str, tariff_name: str, days: int) -> str:
+        """Confirmar extensión VIP."""
+        safe = html.escape(display)
+        tariff = html.escape(tariff_name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>¿Extender VIP de {safe} con tarifa <b>{tariff}</b> (+{days} días)?</i>"""
+
+    @staticmethod
+    def admin_subscriber_extend_success(display: str, tariff_name: str, days: int) -> str:
+        """Éxito tras extender VIP en suscripción específica."""
+        safe = html.escape(display)
+        tariff = html.escape(tariff_name)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>VIP de {safe} extendido con tarifa <b>{tariff}</b> (+{days} días).</i>
+
+Pulse «Volver al perfil» para ver los datos actualizados."""
+
+    @staticmethod
+    def admin_subscriber_debit_success(display: str, amount: int, balance: int) -> str:
+        """Éxito tras débito manual de besitos."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Débito completado: <b>{amount}</b> besitos de {safe}.</i>
+
+Saldo actual: <b>{balance}</b> besitos."""
+
+    @staticmethod
+    def admin_subscriber_besitos_amount_prompt(display: str, action: str) -> str:
+        """Pedir cantidad de besitos (grant o debit)."""
+        safe = html.escape(display)
+        verb = "otorgar" if action == "grant" else "debitar"
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Indique cuántos besitos desea {verb} a {safe}:</i>
+
+Ejemplo: 50"""
+
+    @staticmethod
+    def admin_subscriber_besitos_confirm(display: str, amount: int, action: str) -> str:
+        """Confirmación de besitos grant/debit."""
+        safe = html.escape(display)
+        verb = "otorgar" if action == "grant" else "debitar"
+        return f"""🎩 <b>Lucien:</b>
+
+<i>¿Confirmar {verb} <b>{amount}</b> besitos a {safe}?</i>"""
+
+    @staticmethod
+    def admin_subscriber_kick_confirm(display: str, user_id: int) -> str:
+        """Confirmar expulsión de suscriptor."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>¿Expulsar a {safe} (ID {user_id}) de El Diván?</i>
+
+Esta acción revocará su suscripción VIP."""
+
+    @staticmethod
+    def admin_subscriber_kick_deactivated_only(display: str) -> str:
+        """Kick con otra suscripción activa — solo BD."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>{safe} conserva otra suscripción activa.</i>
+
+Solo se desactivó esta suscripción en la base de datos (sin expulsión del canal)."""
+
+    @staticmethod
+    def admin_subscriber_kick_channel_inactive(display: str) -> str:
+        """Kick con canal inactivo — solo desactivación en BD."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>La suscripción de {safe} fue desactivada.</i>
+
+El canal asociado está inactivo; no se realizó expulsión en Telegram."""
+
+    @staticmethod
+    def admin_subscriber_kick_success(display: str) -> str:
+        """Expulsión completa exitosa."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>{safe} ha sido expulsado de El Diván.</i>
+
+Su suscripción VIP fue revocada y se le notificó."""
+
+    @staticmethod
+    def admin_subscriber_action_failed(reason: str) -> str:
+        """Error genérico en acción admin sobre suscriptor."""
+        safe = html.escape(reason)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>No pude completar la acción: {safe}</i>"""
+
+    @staticmethod
     def admin_requests_cleared(
         approved: int, failed: int = 0, errors: list[str] | None = None
     ) -> str:

@@ -8,4 +8,8 @@
 - Pointer: .grok/agent-memory/documentador/33-test-reality-pool-close.md
 - Pool phrase used: "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
 
+- 2026-07-02: vip-subscriber-admin-profiles.md created (pool vip-subscriber-admin-profiles 1/1 COMPLETE; feature delivery Phase 36 Etapa 1; effort=5, review 2 rounds, 0 open; gates 29 feature + 14 forward + 13 atomicity green; arch PASS WITH NOTES 0 crit, testg "suite protege adecuadamente"; kick has_other_active service-only, admin debit mirror grant, dedicated router + FSM extend/grant/debit/kick, forward intact; learnings: pagination gold 8/p, FSM hygiene 2-round review, Besito snapshot inside VIPService). Source: 36-SUMMARY + gsd + impact/arch/testg + decisions Item 36.
+- Pointer: .grok/agent-memory/documentador/vip-subscriber-admin-profiles.md
+- Pool phrase used: "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
+
 (Previous entries would accumulate here for cross-pool recall.)
