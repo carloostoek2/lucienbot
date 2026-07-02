@@ -39,8 +39,10 @@ Persistir en `.planning/quick/<slug>-CLARIFY.md`. Inyectar en todos los agentes 
 ## Agentes
 
 Resolución con override local:
-- `.grok/agents/<nombre>.md` → Lucien-specific (documentador, arch-enforcer)
+- `.grok/agents/<nombre>.md` → Lucien-specific (documentador, arch-enforcer, test-guardian)
 - `~/.grok/agents/<nombre>.md` → global
+
+**Test-guardian:** audita mocks obligatoriamente (ver `references/mock-audit.md` global + override local con patrón integration gamif/store pool 33).
 
 ## Modo --hardening
 
