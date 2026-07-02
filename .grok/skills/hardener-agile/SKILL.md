@@ -4,8 +4,9 @@ description: >
   Override de proyecto para Lucien Bot. Delega al orquestador global
   (~/.grok/skills/hardener-agile/) con contexto Lucien: 3 sistemas críticos
   (gamificación, narrativa, canales-VIP), HARDENING_ROADMAP con --hardening,
-  y agentes locales en .grok/agents/. Usa /hardener-agile normalmente.
-argument-hint: "[--plan PATH | --spec PATH | --hardening | status | item N] [descripción]"
+  aclaración de scope con --clarify, y agentes locales en .grok/agents/.
+  Usa /hardener-agile normalmente.
+argument-hint: "[--clarify] [--plan PATH | --spec PATH | --hardening | status | item N] [descripción]"
 metadata:
   short-description: "Pipeline 6 agentes — Lucien Bot override"
 ---
@@ -26,6 +27,15 @@ Luego aplica estos defaults de proyecto:
 - **Tests gold:** `cross_service_atomicity`, `reaction_`, `daily_gift`, `invariants`
 - **Flags pytest default:** `-q --tb=line -p no:cov --override-ini="addopts="`
 
+## Modo `--clarify`
+
+Primer paso operativo cuando la bandera está activa. Protocolo global + extensiones Lucien:
+
+- Global: `~/.grok/skills/hardener-agile/references/scope-clarify.md`
+- Lucien: `references/scope-clarify.md` (zonas grises típicas: 3 crit, atomicidad, voz, tests gold)
+
+Persistir en `.planning/quick/<slug>-CLARIFY.md`. Inyectar en todos los agentes del pipeline.
+
 ## Agentes
 
 Resolución con override local:
@@ -41,4 +51,4 @@ Frase de cierre de pool hardening (verbatim):
 
 ## Resto del pipeline
 
-Seguir exactamente la secuencia global: impact-analyzer → gsd-planner → gsd-executor → arch-enforcer → test-guardian → pytest → documentador.
+Seguir exactamente la secuencia global: [§0a clarify si `--clarify`] → intake → impact-analyzer → gsd-planner → gsd-executor → arch-enforcer → test-guardian → pytest → documentador.

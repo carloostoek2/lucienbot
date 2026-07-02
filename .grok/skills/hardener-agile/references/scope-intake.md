@@ -2,6 +2,8 @@
 
 Base genérica: `~/.grok/skills/hardener-agile/references/scope-intake.md`
 
+Con `--clarify`, leer también `references/scope-clarify.md` (extensión Lucien) antes del intake.
+
 ## Restricciones Lucien Bot (siempre vigilar)
 
 - handlers → exactamente 1 service call (`get_service`)

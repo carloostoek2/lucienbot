@@ -2,6 +2,8 @@
 
 Base genérica: `~/.grok/skills/hardener-agile/references/agent-pipeline.md`
 
+Con `--clarify`, el orquestador ejecuta §0a antes del intake; ver `references/scope-clarify.md`.
+
 ## Tests gold Lucien (re-correr si toca sistemas críticos)
 
 ```bash
