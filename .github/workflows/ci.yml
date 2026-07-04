@@ -16,6 +16,10 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    env:
+      CI: true
+      BOT_TOKEN: ci-dummy-token
+      DATABASE_URL: sqlite:///./ci_test.db
     strategy:
       fail-fast: false
       matrix:
@@ -50,9 +54,13 @@ jobs:
       - name: Security (bandit)
         run: bandit -r handlers/ services/ models/ bot.py --skip B311,B404,B603,B607 -ll
 
+      - name: Prepare CI database
+        run: python -c "from models.database import Base, engine; Base.metadata.create_all(engine)"
+
       - name: Test (pytest + coverage)
         run: |
           pytest tests/ \
+            -m "not telegram_live" \
             --ignore=tests/e2e \
             --ignore=tests/integration/test_alembic_heads.py \
             --deselect tests/integration/test_free_entry_flow.py::TestFreeEntryFlow::test_impatience_message_on_repeated_request \
@@ -66,5 +74,3 @@ jobs:
             --deselect tests/unit/test_reward_service.py::TestRewardServiceQueries::test_delete_reward_sets_inactive \
             --deselect tests/unit/test_store_service.py::TestStoreService::test_delete_product \
             --cov=services --cov=models --cov=handlers --cov-fail-under=30
-        env:
-          CI: true
