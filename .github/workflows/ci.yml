@@ -34,7 +34,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install dependencies
-        run: uv pip install --system "ruff==0.6.0" "mypy==1.10.0" -r requirements.txt -r requirements-dev.txt
+        run: uv pip install "ruff==0.6.0" "mypy==1.10.0" -r requirements.txt -r requirements-dev.txt
 
       - name: Lint (ruff)
         run: ruff check handlers/ services/ models/ bot.py
