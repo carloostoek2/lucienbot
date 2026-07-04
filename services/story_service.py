@@ -335,9 +335,7 @@ class StoryService:
         try:
             return json.loads(progress.visited_nodes)
         except (json.JSONDecodeError, TypeError):
-            logger.warning(
-                "story_service | parse_visited_nodes | result=corrupt_json"
-            )
+            logger.warning("story_service | parse_visited_nodes | result=corrupt_json")
             return []
 
     def _is_node_visited(self, progress: UserStoryProgress | None, node_id: int) -> bool:
@@ -428,7 +426,9 @@ class StoryService:
             return chapter_nodes[current_idx + 1].id
         return None
 
-    def validate_continue_transition(self, user_id: int, target_node_id: int) -> tuple[bool, str | None]:
+    def validate_continue_transition(
+        self, user_id: int, target_node_id: int
+    ) -> tuple[bool, str | None]:
         """Valida que target_node_id sea el sucesor lineal desde el nodo actual."""
         progress = self.get_user_progress(user_id)
         if not progress or not progress.current_node_id:
@@ -537,9 +537,7 @@ class StoryService:
                         return False, LucienVoice.story_payment_failed(), None
 
                 already_visited = self._is_node_visited(progress, node.id)
-                if not self._debit_node_access_cost(
-                    user_id, node, choice_id, already_visited
-                ):
+                if not self._debit_node_access_cost(user_id, node, choice_id, already_visited):
                     savepoint.rollback()
                     return False, LucienVoice.story_payment_failed(), None
 
@@ -603,9 +601,7 @@ class StoryService:
         if not node:
             return False, LucienVoice.story_fragment_unavailable(), None
 
-        success, message, progress = self._execute_advance_transaction(
-            user_id, node, choice_id
-        )
+        success, message, progress = self._execute_advance_transaction(user_id, node, choice_id)
         if not success:
             return False, message, None
 
@@ -795,9 +791,7 @@ class StoryService:
                 setattr(archetype, field, value)
 
         self.db.commit()
-        logger.info(
-            f"story_service | update_archetype | type={archetype_type.value} | result=ok"
-        )
+        logger.info(f"story_service | update_archetype | type={archetype_type.value} | result=ok")
         return True
 
     def get_user_archetype(self, user_id: int) -> ArchetypeType | None:

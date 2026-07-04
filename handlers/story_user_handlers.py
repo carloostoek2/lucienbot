@@ -114,9 +114,7 @@ async def narrative_menu(callback: CallbackQuery, state: FSMContext):
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         await callback.answer()
-        logger.info(
-            f"story_user_handlers | narrative_menu | user_id={user_id} | result=ok"
-        )
+        logger.info(f"story_user_handlers | narrative_menu | user_id={user_id} | result=ok")
 
 
 # ==================== INICIAR HISTORIA ====================
@@ -139,9 +137,7 @@ def _build_story_node_text(node, story_service: StoryService) -> str:
     return text
 
 
-def _build_story_node_keyboard(
-    node, choices, story_service: StoryService
-) -> InlineKeyboardMarkup:
+def _build_story_node_keyboard(node, choices, story_service: StoryService) -> InlineKeyboardMarkup:
     buttons = []
     if node.node_type == NodeType.ENDING:
         buttons.append(
@@ -149,7 +145,11 @@ def _build_story_node_keyboard(
         )
     elif node.node_type == NodeType.QUIZ:
         buttons.append(
-            [InlineKeyboardButton(text="🎭 Iniciar cuestionario", callback_data="discover_archetype")]
+            [
+                InlineKeyboardButton(
+                    text="🎭 Iniciar cuestionario", callback_data="discover_archetype"
+                )
+            ]
         )
     elif choices:
         for choice in choices:
@@ -221,9 +221,7 @@ async def start_story(callback: CallbackQuery):
         success, message, _ = story_service.advance_to_node(user_id, starting_node.id)
         if not success:
             await callback.answer(message, show_alert=True)
-            logger.info(
-                f"story_user_handlers | start_story | user_id={user_id} | result=denied"
-            )
+            logger.info(f"story_user_handlers | start_story | user_id={user_id} | result=denied")
             return
 
         logger.info(f"story_user_handlers | start_story | user_id={user_id} | result=ok")
@@ -286,8 +284,7 @@ async def _render_node(callback: CallbackQuery, node_id: int, story_service: Sto
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     await callback.answer()
     logger.info(
-        f"story_user_handlers | show_node | user_id={user_id} | "
-        f"node_id={node_id} | result=ok"
+        f"story_user_handlers | show_node | user_id={user_id} | " f"node_id={node_id} | result=ok"
     )
 
 
@@ -312,7 +309,9 @@ async def go_to_node(callback: CallbackQuery, callback_data: ContinueStoryCallba
             logger.info(f"story_user_handlers | go_to_node | user_id={user_id} | result=denied")
             return
 
-        logger.info(f"story_user_handlers | go_to_node | user_id={user_id} | node_id={node_id} | result=ok")
+        logger.info(
+            f"story_user_handlers | go_to_node | user_id={user_id} | node_id={node_id} | result=ok"
+        )
         await show_node(callback, node_id, story_service)
 
 
@@ -392,9 +391,7 @@ async def start_archetype_quiz(callback: CallbackQuery, state: FSMContext):
         await state.update_data(quiz_answers=[], current_question=0)
         await state.set_state(ArchetypeQuizStates.answering)
 
-        logger.info(
-            f"story_user_handlers | start_archetype_quiz | user_id={user_id} | result=ok"
-        )
+        logger.info(f"story_user_handlers | start_archetype_quiz | user_id={user_id} | result=ok")
         await show_quiz_question(callback, state, story_service)
 
 
@@ -495,11 +492,7 @@ async def calculate_and_show_archetype(
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📖 Continuar la historia", callback_data="continue_story"
-                )
-            ],
+            [InlineKeyboardButton(text="📖 Continuar la historia", callback_data="continue_story")],
             [InlineKeyboardButton(text="🔙 Menu de Fragmentos", callback_data="narrative")],
         ]
     )
@@ -584,9 +577,7 @@ async def view_my_archetype(callback: CallbackQuery):
 
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         await callback.answer()
-        logger.info(
-            f"story_user_handlers | view_my_archetype | user_id={user_id} | result=ok"
-        )
+        logger.info(f"story_user_handlers | view_my_archetype | user_id={user_id} | result=ok")
 
 
 # ==================== LOGROS ====================

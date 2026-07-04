@@ -984,7 +984,7 @@ class TestStoreAdminPureHelpers:
         tier.id = 1
         tier.name = "IMPULSO"
         text, buttons = build_admin_tier_menu_text_and_buttons([(tier, 4)], sin_nivel_count=2)
-        assert "Gabinete" in text
+        assert "productos por niveles" in text.lower()
         assert buttons[0][0].text == "IMPULSO (4)"
         assert buttons[1][0].text == "Sin nivel (2)"
         assert buttons[2][0].callback_data == "admin_store"

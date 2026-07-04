@@ -120,9 +120,7 @@ async def fulfillment_admin_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(
-    FulfillmentAdminQueueCallback.filter(), lambda cb: is_admin(cb.from_user.id)
-)
+@router.callback_query(FulfillmentAdminQueueCallback.filter(), lambda cb: is_admin(cb.from_user.id))
 async def fulfillment_admin_queue_list(
     callback: CallbackQuery, callback_data: FulfillmentAdminQueueCallback
 ):
@@ -162,9 +160,7 @@ async def fulfillment_admin_queue_list(
     await callback.answer()
 
 
-@router.callback_query(
-    FulfillmentAdminItemCallback.filter(), lambda cb: is_admin(cb.from_user.id)
-)
+@router.callback_query(FulfillmentAdminItemCallback.filter(), lambda cb: is_admin(cb.from_user.id))
 async def fulfillment_admin_item_detail(
     callback: CallbackQuery, callback_data: FulfillmentAdminItemCallback
 ):
@@ -202,9 +198,7 @@ async def fulfillment_admin_item_detail(
     await callback.answer()
 
 
-@router.callback_query(
-    FulfillmentAdminMarkCallback.filter(), lambda cb: is_admin(cb.from_user.id)
-)
+@router.callback_query(FulfillmentAdminMarkCallback.filter(), lambda cb: is_admin(cb.from_user.id))
 async def fulfillment_admin_mark_start(
     callback: CallbackQuery, callback_data: FulfillmentAdminMarkCallback, state: FSMContext
 ):
@@ -234,10 +228,10 @@ async def fulfillment_admin_mark_submit(message: Message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("fulfill_deliver_start:"), lambda cb: is_admin(cb.from_user.id))
-async def fulfillment_admin_deliver_start(
-    callback: CallbackQuery, state: FSMContext
-):
+@router.callback_query(
+    F.data.startswith("fulfill_deliver_start:"), lambda cb: is_admin(cb.from_user.id)
+)
+async def fulfillment_admin_deliver_start(callback: CallbackQuery, state: FSMContext):
     """Lista paquetes para entrega manual desde cola."""
     parts = callback.data.split(":")
     fulfillment_id = int(parts[1])

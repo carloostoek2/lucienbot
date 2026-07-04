@@ -663,8 +663,7 @@ async def process_invite_link(message: Message, state: FSMContext):
     with get_service(ChannelService) as svc:
         if not svc.update_invite_link(channel_id, link):
             await message.answer(
-                "🎩 <b>Lucien:</b>\n\n"
-                "<i>No pude guardar ese enlace. Verifique el formato.</i>",
+                "🎩 <b>Lucien:</b>\n\n" "<i>No pude guardar ese enlace. Verifique el formato.</i>",
                 parse_mode="HTML",
             )
             return

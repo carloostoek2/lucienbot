@@ -100,8 +100,18 @@ FIELD_LABELS = {
         "trivia_simple_limit_vip",
         False,
     ),
-    "besitos_daily": ("Besitos diarios (trivia)", "trivia_besitos_daily_free", "trivia_besitos_daily_vip", False),
-    "besitos_weekly": ("Besitos semanales (trivia)", "trivia_besitos_weekly_free", "trivia_besitos_weekly_vip", False),
+    "besitos_daily": (
+        "Besitos diarios (trivia)",
+        "trivia_besitos_daily_free",
+        "trivia_besitos_daily_vip",
+        False,
+    ),
+    "besitos_weekly": (
+        "Besitos semanales (trivia)",
+        "trivia_besitos_weekly_free",
+        "trivia_besitos_weekly_vip",
+        False,
+    ),
 }
 
 

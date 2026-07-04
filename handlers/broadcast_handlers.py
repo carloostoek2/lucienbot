@@ -420,7 +420,11 @@ async def ask_for_reactions(target, state: FSMContext):
     """Pregunta si quiere agregar reacciones"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💋 Mantener reacciones (predeterminado)", callback_data="reaction_yes")],
+            [
+                InlineKeyboardButton(
+                    text="💋 Mantener reacciones (predeterminado)", callback_data="reaction_yes"
+                )
+            ],
             [InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
             [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],
@@ -539,7 +543,9 @@ async def show_reaction_selection(callback: CallbackQuery, state: FSMContext):
         )
 
     buttons.append([InlineKeyboardButton(text="✅ Continuar", callback_data="reactions_selected")])
-    buttons.append([InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")])
+    buttons.append(
+        [InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")]
+    )
     buttons.append(
         [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_reactions")]
     )
@@ -572,7 +578,11 @@ async def back_from_reaction_selection(callback: CallbackQuery, state: FSMContex
     """Regresar desde selección de reacciones"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💋 Mantener reacciones (predeterminado)", callback_data="reaction_yes")],
+            [
+                InlineKeyboardButton(
+                    text="💋 Mantener reacciones (predeterminado)", callback_data="reaction_yes"
+                )
+            ],
             [InlineKeyboardButton(text="⏭️ Deshabilitar reacciones", callback_data="reaction_no")],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="broadcast_back_attachment")],
             [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_gamification")],

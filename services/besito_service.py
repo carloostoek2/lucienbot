@@ -144,7 +144,9 @@ class BesitoService:
             # Item 3/35 logging hygiene + EventBus expansion: structured format "besito_service | ... | user_id=... | ... result=..." (copy health_service + pool34 al pie)
             self._schedule_besitos_awarded_event(user_id, amount, source, reference_id, description)
 
-            logger.info(f"besito_service | credit_besitos | user_id={user_id} | amount={amount} source={source.value} result=credited")
+            logger.info(
+                f"besito_service | credit_besitos | user_id={user_id} | amount={amount} source={source.value} result=credited"
+            )
             return True
 
         except Exception as e:
@@ -210,7 +212,9 @@ class BesitoService:
             if commit:
                 db.commit()
 
-            logger.info(f"besito_service | debit_besitos | user_id={user_id} | amount={amount} source={source.value} result=debited")
+            logger.info(
+                f"besito_service | debit_besitos | user_id={user_id} | amount={amount} source={source.value} result=debited"
+            )
             return True
 
         except Exception as e:

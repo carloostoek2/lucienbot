@@ -132,10 +132,7 @@ def _resolve_actions_available(
     status: FulfillmentStatus, kind: FulfillmentKind, auto_result: dict
 ) -> list[str]:
     actions: list[str] = []
-    if (
-        kind == FulfillmentKind.USER_INPUT_THEN_MANUAL
-        and status == FulfillmentStatus.PENDING_INPUT
-    ):
+    if kind == FulfillmentKind.USER_INPUT_THEN_MANUAL and status == FulfillmentStatus.PENDING_INPUT:
         actions.append("submit_input")
     if kind == FulfillmentKind.PACKAGE and status == FulfillmentStatus.FAILED:
         actions.append("retry_delivery")
@@ -171,7 +168,10 @@ class FulfillmentService:
 
     def _get_fulfillment_row(self, fulfillment_id: int) -> OrderFulfillment | None:
         return (
-            self._get_db().query(OrderFulfillment).filter(OrderFulfillment.id == fulfillment_id).first()
+            self._get_db()
+            .query(OrderFulfillment)
+            .filter(OrderFulfillment.id == fulfillment_id)
+            .first()
         )
 
     def create_fulfillments_for_order(self, order_id: int) -> list[OrderFulfillment]:
@@ -182,9 +182,7 @@ class FulfillmentService:
         created: list[OrderFulfillment] = []
         for item in order.items:
             existing = (
-                db.query(OrderFulfillment)
-                .filter(OrderFulfillment.order_item_id == item.id)
-                .first()
+                db.query(OrderFulfillment).filter(OrderFulfillment.order_item_id == item.id).first()
             )
             if existing:
                 created.append(existing)
@@ -275,7 +273,9 @@ class FulfillmentService:
         )
         return ok, msg
 
-    async def _dispatch_package(self, bot, row: OrderFulfillment, product: StoreProduct) -> tuple[bool, str]:
+    async def _dispatch_package(
+        self, bot, row: OrderFulfillment, product: StoreProduct
+    ) -> tuple[bool, str]:
         if not product.package_id:
             row.status = FulfillmentStatus.FAILED
             self._get_db().commit()
@@ -360,7 +360,9 @@ class FulfillmentService:
         self._get_db().commit()
         return True, msg
 
-    async def _dispatch_vip_grant(self, bot, row: OrderFulfillment, product: StoreProduct) -> tuple[bool, str]:
+    async def _dispatch_vip_grant(
+        self, bot, row: OrderFulfillment, product: StoreProduct
+    ) -> tuple[bool, str]:
         auto = _parse_json(row.auto_result)
         vip_svc = VIPService(self._get_db())
         if auto.get("vip_activated"):
@@ -369,9 +371,7 @@ class FulfillmentService:
             row.status = FulfillmentStatus.FAILED
             self._get_db().commit()
             return False, LucienVoice.reward_vip_not_configured()
-        ok, msg, metadata = await vip_svc.grant_vip_from_tariff(
-            bot, row.user_id, product.tariff_id
-        )
+        ok, msg, metadata = await vip_svc.grant_vip_from_tariff(bot, row.user_id, product.tariff_id)
         if not ok:
             if metadata.get("vip_activated"):
                 row.status = FulfillmentStatus.AUTO_IN_PROGRESS
@@ -485,7 +485,10 @@ class FulfillmentService:
         now = datetime.now(UTC)
         created_any = False
         hours = cfg.get("early_access_hours", 24)
-        if product.fulfillment_kind == FulfillmentKind.PRIVILEGE_EARLY_ACCESS or include_combo_discount:
+        if (
+            product.fulfillment_kind == FulfillmentKind.PRIVILEGE_EARLY_ACCESS
+            or include_combo_discount
+        ):
             created_any |= self._add_early_access_privilege(db, row, product, cfg, now)
         pct = cfg.get("discount_pct") or cfg.get("companion_discount_pct")
         if product.fulfillment_kind == FulfillmentKind.PRIVILEGE_DISCOUNT or (
@@ -619,7 +622,9 @@ class FulfillmentService:
             f"fulfillment_service | admin_mark_fulfilled | user_id={row.user_id} | "
             f"fulfillment_id={fulfillment_id} | result=ok"
         )
-        return True, LucienVoice.backpack_fulfillment_fulfilled(row.product.name if row.product else "")
+        return True, LucienVoice.backpack_fulfillment_fulfilled(
+            row.product.name if row.product else ""
+        )
 
     async def admin_deliver_package_from_queue(
         self, bot, fulfillment_id: int, package_id: int, admin_id: int
@@ -803,7 +808,9 @@ class FulfillmentService:
         self._get_db().commit()
         return True, msg
 
-    async def retry_fulfillment_delivery(self, bot, user_id: int, fulfillment_id: int) -> tuple[bool, str]:
+    async def retry_fulfillment_delivery(
+        self, bot, user_id: int, fulfillment_id: int
+    ) -> tuple[bool, str]:
         row = self._get_fulfillment_row(fulfillment_id)
         if not row or row.user_id != user_id:
             return False, LucienVoice.store_order_not_found()

@@ -125,7 +125,7 @@ class TestStoreCatalog:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "silencio" in text.lower()
+        assert "productos disponibles" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_products(self, mock_get_service, make_callback):
@@ -267,7 +267,7 @@ class TestStoreCategoryProducts:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "aguarda nuevas piezas" in text.lower()
+        assert "no hay productos" in text.lower()
         assert "Fotos Exclusivas" in text
 
     @patch("handlers.store_user_handlers.get_service")
@@ -1034,7 +1034,7 @@ class TestDirectBuy:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "adquisición" in text.lower()
+        assert "confirma la compra" in text.lower()
         assert "Producto Test" in text
         assert "200" in text
         assert "300" in text  # balance after (500-200)
@@ -1111,7 +1111,7 @@ class TestConfirmDirectBuy:
 
         store.purchase_and_complete.assert_called_once_with(cb.bot, 123456789, 1)
         cb.message.edit_text.assert_called_once()
-        cb.answer.assert_called_once_with("Adquisición completada.")
+        cb.answer.assert_called_once_with("Compra realizada.")
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_complete_order_failure(self, mock_get_service, make_callback):
@@ -1177,7 +1177,7 @@ class TestConfirmDirectBuy:
         await confirm_direct_buy(cb, cd, cb.bot, state)
 
         text = cb.message.edit_text.call_args[0][0]
-        assert "discernimiento" in text.lower()
+        assert "compra completada" in text.lower()
         assert "círculo íntimo" not in text
 
     @patch("handlers.store_user_handlers.get_service")
@@ -1269,7 +1269,7 @@ class TestPurchaseHistory:
 
         cb.message.edit_text.assert_called_once()
         text = cb.message.edit_text.call_args[0][0]
-        assert "adquisiciones" in text.lower()
+        assert "compras" in text.lower()
 
     @patch("handlers.store_user_handlers.get_service")
     async def test_displays_orders(self, mock_get_service, make_callback):

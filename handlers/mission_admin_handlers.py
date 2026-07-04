@@ -59,7 +59,9 @@ class RewardWizardStates(StatesGroup):
 # 1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
 
 
-def compute_mission_wizard_step_text(step: int, title: str, prompt: str, example: str | None = None) -> str:
+def compute_mission_wizard_step_text(
+    step: int, title: str, prompt: str, example: str | None = None
+) -> str:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard).
     1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
     """
@@ -75,7 +77,9 @@ Paso {step} de 6: {title}
     return text
 
 
-def build_mission_confirm_text_and_keyboard(data: dict, reward=None) -> tuple[str, InlineKeyboardMarkup]:
+def build_mission_confirm_text_and_keyboard(
+    data: dict, reward=None
+) -> tuple[str, InlineKeyboardMarkup]:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (wizard confirm).
     1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
     """
@@ -249,7 +253,9 @@ def build_mission_delete_confirm_keyboard(mission_id: int) -> InlineKeyboardMark
             [
                 InlineKeyboardButton(
                     text="✅ Si, eliminar",
-                    callback_data=MissionDeleteCallback(mission_id=mission_id, confirmed=True).pack(),
+                    callback_data=MissionDeleteCallback(
+                        mission_id=mission_id, confirmed=True
+                    ).pack(),
                 )
             ],
             [
@@ -262,7 +268,9 @@ def build_mission_delete_confirm_keyboard(mission_id: int) -> InlineKeyboardMark
     )
 
 
-def build_mission_stats_text_and_buttons(missions: list) -> tuple[str, list[list[InlineKeyboardButton]]]:
+def build_mission_stats_text_and_buttons(
+    missions: list,
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin missions (stats).
     1:1 de lógica previamente inline (item9, arch-enforcer). Precedent item7/8.
     """
@@ -593,7 +601,9 @@ async def confirm_create_mission(callback: CallbackQuery, state: FSMContext):
                     ]
                 ),
             )
-            logger.info(f"mission_admin_handlers | confirm_create_mission | user_id={callback.from_user.id} | mission_id={mission.id} | name={mission.name}")
+            logger.info(
+                f"mission_admin_handlers | confirm_create_mission | user_id={callback.from_user.id} | mission_id={mission.id} | name={mission.name}"
+            )
 
         except Exception as e:
             logger.error(f"Error creando mision: {e}")
@@ -617,7 +627,9 @@ async def list_missions(callback: CallbackQuery):
     """Lista todas las misiones"""
     with get_service(MissionService) as mission_service:
         missions = mission_service.get_all_missions(active_only=False)
-        logger.info(f"mission_admin_handlers | list_missions | user_id={callback.from_user.id} | count={len(missions)}")
+        logger.info(
+            f"mission_admin_handlers | list_missions | user_id={callback.from_user.id} | count={len(missions)}"
+        )
 
         if not missions:
             await callback.message.edit_text(

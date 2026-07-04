@@ -223,6 +223,7 @@ class RewardService:
         Not core CRUD. 0 behavior change. Precedent item8/9.
         """
         from services.package_service import PackageService
+
         return PackageService(db=self._get_db()).get_package(package_id)
 
     def create_package_for_reward_wizard(

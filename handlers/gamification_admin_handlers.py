@@ -53,10 +53,11 @@ class DailyGiftConfigStates(StatesGroup):
 
 class ButtonConfigStates(StatesGroup):
     """Estados para el wizard completo de gestión de botones de enlace extra."""
+
     waiting_label = State()
     waiting_url = State()
     waiting_description = State()  # opcional
-    edit_waiting_field = State()   # para edición de label/url/desc
+    edit_waiting_field = State()  # para edición de label/url/desc
 
 
 class AdminBesitoGrantStates(StatesGroup):
@@ -74,7 +75,11 @@ async def admin_gamification_menu(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="💋 Configurar besitos", callback_data="config_besitos")],
-            [InlineKeyboardButton(text="🔗 Botones de enlace para publicaciones", callback_data="config_buttons")],
+            [
+                InlineKeyboardButton(
+                    text="🔗 Botones de enlace para publicaciones", callback_data="config_buttons"
+                )
+            ],
             [InlineKeyboardButton(text="📢 Enviar broadcast", callback_data="send_broadcast")],
             [
                 InlineKeyboardButton(
@@ -160,7 +165,11 @@ async def config_besitos_menu(callback: CallbackQuery):
                 )
             ],
             [InlineKeyboardButton(text="➕ Agregar emoji", callback_data="add_emoji")],
-            [InlineKeyboardButton(text="🔗 Gestionar botones de enlace", callback_data="config_buttons")],
+            [
+                InlineKeyboardButton(
+                    text="🔗 Gestionar botones de enlace", callback_data="config_buttons"
+                )
+            ],
             [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_gamification")],
         ]
     )
@@ -235,7 +244,9 @@ async def process_admin_besito_amount(message: Message, state: FSMContext):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Confirmar", callback_data="admin_besito_grant_confirm"),
+                InlineKeyboardButton(
+                    text="✅ Confirmar", callback_data="admin_besito_grant_confirm"
+                ),
                 InlineKeyboardButton(text="❌ Cancelar", callback_data="config_besitos"),
             ]
         ]
@@ -626,7 +637,9 @@ async def process_button_url(message: Message, state: FSMContext):
     with get_service(BroadcastService) as broadcast_service:
         try:
             button = broadcast_service.create_broadcast_button(label=label, url=url)
-            logger.info(f"gamification_admin_handlers | add_button | admin_id={message.from_user.id} | button_id={button.id} | label={label}")
+            logger.info(
+                f"gamification_admin_handlers | add_button | admin_id={message.from_user.id} | button_id={button.id} | label={label}"
+            )
         except Exception as e:
             logger.error(f"Error creando botón: {e}")
             await message.answer(
@@ -746,12 +759,21 @@ async def toggle_button(callback: CallbackQuery, callback_data: ToggleButtonCall
     for b in buttons:
         st = "✅" if b.is_active else "❌"
         text += f"{st} {b.label}\n"
-        kbs.append([InlineKeyboardButton(text=f"{b.label} Editar", callback_data=EditButtonCallback(button_id=b.id).pack())])
+        kbs.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{b.label} Editar",
+                    callback_data=EditButtonCallback(button_id=b.id).pack(),
+                )
+            ]
+        )
 
-    kbs.extend([
-        [InlineKeyboardButton(text="➕ Agregar botón de enlace", callback_data="add_button")],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_gamification")],
-    ])
+    kbs.extend(
+        [
+            [InlineKeyboardButton(text="➕ Agregar botón de enlace", callback_data="add_button")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_gamification")],
+        ]
+    )
     await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kbs))
     await callback.answer()
 
@@ -761,11 +783,12 @@ async def toggle_button(callback: CallbackQuery, callback_data: ToggleButtonCall
 
 
 @router.callback_query(ChangeButtonLabelCallback.filter(), lambda cb: is_admin(cb.from_user.id))
-async def change_button_label_start(callback: CallbackQuery, callback_data: ChangeButtonLabelCallback, state: FSMContext):
+async def change_button_label_start(
+    callback: CallbackQuery, callback_data: ChangeButtonLabelCallback, state: FSMContext
+):
     await state.update_data(editing_button_id=callback_data.button_id, editing_field="label")
     await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Envíe el nuevo texto para el botón (1-64 caracteres):",
+        "🎩 Lucien:\n\n" "Envíe el nuevo texto para el botón (1-64 caracteres):",
         reply_markup=cancel_keyboard(),
     )
     await state.set_state(ButtonConfigStates.edit_waiting_field)
@@ -773,11 +796,12 @@ async def change_button_label_start(callback: CallbackQuery, callback_data: Chan
 
 
 @router.callback_query(ChangeButtonUrlCallback.filter(), lambda cb: is_admin(cb.from_user.id))
-async def change_button_url_start(callback: CallbackQuery, callback_data: ChangeButtonUrlCallback, state: FSMContext):
+async def change_button_url_start(
+    callback: CallbackQuery, callback_data: ChangeButtonUrlCallback, state: FSMContext
+):
     await state.update_data(editing_button_id=callback_data.button_id, editing_field="url")
     await callback.message.edit_text(
-        "🎩 Lucien:\n\n"
-        "Envíe el nuevo enlace:",
+        "🎩 Lucien:\n\n" "Envíe el nuevo enlace:",
         reply_markup=cancel_keyboard(),
     )
     await state.set_state(ButtonConfigStates.edit_waiting_field)
@@ -785,7 +809,9 @@ async def change_button_url_start(callback: CallbackQuery, callback_data: Change
 
 
 @router.callback_query(ChangeButtonDescCallback.filter(), lambda cb: is_admin(cb.from_user.id))
-async def change_button_desc_start(callback: CallbackQuery, callback_data: ChangeButtonDescCallback, state: FSMContext):
+async def change_button_desc_start(
+    callback: CallbackQuery, callback_data: ChangeButtonDescCallback, state: FSMContext
+):
     await state.update_data(editing_button_id=callback_data.button_id, editing_field="description")
     await callback.message.edit_text(
         "🎩 Lucien:\n\n"
@@ -844,7 +870,9 @@ async def delete_button(callback: CallbackQuery, callback_data: DeleteButtonCall
                 [
                     InlineKeyboardButton(
                         text="✅ Sí, eliminar",
-                        callback_data=DeleteButtonCallback(button_id=button_id, confirmed=True).pack(),
+                        callback_data=DeleteButtonCallback(
+                            button_id=button_id, confirmed=True
+                        ).pack(),
                     )
                 ],
                 [InlineKeyboardButton(text="❌ Cancelar", callback_data="config_buttons")],
@@ -878,11 +906,20 @@ async def delete_button(callback: CallbackQuery, callback_data: DeleteButtonCall
     for b in buttons:
         st = "✅" if b.is_active else "❌"
         text += f"{st} {b.label}\n"
-        kbs.append([InlineKeyboardButton(text=f"{b.label} Editar", callback_data=EditButtonCallback(button_id=b.id).pack())])
-    kbs.extend([
-        [InlineKeyboardButton(text="➕ Agregar botón de enlace", callback_data="add_button")],
-        [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_gamification")],
-    ])
+        kbs.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{b.label} Editar",
+                    callback_data=EditButtonCallback(button_id=b.id).pack(),
+                )
+            ]
+        )
+    kbs.extend(
+        [
+            [InlineKeyboardButton(text="➕ Agregar botón de enlace", callback_data="add_button")],
+            [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_gamification")],
+        ]
+    )
     await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kbs))
     await callback.answer()
 

@@ -772,6 +772,7 @@ async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
                             ProductWizardStates,
                             _wizard_prompt_package_selection,
                         )
+
                         await state.set_state(ProductWizardStates.selecting_package)
                         await _wizard_prompt_package_selection(callback, state)
                     else:
@@ -779,6 +780,7 @@ async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
                             ProductEditStates,
                             build_edit_package_buttons,
                         )
+
                         product_id = return_context["data"]["edit_product_id"]
                         await state.set_state(ProductEditStates.selecting_package)
                         with get_service(StoreService) as store_service:
@@ -811,7 +813,9 @@ async def confirm_create_package(callback: CallbackQuery, state: FSMContext):
                 await state.clear()
 
         except Exception as e:
-            logger.error(f"package_handlers | create_package_failed | user_id={callback.from_user.id} | error={e}")
+            logger.error(
+                f"package_handlers | create_package_failed | user_id={callback.from_user.id} | error={e}"
+            )
             await callback.message.edit_text(
                 LucienVoice.error_message("la creación del paquete"),
                 reply_markup=back_keyboard("manage_packages"),
@@ -864,16 +868,10 @@ async def _restore_product_context(target, state, package, return_context_raw):
                     [
                         InlineKeyboardButton(
                             text="📦 Ver producto",
-                            callback_data=ProductAdminDetailCallback(
-                                product_id=product_id
-                            ).pack(),
+                            callback_data=ProductAdminDetailCallback(product_id=product_id).pack(),
                         )
                     ],
-                    [
-                        InlineKeyboardButton(
-                            text="🔙 Tienda", callback_data="admin_store"
-                        )
-                    ],
+                    [InlineKeyboardButton(text="🔙 Tienda", callback_data="admin_store")],
                 ]
             ),
             parse_mode="HTML",

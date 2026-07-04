@@ -108,9 +108,7 @@ async def _send_mission_celebration_message(
             safe_mission, reward.besito_amount, balance
         )
     elif reward.reward_type == RewardType.PACKAGE:
-        text = LucienVoice.mission_reward_package_delivered(
-            safe_mission, html.escape(reward.name)
-        )
+        text = LucienVoice.mission_reward_package_delivered(safe_mission, html.escape(reward.name))
     elif reward.reward_type == RewardType.VIP_ACCESS:
         tariff_name = html.escape(reward.name)
         if reward.tariff_id:
@@ -259,9 +257,7 @@ class MissionService:
 
         return progress
 
-    def _get_or_create_progress_locked(
-        self, user_id: int, mission_id: int
-    ) -> UserMissionProgress:
+    def _get_or_create_progress_locked(self, user_id: int, mission_id: int) -> UserMissionProgress:
         """Obtiene o crea progreso con lock de fila para actualizaciones concurrentes."""
         db = self._get_db()
         mission = self.get_mission(mission_id)
@@ -437,9 +433,7 @@ class MissionService:
         try:
             await self.deliver_pending_rewards(user_id, bot=bot)
         except Exception as exc:
-            logger.warning(
-                f"mission_service | catch_up_pending | user_id={user_id} | error={exc}"
-            )
+            logger.warning(f"mission_service | catch_up_pending | user_id={user_id} | error={exc}")
 
     # Support added for mission_admin_handlers 1-service + pure extract (item9).
     # Arch-enforcer long-funcs note addressed. Precedent item7 (reward) + item8 (store-admin).
@@ -575,7 +569,12 @@ class MissionService:
         return progress if newly_completed else None
 
     async def _send_celebration_if_delivered(
-        self, delivery_bot, user_id: int, mission: Mission, reward_service: RewardService, db: Session
+        self,
+        delivery_bot,
+        user_id: int,
+        mission: Mission,
+        reward_service: RewardService,
+        db: Session,
     ) -> None:
         """Best-effort: mensaje de celebración tras entrega exitosa."""
         reward = reward_service.get_reward(mission.reward_id)
@@ -689,7 +688,11 @@ class MissionService:
 
         reward_service = RewardService(db)
         blocked = self._mission_reward_prechecks(
-            user_id, mission, previous_completed_at, progress, reward_service,
+            user_id,
+            mission,
+            previous_completed_at,
+            progress,
+            reward_service,
             skip_cooldown=skip_cooldown,
         )
         if blocked is not None:
@@ -765,9 +768,7 @@ class MissionService:
         reward_service = RewardService(db)
         user_ids: set[int] = set()
         rows = (
-            db.query(UserMissionProgress)
-            .filter(UserMissionProgress.is_completed.is_(True))
-            .all()
+            db.query(UserMissionProgress).filter(UserMissionProgress.is_completed.is_(True)).all()
         )
         for progress in rows:
             mission = self.get_mission(progress.mission_id)
@@ -805,9 +806,7 @@ class MissionService:
                 mission, reward_service, mission.reward_id if mission else None
             ):
                 continue
-            if self._is_reward_delivered_for_progress(
-                reward_service, user_id, mission, progress
-            ):
+            if self._is_reward_delivered_for_progress(reward_service, user_id, mission, progress):
                 continue
             result = await self._deliver_mission_reward_if_allowed(
                 db,
@@ -1030,9 +1029,7 @@ async def run_daily_gift_mission_side_effects(user_id: int, bot=None) -> int:
         mission_db.close()
 
 
-async def run_vip_mission_side_effects(
-    user_id: int, bot=None, db: Session | None = None
-) -> int:
+async def run_vip_mission_side_effects(user_id: int, bot=None, db: Session | None = None) -> int:
     """Best-effort: misiones VIP_ACTIVE con entrega automática."""
     owns_db = db is None
     mission_db = db or SessionLocal()
@@ -1041,9 +1038,7 @@ async def run_vip_mission_side_effects(
         return await mission_service.apply_vip_active_mission_updates(user_id, bot=bot)
     except Exception as exc:
         mission_db.rollback()
-        logger.warning(
-            f"mission_service | vip_missions_failed | user_id={user_id} | error={exc}"
-        )
+        logger.warning(f"mission_service | vip_missions_failed | user_id={user_id} | error={exc}")
         return 0
     finally:
         mission_service.close()

@@ -63,14 +63,12 @@ class BlockUserStates(StatesGroup):
 
 # ==================== PURE HELPERS (extracted item 2/35) ====================
 
+
 def build_promotion_step_text(step: int, title: str, prompt: str, example: str = None) -> str:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin promotions (wizard).
     1:1 de lógica previamente inline (item 2/35, arch-enforcer). Precedent item 8/9/34.
     """
-    text = (
-        f"<b>Paso {step} de 5:</b> {title}\n\n"
-        f"{prompt}\n"
-    )
+    text = f"<b>Paso {step} de 5:</b> {title}\n\n" f"{prompt}\n"
     if example:
         text += f"<i>Ejemplo: {example}</i>"
     return text
@@ -107,7 +105,9 @@ def compute_dates_text(start_date, end_date) -> str:
     return dates_text
 
 
-def build_promotion_confirm_text_and_keyboard(data: dict, package=None) -> tuple[str, InlineKeyboardMarkup]:
+def build_promotion_confirm_text_and_keyboard(
+    data: dict, package=None
+) -> tuple[str, InlineKeyboardMarkup]:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin promotions (wizard confirm).
     1:1 de lógica previamente inline (item 2/35, arch-enforcer). Precedent item 8/9/34.
     """
@@ -201,7 +201,9 @@ def build_promotion_delete_confirm_keyboard(promo_id: int) -> InlineKeyboardMark
     return promotion_confirm_delete_keyboard(promo_id)
 
 
-def build_interest_list_text_and_buttons(pending: list) -> tuple[str, list[list[InlineKeyboardButton]]]:
+def build_interest_list_text_and_buttons(
+    pending: list,
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin promotions (interests list).
     1:1 de lógica previamente inline (item 2/35, arch-enforcer). Precedent item 8/9/34.
     """
@@ -210,9 +212,7 @@ def build_interest_list_text_and_buttons(pending: list) -> tuple[str, list[list[
     buttons = []
     for interest in pending[:20]:
         promo_name = interest.promotion.name if interest.promotion else "Desconocida"
-        user_display = (
-            interest.username or interest.first_name or f"Visitante {interest.user_id}"
-        )
+        user_display = interest.username or interest.first_name or f"Visitante {interest.user_id}"
         text += f"• {user_display} - {promo_name[:20]}\n"
         buttons.append(
             [
@@ -226,7 +226,9 @@ def build_interest_list_text_and_buttons(pending: list) -> tuple[str, list[list[
     return text, buttons
 
 
-def build_promotion_interests_text_and_buttons(promo, pending: list) -> tuple[str, list[list[InlineKeyboardButton]]]:
+def build_promotion_interests_text_and_buttons(
+    promo, pending: list
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin promotions (per-promo interests).
     1:1 de lógica previamente inline (item 2/35, arch-enforcer). Precedent item 8/9/34.
     """
@@ -235,9 +237,7 @@ def build_promotion_interests_text_and_buttons(promo, pending: list) -> tuple[st
     text += f"🔔 <b>Expresiones pendientes: {len(pending)}</b>\n\n"
     buttons = []
     for interest in pending[:15]:
-        user_display = (
-            interest.username or interest.first_name or f"Visitante {interest.user_id}"
-        )
+        user_display = interest.username or interest.first_name or f"Visitante {interest.user_id}"
         text += f"• {user_display}\n"
         buttons.append(
             [
@@ -257,7 +257,9 @@ def build_promotion_interests_text_and_buttons(promo, pending: list) -> tuple[st
     return text, buttons
 
 
-def build_blocked_user_text_and_keyboard(blocked: list) -> tuple[str, list[list[InlineKeyboardButton]]]:
+def build_blocked_user_text_and_keyboard(
+    blocked: list,
+) -> tuple[str, list[list[InlineKeyboardButton]]]:
     """Función pura (sin estado ni side-effects). Soporte para UI de admin promotions (blocked users).
     1:1 de lógica previamente inline (item 2/35, arch-enforcer). Precedent item 8/9/34.
     """
@@ -292,11 +294,7 @@ def build_promotion_created_text_and_keyboard(promotion) -> tuple[str, InlineKey
     )
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🔙 Volver al Gabinete", callback_data="admin_promotions"
-                )
-            ]
+            [InlineKeyboardButton(text="🔙 Volver al Gabinete", callback_data="admin_promotions")]
         ]
     )
     return text, keyboard
@@ -312,9 +310,7 @@ def build_promotion_create_error_text_and_keyboard() -> tuple[str, InlineKeyboar
         "Permitame consultar con Diana sobre este inconveniente."
     )
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="🔙 Volver", callback_data="admin_promotions")]]
     )
     return text, keyboard
 
@@ -327,7 +323,9 @@ async def admin_promotions_menu(callback: CallbackQuery):
     """Menu de administracion de promociones - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
         stats = promotion_service.get_promotion_stats()
-        logger.info(f"promotion_admin_handlers | admin_promotions_menu | user_id={callback.from_user.id} | result=active={stats.get('active_promotions',0)} pending={stats.get('pending_interests',0)}")
+        logger.info(
+            f"promotion_admin_handlers | admin_promotions_menu | user_id={callback.from_user.id} | result=active={stats.get('active_promotions',0)} pending={stats.get('pending_interests',0)}"
+        )
 
         keyboard = promotion_admin_keyboard()
 
@@ -364,9 +362,10 @@ async def create_promotion_start(callback: CallbackQuery, state: FSMContext):
         "🎩 <b>Lucien:</b>\n\n"
         "<i>Vamos a forjar una nueva experiencia para el Gabinete...</i>\n\n"
         + build_promotion_step_text(
-            1, "El nombre de la experiencia",
+            1,
+            "El nombre de la experiencia",
             "Indique un nombre que capture la esencia de lo que Diana ofrece:",
-            "Coleccion Primavera - Momentos Intimos"
+            "Coleccion Primavera - Momentos Intimos",
         )
     )
 
@@ -391,13 +390,11 @@ async def process_promotion_name(message: Message, state: FSMContext):
         ]
     )
 
-    text = (
-        "🎩 <b>Lucien:</b>\n\n"
-        + build_promotion_step_text(
-            2, "La descripcion",
-            "Describa lo que esta experiencia ofrece (opcional):\n\nEnvie /skip para omitir.",
-            "Una seleccion curada de momentos capturados..."
-        )
+    text = "🎩 <b>Lucien:</b>\n\n" + build_promotion_step_text(
+        2,
+        "La descripcion",
+        "Describa lo que esta experiencia ofrece (opcional):\n\nEnvie /skip para omitir.",
+        "Una seleccion curada de momentos capturados...",
     )
 
     await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
@@ -428,7 +425,9 @@ async def select_package_source(callback: CallbackQuery, state: FSMContext):
     """Muestra lista de paquetes para seleccionar - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
         packages = promotion_service.get_available_packages_for_promo_wizard()
-        logger.info(f"promotion_admin_handlers | select_package_source | user_id={callback.from_user.id} | result=packages_count={len(packages)}")
+        logger.info(
+            f"promotion_admin_handlers | select_package_source | user_id={callback.from_user.id} | result=packages_count={len(packages)}"
+        )
 
     if not packages:
         keyboard = InlineKeyboardMarkup(
@@ -671,7 +670,9 @@ async def list_promotions(callback: CallbackQuery):
     """Lista todas las promociones - Voz de Lucien"""
     with get_service(PromotionService) as promotion_service:
         promotions = promotion_service.get_all_promotions()
-        logger.info(f"promotion_admin_handlers | list_promotions | user_id={callback.from_user.id} | result=count={len(promotions)}")
+        logger.info(
+            f"promotion_admin_handlers | list_promotions | user_id={callback.from_user.id} | result=count={len(promotions)}"
+        )
 
         if not promotions:
             keyboard = InlineKeyboardMarkup(

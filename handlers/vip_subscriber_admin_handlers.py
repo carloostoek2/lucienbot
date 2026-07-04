@@ -156,20 +156,14 @@ async def _reject_fsm_mismatch(callback: CallbackQuery, state: FSMContext) -> No
     await callback.answer("Contexto expirado. Vuelva al perfil.", show_alert=True)
 
 
-async def _render_subscriber_list(
-    callback: CallbackQuery, channel_id: int, page: int
-) -> None:
+async def _render_subscriber_list(callback: CallbackQuery, channel_id: int, page: int) -> None:
     """Renderiza lista paginada de suscriptores activos."""
     channel_filter = _channel_filter(channel_id)
     with get_service(VIPService) as svc:
-        subs, total = svc.get_subscriber_list_page(
-            channel_filter, page, SUBSCRIBER_PAGE_SIZE
-        )
+        subs, total = svc.get_subscriber_list_page(channel_filter, page, SUBSCRIBER_PAGE_SIZE)
     display_page = clamp_subscriber_page(page, total)
     text = build_subscriber_list_text(subs, display_page, total)
-    keyboard = subscriber_list_keyboard(
-        subs, channel_id, display_page, total, SUBSCRIBER_PAGE_SIZE
-    )
+    keyboard = subscriber_list_keyboard(subs, channel_id, display_page, total, SUBSCRIBER_PAGE_SIZE)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
@@ -288,9 +282,7 @@ async def process_subscriber_search_query(message: Message, state: FSMContext):
         return
 
     if len(matches) == 1:
-        found = await _send_subscriber_profile_message(
-            message, matches[0].id, channel_id
-        )
+        found = await _send_subscriber_profile_message(message, matches[0].id, channel_id)
         if not found:
             await message.answer(
                 LucienVoice.admin_subscriber_search_no_results(query),
@@ -308,9 +300,7 @@ async def process_subscriber_search_query(message: Message, state: FSMContext):
     SubscriberListCallback.filter(),
     lambda cb: is_admin(cb.from_user.id),
 )
-async def open_subscriber_list(
-    callback: CallbackQuery, callback_data: SubscriberListCallback
-):
+async def open_subscriber_list(callback: CallbackQuery, callback_data: SubscriberListCallback):
     """Abre lista paginada de suscriptores activos."""
     if await _deny_non_admin_callback(callback):
         return
@@ -319,9 +309,7 @@ async def open_subscriber_list(
         f"vip_subscriber_admin_handlers | abrir_lista | user_id={admin_id} | "
         f"channel_id={callback_data.channel_id} | page={callback_data.page}"
     )
-    await _render_subscriber_list(
-        callback, callback_data.channel_id, callback_data.page
-    )
+    await _render_subscriber_list(callback, callback_data.channel_id, callback_data.page)
 
 
 @router.callback_query(
@@ -721,9 +709,7 @@ async def confirm_subscriber_debit_besitos(
         )
     else:
         await callback.message.edit_text(
-            LucienVoice.admin_subscriber_action_failed(
-                "Saldo insuficiente o cantidad inválida"
-            ),
+            LucienVoice.admin_subscriber_action_failed("Saldo insuficiente o cantidad inválida"),
             reply_markup=profile_kb,
             parse_mode="HTML",
         )

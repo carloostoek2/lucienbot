@@ -30,6 +30,7 @@ from utils.admin import is_admin
 logger = logging.getLogger(__name__)
 router = Router()
 
+
 # Estados para FSM
 class AnonymousMessageStates(StatesGroup):
     waiting_message = State()
@@ -293,11 +294,7 @@ async def express_vip_promo_interest(
         if creator_contact_url:
             keyboard_buttons.insert(
                 0,
-                [
-                    InlineKeyboardButton(
-                        text="💬 Contactar a Diana", url=creator_contact_url
-                    )
-                ],
+                [InlineKeyboardButton(text="💬 Contactar a Diana", url=creator_contact_url)],
             )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
@@ -480,7 +477,11 @@ async def _reply_anonymous_send_success(
     await callback.answer()
 
 
-@router.callback_query(AnonymousMessageStates.confirming_send, F.data == "confirm_anonymous_send", lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    AnonymousMessageStates.confirming_send,
+    F.data == "confirm_anonymous_send",
+    lambda cb: not is_admin(cb.from_user.id),
+)
 async def confirm_anonymous_send(callback: CallbackQuery, state: FSMContext):
     """Confirma y envía el mensaje anónimo, debitando besitos primero"""
     user = callback.from_user

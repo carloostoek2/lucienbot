@@ -29,6 +29,7 @@ event_from_user, robustness) is in the middlewares/ canonical files.
 
 DO NOT ADD NEW LOGIC HERE. DO NOT RELY ON THIS PATH.
 """
+
 import warnings
 
 # Re-export the canonical implementation (and the alias)

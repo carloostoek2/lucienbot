@@ -45,9 +45,7 @@ async def cmd_start(message: Message):
     user_service = UserService()
     vip_service = VIPService()
 
-    logger.info(
-        f"/start recibido - user_id={user.id}, args={_redact_start_log_args(args)}"
-    )
+    logger.info(f"/start recibido - user_id={user.id}, args={_redact_start_log_args(args)}")
 
     try:
         if args == "acceso_vip":
@@ -56,15 +54,11 @@ async def cmd_start(message: Message):
                     message.bot, user.id
                 )
                 if ok:
-                    await message.answer(
-                        msg, reply_markup=vip_access_keyboard(), parse_mode="HTML"
-                    )
+                    await message.answer(msg, reply_markup=vip_access_keyboard(), parse_mode="HTML")
                 else:
                     await message.answer(msg, parse_mode="HTML")
             else:
-                await message.answer(
-                    LucienVoice.reward_vip_not_configured(), parse_mode="HTML"
-                )
+                await message.answer(LucienVoice.reward_vip_not_configured(), parse_mode="HTML")
             return
 
         # Verificar si es deep link "free"

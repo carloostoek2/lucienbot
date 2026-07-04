@@ -378,7 +378,9 @@ async def game_trivia_simple(callback: CallbackQuery):
     )
 
 
-@router.callback_query(TriviaSimpleAnswerCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    TriviaSimpleAnswerCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSimpleAnswerCallback):
     """Procesa respuesta de trivia especial."""
     user_id = callback.from_user.id
@@ -455,7 +457,9 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
 # ==================== PHASE 18: PROTECCION DE RACHA ====================
 
 
-@router.callback_query(StreakProtectAcceptCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    StreakProtectAcceptCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def handle_protection_accept(
     callback: CallbackQuery, callback_data: StreakProtectAcceptCallback
 ):
@@ -477,7 +481,9 @@ async def handle_protection_accept(
     await _redirect_to_trivia(callback, game_type)
 
 
-@router.callback_query(StreakProtectDeclineCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    StreakProtectDeclineCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def handle_protection_decline(
     callback: CallbackQuery, callback_data: StreakProtectDeclineCallback
 ):

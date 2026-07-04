@@ -214,9 +214,7 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text=LucienVoice.backpack_fulfillment_resend_vip_invite_button(),
-                    callback_data=BackpackActivateVipCallback(
-                        fulfillment_id=fulfillment_id
-                    ).pack(),
+                    callback_data=BackpackActivateVipCallback(fulfillment_id=fulfillment_id).pack(),
                 )
             ]
         )
@@ -242,9 +240,7 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text=LucienVoice.fulfillment_input_submit_button(),
-                    callback_data=BackpackSubmitInputCallback(
-                        fulfillment_id=fulfillment_id
-                    ).pack(),
+                    callback_data=BackpackSubmitInputCallback(fulfillment_id=fulfillment_id).pack(),
                 )
             ]
         )
@@ -253,9 +249,7 @@ def build_purchase_detail_keyboard(purchase: dict) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text=LucienVoice.backpack_fulfillment_read_chapter_button(),
-                    callback_data=BackpackReadChapterCallback(
-                        fulfillment_id=fulfillment_id
-                    ).pack(),
+                    callback_data=BackpackReadChapterCallback(fulfillment_id=fulfillment_id).pack(),
                 )
             ]
         )
@@ -371,7 +365,9 @@ async def callback_rewards(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar recompensas", show_alert=True)
 
 
-@router.callback_query(BackpackRewardsPageCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    BackpackRewardsPageCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def callback_rewards_page(
     callback: CallbackQuery, callback_data: BackpackRewardsPageCallback
 ):
@@ -420,7 +416,9 @@ async def callback_purchases(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar compras", show_alert=True)
 
 
-@router.callback_query(BackpackPurchasesPageCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    BackpackPurchasesPageCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def callback_purchases_page(
     callback: CallbackQuery, callback_data: BackpackPurchasesPageCallback
 ):
@@ -468,7 +466,9 @@ async def callback_vip(callback: CallbackQuery, bot: Bot):
         await callback.answer("Error al cargar VIP", show_alert=True)
 
 
-@router.callback_query(BackpackRewardDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    BackpackRewardDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def callback_reward_detail(
     callback: CallbackQuery, callback_data: BackpackRewardDetailCallback
 ):
@@ -506,7 +506,9 @@ async def callback_reward_detail(
         await callback.answer("Error al cargar detalle", show_alert=True)
 
 
-@router.callback_query(BackpackPurchaseDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
+@router.callback_query(
+    BackpackPurchaseDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id)
+)
 async def callback_purchase_detail(
     callback: CallbackQuery, callback_data: BackpackPurchaseDetailCallback
 ):
@@ -573,9 +575,7 @@ async def callback_resend_vip_invite(
             callback.bot, callback.from_user.id, callback_data.fulfillment_id
         )
     if ok:
-        await callback.message.answer(
-            msg, reply_markup=vip_access_keyboard(), parse_mode="HTML"
-        )
+        await callback.message.answer(msg, reply_markup=vip_access_keyboard(), parse_mode="HTML")
         await callback.answer()
     else:
         await callback.answer(msg, show_alert=True)

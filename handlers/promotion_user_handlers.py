@@ -236,11 +236,7 @@ async def express_interest(callback: CallbackQuery, callback_data: OfferInterest
         if creator_contact_url:
             keyboard_buttons.insert(
                 0,
-                [
-                    InlineKeyboardButton(
-                        text="💬 Contactar a Diana", url=creator_contact_url
-                    )
-                ],
+                [InlineKeyboardButton(text="💬 Contactar a Diana", url=creator_contact_url)],
             )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)

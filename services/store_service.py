@@ -325,7 +325,10 @@ class StoreService:
 
         changing_kind = "fulfillment_kind" in kwargs
         if changing_kind:
-            if new_kind in (FulfillmentKind.PACKAGE, FulfillmentKind.PACKAGE_DEFERRED) and not new_package_id:
+            if (
+                new_kind in (FulfillmentKind.PACKAGE, FulfillmentKind.PACKAGE_DEFERRED)
+                and not new_package_id
+            ):
                 logger.warning(
                     f"store_service | update_product | product_id={product_id} | "
                     f"result=package_id_required_for_kind"
@@ -866,11 +869,7 @@ class StoreService:
         """Cuenta productos sin tier asignado."""
         from sqlalchemy import func
 
-        q = (
-            self._get_db()
-            .query(func.count(StoreProduct.id))
-            .filter(StoreProduct.tier_id.is_(None))
-        )
+        q = self._get_db().query(func.count(StoreProduct.id)).filter(StoreProduct.tier_id.is_(None))
         if active_only:
             q = q.filter(StoreProduct.is_active)
         return q.scalar() or 0
@@ -1052,9 +1051,7 @@ class StoreService:
             if product and product.monthly_stock_cap:
                 count = fulfill.count_monthly_completed_order_items(product_id, db=db)
                 if count + qty > product.monthly_stock_cap:
-                    raise _OrderAtomicError(
-                        f"monthly_cap_exceeded | product_id={product.id}"
-                    )
+                    raise _OrderAtomicError(f"monthly_cap_exceeded | product_id={product.id}")
 
     def _decrement_stock_for_order(self, db: Session, order: Order) -> list[int]:
         """Decrementa stock con FOR UPDATE. Retorna low_stock_product_ids."""
@@ -1118,11 +1115,7 @@ class StoreService:
         item_ids = [item.id for item in order.items]
         if not item_ids:
             return False
-        rows = (
-            db.query(OrderFulfillment)
-            .filter(OrderFulfillment.order_item_id.in_(item_ids))
-            .all()
-        )
+        rows = db.query(OrderFulfillment).filter(OrderFulfillment.order_item_id.in_(item_ids)).all()
         if len(rows) < len(item_ids):
             return True
         incomplete = {
@@ -1164,9 +1157,7 @@ class StoreService:
         fulfill_svc = FulfillmentService(self._get_db())
         try:
             fulfill_svc.create_fulfillments_for_order(order.id)
-            await fulfill_svc.process_order_fulfillments(
-                bot, order.id, skip_notifications=is_retry
-            )
+            await fulfill_svc.process_order_fulfillments(bot, order.id, skip_notifications=is_retry)
         except Exception as exc:
             logger.error(
                 f"store | fulfillment_post_commit_failed | order_id={order.id} | error={exc}"
@@ -1426,7 +1417,9 @@ class StoreService:
         Colocado como método privado del servicio (único punto de finalización de purchase = complete_order).
         """
         if not bot_config.ADMIN_IDS:
-            logger.debug(f"store | purchase_notif_skipped | order_id={order.id} | reason=no_admin_ids")
+            logger.debug(
+                f"store | purchase_notif_skipped | order_id={order.id} | reason=no_admin_ids"
+            )
             return
 
         db = self._get_db()
@@ -1451,7 +1444,7 @@ class StoreService:
 
         fulfill_svc = FulfillmentService(db)
         items_for_text: list[tuple[str, int, int, str]] = []
-        for it in (order.items or []):
+        for it in order.items or []:
             row = fulfill_svc.get_fulfillment_for_order_item(it.id)
             kind = row.fulfillment_kind.value if row else "package"
             items_for_text.append((it.product_name, it.quantity, it.total_price, kind))
@@ -1492,9 +1485,13 @@ class StoreService:
                     reply_markup=keyboard,
                     parse_mode="HTML",
                 )
-                logger.info(f"store | purchase_notif_sent | admin_id={admin_id} | order_id={order.id}")
+                logger.info(
+                    f"store | purchase_notif_sent | admin_id={admin_id} | order_id={order.id}"
+                )
             except Exception as e:
-                logger.error(f"store | purchase_notif_error | admin_id={admin_id} | order_id={order.id} | error={e}")
+                logger.error(
+                    f"store | purchase_notif_error | admin_id={admin_id} | order_id={order.id} | error={e}"
+                )
 
 
 # =============================================================================

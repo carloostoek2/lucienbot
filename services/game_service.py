@@ -357,7 +357,9 @@ class GameService:
             lines.extend(["", parts["encouragement"]])
         return "\n".join(lines)
 
-    def _build_cap_message(self, remaining_before: int, remaining_after: int, templates: dict) -> str | None:
+    def _build_cap_message(
+        self, remaining_before: int, remaining_after: int, templates: dict
+    ) -> str | None:
         """Construye mensaje de aviso de limite de besitos (caps)."""
         if remaining_before <= 0:
             return self._select_template(templates["cap_exhausted"])
@@ -460,7 +462,12 @@ class GameService:
         if played >= limit:
             is_vip = self.is_user_vip(user_id)
             if is_vip:
-                return False, played, limit, "Ha alcanzado su límite diario de jugadas. Vuelva mañana."
+                return (
+                    False,
+                    played,
+                    limit,
+                    "Ha alcanzado su límite diario de jugadas. Vuelva mañana.",
+                )
             else:
                 return (
                     False,
@@ -636,7 +643,11 @@ class GameService:
 
         # 6. Registrar jugada
         record = GameRecord(
-            user_id=user_id, game_type="dice", result=f"{dice1}+{dice2}", payout=besitos, correct=False
+            user_id=user_id,
+            game_type="dice",
+            result=f"{dice1}+{dice2}",
+            payout=besitos,
+            correct=False,
         )
         self.db.add(record)
         self.db.commit()

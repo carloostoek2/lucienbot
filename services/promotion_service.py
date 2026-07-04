@@ -197,6 +197,7 @@ class PromotionService:
         Not core CRUD. 0 behavior change. Precedent item 8/9/34.
         """
         from services.package_service import PackageService
+
         return PackageService(db=self._get_db()).get_all_packages()
 
     # ==================== SISTEMA "ME INTERESA" ====================

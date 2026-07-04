@@ -56,7 +56,10 @@ class AnonymousMessageService:
     ) -> tuple[bool, str, AnonymousMessage | None]:
         """Debita besitos y persiste mensaje anónimo en una sola transacción."""
         content = (content or "").strip()
-        if len(content) < ANONYMOUS_MESSAGE_MIN_LENGTH or len(content) > ANONYMOUS_MESSAGE_MAX_LENGTH:
+        if (
+            len(content) < ANONYMOUS_MESSAGE_MIN_LENGTH
+            or len(content) > ANONYMOUS_MESSAGE_MAX_LENGTH
+        ):
             logger.info(
                 f"anonymous_message_service | send_paid | user_id={user_id} | result=invalid_content"
             )

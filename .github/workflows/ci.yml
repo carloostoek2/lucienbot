@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.12"]
 
@@ -20,9 +28,13 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
-        run: uv pip install "ruff==0.6.0" "mypy==1.10.0" -r requirements.txt -r requirements-dev.txt
+        run: uv pip install --system "ruff==0.6.0" "mypy==1.10.0" -r requirements.txt -r requirements-dev.txt
 
       - name: Lint (ruff)
         run: ruff check handlers/ services/ models/ bot.py
@@ -39,21 +51,20 @@ jobs:
         run: bandit -r handlers/ services/ models/ bot.py --skip B311,B404,B603,B607
 
       - name: Test (pytest + coverage)
-        run: >
-          pytest tests/
-          --ignore=tests/e2e
-          --ignore=tests/integration/test_alembic_heads.py
-          --deselect tests/integration/test_free_entry_flow.py::TestFreeEntryFlow::test_impatience_message_on_repeated_request
-          # Removed obsolete deselects for test_reaction_mission_flow_real.py (cleaned in testing refactor item #2 - the test mutated production DB and was a diagnostic script, not a real test)
-          --deselect tests/integration/test_streak_promotion_handler.py::test_admin_menu_includes_streak_promotions
-          --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_can_claim_cooldown_active
-          --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_can_claim_after_24_hours
-          --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_claim_gift_success
-          --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_claim_gift_cooldown_blocks
-          --deselect tests/unit/test_mission_service.py::TestMissionService::test_delete_mission
-          --deselect tests/unit/test_promotion_service.py::TestPromotionService::test_delete_promotion
-          --deselect tests/unit/test_reward_service.py::TestRewardServiceQueries::test_delete_reward_sets_inactive
-          --deselect tests/unit/test_store_service.py::TestStoreService::test_delete_product
-          --cov=services --cov=models --cov=handlers --cov-fail-under=30
+        run: |
+          pytest tests/ \
+            --ignore=tests/e2e \
+            --ignore=tests/integration/test_alembic_heads.py \
+            --deselect tests/integration/test_free_entry_flow.py::TestFreeEntryFlow::test_impatience_message_on_repeated_request \
+            --deselect tests/integration/test_streak_promotion_handler.py::test_admin_menu_includes_streak_promotions \
+            --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_can_claim_cooldown_active \
+            --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_can_claim_after_24_hours \
+            --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_claim_gift_success \
+            --deselect tests/unit/test_daily_gift_service.py::TestDailyGiftClaims::test_claim_gift_cooldown_blocks \
+            --deselect tests/unit/test_mission_service.py::TestMissionService::test_delete_mission \
+            --deselect tests/unit/test_promotion_service.py::TestPromotionService::test_delete_promotion \
+            --deselect tests/unit/test_reward_service.py::TestRewardServiceQueries::test_delete_reward_sets_inactive \
+            --deselect tests/unit/test_store_service.py::TestStoreService::test_delete_product \
+            --cov=services --cov=models --cov=handlers --cov-fail-under=30
         env:
           CI: true

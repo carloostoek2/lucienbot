@@ -126,7 +126,9 @@ def build_forward_bot_access_link(bot_username: str | None) -> str | None:
     return None
 
 
-async def try_deliver_vip_forward_message(bot, target_user_id: int, access_msg: str) -> tuple[bool, str | None]:
+async def try_deliver_vip_forward_message(
+    bot, target_user_id: int, access_msg: str
+) -> tuple[bool, str | None]:
     """Intenta DM al candidato; reintenta sin teclado si el primer envío falla."""
     from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
     from utils.telegram_delivery import classify_bad_request_error, classify_forbidden_error

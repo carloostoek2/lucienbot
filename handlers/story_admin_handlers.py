@@ -2155,9 +2155,7 @@ async def achievement_archetype_requirement_select(
     reward = data.get("reward_besitos", 0)
     chapter = data.get("required_chapter")
     required_node_id = data.get("required_node_id")
-    archetype_text = (
-        "Ninguno" if not required_archetype else required_archetype.value.title()
-    )
+    archetype_text = "Ninguno" if not required_archetype else required_archetype.value.title()
     node_text = "Ninguno" if not required_node_id else f"Fragmento {required_node_id}"
 
     keyboard = InlineKeyboardMarkup(

@@ -193,9 +193,7 @@ class BackpackService:
             bot, user_id, fulfillment_id
         )
 
-    def get_fulfillment_input_prompt(
-        self, user_id: int, fulfillment_id: int
-    ) -> tuple[bool, str]:
+    def get_fulfillment_input_prompt(self, user_id: int, fulfillment_id: int) -> tuple[bool, str]:
         from services.fulfillment_service import FulfillmentService
 
         return FulfillmentService(self._get_db()).get_user_input_prompt_message(
@@ -249,9 +247,7 @@ class BackpackService:
             # Prefer direct tariff_id (new convention for internal grants); fallback to token for legacy/manual
             tariff_id = sub.tariff_id or (sub.token.tariff_id if sub.token else None)
             tariff_obj = (
-                db.query(Tariff).filter(Tariff.id == tariff_id).first()
-                if tariff_id
-                else None
+                db.query(Tariff).filter(Tariff.id == tariff_id).first() if tariff_id else None
             )
 
             result.append(

@@ -1196,7 +1196,8 @@ class TestSubscriberAdminVIPService:
         assert extended.id == sub_soon.id
         db_session.refresh(sub_soon)
         db_session.refresh(sub_later)
-        assert sub_soon.end_date > now + timedelta(days=5)
+        min_end = (now + timedelta(days=5)).replace(tzinfo=None)
+        assert sub_soon.end_date > min_end
         assert sub_later.end_date == original_later_end
         assert sub_later.is_active is True
 

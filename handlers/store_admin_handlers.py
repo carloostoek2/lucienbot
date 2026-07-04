@@ -150,7 +150,9 @@ def build_product_detail_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def build_admin_tier_menu_button(tier_name: str, product_count: int, tier_id: int) -> InlineKeyboardButton:
+def build_admin_tier_menu_button(
+    tier_name: str, product_count: int, tier_id: int
+) -> InlineKeyboardButton:
     """Botón de nivel admin con conteo de productos. Función pura."""
     return InlineKeyboardButton(
         text=LucienVoice.store_admin_tier_button(tier_name, product_count),
@@ -234,9 +236,7 @@ def build_product_list_entry_and_button(
     button = [
         InlineKeyboardButton(
             text=f"{status} {product.name[:30]}",
-            callback_data=ProductAdminDetailCallback(
-                product_id=product.id, tier_id=tier_id
-            ).pack(),
+            callback_data=ProductAdminDetailCallback(product_id=product.id, tier_id=tier_id).pack(),
         )
     ]
     return entry, button
@@ -298,7 +298,9 @@ def build_product_edit_menu_text(product) -> str:
         tariff_name = product.tariff.name if getattr(product, "tariff", None) else "Sin tarifa"
         lines.append(f"👑 Tarifa: {tariff_name}")
     elif product.fulfillment_kind == FulfillmentKind.STORY_UNLOCK:
-        node_title = product.story_node.title if getattr(product, "story_node", None) else "Sin nodo"
+        node_title = (
+            product.story_node.title if getattr(product, "story_node", None) else "Sin nodo"
+        )
         lines.append(f"📖 Nodo: {node_title}")
     lines.extend(
         [
@@ -360,7 +362,9 @@ def build_edit_cancel_keyboard(product_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def build_edit_name_prompt_and_keyboard(product_id: int, name: str) -> tuple[str, InlineKeyboardMarkup]:
+def build_edit_name_prompt_and_keyboard(
+    product_id: int, name: str
+) -> tuple[str, InlineKeyboardMarkup]:
     """Construye prompt y teclado para editar nombre. Función pura."""
     text = f"🎩 Lucien:\n\nNombre actual: {name}\n\nIndica el nuevo nombre:"
     return text, build_edit_cancel_keyboard(product_id)
@@ -394,7 +398,11 @@ def build_edit_stock_prompt_and_keyboard(
     text = f"🎩 Lucien:\n\nStock actual: {stock_text}\n\nConfigura el nuevo stock:"
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="♾️ Ilimitado", callback_data="edit_product_stock_unlimited")],
+            [
+                InlineKeyboardButton(
+                    text="♾️ Ilimitado", callback_data="edit_product_stock_unlimited"
+                )
+            ],
             [InlineKeyboardButton(text="📦 Limitado", callback_data="edit_product_stock_limited")],
             [
                 InlineKeyboardButton(
@@ -407,9 +415,7 @@ def build_edit_stock_prompt_and_keyboard(
     return text, keyboard
 
 
-def build_edit_package_buttons(
-    product_id: int, packages: list
-) -> list[list[InlineKeyboardButton]]:
+def build_edit_package_buttons(product_id: int, packages: list) -> list[list[InlineKeyboardButton]]:
     """Construye botones de selección de paquete para edición. Función pura."""
     buttons = []
     for pkg in packages:
@@ -494,9 +500,7 @@ def build_edit_tier_buttons(product_id: int, tiers: list) -> list[list[InlineKey
     return buttons
 
 
-def build_edit_tariff_buttons(
-    product_id: int, tariffs: list
-) -> list[list[InlineKeyboardButton]]:
+def build_edit_tariff_buttons(product_id: int, tariffs: list) -> list[list[InlineKeyboardButton]]:
     """Construye botones de selección de tarifa para edición. Función pura."""
     buttons = [
         [
@@ -520,9 +524,7 @@ def build_edit_tariff_buttons(
     return buttons
 
 
-def build_edit_story_node_buttons(
-    product_id: int, nodes: list
-) -> list[list[InlineKeyboardButton]]:
+def build_edit_story_node_buttons(product_id: int, nodes: list) -> list[list[InlineKeyboardButton]]:
     """Construye botones de selección de nodo narrativo para edición. Función pura."""
     buttons = [
         [
@@ -807,10 +809,7 @@ async def process_product_description(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    buttons = [
-        [InlineKeyboardButton(text=t.name, callback_data=f"wiz_tier:{t.id}")]
-        for t in tiers
-    ]
+    buttons = [[InlineKeyboardButton(text=t.name, callback_data=f"wiz_tier:{t.id}")] for t in tiers]
     buttons.append([InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")])
     await message.answer(
         LucienVoice.fulfillment_admin_wizard_select_tier(),
@@ -875,9 +874,7 @@ async def _wizard_prompt_price_step(target, state: FSMContext) -> None:
     """Pide precio en besitos."""
     text = LucienVoice.fulfillment_admin_wizard_step_price()
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="❌ Cancelar", callback_data="admin_store")]]
     )
     if isinstance(target, CallbackQuery):
         await target.message.edit_text(text, reply_markup=keyboard)
@@ -985,9 +982,7 @@ async def _wizard_prompt_tariff_selection(target, state: FSMContext) -> None:
     if not tariffs:
         text = LucienVoice.fulfillment_admin_wizard_no_tariffs()
         keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
-            ]
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]]
         )
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=keyboard)
@@ -1013,9 +1008,7 @@ async def _wizard_prompt_story_node_selection(target, state: FSMContext) -> None
     if not nodes:
         text = LucienVoice.fulfillment_admin_wizard_no_story_nodes()
         keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
-            ]
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]]
         )
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=keyboard)
@@ -1084,9 +1077,7 @@ async def wizard_select_story_node(
     await callback.answer()
 
 
-@router.callback_query(
-    ProductWizardStates.waiting_fulfillment_config, F.data == "wiz_cfg_skip"
-)
+@router.callback_query(ProductWizardStates.waiting_fulfillment_config, F.data == "wiz_cfg_skip")
 async def wizard_skip_fulfillment_config(callback: CallbackQuery, state: FSMContext):
     """Usa fulfillment_config vacío."""
     await state.update_data(fulfillment_config="{}")
@@ -1317,9 +1308,7 @@ async def confirm_create_product(callback: CallbackQuery, state: FSMContext):
             )
 
             await callback.message.edit_text(
-                LucienVoice.fulfillment_admin_wizard_product_created(
-                    product.name, product.price
-                ),
+                LucienVoice.fulfillment_admin_wizard_product_created(product.name, product.price),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text="🔙 Volver", callback_data="admin_store")]
@@ -1372,9 +1361,7 @@ async def list_products(callback: CallbackQuery):
             await callback.answer()
             return
 
-        text, buttons = build_admin_tier_menu_text_and_buttons(
-            tiers_with_counts, sin_nivel_count
-        )
+        text, buttons = build_admin_tier_menu_text_and_buttons(tiers_with_counts, sin_nivel_count)
 
         await callback.message.edit_text(
             text,
@@ -1385,9 +1372,7 @@ async def list_products(callback: CallbackQuery):
 
 
 @router.callback_query(AdminStoreTierCallback.filter(), lambda cb: is_admin(cb.from_user.id))
-async def admin_list_tier_products(
-    callback: CallbackQuery, callback_data: AdminStoreTierCallback
-):
+async def admin_list_tier_products(callback: CallbackQuery, callback_data: AdminStoreTierCallback):
     """Lista productos de un nivel (tier) en administración."""
     tier_id = callback_data.tier_id
     with get_service(StoreService) as store_service:
@@ -1610,9 +1595,7 @@ async def process_edit_product_description(message: Message, state: FSMContext):
         await _finish_product_edit(message, state, product_id, success, "descripcion")
 
 
-@router.callback_query(
-    ProductEditStates.selecting_package, SelectPkgEditProductCallback.filter()
-)
+@router.callback_query(ProductEditStates.selecting_package, SelectPkgEditProductCallback.filter())
 async def process_edit_product_package(
     callback: CallbackQuery, state: FSMContext, callback_data: SelectPkgEditProductCallback
 ):
@@ -1625,9 +1608,7 @@ async def process_edit_product_package(
         await _finish_product_edit(callback, state, product_id, success, "paquete")
 
 
-@router.callback_query(
-    ProductEditStates.selecting_tier, SelectTierEditProductCallback.filter()
-)
+@router.callback_query(ProductEditStates.selecting_tier, SelectTierEditProductCallback.filter())
 async def process_edit_product_tier(
     callback: CallbackQuery, state: FSMContext, callback_data: SelectTierEditProductCallback
 ):
@@ -1640,9 +1621,7 @@ async def process_edit_product_tier(
         await _finish_product_edit(callback, state, product_id, success, "nivel")
 
 
-@router.callback_query(
-    ProductEditStates.selecting_tariff, SelectTariffEditProductCallback.filter()
-)
+@router.callback_query(ProductEditStates.selecting_tariff, SelectTariffEditProductCallback.filter())
 async def process_edit_product_tariff(
     callback: CallbackQuery, state: FSMContext, callback_data: SelectTariffEditProductCallback
 ):
@@ -1743,7 +1722,9 @@ async def process_edit_product_stock(message: Message, state: FSMContext):
         await _finish_product_edit(message, state, product_id, success, "stock")
 
 
-async def _finish_product_edit(target, state: FSMContext, product_id: int, success: bool, field: str):
+async def _finish_product_edit(
+    target, state: FSMContext, product_id: int, success: bool, field: str
+):
     """Muestra resultado de edición y limpia estado FSM."""
     if success:
         text = f"🎩 Lucien:\n\n✅ {field.capitalize()} actualizado correctamente."

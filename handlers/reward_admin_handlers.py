@@ -884,7 +884,9 @@ async def confirm_create_reward(callback: CallbackQuery, state: FSMContext):
                 build_reward_created_text(reward),
                 reply_markup=build_back_only_keyboard(),
             )
-            logger.info(f"reward_admin_handlers | confirm_create_reward | user_id={callback.from_user.id} | reward_id={reward.id} | result=success")
+            logger.info(
+                f"reward_admin_handlers | confirm_create_reward | user_id={callback.from_user.id} | reward_id={reward.id} | result=success"
+            )
         except Exception as e:
             logger.error(f"Error creando recompensa: {e}")
             await callback.message.edit_text(

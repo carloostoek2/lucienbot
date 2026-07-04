@@ -163,9 +163,7 @@ async def grant_pending_request(db: Session, request: PendingRequest, bot) -> Gr
             return GrantResult(success=True, request_id=request_id)
         if "USER_CHANNELS_TOO_MUCH" in err:
             try:
-                await bot.decline_chat_join_request(
-                    chat_id=channel.channel_id, user_id=user_id
-                )
+                await bot.decline_chat_join_request(chat_id=channel.channel_id, user_id=user_id)
             except Exception as decl_err:
                 logger.warning(
                     f"channel_grant | channels_limit_decline_failed | request_id={request_id} | "

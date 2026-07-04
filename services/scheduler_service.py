@@ -73,9 +73,7 @@ async def _run_backup_job():
         logger.error(f"Error running backup: {e}")
 
 
-async def _send_free_welcome_job(
-    user_id: int, channel_id: int, user_chat_id: int | None = None
-):
+async def _send_free_welcome_job(user_id: int, channel_id: int, user_chat_id: int | None = None):
     """Envía el mensaje ritual de entrada al canal Free tras 30s de espera.
 
     Job handler de módulo para evitar errores de serialización con APScheduler.
@@ -517,9 +515,7 @@ class SchedulerService:
         self.running = True
         logger.info("Scheduler started (APScheduler + SQLAlchemyJobStore)")
 
-    def schedule_free_welcome(
-        self, user_id: int, channel_id: int, user_chat_id: int | None = None
-    ):
+    def schedule_free_welcome(self, user_id: int, channel_id: int, user_chat_id: int | None = None):
         """Programa el mensaje ritual de entrada con 30s de delay.
 
         Usa DateTrigger para un job one-shot que se ejecuta 30 segundos

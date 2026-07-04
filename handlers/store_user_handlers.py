@@ -82,18 +82,34 @@ def _build_product_buttons(
                 )
             )
     else:
-        row.append(InlineKeyboardButton(text=LucienVoice.store_button_sold_out(), callback_data="#"))
+        row.append(
+            InlineKeyboardButton(text=LucienVoice.store_button_sold_out(), callback_data="#")
+        )
     buttons = [row]
     if include_preview:
         buttons.append(
-            [InlineKeyboardButton(text=LucienVoice.store_button_more_products(), callback_data=more_products_callback)]
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_more_products(),
+                    callback_data=more_products_callback,
+                )
+            ]
         )
         buttons.append(
-            [InlineKeyboardButton(text=LucienVoice.store_button_by_categories(), callback_data="store_tiers")]
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_by_categories(), callback_data="store_tiers"
+                )
+            ]
         )
     else:
         buttons.append(
-            [InlineKeyboardButton(text=LucienVoice.store_button_more_products(), callback_data=more_products_callback)]
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_more_products(),
+                    callback_data=more_products_callback,
+                )
+            ]
         )
     buttons.append(
         [InlineKeyboardButton(text=LucienVoice.store_button_back_to_shop(), callback_data="shop")]
@@ -153,15 +169,31 @@ async def shop_menu(callback: CallbackQuery):
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=LucienVoice.store_button_search(), callback_data="store_search")],
-            [InlineKeyboardButton(text=LucienVoice.store_button_categories(), callback_data="store_tiers")],
-            [InlineKeyboardButton(text=LucienVoice.store_button_catalog(), callback_data="store_catalog")],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_search(), callback_data="store_search"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_categories(), callback_data="store_tiers"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_catalog(), callback_data="store_catalog"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text=LucienVoice.store_button_history(), callback_data="purchase_history"
                 )
             ],
-            [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="back_to_main")],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_button_back(), callback_data="back_to_main"
+                )
+            ],
         ]
     )
 
@@ -193,7 +225,9 @@ async def store_tiers_menu(callback: CallbackQuery):
         ]
         for t in tiers
     ]
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]
+    )
     await callback.message.edit_text(
         LucienVoice.store_tier_menu_intro(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
@@ -277,7 +311,9 @@ async def store_catalog(callback: CallbackQuery):
     if row:
         buttons.append(row)
 
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]
+    )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -314,7 +350,11 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
                             callback_data="store_tiers",
                         )
                     ],
-                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_back(), callback_data="shop"
+                        )
+                    ],
                 ]
             ),
             parse_mode="HTML",
@@ -344,9 +384,15 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
         buttons.append(row)
 
     buttons.append(
-        [InlineKeyboardButton(text=LucienVoice.store_button_other_categories(), callback_data="store_tiers")]
+        [
+            InlineKeyboardButton(
+                text=LucienVoice.store_button_other_categories(), callback_data="store_tiers"
+            )
+        ]
     )
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]
+    )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -498,9 +544,7 @@ async def confirm_direct_buy(
         kind = summary.get("kind", "package")
         status = summary.get("status", "")
         if kind == "vip_grant":
-            if status == "failed" or (
-                status == "auto_running" and summary.get("vip_activated")
-            ):
+            if status == "failed" or (status == "auto_running" and summary.get("vip_activated")):
                 post_msg = LucienVoice.store_vip_purchase_pending_backpack()
             else:
                 post_msg = LucienVoice.store_purchase_completed(charge_amount)
@@ -525,7 +569,11 @@ async def confirm_direct_buy(
                         callback_data="store_tiers",
                     )
                 ],
-                [InlineKeyboardButton(text=LucienVoice.store_button_back_main(), callback_data="back_to_main")],
+                [
+                    InlineKeyboardButton(
+                        text=LucienVoice.store_button_back_main(), callback_data="back_to_main"
+                    )
+                ],
             ]
         ),
         parse_mode="HTML",
@@ -590,8 +638,16 @@ async def purchase_history(callback: CallbackQuery):
             LucienVoice.store_purchase_history_empty(),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text=LucienVoice.store_button_go_shop(), callback_data="shop")],
-                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_go_shop(), callback_data="shop"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_back(), callback_data="shop"
+                        )
+                    ],
                 ]
             ),
             parse_mode="HTML",
@@ -613,7 +669,11 @@ async def purchase_history(callback: CallbackQuery):
         text,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=LucienVoice.store_button_go_shop(), callback_data="shop")],
+                [
+                    InlineKeyboardButton(
+                        text=LucienVoice.store_button_go_shop(), callback_data="shop"
+                    )
+                ],
                 [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
             ]
         ),
@@ -650,7 +710,11 @@ async def process_search_query(message: Message, state: FSMContext):
             LucienVoice.store_search_min_chars(),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text=LucienVoice.store_button_cancel(), callback_data="shop")]
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_cancel(), callback_data="shop"
+                        )
+                    ]
                 ]
             ),
         )
@@ -664,8 +728,16 @@ async def process_search_query(message: Message, state: FSMContext):
             LucienVoice.store_search_no_results(query),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text=LucienVoice.store_button_catalog(), callback_data="store_catalog")],
-                    [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_catalog(), callback_data="store_catalog"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_back(), callback_data="shop"
+                        )
+                    ],
                 ]
             ),
             parse_mode="HTML",
@@ -693,8 +765,16 @@ async def process_search_query(message: Message, state: FSMContext):
     if row:
         buttons.append(row)
 
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_new_search(), callback_data="store_search")])
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text=LucienVoice.store_button_new_search(), callback_data="store_search"
+            )
+        ]
+    )
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]
+    )
 
     await message.answer(
         text,
@@ -719,8 +799,16 @@ async def store_filters(callback: CallbackQuery):
                     text=LucienVoice.store_filter_price_desc(), callback_data="filter_price_desc"
                 )
             ],
-            [InlineKeyboardButton(text=LucienVoice.store_filter_in_stock(), callback_data="filter_in_stock")],
-            [InlineKeyboardButton(text=LucienVoice.store_filter_recent(), callback_data="filter_recent")],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_filter_in_stock(), callback_data="filter_in_stock"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.store_filter_recent(), callback_data="filter_recent"
+                )
+            ],
             [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")],
         ]
     )
@@ -750,7 +838,9 @@ async def filter_price_desc(callback: CallbackQuery):
         products = store_service.get_all_products(active_only=True)
         products.sort(key=lambda p: p.price, reverse=True)
 
-        await show_filtered_products(callback, products, LucienVoice.store_filter_label_price_desc())
+        await show_filtered_products(
+            callback, products, LucienVoice.store_filter_label_price_desc()
+        )
 
 
 @router.callback_query(F.data == "filter_in_stock", lambda cb: not is_admin(cb.from_user.id))
@@ -778,7 +868,13 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
         await callback.message.edit_text(
             LucienVoice.store_filter_empty(),
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]]
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=LucienVoice.store_button_back(), callback_data="shop"
+                        )
+                    ]
+                ]
             ),
             parse_mode="HTML",
         )
@@ -806,7 +902,9 @@ async def show_filtered_products(callback: CallbackQuery, products: list, filter
     if row:
         buttons.append(row)
 
-    buttons.append([InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")])
+    buttons.append(
+        [InlineKeyboardButton(text=LucienVoice.store_button_back(), callback_data="shop")]
+    )
 
     await callback.message.edit_text(
         text,

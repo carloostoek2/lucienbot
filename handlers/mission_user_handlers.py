@@ -27,9 +27,7 @@ async def show_my_missions(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     with get_service(MissionService) as mission_service:
-        active_missions = await mission_service.get_user_active_missions(
-            user_id, bot=callback.bot
-        )
+        active_missions = await mission_service.get_user_active_missions(user_id, bot=callback.bot)
 
         if not active_missions:
             await callback.message.edit_text(
@@ -145,15 +143,11 @@ async def claim_mission_reward(callback: CallbackQuery):
     """Catch-up de recompensas de misiones pendientes (red de seguridad)."""
     user_id = callback.from_user.id
     with get_service(MissionService) as mission_service:
-        delivered = await mission_service.deliver_pending_rewards(
-            user_id, bot=callback.bot
-        )
+        delivered = await mission_service.deliver_pending_rewards(user_id, bot=callback.bot)
     if delivered:
         await callback.answer(
             LucienVoice.mission_reward_claim_success_alert("sus misiones"),
             show_alert=True,
         )
     else:
-        await callback.answer(
-            LucienVoice.mission_reward_claim_pending_alert(), show_alert=True
-        )
+        await callback.answer(LucienVoice.mission_reward_claim_pending_alert(), show_alert=True)

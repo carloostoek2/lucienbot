@@ -230,7 +230,9 @@ class VIPService:
             existing_subscription.is_active = True  # Defensive: ensure active after extension
             # Mantener la nueva referencia del token aunque sea extensión
             existing_subscription.token_id = token.id
-            existing_subscription.tariff_id = token.tariff_id  # direct tariff (new convention for internals + legacy compat)
+            existing_subscription.tariff_id = (
+                token.tariff_id
+            )  # direct tariff (new convention for internals + legacy compat)
 
             # Desactivar cualquier otra suscripción activa del usuario (duplicados por bug anterior)
             db.query(Subscription).filter(
@@ -318,9 +320,7 @@ class VIPService:
             from services.mission_service import run_vip_mission_side_effects
 
             shared_db = self.db if not self._owns_session else None
-            completed = await run_vip_mission_side_effects(
-                user_id, bot=bot, db=shared_db
-            )
+            completed = await run_vip_mission_side_effects(user_id, bot=bot, db=shared_db)
             if completed:
                 logger.info(
                     f"vip_service | vip_mission_side_effects | user_id={user_id} | "
@@ -476,8 +476,7 @@ class VIPService:
                 name=f"VIP {user_id}",
                 creates_join_request=False,
                 member_limit=1,
-                expire_date=datetime.now(UTC)
-                + timedelta(days=self.INVITE_LINK_EXPIRATION_DAYS),
+                expire_date=datetime.now(UTC) + timedelta(days=self.INVITE_LINK_EXPIRATION_DAYS),
             )
             return invite_link_obj.invite_link
         except Exception as exc:
@@ -498,9 +497,7 @@ class VIPService:
             return False, LucienVoice.reward_tariff_not_found(), {}
 
         token = self.generate_token(tariff_id)
-        subscription = await self.redeem_token_with_missions(
-            token.token_code, user_id, bot=bot
-        )
+        subscription = await self.redeem_token_with_missions(token.token_code, user_id, bot=bot)
         if not subscription:
             logger.error(
                 f"vip_service | grant_vip_from_tariff | redeem_failed | "
@@ -590,7 +587,11 @@ class VIPService:
                     {"user_id": user_id, "subscription_id": existing_subscription.id},
                 )
             )
-            return True, existing_subscription, {"subscription_id": existing_subscription.id, "tariff_id": tariff_id}
+            return (
+                True,
+                existing_subscription,
+                {"subscription_id": existing_subscription.id, "tariff_id": tariff_id},
+            )
 
         # Crear nueva
         end_date = now + timedelta(days=tariff.duration_days)
@@ -684,14 +685,16 @@ class VIPService:
                 {"user_id": subscription.user_id, "subscription_id": subscription.id},
             )
         )
-        return True, subscription, {
-            "subscription_id": subscription.id,
-            "tariff_id": tariff_id,
-        }
+        return (
+            True,
+            subscription,
+            {
+                "subscription_id": subscription.id,
+                "tariff_id": tariff_id,
+            },
+        )
 
-    async def resend_vip_invite_for_user(
-        self, bot, user_id: int
-    ) -> tuple[bool, str, str | None]:
+    async def resend_vip_invite_for_user(self, bot, user_id: int) -> tuple[bool, str, str | None]:
         """Regenera enlace VIP si el usuario tiene suscripción activa."""
         if not self.is_user_vip(user_id):
             return False, LucienVoice.reward_vip_not_configured(), None
@@ -870,9 +873,7 @@ class VIPService:
         )
         return snapshot
 
-    def get_subscriber_extend_context(
-        self, subscription_id: int
-    ) -> tuple[dict | None, list]:
+    def get_subscriber_extend_context(self, subscription_id: int) -> tuple[dict | None, list]:
         """Snapshot + tarifas activas para flujo extend (1 llamada de negocio compuesta)."""
         snapshot = self.get_subscriber_admin_snapshot(subscription_id)
         tariffs = self.get_all_tariffs(active_only=True)
@@ -909,9 +910,7 @@ class VIPService:
             )
             return True, "channel_inactive", {"subscription_id": subscription_id}
 
-        other_active = self.has_other_active_subscription(
-            subscription.user_id, subscription.id
-        )
+        other_active = self.has_other_active_subscription(subscription.user_id, subscription.id)
         if other_active:
             subscription.is_active = False
             db.commit()
@@ -922,12 +921,8 @@ class VIPService:
             return True, "deactivated_only", {"subscription_id": subscription_id}
 
         try:
-            await bot.ban_chat_member(
-                chat_id=channel.channel_id, user_id=subscription.user_id
-            )
-            await bot.unban_chat_member(
-                chat_id=channel.channel_id, user_id=subscription.user_id
-            )
+            await bot.ban_chat_member(chat_id=channel.channel_id, user_id=subscription.user_id)
+            await bot.unban_chat_member(chat_id=channel.channel_id, user_id=subscription.user_id)
             subscription.is_active = False
             user = db.query(User).filter(User.telegram_id == subscription.user_id).first()
             if user and user.vip_entry_status is not None:
@@ -943,10 +938,14 @@ class VIPService:
                 f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
                 f"subscription_id={subscription_id} | target={subscription.user_id} | result=kicked"
             )
-            return True, "kicked", {
-                "subscription_id": subscription_id,
-                "user_id": subscription.user_id,
-            }
+            return (
+                True,
+                "kicked",
+                {
+                    "subscription_id": subscription_id,
+                    "user_id": subscription.user_id,
+                },
+            )
         except Exception as exc:
             db.rollback()
             logger.error(
