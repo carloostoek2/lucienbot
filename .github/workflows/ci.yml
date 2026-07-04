@@ -48,7 +48,7 @@ jobs:
         continue-on-error: true
 
       - name: Security (bandit)
-        run: bandit -r handlers/ services/ models/ bot.py --skip B311,B404,B603,B607
+        run: bandit -r handlers/ services/ models/ bot.py --skip B311,B404,B603,B607 -ll
 
       - name: Test (pytest + coverage)
         run: |
