@@ -2,12 +2,13 @@
 Tests unitarios para BroadcastService.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from models.models import BesitoBalance, BroadcastMessage
 from services import BroadcastService, get_service
+from services.mission_service import MissionService
 
 
 @pytest.mark.unit
@@ -190,7 +191,9 @@ class TestBroadcastMessage:
         assert broadcast.text == "Hello world"
         assert broadcast.has_reactions is True
 
-    def test_create_broadcast_message_accepts_extra_button_id(self, db_session, sample_free_channel):
+    def test_create_broadcast_message_accepts_extra_button_id(
+        self, db_session, sample_free_channel
+    ):
         """Extra button id se acepta (default None) y se persiste."""
         service = BroadcastService(db_session)
 
@@ -227,57 +230,70 @@ class TestBroadcastMessage:
 
 @pytest.mark.unit
 class TestBroadcastReactions:
-    """Tests para reacciones y besitos"""
+    """Tests para reacciones y besitos (production async path)."""
 
-    def test_register_reaction_success(
+    @pytest.fixture(autouse=True)
+    def link_broadcast_selected_emojis(
+        self, db_session, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
+        db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_register_reaction_success(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
         """Test registrar reaccion crea BroadcastReaction y acredita besitos"""
         service = BroadcastService(db_session)
-        # Asegurar que el usuario tenga un balance inicial
         balance = BesitoBalance(user_id=sample_user.id, balance=0, total_earned=0, total_spent=0)
         db_session.add(balance)
         db_session.commit()
 
-        reaction = service.register_reaction(
-            sample_broadcast_message.id,
-            sample_user.id,
-            sample_reaction_emoji.id,
-            username=sample_user.username,
-        )
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            result = await service.check_and_register_reaction(
+                sample_broadcast_message.id,
+                sample_user.id,
+                sample_reaction_emoji.id,
+                username=sample_user.username,
+            )
 
-        assert reaction is not None
-        assert reaction.besitos_awarded == sample_reaction_emoji.besito_value
-        assert reaction.broadcast_id == sample_broadcast_message.id
-        assert reaction.user_id == sample_user.id
+        assert result["success"] is True
+        assert result["besitos_awarded"] == sample_reaction_emoji.besito_value
+        assert result["broadcast_id"] == sample_broadcast_message.id
+        assert result["user_id"] == sample_user.id
 
-        # Verificar que se acreditaron besitos
         db_session.refresh(balance)
         assert balance.balance == sample_reaction_emoji.besito_value
         assert balance.total_earned == sample_reaction_emoji.besito_value
 
-    def test_register_reaction_duplicate(
+    @pytest.mark.asyncio
+    async def test_register_reaction_duplicate(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
-        """Test reaccion duplicada retorna None y no acredita doble"""
+        """Test reaccion duplicada retorna failure y no acredita doble"""
         service = BroadcastService(db_session)
         balance = BesitoBalance(user_id=sample_user.id, balance=0, total_earned=0, total_spent=0)
         db_session.add(balance)
         db_session.commit()
 
-        # Primera reaccion
-        reaction1 = service.register_reaction(
-            sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
-        )
-        assert reaction1 is not None
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            result1 = await service.check_and_register_reaction(
+                sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
+            )
+            result2 = await service.check_and_register_reaction(
+                sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
+            )
 
-        # Segunda reaccion (duplicada)
-        reaction2 = service.register_reaction(
-            sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
-        )
-        assert reaction2 is None
+        assert result1["success"] is True
+        assert result2["success"] is False
+        assert result2["reason"] == "duplicate"
 
-        # Verificar que no se acreditaron besitos dobles
         db_session.refresh(balance)
         assert balance.balance == sample_reaction_emoji.besito_value
         assert balance.total_earned == sample_reaction_emoji.besito_value
@@ -287,7 +303,15 @@ class TestBroadcastReactions:
 class TestBroadcastQueries:
     """Tests para consultas de reacciones"""
 
-    def test_get_reactions_by_broadcast(
+    @pytest.fixture(autouse=True)
+    def link_broadcast_selected_emojis(
+        self, db_session, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
+        db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_get_reactions_by_broadcast(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
         """Test obtener reacciones de un broadcast"""
@@ -296,16 +320,21 @@ class TestBroadcastQueries:
         db_session.add(balance)
         db_session.commit()
 
-        service.register_reaction(
-            sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
-        )
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            await service.check_and_register_reaction(
+                sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
+            )
 
         reactions = service.get_reactions_by_broadcast(sample_broadcast_message.id)
 
         assert len(reactions) == 1
         assert reactions[0].broadcast_id == sample_broadcast_message.id
 
-    def test_get_user_reactions(
+    @pytest.mark.asyncio
+    async def test_get_user_reactions(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
         """Test obtener reacciones de un usuario"""
@@ -314,9 +343,13 @@ class TestBroadcastQueries:
         db_session.add(balance)
         db_session.commit()
 
-        service.register_reaction(
-            sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
-        )
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            await service.check_and_register_reaction(
+                sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
+            )
 
         reactions = service.get_user_reactions(sample_user.id)
 
@@ -328,7 +361,15 @@ class TestBroadcastQueries:
 class TestBroadcastStats:
     """Tests para estadisticas de broadcast"""
 
-    def test_get_broadcast_stats(
+    @pytest.fixture(autouse=True)
+    def link_broadcast_selected_emojis(
+        self, db_session, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
+        db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_get_broadcast_stats(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
         """Test estadisticas con total reacciones, besitos y desglose por emoji"""
@@ -337,10 +378,13 @@ class TestBroadcastStats:
         db_session.add(balance)
         db_session.commit()
 
-        # Crear dos reacciones del mismo usuario (una reentrada no permitida en realidad, simulamos una sola)
-        service.register_reaction(
-            sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
-        )
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            await service.check_and_register_reaction(
+                sample_broadcast_message.id, sample_user.id, sample_reaction_emoji.id
+            )
 
         stats = service.get_broadcast_stats(sample_broadcast_message.id)
 
@@ -362,10 +406,11 @@ class TestBroadcastStats:
 class TestBroadcastServiceRaceCondition:
     """Tests para verificar proteccion contra race conditions"""
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
     def test_register_reaction_uses_select_for_update(
         self, db_session, sample_broadcast_message, sample_reaction_emoji
     ):
-        """Test que register_reaction usa SELECT FOR UPDATE en BroadcastReaction"""
+        """Test que register_reaction usa SELECT FOR UPDATE en BroadcastReaction (legacy path)."""
         service = BroadcastService(db_session)
 
         # Mock para query de BroadcastReaction (primer query)

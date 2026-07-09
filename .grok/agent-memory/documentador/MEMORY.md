@@ -12,4 +12,12 @@
 - Pointer: .grok/agent-memory/documentador/vip-subscriber-admin-profiles.md
 - Pool phrase used: "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
 
+- 2026-07-05: reaction-ecosystem-week1-closed.md created (pool reaction-ecosystem-week1 Item 1/4; Week 1 broadcast reaction hardening effort=5; outcomes: unified markup module `broadcast_channel_markup.py`, `process_channel_reaction`, slim handler 1svc+1method, validators extracted; 101+ tests green, arch PASS WITH NOTES 0 crit, testg "suite protege adecuadamente"; review fixes: TestProcessChannelReaction, bot guard, dead code removal). Source: PLAN + SUMMARY + gsd + impact/arch/testg.
+- Pointer: .grok/agent-memory/documentador/reaction-ecosystem-week1-closed.md
+- Pool phrase used: "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
+
+- 2026-07-06: reaction-ecosystem-week2-closed.md created (pool reaction-ecosystem-week2 Item 2/4; Week 2 tests+docs+debt effort=5; builds on week1; outcomes: markup parity goldens, message_id=0 test, full_chain migration, CLAUDE.md rewrite, credit_besitos defer in decisions.md; 0 prod changes, 117 tests gold suite green; reaction ecosystem hardening cluster week1+week2 complete). Source: PLAN + SUMMARY + gsd + impact/arch/testg.
+- Pointer: .grok/agent-memory/documentador/reaction-ecosystem-week2-closed.md
+- Pool phrase used: "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
+
 (Previous entries would accumulate here for cross-pool recall.)

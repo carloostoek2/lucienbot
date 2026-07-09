@@ -14,10 +14,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from keyboards.broadcast_channel_markup import build_broadcast_send_markup
 from keyboards.callback_data import (
     BroadcastChannelCallback,
     BroadcastProtectCallback,
-    ReactionCallback,
     ToggleExtraButtonCallback,
     ToggleReactionCallback,
 )
@@ -38,63 +38,120 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def build_send_reaction_markup(
-    broadcast_id: int,
-    selected_emoji_ids: list[int],
-    get_emoji,
-) -> InlineKeyboardMarkup | None:
-    """Construye teclado de reacciones para envío de broadcast. Función pura."""
-    buttons = []
-    for emoji_id in selected_emoji_ids:
-        emoji = get_emoji(emoji_id)
-        if emoji:
-            buttons.append(
-                InlineKeyboardButton(
-                    text=f"{emoji.emoji}",
-                    callback_data=ReactionCallback(
-                        broadcast_id=broadcast_id, emoji_id=emoji.id
-                    ).pack(),
-                )
+def validate_broadcast_content_for_send(data: dict) -> str | None:
+    """Valida que el broadcast tenga contenido enviable. Función pura. None si OK."""
+    text = (data.get("text") or "").strip()
+    has_attachment = data.get("has_attachment", False)
+    attachment_file_id = data.get("attachment_file_id")
+    if has_attachment and attachment_file_id:
+        return None
+    if not text:
+        return "Agregue texto al mensaje o adjunte una foto/archivo antes de enviar."
+    return None
+
+
+async def send_broadcast_to_channel(
+    bot: Bot,
+    *,
+    channel_id: int,
+    text: str,
+    has_attachment: bool,
+    attachment_type: str | None,
+    attachment_file_id: str | None,
+    reply_markup: InlineKeyboardMarkup | None,
+    protect_content: bool,
+):
+    """Envía broadcast al canal en un solo paso con reply_markup opcional."""
+    common = {"chat_id": channel_id, "reply_markup": reply_markup}
+    if has_attachment and attachment_file_id:
+        if attachment_type == "photo":
+            return await bot.send_photo(
+                photo=attachment_file_id, caption=text, protect_content=protect_content, **common
             )
-    if not buttons:
-        return None
-    return InlineKeyboardMarkup(inline_keyboard=[buttons])
+        if attachment_type == "video":
+            return await bot.send_video(
+                video=attachment_file_id, caption=text, protect_content=protect_content, **common
+            )
+        if attachment_type == "document":
+            return await bot.send_document(
+                document=attachment_file_id, caption=text, protect_content=protect_content, **common
+            )
+        if attachment_type == "animation":
+            return await bot.send_animation(
+                animation=attachment_file_id,
+                caption=text,
+                protect_content=protect_content,
+                **common,
+            )
+    return await bot.send_message(text=text, protect_content=protect_content, **common)
 
 
-def build_broadcast_send_markup(
-    broadcast_id: int,
-    selected_emoji_ids: list[int],
-    extra_button,  # BroadcastButton | None
-    get_emoji,
-) -> InlineKeyboardMarkup | None:
-    """Construye markup combinado: reacciones (si hay) + botón URL extra (si hay). Función pura (sin estado ni side-effects)."""
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+async def publish_broadcast_to_channel(
+    bot: Bot,
+    broadcast_service: BroadcastService,
+    broadcast: BroadcastMessage,
+    data: dict,
+    send_markup: InlineKeyboardMarkup | None,
+) -> tuple[str, int | None]:
+    """Publica broadcast y persiste message_id. Retorna status y message_id."""
+    try:
+        sent_message = await send_broadcast_to_channel(
+            bot,
+            channel_id=data.get("channel_id"),
+            text=data.get("text", ""),
+            has_attachment=data.get("has_attachment", False),
+            attachment_type=data.get("attachment_type"),
+            attachment_file_id=data.get("attachment_file_id"),
+            reply_markup=send_markup,
+            protect_content=data.get("is_protected", False),
+        )
+    except Exception as e:
+        broadcast_service.delete_broadcast(broadcast.id)
+        logger.error(
+            f"broadcast_handlers | publish_broadcast_to_channel | send_failed | "
+            f"broadcast_id={broadcast.id} | error={e}"
+        )
+        return "send_failed", None
 
-    from keyboards.callback_data import ReactionCallback
+    if not broadcast_service.update_broadcast_message_id(broadcast.id, sent_message.message_id):
+        logger.error(
+            f"broadcast_handlers | publish_broadcast_to_channel | message_id_update_failed | "
+            f"broadcast_id={broadcast.id} | message_id={sent_message.message_id}"
+        )
+        return "tracking_failed", sent_message.message_id
 
-    rows = []
-    # reactions row
-    if selected_emoji_ids:
-        reaction_row = []
-        for eid in selected_emoji_ids:
-            em = get_emoji(eid)
-            if em:
-                reaction_row.append(
-                    InlineKeyboardButton(
-                        text=em.emoji,
-                        callback_data=ReactionCallback(
-                            broadcast_id=broadcast_id, emoji_id=em.id
-                        ).pack(),
-                    )
-                )
-        if reaction_row:
-            rows.append(reaction_row)
-    # extra button row
-    if extra_button:
-        rows.append([InlineKeyboardButton(text=extra_button.label, url=extra_button.url)])
-    if not rows:
-        return None
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    logger.info(
+        f"broadcast_handlers | publish_broadcast_to_channel | sent | "
+        f"channel={data.get('channel_id')} | message={sent_message.message_id} | "
+        f"broadcast_id={broadcast.id}"
+    )
+    return "sent", sent_message.message_id
+
+
+async def notify_broadcast_send_success(
+    callback: CallbackQuery, data: dict, message_id: int, selected_emojis: list[int]
+) -> None:
+    """Edita el mensaje admin con confirmación de broadcast enviado."""
+    try:
+        await callback.message.edit_text(
+            f"""🎩 <b>Lucien:</b>
+
+<i>El mensaje ha sido transmitido a los dominios de Diana...</i>
+
+✅ <b>Broadcast enviado exitosamente.</b>
+
+📊 <b>Detalles:</b>
+   • Canal: {data.get("channel_name")}
+   • Mensaje ID: <code>{message_id}</code>
+   • Reacciones: {"Sí" if selected_emojis else "No"}
+
+<i>Los visitantes podrán interactuar con él.</i>""",
+            reply_markup=back_keyboard("admin_gamification"),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        if "message is not modified" not in str(e).lower():
+            raise
 
 
 def persist_broadcast_from_state(data: dict, admin_id: int, broadcast_service) -> BroadcastMessage:  # noqa: F821 - forward ref under TYPE_CHECKING + postponed annotations
@@ -1007,165 +1064,40 @@ async def back_from_preview(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BroadcastStates.confirming, F.data == "confirm_broadcast")
 async def confirm_and_send_broadcast(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Envía el mensaje al canal"""
+    """Envía el mensaje al canal en un solo paso con reacciones."""
     data = await state.get_data()
+    validation_error = validate_broadcast_content_for_send(data)
+    if validation_error:
+        await callback.answer(validation_error, show_alert=True)
+        return
 
-    channel_id = data.get("channel_id")
-    text = data.get("text", "")
-    has_attachment = data.get("has_attachment", False)
-    attachment_type = data.get("attachment_type")
-    attachment_file_id = data.get("attachment_file_id")
     selected_emojis = data.get("selected_emojis", [])
-    is_protected = data.get("is_protected", False)
-
     with get_service(BroadcastService) as broadcast_service:
-        extra_button_id = data.get("extra_button_id")
         broadcast = persist_broadcast_from_state(data, callback.from_user.id, broadcast_service)
-
         extra_button = None
-        if extra_button_id:
-            extra_button = broadcast_service.get_broadcast_button(extra_button_id)
-
-        reaction_markup = build_broadcast_send_markup(
+        if data.get("extra_button_id"):
+            extra_button = broadcast_service.get_broadcast_button(data["extra_button_id"])
+        send_markup = build_broadcast_send_markup(
             broadcast.id,
             selected_emojis,
             extra_button,
             broadcast_service.get_reaction_emoji,
         )
-
-        # Sin botones de reacción en el envío inicial: se adjuntan tras fijar message_id
-        send_markup = None
-        protect_content = is_protected
-
-        try:
-            if has_attachment and attachment_file_id:
-                if attachment_type == "photo":
-                    sent_message = await bot.send_photo(
-                        chat_id=channel_id,
-                        photo=attachment_file_id,
-                        caption=text,
-                        reply_markup=send_markup,
-                        protect_content=protect_content,
-                    )
-                elif attachment_type == "video":
-                    sent_message = await bot.send_video(
-                        chat_id=channel_id,
-                        video=attachment_file_id,
-                        caption=text,
-                        reply_markup=send_markup,
-                        protect_content=protect_content,
-                    )
-                elif attachment_type == "document":
-                    sent_message = await bot.send_document(
-                        chat_id=channel_id,
-                        document=attachment_file_id,
-                        caption=text,
-                        reply_markup=send_markup,
-                        protect_content=protect_content,
-                    )
-                elif attachment_type == "animation":
-                    sent_message = await bot.send_animation(
-                        chat_id=channel_id,
-                        animation=attachment_file_id,
-                        caption=text,
-                        reply_markup=send_markup,
-                        protect_content=protect_content,
-                    )
-                else:
-                    sent_message = await bot.send_message(
-                        chat_id=channel_id, text=text, reply_markup=send_markup
-                    )
-            else:
-                sent_message = await bot.send_message(
-                    chat_id=channel_id,
-                    text=text,
-                    reply_markup=send_markup,
-                    protect_content=protect_content,
-                )
-        except Exception as e:
-            broadcast_service.delete_broadcast(broadcast.id)
-            logger.error(
-                f"broadcast_handlers | confirm_and_send_broadcast | send_failed | broadcast_id={broadcast.id} | error={e}"
-            )
+        status, message_id = await publish_broadcast_to_channel(
+            bot, broadcast_service, broadcast, data, send_markup
+        )
+        if status == "send_failed":
             await callback.answer(
                 "No pudimos enviar el mensaje al canal. Inténtelo de nuevo.", show_alert=True
             )
             return
-
-        if not broadcast_service.update_broadcast_message_id(broadcast.id, sent_message.message_id):
-            logger.error(
-                f"broadcast_handlers | confirm_and_send_broadcast | message_id_update_failed | broadcast_id={broadcast.id}"
-            )
-            try:
-                await bot.delete_message(chat_id=channel_id, message_id=sent_message.message_id)
-            except Exception as cleanup_err:
-                logger.warning(
-                    f"broadcast_handlers | confirm_and_send_broadcast | cleanup_failed | broadcast_id={broadcast.id} | error={cleanup_err}"
-                )
-            broadcast_service.delete_broadcast(broadcast.id)
+        if status == "tracking_failed":
             await callback.answer(
-                "El mensaje se envió pero no pudimos activar las reacciones. Inténtelo de nuevo.",
+                "Mensaje enviado, pero Lucien no pudo registrar el ID. Las reacciones podrían fallar.",
                 show_alert=True,
             )
-            return
-
-        if reaction_markup:
-            try:
-                await bot.edit_message_reply_markup(
-                    chat_id=channel_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=reaction_markup,
-                )
-            except Exception as e:
-                if "message is not modified" in str(e).lower():
-                    pass
-                else:
-                    logger.error(
-                        f"broadcast_handlers | attach_reaction_markup | broadcast_id={broadcast.id} | error={e}"
-                    )
-                    try:
-                        await bot.delete_message(
-                            chat_id=channel_id, message_id=sent_message.message_id
-                        )
-                    except Exception as cleanup_err:
-                        logger.warning(
-                            f"broadcast_handlers | attach_reaction_markup | cleanup_failed | broadcast_id={broadcast.id} | error={cleanup_err}"
-                        )
-                    broadcast_service.delete_broadcast(broadcast.id)
-                    await callback.answer(
-                        "El mensaje se envió pero no pudimos activar las reacciones. Inténtelo de nuevo.",
-                        show_alert=True,
-                    )
-                    return
-
-        try:
-            await callback.message.edit_text(
-                f"""🎩 <b>Lucien:</b>
-
-<i>El mensaje ha sido transmitido a los dominios de Diana...</i>
-
-✅ <b>Broadcast enviado exitosamente.</b>
-
-📊 <b>Detalles:</b>
-   • Canal: {data.get("channel_name")}
-   • Mensaje ID: <code>{sent_message.message_id}</code>
-   • Reacciones: {"Sí" if selected_emojis else "No"}
-
-<i>Los visitantes podrán interactuar con él.</i>""",
-                reply_markup=back_keyboard("admin_gamification"),
-                parse_mode="HTML",
-            )
-        except Exception as e:
-            if "message is not modified" in str(e).lower():
-                pass
-            else:
-                raise
-
-        logger.info(f"Broadcast enviado: channel={channel_id}, message={sent_message.message_id}")
-
-    # Legacy outer try/except/finally for send error UI removed in F4 unification (with handles close on all paths;
-    # errors will be caught by global error handler or bubble; main success path + close preserved).
-    # (Custom error edit for send fail is now handled by outer if any.)
+        else:
+            await notify_broadcast_send_success(callback, data, message_id, selected_emojis)
 
     await state.clear()
     await callback.answer()

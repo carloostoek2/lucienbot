@@ -6,7 +6,7 @@ Verifica que los CallbackData migrados funcionan correctamente:
 - ToggleReactionCallback
 - BroadcastProtectCallback
 """
-import pytest
+
 from unittest.mock import MagicMock
 
 from keyboards.callback_data import (
@@ -176,7 +176,7 @@ class TestReactionCallback:
 
     def test_build_send_reaction_markup_uses_reaction_callback(self):
         """Helper de envío genera callback_data compatible con handle_reaction."""
-        from handlers.broadcast_handlers import build_send_reaction_markup
+        from keyboards.broadcast_channel_markup import build_send_reaction_markup
 
         emoji = MagicMock()
         emoji.id = 3
@@ -240,7 +240,7 @@ class TestBroadcastCallbacksNoCollisions:
         ]
 
         packed_strings = [cb.pack() for cb in callbacks]
-        unique_prefixes = set(packed.split(":")[0] for packed in packed_strings)
+        unique_prefixes = {packed.split(":")[0] for packed in packed_strings}
 
         assert len(unique_prefixes) == 4
 
@@ -255,16 +255,22 @@ class TestBroadcastCallbacksNoCollisions:
         assert cb1.pack() != cb2.pack()
         assert cb1.pack() == f"bc_channel:{test_value}"
         assert cb2.pack() == f"bc_reaction:{test_value}"
+
+
 class TestBroadcastPureHelpers:
     """Tests para helpers puros de markup combinado (reacciones + botón extra URL)."""
 
     def test_build_broadcast_send_markup_reactions_only(self):
         """Solo emojis → una fila con ReactionCallbacks, sin URL."""
-        from handlers.broadcast_handlers import build_broadcast_send_markup
         from unittest.mock import MagicMock
 
+        from keyboards.broadcast_channel_markup import build_broadcast_send_markup
+
         mock_emoji = MagicMock(id=1, emoji="💋")
-        get_emoji = lambda eid: mock_emoji if eid == 1 else None
+
+        def get_emoji(eid):
+            return mock_emoji if eid == 1 else None
+
         markup = build_broadcast_send_markup(
             broadcast_id=42,
             selected_emoji_ids=[1],
@@ -279,7 +285,7 @@ class TestBroadcastPureHelpers:
 
     def test_build_broadcast_send_markup_extra_only(self):
         """Sin emojis, con extra → fila única con url (sin callback)."""
-        from handlers.broadcast_handlers import build_broadcast_send_markup
+        from keyboards.broadcast_channel_markup import build_broadcast_send_markup
 
         class FakeBtn:
             label = "🔗 Más"
@@ -301,11 +307,14 @@ class TestBroadcastPureHelpers:
 
     def test_build_broadcast_send_markup_combined(self):
         """Emojis + extra → 2 filas: reacciones (callbacks) + url."""
-        from handlers.broadcast_handlers import build_broadcast_send_markup
         from unittest.mock import MagicMock
 
+        from keyboards.broadcast_channel_markup import build_broadcast_send_markup
+
         mock_emoji = MagicMock(id=9, emoji="❤️")
-        get_emoji = lambda eid: mock_emoji if eid == 9 else None
+
+        def get_emoji(eid):
+            return mock_emoji if eid == 9 else None
 
         class FakeBtn:
             label = "📎 Ver"
@@ -326,7 +335,8 @@ class TestBroadcastPureHelpers:
 
     def test_build_broadcast_send_markup_none(self):
         """Sin nada → None."""
-        from handlers.broadcast_handlers import build_broadcast_send_markup
+        from keyboards.broadcast_channel_markup import build_broadcast_send_markup
+
         markup = build_broadcast_send_markup(
             broadcast_id=1,
             selected_emoji_ids=[],
@@ -334,3 +344,32 @@ class TestBroadcastPureHelpers:
             get_emoji=lambda eid: None,
         )
         assert markup is None
+
+    def test_build_broadcast_send_markup_chunks_nine_emojis(self):
+        """Más de 8 emojis → varias filas (límite Telegram)."""
+        from unittest.mock import MagicMock
+
+        from keyboards.broadcast_channel_markup import build_broadcast_send_markup
+
+        emojis = {i: MagicMock(id=i, emoji=f"E{i}") for i in range(1, 10)}
+        markup = build_broadcast_send_markup(
+            broadcast_id=19,
+            selected_emoji_ids=list(range(1, 10)),
+            extra_button=None,
+            get_emoji=lambda eid: emojis.get(eid),
+        )
+        assert markup is not None
+        assert len(markup.inline_keyboard) == 2
+        assert len(markup.inline_keyboard[0]) == 8
+        assert len(markup.inline_keyboard[1]) == 1
+
+    def test_chunk_inline_buttons_pure(self):
+        from aiogram.types import InlineKeyboardButton
+
+        from keyboards.broadcast_channel_markup import chunk_reaction_buttons
+
+        buttons = [InlineKeyboardButton(text=str(i), callback_data=f"x:{i}") for i in range(10)]
+        rows = chunk_reaction_buttons(buttons, max_per_row=8)
+        assert len(rows) == 2
+        assert len(rows[0]) == 8
+        assert len(rows[1]) == 2

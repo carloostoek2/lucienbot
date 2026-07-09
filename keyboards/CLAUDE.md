@@ -28,7 +28,8 @@ Teclados inline de Telegram.
 | `anonymous_messages_menu_keyboard()` | Menú de gestión de mensajes anónimos (admin) |
 | `anonymous_message_actions_keyboard(message_id)` | Acciones para un mensaje anónimo específico |
 | `anonymous_messages_list_keyboard(messages)` | Lista de mensajes con estados |
-| `reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)` | Teclado de reacciones con conteos |
+| `reactions_keyboard_with_counts(broadcast_id, emojis, emoji_counts)` | DEPRECATED — delega a `broadcast_channel_markup.build_channel_reaction_markup` |
+| `broadcast_channel_markup.build_channel_reaction_markup(...)` | Builder unificado send + refresh + extra URL (módulo `keyboards/broadcast_channel_markup.py`) |
 
 
 

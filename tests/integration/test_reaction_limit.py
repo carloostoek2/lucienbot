@@ -7,22 +7,21 @@ en el sistema de broadcast.
 Hallazgo: No existe implementación de límite diario de reacciones.
 Este test documenta el estado actual y sería un gap a implementar.
 """
-import pytest
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
 
-from services.broadcast_service import BroadcastService
-from services.besito_service import BesitoService
+import pytest
+
 from models.models import (
-    BroadcastMessage, BroadcastReaction, Channel, ChannelType,
-    ReactionEmoji, User
+    BroadcastMessage,
+    ReactionEmoji,
 )
+from services.broadcast_service import BroadcastService
 
 
 @pytest.mark.integration
 class TestReactionLimit:
     """Test para verificar el límite de reacciones por usuario"""
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
     def test_no_daily_reaction_limit_exists(self, db_session, sample_user, sample_free_channel):
         """
         Test que documenta: NO existe límite diario de reacciones.
@@ -40,12 +39,7 @@ class TestReactionLimit:
         broadcast_service = BroadcastService(db_session)
 
         # Crear emoji de reacción
-        emoji = ReactionEmoji(
-            emoji="💋",
-            name="besito",
-            besito_value=1,
-            is_active=True
-        )
+        emoji = ReactionEmoji(emoji="💋", name="besito", besito_value=1, is_active=True)
         db_session.add(emoji)
         db_session.commit()
         db_session.refresh(emoji)
@@ -56,7 +50,7 @@ class TestReactionLimit:
             channel_id=sample_free_channel.channel_id,
             admin_id=987654321,
             text="Test message for reaction limit",
-            has_reactions=True
+            has_reactions=True,
         )
         db_session.add(broadcast_msg)
         db_session.commit()
@@ -81,22 +75,18 @@ class TestReactionLimit:
             existing_emoji = broadcast_service.get_reaction_emoji_by_emoji(emoji_char)
             if not existing_emoji:
                 existing_emoji = broadcast_service.create_reaction_emoji(
-                    emoji=emoji_char,
-                    name=f"emoji_{emoji_char}",
-                    besito_value=1
+                    emoji=emoji_char, name=f"emoji_{emoji_char}", besito_value=1
                 )
 
             # Agregar reacción usando register_reaction
             reaction = broadcast_service.register_reaction(
-                broadcast_id=broadcast_msg.id,
-                user_id=sample_user.id,
-                emoji_id=existing_emoji.id
+                broadcast_id=broadcast_msg.id, user_id=sample_user.id, emoji_id=existing_emoji.id
             )
             if reaction:
                 reactions_added.append(reaction)
 
         # === ASSERT: Verificar que se pueden agregar múltiples reacciones ===
-        print(f"\n=== ANÁLISIS DE LÍMITE DE REACCIONES ===")
+        print("\n=== ANÁLISIS DE LÍMITE DE REACCIONES ===")
         print(f"Reacciones agregadas: {len(reactions_added)}")
         print(f"Usuario: {sample_user.id}")
         print(f"Mensaje: {broadcast_msg.message_id}")
@@ -114,12 +104,12 @@ class TestReactionLimit:
         # El único "límite" es limit=20 en get_user_reactions (no es diario)
 
         # Verificar que no existe método de límite diario
-        service_methods = [m for m in dir(broadcast_service) if not m.startswith('_')]
-        limit_methods = [m for m in service_methods if 'limit' in m.lower() or 'daily' in m.lower()]
+        service_methods = [m for m in dir(broadcast_service) if not m.startswith("_")]
+        limit_methods = [m for m in service_methods if "limit" in m.lower() or "daily" in m.lower()]
 
-        print(f"\n=== MÉTODOS RELACIONADOS CON LÍMITE ===")
+        print("\n=== MÉTODOS RELACIONADOS CON LÍMITE ===")
         print(f"Métodos con 'limit' o 'daily': {limit_methods}")
-        print(f"¿Existe límite diario? NO IMPLEMENTADO")
+        print("¿Existe límite diario? NO IMPLEMENTADO")
 
         # Documentar como gap
         assert len(limit_methods) == 0, (
@@ -141,13 +131,14 @@ class TestReactionLimit:
 
         # Verificar la firma del método
         import inspect
-        sig = inspect.signature(broadcast_service.get_user_reactions)
-        default_limit = sig.parameters.get('limit', None)
 
-        print(f"\n=== PARÁMETRO LIMIT EN get_user_reactions ===")
+        sig = inspect.signature(broadcast_service.get_user_reactions)
+        default_limit = sig.parameters.get("limit", None)
+
+        print("\n=== PARÁMETRO LIMIT EN get_user_reactions ===")
         print(f"Default: {default_limit.default if default_limit else 'sin default'}")
-        print(f"Descripción: Límite de resultados por query (paginación)")
-        print(f"NO es: límite diario de reacciones por usuario")
+        print("Descripción: Límite de resultados por query (paginación)")
+        print("NO es: límite diario de reacciones por usuario")
 
         assert default_limit is not None, "Debería haber un default para limit"
         assert default_limit.default == 20, "El default debe ser 20"
@@ -170,9 +161,9 @@ class TestReactionLimit:
 
         Esto evitaría spam de reacciones y abuso del sistema de besitos.
         """
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("RECOMENDACIÓN: IMPLEMENTAR LÍMITE DIARIO DE REACCIONES")
-        print("="*50)
+        print("=" * 50)
         print("""
 GAP ENCONTRADO:
 - No hay límite de reacciones por usuario por día

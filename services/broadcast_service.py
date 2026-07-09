@@ -5,12 +5,17 @@ Gestiona el envío de mensajes a canales con sistema de reacciones.
 """
 
 import logging
+import warnings
 
 from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from keyboards.broadcast_channel_markup import (
+    build_channel_reaction_markup,
+    calculate_emoji_counts_from_reactions,
+)
 from models.database import SessionLocal
 from models.models import (
     BroadcastButton,
@@ -21,6 +26,12 @@ from models.models import (
     TransactionSource,
 )
 from services.besito_service import BesitoService
+from services.broadcast.reaction_validators import (
+    validate_broadcast_context_match,
+    validate_broadcast_exists_for_reaction,
+    validate_reaction_emoji_allowed,
+    validate_reaction_not_duplicate,
+)
 from services.mission_service import MissionService, run_mission_side_effects_isolated
 
 logger = logging.getLogger(__name__)
@@ -291,6 +302,11 @@ class BroadcastService:
         Registra una reacción y otorga besitos al usuario.
         Retorna None si el usuario ya reaccionó.
         """
+        warnings.warn(
+            "register_reaction is deprecated; use check_and_register_reaction",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Verificar si ya reaccionó (con lock para evitar race conditions)
         existing = (
             self.db.query(BroadcastReaction)
@@ -382,38 +398,31 @@ class BroadcastService:
         para evitar el bug 'DetachedInstanceError' que existe en main.
         """
         db = self.db
-
         broadcast = self.get_broadcast(broadcast_id)
-        if not broadcast:
+        reason = validate_broadcast_exists_for_reaction(broadcast)
+        if reason:
             logger.warning(
                 f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | invalid_broadcast"
             )
-            return self._reaction_failure("invalid_broadcast")
+            return self._reaction_failure(reason)
         if not broadcast.has_reactions:
             return self._reaction_failure("no_reactions")
-        if channel_id is not None and broadcast.channel_id != channel_id:
-            return self._reaction_failure("message_mismatch")
-        if message_id is not None and broadcast.message_id != message_id:
-            return self._reaction_failure("message_mismatch")
-
+        reason = validate_broadcast_context_match(broadcast, channel_id, message_id)
+        if reason:
+            return self._reaction_failure(reason)
         emoji = self.get_reaction_emoji(emoji_id)
-        if not emoji:
-            logger.error(f"Emoji {emoji_id} no encontrado")
-            return self._reaction_failure("invalid_emoji")
-        if not emoji.is_active:
-            return self._reaction_failure("inactive_emoji")
-
         selected_emoji_ids = self.get_selected_emoji_ids(broadcast_id)
-        if emoji_id not in selected_emoji_ids:
-            return self._reaction_failure("emoji_not_allowed")
-
-        # Defensa en profundidad: chequeo explícito antes del INSERT (UC sigue siendo la protección final para races).
-        if self.has_user_reacted(broadcast_id, user_id):
+        reason = validate_reaction_emoji_allowed(emoji, emoji_id, selected_emoji_ids)
+        if reason:
+            if reason == "invalid_emoji":
+                logger.error(f"Emoji {emoji_id} no encontrado")
+            return self._reaction_failure(reason)
+        reason = validate_reaction_not_duplicate(self.has_user_reacted(broadcast_id, user_id))
+        if reason:
             logger.info(
                 f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | duplicate (pre-check)"
             )
-            return self._reaction_failure("duplicate")
-
+            return self._reaction_failure(reason)
         besito_value = emoji.besito_value
 
         try:
@@ -517,6 +526,56 @@ class BroadcastService:
                 f"broadcast_service | check_and_register_reaction | user_id={user_id} | error={e}"
             )
             return self._reaction_failure("error")
+
+    async def process_channel_reaction(
+        self,
+        broadcast_id: int,
+        user_id: int,
+        emoji_id: int,
+        *,
+        username: str | None = None,
+        bot=None,
+        channel_id: int | None = None,
+        message_id: int | None = None,
+    ) -> dict:
+        """Register reaction + refresh channel markup on success. Return dict identical to check_and_register_reaction."""
+        result = await self.check_and_register_reaction(
+            broadcast_id,
+            user_id,
+            emoji_id,
+            username=username,
+            bot=bot,
+            channel_id=channel_id,
+            message_id=message_id,
+        )
+        if not result.get("success"):
+            return result
+        broadcast = self.get_broadcast(broadcast_id)
+        if not (broadcast and broadcast.has_reactions):
+            return result
+        emoji_entries = [
+            (eid, em.emoji)
+            for eid in self.get_selected_emoji_ids(broadcast_id)
+            if (em := self.get_reaction_emoji(eid))
+        ]
+        extra_id = getattr(broadcast, "extra_button_id", None)
+        extra_button = self.get_broadcast_button(extra_id) if isinstance(extra_id, int) else None
+        new_markup = build_channel_reaction_markup(
+            broadcast_id,
+            emoji_entries,
+            emoji_counts=calculate_emoji_counts_from_reactions(
+                self.get_reactions_by_broadcast(broadcast_id)
+            ),
+            extra_button=extra_button,
+        )
+        if new_markup is not None and bot is not None:
+            await self.update_reaction_message(
+                bot=bot,
+                channel_id=broadcast.channel_id,
+                message_id=broadcast.message_id,
+                new_markup=new_markup,
+            )
+        return result
 
     def get_reactions_by_broadcast(self, broadcast_id: int) -> list[BroadcastReaction]:
         """Obtiene todas las reacciones de un mensaje"""

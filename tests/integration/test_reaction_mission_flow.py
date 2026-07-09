@@ -10,26 +10,31 @@ Este test verifica el flujo completo desde que un usuario reacciona a un mensaje
 DATOS REALES: Este test extrae las misiones actuales de la base de datos,
 NO usa mocks - trabaja con los datos真实的 del sistema.
 """
-import pytest
-import asyncio
-from datetime import datetime
-from unittest.mock import MagicMock, AsyncMock
 
+from unittest.mock import AsyncMock
+
+import pytest
+
+from models.models import (
+    BroadcastMessage,
+    MissionFrequency,
+    MissionType,
+    Reward,
+    RewardType,
+)
+from services.besito_service import BesitoService
 from services.broadcast_service import BroadcastService
 from services.mission_service import MissionService
-from services.besito_service import BesitoService
-from models.models import (
-    BroadcastMessage, BroadcastReaction, Channel, ChannelType,
-    ReactionEmoji, User, Mission, MissionType, MissionFrequency,
-    Reward, RewardType, BesitoBalance, BesitoTransaction
-)
 
 
 @pytest.mark.integration
 class TestReactionMissionFlow:
     """Test E2E del flujo reacción → misión → besitos"""
 
-    def test_complete_reaction_mission_flow_with_real_data(self, db_session, sample_user, sample_free_channel):
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
+    def test_complete_reaction_mission_flow_with_real_data(
+        self, db_session, sample_user, sample_free_channel
+    ):
         """
         Test completo del flujo de reacción → misiones → besitos.
 
@@ -40,9 +45,9 @@ class TestReactionMissionFlow:
         4. Muestra paso a paso qué misiones se activan y cuántos besitos otorga cada una
         5. Verifica el balance final de besitos del usuario
         """
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("TEST E2E: FLUHO REACCIÓN → MISIONES → BESITOS")
-        print("="*70)
+        print("=" * 70)
 
         # ========================================
         # PASS 1: CONSULTAR MISIONES REALES
@@ -71,21 +76,25 @@ class TestReactionMissionFlow:
                     reward = db_session.query(Reward).filter(Reward.id == m.reward_id).first()
                     if reward:
                         reward_info = {
-                            'type': reward.reward_type.value if reward.reward_type else 'unknown',
-                            'besitos': reward.besitos_amount if hasattr(reward, 'besitos_amount') else 0,
-                            'package_id': reward.package_id
+                            "type": reward.reward_type.value if reward.reward_type else "unknown",
+                            "besitos": reward.besitos_amount
+                            if hasattr(reward, "besitos_amount")
+                            else 0,
+                            "package_id": reward.package_id,
                         }
 
-                mission_details.append({
-                    'id': m.id,
-                    'name': m.name,
-                    'description': m.description,
-                    'target_value': m.target_value,
-                    'frequency': m.frequency.value if m.frequency else 'unknown',
-                    'is_active': m.is_active,
-                    'reward_id': m.reward_id,
-                    'reward': reward_info
-                })
+                mission_details.append(
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "description": m.description,
+                        "target_value": m.target_value,
+                        "frequency": m.frequency.value if m.frequency else "unknown",
+                        "is_active": m.is_active,
+                        "reward_id": m.reward_id,
+                        "reward": reward_info,
+                    }
+                )
 
                 print(f"\n  📌 Misión #{m.id}: {m.name}")
                 print(f"     Descripción: {m.description or 'Sin descripción'}")
@@ -93,7 +102,9 @@ class TestReactionMissionFlow:
                 print(f"     Frecuencia: {m.frequency.value if m.frequency else 'N/A'}")
                 print(f"     Activa: {m.is_active}")
                 if reward_info:
-                    print(f"     Recompensa: {reward_info['type']} - {reward_info.get('besitos', 'N/A')} besitos")
+                    print(
+                        f"     Recompensa: {reward_info['type']} - {reward_info.get('besitos', 'N/A')} besitos"
+                    )
 
         # ========================================
         # PASS 2: PREPARAR BROADCAST Y REACCIÓN
@@ -107,9 +118,7 @@ class TestReactionMissionFlow:
         emoji = broadcast_service.get_reaction_emoji_by_emoji("💋")
         if not emoji:
             emoji = broadcast_service.create_reaction_emoji(
-                emoji="💋",
-                name="besito",
-                besito_value=1
+                emoji="💋", name="besito", besito_value=1
             )
         print(f"  Emoji configurado: {emoji.emoji} (valor: {emoji.besito_value} besitos)")
 
@@ -119,7 +128,7 @@ class TestReactionMissionFlow:
             channel_id=sample_free_channel.channel_id,
             admin_id=987654321,
             text="Test E2E - Reacción y Misiones",
-            has_reactions=True
+            has_reactions=True,
         )
         db_session.add(broadcast_msg)
         db_session.commit()
@@ -148,15 +157,15 @@ class TestReactionMissionFlow:
             broadcast_id=broadcast_msg.id,
             user_id=sample_user.id,
             emoji_id=emoji.id,
-            username=sample_user.username
+            username=sample_user.username,
         )
 
         if reaction:
-            print(f"  ✅ Reacción registrada exitosamente")
+            print("  ✅ Reacción registrada exitosamente")
             print(f"     Reaction ID: {reaction.id}")
             print(f"     Besitos otorgados por reacción: {reaction.besitos_awarded}")
         else:
-            print(f"  ⚠️  Reacción no registrada (posiblemente ya existía)")
+            print("  ⚠️  Reacción no registrada (posiblemente ya existía)")
 
         # ========================================
         # PASS 5: PROCESAR MISIONES (INCREMENTAR PROGRESO)
@@ -169,24 +178,28 @@ class TestReactionMissionFlow:
         for mission in reaction_missions:
             progress = mission_service.get_user_progress(sample_user.id, mission.id)
             if progress:
-                user_progress_before.append({
-                    'mission_id': mission.id,
-                    'mission_name': mission.name,
-                    'current_value': progress.current_value,
-                    'target_value': mission.target_value,
-                    'is_completed': progress.is_completed
-                })
+                user_progress_before.append(
+                    {
+                        "mission_id": mission.id,
+                        "mission_name": mission.name,
+                        "current_value": progress.current_value,
+                        "target_value": mission.target_value,
+                        "is_completed": progress.is_completed,
+                    }
+                )
 
-        print(f"  Progreso ANTES de la reacción:")
+        print("  Progreso ANTES de la reacción:")
         for p in user_progress_before:
-            print(f"    - {p['mission_name']}: {p['current_value']}/{p['target_value']} ({p['is_completed'] and 'COMPLETADA' or 'en progreso'})")
+            print(
+                f"    - {p['mission_name']}: {p['current_value']}/{p['target_value']} ({p['is_completed'] and 'COMPLETADA' or 'en progreso'})"
+            )
 
         # Incrementar progreso (síncrono)
         completed_missions = mission_service.increment_progress(
             user_id=sample_user.id,
             mission_type=MissionType.REACTION_COUNT,
             amount=1,
-            reference_id=broadcast_msg.id
+            reference_id=broadcast_msg.id,
         )
 
         print(f"\n  🚀 Misiones disparadas por esta reacción: {len(completed_missions)}")
@@ -198,25 +211,33 @@ class TestReactionMissionFlow:
         for mission in reaction_missions:
             progress = mission_service.get_user_progress(sample_user.id, mission.id)
             if progress:
-                user_progress_after.append({
-                    'mission_id': mission.id,
-                    'mission_name': mission.name,
-                    'current_value': progress.current_value,
-                    'target_value': mission.target_value,
-                    'is_completed': progress.is_completed,
-                    'completed_at': progress.completed_at
-                })
+                user_progress_after.append(
+                    {
+                        "mission_id": mission.id,
+                        "mission_name": mission.name,
+                        "current_value": progress.current_value,
+                        "target_value": mission.target_value,
+                        "is_completed": progress.is_completed,
+                        "completed_at": progress.completed_at,
+                    }
+                )
 
                 # Calcular besitos de recompensas (si hay)
                 if progress.is_completed and mission.reward_id:
                     reward = db_session.query(Reward).filter(Reward.id == mission.reward_id).first()
                     if reward and reward.reward_type == RewardType.BESITOS:
                         besitos_from_missions += reward.besitos_amount
-                        print(f"    🎁 {mission.name}: RECOMPENSA ENTREGADA - {reward.besitos_amount} besitos")
+                        print(
+                            f"    🎁 {mission.name}: RECOMPENSA ENTREGADA - {reward.besitos_amount} besitos"
+                        )
 
-        print(f"\n  Progreso DESPUÉS de la reacción:")
+        print("\n  Progreso DESPUÉS de la reacción:")
         for p in user_progress_after:
-            status = "✅ COMPLETADA" if p['is_completed'] else f"en progreso ({p['current_value']}/{p['target_value']})"
+            status = (
+                "✅ COMPLETADA"
+                if p["is_completed"]
+                else f"en progreso ({p['current_value']}/{p['target_value']})"
+            )
             print(f"    - {p['mission_name']}: {status}")
 
         # ========================================
@@ -234,22 +255,22 @@ class TestReactionMissionFlow:
         print(f"  Balance inicial: {initial_balance} besitos")
         print(f"  Besitos por reacción directa: +{besitos_from_reaction}")
         print(f"  Besitos por recompensas de misiones: +{besitos_from_missions}")
-        print(f"  ─────────────────────────────────────")
+        print("  ─────────────────────────────────────")
         print(f"  Total ganado en esta interacción: {total_besitos_gained} besitos")
         print(f"  Balance final: {final_balance} besitos")
 
         # ========================================
         # PASS 7: RESUMEN FINAL
         # ========================================
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("📊 RESUMEN DEL FLUJO E2E")
-        print("="*70)
+        print("=" * 70)
         print(f"""
   ┌────────────────────────────────────────────────────────────────┐
   │ 1. Reacción registrada: {emoji.emoji} en mensaje #{broadcast_msg.id}
   ├────────────────────────────────────────────────────────────────┤
   │ 2. Misiones de tipo REACTION_COUNT activas: {len(reaction_missions)}
-  │    {f"(Las siguientes misiones se disparan con cada reacción)" if reaction_missions else "(No hay misiones configuradas)"}
+  │    {"(Las siguientes misiones se disparan con cada reacción)" if reaction_missions else "(No hay misiones configuradas)"}
   ├────────────────────────────────────────────────────────────────┤
   │ 3. Misiones completadas en esta interacción: {len(completed_missions)}
   ├────────────────────────────────────────────────────────────────┤
@@ -284,9 +305,9 @@ class TestReactionMissionFlow:
         """
         Muestra todos los tipos de misiones disponibles en el sistema.
         """
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("TIPOS DE MISIONES DISPONIBLES EN EL SISTEMA")
-        print("="*70)
+        print("=" * 70)
 
         mission_service = MissionService(db_session)
 
@@ -319,13 +340,16 @@ class TestReactionMissionFlow:
 
         assert True, "Información mostrada"
 
-    def test_reaction_besitos_value_mapping(self, db_session, sample_user, sample_free_channel):
+    @pytest.mark.asyncio
+    async def test_reaction_besitos_value_mapping(
+        self, db_session, sample_user, sample_free_channel
+    ):
         """
         Test que muestra cómo cada emoji de reacción tiene un valor diferente de besitos.
         """
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("MAPA DE EMOJIS DE REACCIÓN Y SUS VALORES EN BESITOS")
-        print("="*70)
+        print("=" * 70)
 
         broadcast_service = BroadcastService(db_session)
 
@@ -338,9 +362,7 @@ class TestReactionMissionFlow:
             print("⚠️  No hay emojis de reacción configurados")
             print("   Creando emoji de prueba...")
             emoji = broadcast_service.create_reaction_emoji(
-                emoji="💋",
-                name="besito",
-                besito_value=1
+                emoji="💋", name="besito", besito_value=1
             )
             emojis = [emoji]
 
@@ -355,25 +377,33 @@ class TestReactionMissionFlow:
             channel_id=sample_free_channel.channel_id,
             admin_id=987654321,
             text="Test de valores de emoji",
-            has_reactions=True
+            has_reactions=True,
+            selected_emoji_ids=str(emoji.id),
         )
         db_session.add(broadcast_msg)
         db_session.commit()
 
-        # Registrar reacción
-        reaction = broadcast_service.register_reaction(
-            broadcast_id=broadcast_msg.id,
-            user_id=sample_user.id,
-            emoji_id=emoji.id
-        )
+        from unittest.mock import patch
 
-        print(f"\n📝 Ejemplo de reacción:")
+        from services.mission_service import MissionService
+
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            result = await broadcast_service.check_and_register_reaction(
+                broadcast_id=broadcast_msg.id,
+                user_id=sample_user.id,
+                emoji_id=emoji.id,
+            )
+
+        print("\n📝 Ejemplo de reacción:")
         print(f"   Emoji: {emoji.emoji}")
-        print(f"   Besitos otorgados: {reaction.besitos_awarded if reaction else 0}")
+        print(f"   Besitos otorgados: {result.get('besitos_awarded', 0)}")
 
-        assert reaction is not None, "La reacción debería registrarse"
-        assert reaction.besitos_awarded == emoji.besito_value, (
-            f"Besitos de reacción ({reaction.besitos_awarded}) "
+        assert result["success"] is True, "La reacción debería registrarse"
+        assert result["besitos_awarded"] == emoji.besito_value, (
+            f"Besitos de reacción ({result['besitos_awarded']}) "
             f"deberían igualar el valor del emoji ({emoji.besito_value})"
         )
 
@@ -383,14 +413,16 @@ class TestReactionMissionFlowAsync:
     """Tests asíncronos para el flujo de reacción → misiones"""
 
     @pytest.mark.asyncio
-    async def test_async_reaction_and_mission_delivery(self, db_session, sample_user, sample_free_channel):
+    async def test_async_reaction_and_mission_delivery(
+        self, db_session, sample_user, sample_free_channel
+    ):
         """
         Test asíncrono que usa check_and_register_reaction (el método real del bot)
         y delivery automático de recompensas de misiones.
         """
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("TEST ASÍNCRONO: REACCIÓN + ENTREGA AUTOMÁTICA DE RECOMPENSAS")
-        print("="*70)
+        print("=" * 70)
 
         # Preparar
         broadcast_service = BroadcastService(db_session)
@@ -401,9 +433,7 @@ class TestReactionMissionFlowAsync:
         emoji = broadcast_service.get_reaction_emoji_by_emoji("💋")
         if not emoji:
             emoji = broadcast_service.create_reaction_emoji(
-                emoji="💋",
-                name="besito",
-                besito_value=1
+                emoji="💋", name="besito", besito_value=1
             )
 
         # Crear mensaje
@@ -436,7 +466,7 @@ class TestReactionMissionFlowAsync:
         )
 
         if result.get("success"):
-            print(f"\n✅ Reacción registrada async")
+            print("\n✅ Reacción registrada async")
             print(f"   Besitos otorgados: {result['besitos_awarded']}")
             print(f"   Emoji: {result['emoji_char']}")
 

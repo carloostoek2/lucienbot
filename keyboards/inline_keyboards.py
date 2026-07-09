@@ -413,9 +413,7 @@ def forward_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def subscriber_search_results_keyboard(
-    subs: list, channel_id: int
-) -> InlineKeyboardMarkup:
+def subscriber_search_results_keyboard(subs: list, channel_id: int) -> InlineKeyboardMarkup:
     """Teclado con coincidencias de búsqueda (cada fila → perfil)."""
     buttons: list[list[InlineKeyboardButton]] = []
     for sub in subs:
@@ -437,11 +435,7 @@ def subscriber_search_results_keyboard(
                 )
             ]
         )
-    back_cb = (
-        ChannelDetailCallback(channel_id=channel_id).pack()
-        if channel_id
-        else "admin_vip"
-    )
+    back_cb = ChannelDetailCallback(channel_id=channel_id).pack() if channel_id else "admin_vip"
     buttons.append(
         [
             InlineKeyboardButton(
@@ -456,15 +450,9 @@ def subscriber_search_results_keyboard(
 
 def subscriber_search_cancel_keyboard(channel_id: int) -> InlineKeyboardMarkup:
     """Cancelar búsqueda y volver al menú anterior."""
-    back_cb = (
-        ChannelDetailCallback(channel_id=channel_id).pack()
-        if channel_id
-        else "admin_vip"
-    )
+    back_cb = ChannelDetailCallback(channel_id=channel_id).pack() if channel_id else "admin_vip"
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Cancelar", callback_data=back_cb)]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="❌ Cancelar", callback_data=back_cb)]]
     )
 
 
@@ -512,11 +500,7 @@ def subscriber_list_keyboard(
         )
     if nav:
         buttons.append(nav)
-    back_cb = (
-        ChannelDetailCallback(channel_id=channel_id).pack()
-        if channel_id
-        else "admin_vip"
-    )
+    back_cb = ChannelDetailCallback(channel_id=channel_id).pack() if channel_id else "admin_vip"
     buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data=back_cb)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -723,9 +707,7 @@ def game_menu_keyboard(is_vip: bool = False, special_button: tuple = None) -> In
     if special_button:
         label, cb_data = special_button
         buttons.append([InlineKeyboardButton(text=label, callback_data=cb_data)])
-    buttons.append(
-        [InlineKeyboardButton(text="❓ Trivia", callback_data="game_trivia")]
-    )
+    buttons.append([InlineKeyboardButton(text="❓ Trivia", callback_data="game_trivia")])
     buttons.append([InlineKeyboardButton(text="🔙 Volver", callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -804,9 +786,7 @@ def trivia_simple_keyboard(question: dict, question_idx: int) -> InlineKeyboardM
                 )
             ]
         )
-    buttons.append(
-        [InlineKeyboardButton(text="🔙 Volver a minijuegos", callback_data="game_menu")]
-    )
+    buttons.append([InlineKeyboardButton(text="🔙 Volver a minijuegos", callback_data="game_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -868,27 +848,13 @@ def risk_mode_keyboard() -> InlineKeyboardMarkup:
 def reactions_keyboard_with_counts(
     broadcast_id: int, emojis: list[tuple[int, str]], emoji_counts: dict[int, int]
 ) -> InlineKeyboardMarkup:
-    """Genera teclado de reacciones con conteos para un broadcast.
+    """DEPRECATED: use keyboards.broadcast_channel_markup.build_channel_reaction_markup."""
+    from keyboards.broadcast_channel_markup import build_channel_reaction_markup
 
-    Args:
-        broadcast_id: ID del broadcast
-        emojis: Lista de (emoji_id, emoji_char)
-        emoji_counts: Diccionario {emoji_id: conteo}
-    """
-    from keyboards.callback_data import ReactionCallback
-
-    buttons = []
-    for emoji_id, emoji_char in emojis:
-        count = emoji_counts.get(emoji_id, 0)
-        # Mostrar el emoji con el conteo (o solo el emoji si no hay conteo)
-        text = f"{emoji_char} {count}" if count > 0 else emoji_char
-        buttons.append(
-            InlineKeyboardButton(
-                text=text,
-                callback_data=ReactionCallback(broadcast_id=broadcast_id, emoji_id=emoji_id).pack(),
-            )
-        )
-    return InlineKeyboardMarkup(inline_keyboard=[buttons])  # Una sola fila
+    markup = build_channel_reaction_markup(broadcast_id, emojis, emoji_counts=emoji_counts)
+    if markup is None:
+        return InlineKeyboardMarkup(inline_keyboard=[])
+    return markup
 
 
 # ==================== PROMOTIONS ====================

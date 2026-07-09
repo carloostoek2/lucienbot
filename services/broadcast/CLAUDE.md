@@ -38,15 +38,71 @@ get_broadcast(broadcast_id) -> BroadcastMessage
 get_recent_broadcasts(channel_id=None, limit=20) -> list[BroadcastMessage]
 ```
 
-**Reacciones:**
+**Reacciones (production paths):**
 ```python
+# Production orchestration — handler calls this (gamification_user_handlers.py)
+process_channel_reaction(broadcast_id, user_id, emoji_id, *, username, bot,
+                       channel_id, message_id) -> dict
+# Atomic register + credit + mission best-effort
+check_and_register_reaction(broadcast_id, user_id, emoji_id, *, username, bot,
+                            channel_id, message_id) -> dict
+
+# Read helpers
 has_user_reacted(broadcast_id, user_id) -> bool  # 1 reacción por usuario por mensaje
-register_reaction(broadcast_id, user_id, reaction_emoji_id) -> BroadcastReaction
 get_reactions_by_broadcast(broadcast_id) -> list[BroadcastReaction]
 get_user_reactions(user_id, limit=20) -> list[BroadcastReaction]
 get_reaction_count(broadcast_id) -> int
 get_broadcast_stats(broadcast_id) -> dict
+
+# DEPRECATED — legacy sync; do not use in new code
+register_reaction(broadcast_id, user_id, reaction_emoji_id) -> BroadcastReaction
 ```
+
+### Return dict contract
+
+**Success:**
+```python
+{"success": True, "besitos_awarded": N, "id", "broadcast_id", "user_id",
+ "emoji_id", "emoji_char"}
+```
+
+**Failure:**
+```python
+{"success": False, "reason": "<code>"}
+```
+
+Reason codes: `duplicate`, `invalid_broadcast`, `no_reactions`, `message_mismatch`,
+`invalid_emoji`, `inactive_emoji`, `emoji_not_allowed`, `credit_failed`, `error`
+
+### Validators (`services/broadcast/reaction_validators.py`)
+
+4 pure read-only functions (no DB writes):
+- `validate_broadcast_exists_for_reaction`
+- `validate_broadcast_context_match` — guards `channel_id` + `message_id` (incl.
+  `message_id=0` after `tracking_failed`)
+- `validate_reaction_emoji_allowed`
+- `validate_reaction_not_duplicate`
+
+### Markup (`keyboards/broadcast_channel_markup.py`)
+
+- **Send:** `build_broadcast_send_markup` / `build_channel_reaction_markup(..., emoji_counts=None)`
+- **Refresh:** `build_channel_reaction_markup` with counts dict (`"emoji count"` when N>0)
+- **Extra URL:** `extra_button_id` on `BroadcastMessage` included in send + refresh
+- Row order: reactions first (chunked 8/row), extra URL last
+
+### Message ID tracking
+
+- `create_broadcast_message(message_id=0)` then `update_broadcast_message_id` after TG send
+- If update fails → `tracking_failed`; admin alert; row stays at `message_id=0`
+- Reactions on that broadcast return `message_mismatch` (validator blocks stale context)
+
+### Atomicity
+
+- Reaction INSERT + credit in `check_and_register_reaction`; credit internal commit
+  (split-tx by design — see `decisions.md` defer entry for `credit_besitos(commit=False)`)
+- Mission delivery + markup refresh post-commit, best-effort
+- `process_channel_reaction` wraps register + `build_channel_reaction_markup` +
+  `update_reaction_message` on success
 
 ## Flujo de Broadcast
 
@@ -60,11 +116,13 @@ Admin inicia broadcast
     → Confirma y envía
     → Handler envía mensaje a canal via bot.send_message()
 
-Visitante reacciona al mensaje
-    → Handler recibe callback
-    → BroadcastService.has_user_reacted() → ya reaccionó? → reject
-    → BroadcastService.register_reaction()
-    → BesitoService.credit_besitos() → acreditar besitos al visitante
+Visitante reacciona
+    → handle_reaction (gamification_user_handlers.py)
+    → get_service(BroadcastService) ×1
+    → process_channel_reaction(broadcast_id, user_id, emoji_id, channel_id, message_id, bot, username)
+        → check_and_register_reaction (validators → INSERT + credit + commit → missions best-effort)
+        → on success: build_channel_reaction_markup + update_reaction_message (best-effort)
+    → callback.answer from result dict (success / reason / besitos_awarded)
 ```
 
 ## Reglas de Negocio

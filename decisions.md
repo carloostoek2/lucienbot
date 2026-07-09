@@ -530,3 +530,18 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 - Gates 1/3–5 verdes (16+13+14+83); gate 2: 257 pass, 1 fail pre-existente store (no atribuible).
 - Dead callback resuelto; `is_admin` 100% entrypoints; 1 svc/confirm; LucienVoice copy admin.
 - Refs: `.planning/phases/36-vip-subscriber-admin-profiles/PLAN.md` + SUMMARY + `.planning/quick/gsd-vip-subscriber-admin-profiles.log`
+
+## Reaction credit atomicity — defer `credit_besitos(commit=False)` (reaction-ecosystem-week2)
+
+**Motivo:** Week 2 evaluated unifying reaction INSERT + credit into single outer commit via `credit_besitos(..., commit=False)` (mirror `debit_besitos` precedent). Current path uses split-tx: credit's internal `db.commit()` then outer `db.commit()` for reaction row.
+
+**Riesgos (si se implementara):**
+- Atomicity gold breakage (`test_cross_service_atomicity.py` — "credit survives deliver False", 10+ scenarios)
+- EventBus `schedule_emit` timing change (expects post-credit-commit)
+- Scope creep to all `credit_besitos` callers (REACTION, DAILY, MISSION, GAME, ADMIN, story)
+
+**Decisión:** **DEFER** — split-tx is intentional per Item 6 (`decisions.md`); gold coverage protects integrity (`credit_failed` + rollback, UniqueConstraint duplicate guard). Revisit only on production orphan-row incident.
+
+**Resultado:** 0 prod change Week 2; atomicity golds unchanged; documented in impact report + this entry.
+
+**Refs:** `.grok/agent-memory/impact-analyzer/reaction-ecosystem-week2.md`, `.planning/quick/20260706-reaction-ecosystem-week2/PLAN.md`, `services/broadcast_service.py:440-460`, `test_cross_service_atomicity.py`, `test_broadcast_service_reaction_flow.py::test_credit_failure_rolls_back`

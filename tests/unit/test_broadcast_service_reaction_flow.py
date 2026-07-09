@@ -267,7 +267,12 @@ class TestCheckAndRegisterReaction:
         assert result["reason"] == "message_mismatch"
 
     async def test_message_mismatch_message_id_returns_structured_reason(
-        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji, sample_free_channel
+        self,
+        db_session,
+        sample_user,
+        sample_broadcast_message,
+        sample_reaction_emoji,
+        sample_free_channel,
     ):
         service = BroadcastService(db_session)
         result = await service.check_and_register_reaction(
@@ -280,6 +285,38 @@ class TestCheckAndRegisterReaction:
         )
         assert result["success"] is False
         assert result["reason"] == "message_mismatch"
+
+    async def test_message_mismatch_when_broadcast_stuck_at_message_id_zero(
+        self,
+        db_session,
+        sample_user,
+        sample_broadcast_message,
+        sample_reaction_emoji,
+        sample_free_channel,
+    ):
+        """Simulates tracking_failed persistence: broadcast sent but message_id never updated."""
+        sample_broadcast_message.message_id = 0  # tracking_failed left row at 0
+        db_session.commit()
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+            channel_id=sample_free_channel.channel_id,
+            message_id=1001,  # real TG message user clicked
+        )
+        assert result["success"] is False
+        assert result["reason"] == "message_mismatch"
+        reaction_row = (
+            db_session.query(BroadcastReaction)
+            .filter(
+                BroadcastReaction.broadcast_id == sample_broadcast_message.id,
+                BroadcastReaction.user_id == sample_user.telegram_id,
+            )
+            .first()
+        )
+        assert reaction_row is None
 
     async def test_inactive_emoji_returns_structured_reason(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
@@ -408,9 +445,7 @@ class TestCheckAndRegisterReaction:
         )
         assert reaction_count == 0
 
-        balance = (
-            db_session.query(BesitoBalance).filter(BesitoBalance.user_id == user_id).first()
-        )
+        balance = db_session.query(BesitoBalance).filter(BesitoBalance.user_id == user_id).first()
         assert balance is None or balance.balance == 0
         tx_count = (
             db_session.query(BesitoTransaction)
@@ -704,3 +739,157 @@ class TestServiceLifecycleOrGetServiceContext:
         )
         assert found, "broadcast reaction observer not invoked or did not log per contract"
         # no mutation contract (would be in other tests via credit paths)
+
+
+@pytest.mark.unit
+class TestProcessChannelReaction:
+    """Tests for process_channel_reaction (register + post-commit markup refresh)."""
+
+    @pytest.fixture(autouse=True)
+    def link_broadcast_selected_emojis(
+        self, db_session, sample_broadcast_message, sample_reaction_emoji
+    ):
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
+        db_session.commit()
+
+    async def test_success_calls_update_reaction_message_with_counts(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """On success, refreshes channel markup with live reaction counts."""
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        db_session.add(
+            BesitoBalance(user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0)
+        )
+        db_session.commit()
+
+        service = BroadcastService(db_session)
+        mock_bot = AsyncMock()
+
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            with patch.object(
+                service, "update_reaction_message", new_callable=AsyncMock
+            ) as mock_update:
+                mock_update.return_value = True
+                result = await service.process_channel_reaction(
+                    broadcast_id=sample_broadcast_message.id,
+                    user_id=sample_user.telegram_id,
+                    emoji_id=sample_reaction_emoji.id,
+                    username=sample_user.username,
+                    bot=mock_bot,
+                    channel_id=sample_broadcast_message.channel_id,
+                    message_id=sample_broadcast_message.message_id,
+                )
+
+        assert result["success"] is True
+        mock_update.assert_awaited_once()
+        _, kwargs = mock_update.call_args
+        assert kwargs["channel_id"] == sample_broadcast_message.channel_id
+        assert kwargs["message_id"] == sample_broadcast_message.message_id
+        btn_text = kwargs["new_markup"].inline_keyboard[0][0].text
+        assert "💋" in btn_text and "1" in btn_text
+
+    async def test_success_includes_extra_button_url_row(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """When broadcast has extra_button_id, markup includes URL row below reactions."""
+        from models.models import BroadcastButton
+
+        btn = BroadcastButton(label="🔗 Link", url="https://t.me/foo", is_active=True)
+        db_session.add(btn)
+        db_session.commit()
+        sample_broadcast_message.extra_button_id = btn.id
+        sample_broadcast_message.selected_emoji_ids = str(sample_reaction_emoji.id)
+        db_session.commit()
+
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        db_session.add(
+            BesitoBalance(user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0)
+        )
+        db_session.commit()
+
+        service = BroadcastService(db_session)
+        mock_bot = AsyncMock()
+
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            with patch.object(
+                service, "update_reaction_message", new_callable=AsyncMock
+            ) as mock_update:
+                mock_update.return_value = True
+                result = await service.process_channel_reaction(
+                    broadcast_id=sample_broadcast_message.id,
+                    user_id=sample_user.telegram_id,
+                    emoji_id=sample_reaction_emoji.id,
+                    bot=mock_bot,
+                )
+
+        assert result["success"] is True
+        markup = mock_update.call_args.kwargs["new_markup"]
+        assert len(markup.inline_keyboard) == 2
+        assert markup.inline_keyboard[1][0].url == "https://t.me/foo"
+
+    async def test_failure_skips_markup_refresh(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """Duplicate or validation failure must not call update_reaction_message."""
+        service = BroadcastService(db_session)
+        mock_bot = AsyncMock()
+
+        with patch.object(
+            service, "check_and_register_reaction", new_callable=AsyncMock
+        ) as mock_register:
+            mock_register.return_value = {"success": False, "reason": "duplicate"}
+            with patch.object(
+                service, "update_reaction_message", new_callable=AsyncMock
+            ) as mock_update:
+                result = await service.process_channel_reaction(
+                    broadcast_id=sample_broadcast_message.id,
+                    user_id=sample_user.telegram_id,
+                    emoji_id=sample_reaction_emoji.id,
+                    bot=mock_bot,
+                )
+
+        assert result["reason"] == "duplicate"
+        mock_update.assert_not_awaited()
+
+    async def test_markup_update_failure_still_returns_success_dict(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """Besitos credited: success dict unchanged when refresh best-effort fails."""
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        db_session.add(
+            BesitoBalance(user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0)
+        )
+        db_session.commit()
+
+        service = BroadcastService(db_session)
+        mock_bot = AsyncMock()
+
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            with patch.object(
+                service, "update_reaction_message", new_callable=AsyncMock
+            ) as mock_update:
+                mock_update.return_value = False
+                result = await service.process_channel_reaction(
+                    broadcast_id=sample_broadcast_message.id,
+                    user_id=sample_user.telegram_id,
+                    emoji_id=sample_reaction_emoji.id,
+                    bot=mock_bot,
+                )
+
+        assert result["success"] is True
+        assert result["besitos_awarded"] == sample_reaction_emoji.besito_value

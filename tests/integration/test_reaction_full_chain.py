@@ -3,9 +3,9 @@ Integration test: Full reaction flow (production path) - Patrón SQLite en archi
 
 Covers the complete real-world chain when a user reacts to a broadcast:
 
-1. Reaction registration + besitos credit (check_and_register_reaction)
+1. Reaction registration + besitos credit (check_and_register_reaction via process_channel_reaction)
 2. Automatic mission progress + reward delivery (increment_progress_and_deliver + deliver_reward)
-3. Post-reaction UI update: rebuilding reaction keyboard with live counts
+3. Post-reaction UI update via `process_channel_reaction` (service refresh)
 
 Este archivo establece el **patrón recomendado** para tests de integración complejos
 que cruzan múltiples servicios con commits internos (BroadcastService, MissionService,
@@ -21,7 +21,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from keyboards.inline_keyboards import reactions_keyboard_with_counts
 from models.database import Base
 from models.models import (
     BesitoBalance,
@@ -177,43 +176,18 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             broadcast_service = BroadcastService(db)
             besito_service = BesitoService(db)
 
-            reaction_result = await broadcast_service.check_and_register_reaction(
+            reaction_result = await broadcast_service.process_channel_reaction(
                 broadcast_id=broadcast_db_id,
                 user_id=user_id,
                 emoji_id=emoji1_id,
                 username="testuser",
                 bot=mock_bot,
+                channel_id=broadcast_channel_id,
+                message_id=broadcast_telegram_id,
             )
 
             assert reaction_result["success"] is True
             assert reaction_result["besitos_awarded"] == 2
-
-            # Lógica exacta de actualización de teclado del handler
-            selected_emoji_ids = broadcast_service.get_selected_emoji_ids(broadcast_db_id)
-            reactions = broadcast_service.get_reactions_by_broadcast(broadcast_db_id)
-
-            emoji_counts = {}
-            for r in reactions:
-                if r.reaction_emoji:
-                    eid = r.reaction_emoji.id
-                    emoji_counts[eid] = emoji_counts.get(eid, 0) + 1
-
-            emojis_for_keyboard = []
-            for eid in selected_emoji_ids:
-                emoji_obj = broadcast_service.get_reaction_emoji(eid)
-                if emoji_obj:
-                    emojis_for_keyboard.append((eid, emoji_obj.emoji))
-
-            new_markup = reactions_keyboard_with_counts(
-                broadcast_db_id, emojis_for_keyboard, emoji_counts
-            )
-
-            await broadcast_service.update_reaction_message(
-                bot=mock_bot,
-                channel_id=broadcast_channel_id,
-                message_id=broadcast_telegram_id,
-                new_markup=new_markup,
-            )
 
             # ==========================================
             # ASSERTS DEL FLUJO COMPLETO
@@ -239,6 +213,13 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             final_balance = besito_service.get_balance(user_id)
             assert final_balance == 7  # 2 (reacción) + 5 (recompensa de misión)
 
+            reactions = broadcast_service.get_reactions_by_broadcast(broadcast_db_id)
+            emoji_counts = {}
+            for r in reactions:
+                if r.reaction_emoji:
+                    eid = r.reaction_emoji.id
+                    emoji_counts[eid] = emoji_counts.get(eid, 0) + 1
+
             assert emoji_counts.get(emoji1_id) == 1
             assert emoji_counts.get(emoji2_id, 0) == 0
 
@@ -247,6 +228,8 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             call_args = mock_bot.edit_message_reply_markup.await_args
             assert call_args.kwargs["chat_id"] == broadcast_channel_id
             assert call_args.kwargs["message_id"] == broadcast_telegram_id
+            markup_btn_text = call_args.kwargs["reply_markup"].inline_keyboard[0][0].text
+            assert "💋 1" in markup_btn_text or "1" in markup_btn_text
 
         finally:
             db.close()
@@ -299,18 +282,26 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
             mock_bot = AsyncMock()
 
             broadcast_service = BroadcastService(db)
+            broadcast_channel_id = broadcast.channel_id
+            broadcast_telegram_id = broadcast.message_id
 
-            await broadcast_service.check_and_register_reaction(
+            await broadcast_service.process_channel_reaction(
                 broadcast_id=broadcast.id,
                 user_id=user1.telegram_id,
                 emoji_id=emoji.id,
+                username="u1",
                 bot=mock_bot,
+                channel_id=broadcast_channel_id,
+                message_id=broadcast_telegram_id,
             )
-            await broadcast_service.check_and_register_reaction(
+            await broadcast_service.process_channel_reaction(
                 broadcast_id=broadcast.id,
                 user_id=user2.telegram_id,
                 emoji_id=emoji.id,
+                username="u2",
                 bot=mock_bot,
+                channel_id=broadcast_channel_id,
+                message_id=broadcast_telegram_id,
             )
 
             reactions = broadcast_service.get_reactions_by_broadcast(broadcast.id)
@@ -322,10 +313,10 @@ class TestFullReactionChainWithMissionAndKeyboardUpdate:
 
             assert emoji_counts.get(emoji.id) == 2
 
-            emojis = [(emoji.id, emoji.emoji)]
-            _markup = reactions_keyboard_with_counts(broadcast.id, emojis, emoji_counts)
-
-            assert emoji_counts[emoji.id] == 2
+            assert mock_bot.edit_message_reply_markup.await_count == 2
+            second_call = mock_bot.edit_message_reply_markup.await_args_list[1]
+            second_btn_text = second_call.kwargs["reply_markup"].inline_keyboard[0][0].text
+            assert "🔥 2" in second_btn_text
 
         finally:
             db.close()
