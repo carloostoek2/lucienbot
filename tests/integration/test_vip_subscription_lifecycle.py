@@ -358,7 +358,7 @@ class TestVIPSubscriptionLifecycle:
         Métodos bajo prueba:
           - scheduler_service._process_expired_subscriptions()
           - VIPService.get_expired_subscriptions()
-          - Telegram ban_chat_member / unban_chat_member
+          - Telegram ban_chat_member (sin unban inmediato)
         """
         self._print_separator("ESCENARIO B: Usuario no renovó → DEBE ser expulsado")
 
@@ -456,10 +456,17 @@ class TestVIPSubscriptionLifecycle:
             f"ban_chat_member debió llamarse al menos 1 vez, se llamó {call_count} veces"
         )
 
-        # Verificar también unban
-        unbanned = mock_bot.unban_chat_member.call_count >= 1
-        if unbanned:
-            self._print_ok("unban_chat_member también llamado (desbaneo post-expulsión)")
+        # Verificar que NO hay desbaneo inmediato (ban persistente hasta reactivación)
+        unban_count = mock_bot.unban_chat_member.call_count
+        if unban_count == 0:
+            self._print_ok("unban_chat_member NO llamado (ban persistente tras expulsión)")
+        else:
+            self._print_fail(
+                f"unban_chat_member llamado {unban_count} vez/veces (NO debió llamarse al expulsar)"
+            )
+        assert unban_count == 0, (
+            f"unban_chat_member debió no llamarse al expulsar, se llamó {unban_count} veces"
+        )
 
         # ── Paso 5: Verificar estado final BD ────────────────────────────
         self._print_step(5, "Verificar estado final de BD")

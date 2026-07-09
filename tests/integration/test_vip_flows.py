@@ -502,6 +502,32 @@ class TestFlow5ReturnAfterExpulsion:
         assert new_sub.is_active is True
         assert _ensure_aware(new_sub.end_date) > _now() - timedelta(minutes=5)
 
+    async def test_expired_user_redeem_unbans_from_vip_channel(self, db_session):
+        """Usuario expulsado (ban persistente) se desbanea al reactivar con nuevo token."""
+        from unittest.mock import AsyncMock
+
+        user = _create_user(db_session, 8004)
+        channel = _create_vip_channel(db_session)
+        tariff = _create_tariff(db_session, duration_days=30)
+
+        old_token = _create_token(db_session, tariff, code="BANEXP01")
+        _create_subscription(
+            db_session, user, channel, old_token, end_date=_past(5), is_active=False
+        )
+        new_token = _create_token(db_session, tariff, code="UNBAN01")
+
+        vip = VIPService(db_session)
+        bot = AsyncMock()
+        new_sub = await vip.redeem_token_with_missions(
+            new_token.token_code, user.telegram_id, bot=bot
+        )
+
+        assert new_sub is not None
+        bot.unban_chat_member.assert_awaited_once_with(
+            chat_id=channel.channel_id,
+            user_id=user.telegram_id,
+        )
+
     def test_expired_user_gets_pending_entry_stage_1(self, db_session):
         """Usuario que regresa tiene pending_entry stage 1 limpio."""
         user = _create_user(db_session, 8002, vip_entry_status="active", vip_entry_stage=None)

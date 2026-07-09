@@ -1130,7 +1130,7 @@ class TestSubscriberAdminVIPService:
         db_session.refresh(sub1)
         assert sub1.is_active is False
 
-    async def test_admin_revoke_ban_unban_when_only_subscription(
+    async def test_admin_revoke_bans_without_immediate_unban(
         self, db_session, sample_subscription, sample_vip_channel
     ):
         service = VIPService(db_session)
@@ -1144,9 +1144,42 @@ class TestSubscriberAdminVIPService:
             chat_id=sample_vip_channel.channel_id,
             user_id=sample_subscription.user_id,
         )
-        bot.unban_chat_member.assert_called_once()
+        bot.unban_chat_member.assert_not_called()
         bot.send_message.assert_called_once()
         assert meta["user_id"] == sample_subscription.user_id
+
+    async def test_redeem_token_with_missions_unbans_on_activation(
+        self, db_session, sample_tariff, sample_user, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        bot = AsyncMock()
+        token = service.generate_token(sample_tariff.id)
+
+        subscription = await service.redeem_token_with_missions(
+            token.token_code, sample_user.telegram_id, bot=bot
+        )
+
+        assert subscription is not None
+        bot.unban_chat_member.assert_called_once_with(
+            chat_id=sample_vip_channel.channel_id,
+            user_id=sample_user.telegram_id,
+        )
+
+    async def test_unban_user_from_vip_channel_uses_subscription_channel(
+        self, db_session, sample_user, sample_vip_channel, sample_subscription
+    ):
+        service = VIPService(db_session)
+        bot = AsyncMock()
+
+        ok = await service.unban_user_from_vip_channel(
+            bot, sample_user.telegram_id, sample_subscription
+        )
+
+        assert ok is True
+        bot.unban_chat_member.assert_called_once_with(
+            chat_id=sample_vip_channel.channel_id,
+            user_id=sample_user.telegram_id,
+        )
 
     async def test_grant_internal_vip_access_for_subscription_targets_specific_sub(
         self, db_session, sample_user, sample_vip_channel, sample_token, sample_tariff
@@ -1242,7 +1275,8 @@ class TestSubscriberAdminVIPService:
 
 
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
-# (has_other check + conditional ban/unban + direct User state clear + send + commit/rollback per sub)
+# (has_other check + conditional ban + direct User state clear + send + commit/rollback per sub;
+#  unban on subscription reactivation via redeem_token_with_missions)
 # + similar in bot.py startup remain in place. Unit tests here target the pure VIPService
 # queries/expire/redeem that the orchestration depends on. This fulfills punto 5 via smallest change
 # without risking pickling, dupe, or boundary violations. Full error paths + ritual matrix stay in

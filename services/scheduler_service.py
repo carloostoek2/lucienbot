@@ -214,11 +214,8 @@ async def _process_expired_subscriptions():
                     )
                     continue
 
-                # Es la única suscripción del usuario: ban/unban y notificar
+                # Es la única suscripción del usuario: expulsar (ban persistente) y notificar
                 await bot.ban_chat_member(chat_id=channel.channel_id, user_id=subscription.user_id)
-                await bot.unban_chat_member(
-                    chat_id=channel.channel_id, user_id=subscription.user_id
-                )
 
                 subscription.is_active = False
 

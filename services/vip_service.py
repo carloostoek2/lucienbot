@@ -317,6 +317,8 @@ class VIPService:
         """Canjea token VIP y procesa misiones VIP_ACTIVE con entrega automática."""
         subscription = self.redeem_token(token_code, user_id)
         if subscription:
+            if bot:
+                await self.unban_user_from_vip_channel(bot, user_id, subscription)
             from services.mission_service import run_vip_mission_side_effects
 
             shared_db = self.db if not self._owns_session else None
@@ -462,6 +464,38 @@ class VIPService:
             .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active)
             .first()
         )
+
+    async def unban_user_from_vip_channel(
+        self, bot, user_id: int, subscription: Subscription | None = None
+    ) -> bool:
+        """Desbanea al visitante del canal VIP tras reactivar una suscripción."""
+        db = self._get_db()
+        channel = None
+        if subscription is not None:
+            channel = subscription.channel
+            if channel is None and subscription.channel_id is not None:
+                channel = db.query(Channel).filter(Channel.id == subscription.channel_id).first()
+        if channel is None:
+            channel = self.get_vip_channel()
+        if not channel or not channel.is_active:
+            logger.warning(
+                f"vip_service | unban_user_from_vip_channel | user_id={user_id} | "
+                f"result=no_active_channel"
+            )
+            return False
+        try:
+            await bot.unban_chat_member(chat_id=channel.channel_id, user_id=user_id)
+            logger.info(
+                f"vip_service | unban_user_from_vip_channel | user_id={user_id} | "
+                f"channel_id={channel.channel_id} | result=ok"
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                f"vip_service | unban_user_from_vip_channel | user_id={user_id} | "
+                f"channel_id={channel.channel_id} | result=error | error={exc}"
+            )
+            return False
 
     async def create_vip_invite_link(
         self, bot, user_id: int, *, allow_fallback: bool = False
@@ -884,7 +918,8 @@ class VIPService:
     ) -> tuple[bool, str, dict]:
         """
         Revoca suscripción admin (kick).
-        Contrato idéntico a scheduler _process_expired_subscriptions.
+        Contrato idéntico a scheduler _process_expired_subscriptions:
+        ban persistente en Telegram; el desbaneo ocurre al reactivar suscripción.
         """
         db = self._get_db()
         subscription = (
@@ -922,7 +957,6 @@ class VIPService:
 
         try:
             await bot.ban_chat_member(chat_id=channel.channel_id, user_id=subscription.user_id)
-            await bot.unban_chat_member(chat_id=channel.channel_id, user_id=subscription.user_id)
             subscription.is_active = False
             user = db.query(User).filter(User.telegram_id == subscription.user_id).first()
             if user and user.vip_entry_status is not None:

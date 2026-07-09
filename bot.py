@@ -184,10 +184,6 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                         await bot.ban_chat_member(
                             chat_id=channel.channel_id, user_id=user.telegram_id
                         )
-                        # Desbanear inmediatamente para permitir que vuelva con un nuevo token
-                        await bot.unban_chat_member(
-                            chat_id=channel.channel_id, user_id=user.telegram_id
-                        )
                         logger.info(
                             f"Usuario {user.telegram_id} removido del canal VIP {channel.channel_id}"
                         )
