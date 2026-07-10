@@ -85,7 +85,9 @@ class TestConfirmAndSendBroadcast:
         await confirm_and_send_broadcast(callback, state, bot)
 
         bot.send_message.assert_awaited_once()
-        assert bot.send_message.await_args.kwargs.get("reply_markup") is not None
+        kwargs = bot.send_message.await_args.kwargs
+        assert kwargs.get("reply_markup") is not None
+        assert kwargs.get("parse_mode") == "HTML"
         bot.edit_message_reply_markup.assert_not_awaited()
         broadcast_svc.update_broadcast_message_id.assert_called_once_with(42, 777)
         state.clear.assert_awaited_once()
@@ -122,6 +124,7 @@ class TestConfirmAndSendBroadcast:
         await confirm_and_send_broadcast(callback, state, bot)
 
         bot.send_photo.assert_awaited_once()
+        assert bot.send_photo.await_args.kwargs.get("parse_mode") == "HTML"
         bot.send_message.assert_not_awaited()
 
 

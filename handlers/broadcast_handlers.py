@@ -27,6 +27,10 @@ from keyboards.inline_keyboards import (
     cancel_keyboard,
 )
 from services import get_service
+from services.broadcast.text_format import (
+    extract_message_text_and_entities,
+    resolve_broadcast_text_to_html,
+)
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
 from utils.admin import is_admin
@@ -61,8 +65,15 @@ async def send_broadcast_to_channel(
     reply_markup: InlineKeyboardMarkup | None,
     protect_content: bool,
 ):
-    """Envía broadcast al canal en un solo paso con reply_markup opcional."""
-    common = {"chat_id": channel_id, "reply_markup": reply_markup}
+    """Envía broadcast al canal en un solo paso con reply_markup opcional.
+
+    ``text`` se asume ya normalizado a HTML (nativo→HTML o tags manuales).
+    """
+    common = {
+        "chat_id": channel_id,
+        "reply_markup": reply_markup,
+        "parse_mode": "HTML",
+    }
     if has_attachment and attachment_file_id:
         if attachment_type == "photo":
             return await bot.send_photo(
@@ -330,10 +341,9 @@ async def select_channel_for_broadcast(
 
 📋 <b>Paso 1 de 7:</b> Texto del mensaje
 
-Envíe el texto que desea publicar. Puede usar formato HTML:
-• &lt;b&gt;negrita&lt;/b&gt;
-• &lt;i&gt;cursiva&lt;/i&gt;
-• &lt;code&gt;código&lt;/code&gt;""",
+Envíe el texto que desea publicar. Puede usar:
+• Formato nativo de Telegram (negrita, cursiva, etc.)
+• HTML: &lt;b&gt;negrita&lt;/b&gt;, &lt;i&gt;cursiva&lt;/i&gt;, &lt;code&gt;código&lt;/code&gt;""",
             reply_markup=broadcast_back_keyboard("waiting_text"),
             parse_mode="HTML",
         )
@@ -348,8 +358,9 @@ Envíe el texto que desea publicar. Puede usar formato HTML:
 
 @router.message(BroadcastStates.waiting_text)
 async def process_broadcast_text(message: Message, state: FSMContext):
-    """Procesa el texto del mensaje"""
-    text = message.text or message.caption or ""
+    """Procesa el texto del mensaje (nativo Telegram o HTML → HTML canónico)."""
+    raw_text, entities = extract_message_text_and_entities(message)
+    text = resolve_broadcast_text_to_html(raw_text, entities)
 
     await state.update_data(text=text)
 
@@ -388,10 +399,9 @@ async def back_to_text(callback: CallbackQuery, state: FSMContext):
 
 📋 <b>Paso 1 de 7:</b> Texto del mensaje
 
-Envíe el texto que desea publicar. Puede usar formato HTML:
-• &lt;b&gt;negrita&lt;/b&gt;
-• &lt;i&gt;cursiva&lt;/i&gt;
-• &lt;code&gt;código&lt;/code&gt;""",
+Envíe el texto que desea publicar. Puede usar:
+• Formato nativo de Telegram (negrita, cursiva, etc.)
+• HTML: &lt;b&gt;negrita&lt;/b&gt;, &lt;i&gt;cursiva&lt;/i&gt;, &lt;code&gt;código&lt;/code&gt;""",
             reply_markup=broadcast_back_keyboard("waiting_text"),
             parse_mode="HTML",
         )
