@@ -701,6 +701,49 @@ async def test_confirm_subscriber_reduce_does_not_call_revoke(
 
 @patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
 @patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_confirm_subscriber_reduce_date_mode_kwargs(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    """Date mode: confirm passes days=None and parsed new_end_date; never revoke."""
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        confirm_subscriber_reduce,
+    )
+
+    expected_end = datetime(2026, 8, 1, 23, 59, 59, tzinfo=UTC)
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.admin_reduce_subscription_time.return_value = (
+        True,
+        "ok",
+        {
+            "subscription_id": 1,
+            "old_end_date": datetime(2026, 9, 1, tzinfo=UTC),
+            "new_end_date": expected_end,
+            "user_id": 42,
+        },
+    )
+    fsm = await make_fsm_context()
+    await fsm.update_data(
+        target_subscription_id=1,
+        target_display="@vip",
+        reduce_mode="date",
+        reduce_days=None,
+        reduce_new_end_iso=expected_end.isoformat(),
+    )
+    await fsm.set_state(SubscriberAdminStates.reduce_confirming)
+    cb = make_callback(
+        data=SubscriberConfirmCallback(action="reduce", subscription_id=1).pack()
+    )
+    cbdata = SubscriberConfirmCallback(action="reduce", subscription_id=1)
+    await confirm_subscriber_reduce(cb, fsm, cbdata)
+    mock_svc.admin_reduce_subscription_time.assert_called_once_with(
+        1, cb.from_user.id, days=None, new_end_date=expected_end
+    )
+    mock_svc.admin_revoke_subscription.assert_not_called()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
 async def test_confirm_subscriber_reduce_rejects_fsm_mismatch(
     mock_get_service, _mock_is_admin, make_callback, make_fsm_context
 ):

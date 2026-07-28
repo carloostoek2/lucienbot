@@ -1452,6 +1452,99 @@ class TestSubscriberAdminVIPService:
         assert total >= 1
         assert any(s.id == sample_subscription.id for s in page)
 
+    def test_admin_reduce_subscription_time_rejects_not_found(self, db_session):
+        service = VIPService(db_session)
+        ok, code, meta = service.admin_reduce_subscription_time(
+            999999, 999001, days=1
+        )
+        assert ok is False
+        assert code == "not_found"
+        assert meta == {}
+
+    def test_admin_reduce_subscription_time_rejects_inactive(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        db_session.refresh(sample_subscription)
+        old_end = sample_subscription.end_date
+        sample_subscription.is_active = False
+        db_session.commit()
+
+        ok, code, meta = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, days=1
+        )
+
+        assert ok is False
+        assert code == "inactive"
+        assert meta == {}
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.end_date == old_end
+        assert sample_subscription.is_active is False
+
+    def test_admin_reduce_subscription_time_rejects_not_earlier_when_equal(
+        self, db_session, sample_subscription
+    ):
+        """Boundary: new_end == current must be not_earlier (candidate >= current)."""
+        service = VIPService(db_session)
+        db_session.refresh(sample_subscription)
+        old_end = sample_subscription.end_date
+        old_end_aware = (
+            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
+        )
+
+        ok, code, meta = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, new_end_date=old_end_aware
+        )
+
+        assert ok is False
+        assert code == "not_earlier"
+        assert meta == {}
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.end_date == old_end
+
+    def test_get_subscriber_list_page_orders_id_desc_on_created_at_tie(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """Same created_at → higher id first (id.desc tiebreak)."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        tokens = []
+        for i in range(2):
+            tok = Token(
+                token_code=f"TIETOK{i}",
+                tariff_id=sample_tariff.id,
+                status=TokenStatus.ACTIVE,
+            )
+            db_session.add(tok)
+            tokens.append(tok)
+        db_session.commit()
+        subs = []
+        for i, tok in enumerate(tokens):
+            db_session.refresh(tok)
+            sub = Subscription(
+                user_id=sample_user.telegram_id,
+                channel_id=sample_vip_channel.id,
+                token_id=tok.id,
+                end_date=now + timedelta(days=15 + i),
+                is_active=True,
+            )
+            db_session.add(sub)
+            subs.append(sub)
+        db_session.commit()
+        same_created = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
+        for sub in subs:
+            db_session.refresh(sub)
+            sub.created_at = same_created
+        db_session.commit()
+        for sub in subs:
+            db_session.refresh(sub)
+
+        page0, total = service.get_subscriber_list_page(page=0, page_size=8)
+        assert total == 2
+        page_ids = [s.id for s in page0]
+        higher_id, lower_id = max(subs[0].id, subs[1].id), min(subs[0].id, subs[1].id)
+        assert page_ids == [higher_id, lower_id]
+
 
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
 # (has_other check + conditional ban + direct User state clear + send + commit/rollback per sub;
