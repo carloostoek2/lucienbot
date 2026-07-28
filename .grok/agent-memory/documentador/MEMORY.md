@@ -20,4 +20,8 @@
 - Pointer: .grok/agent-memory/documentador/reaction-ecosystem-week2-closed.md
 - Pool phrase used: "Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Quedan ~2-4 clusters del análisis inicial después de este pool."
 
+- 2026-07-28: vip-admin-subscriber-list-sort-reduce.md created (1-item product feature quick — NOT hardening pool; list created_at.desc+id.desc; admin_reduce end_date-only no kick/ban/EventBus; FSM 1svc confirm; arch PWN 0c; testg suite protege; review effort3/2rounds/4 fix→0 open; 99 targeted + 306 VIP golds; residuals OOS: search order + broadcast MissingGreenlet). Source: SUMMARY+PLAN+gsd+impact/arch/testg/review.
+- Pointer: .grok/agent-memory/documentador/vip-admin-subscriber-list-sort-reduce.md
+- Close phrase: "Pool vip-admin-subscriber-list-sort-reduce cerrado — 1 ítem completado, tests passing, review 0 issues, commits hechos, documentación actualizada según scope."
+
 (Previous entries would accumulate here for cross-pool recall.)

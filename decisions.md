@@ -509,6 +509,25 @@ Pool anterior de 4 cerrado (tests passing per user). Nuevo pool de 4 iniciado. Q
 - 5 archivos tocados; 111 tests gate verdes; arch-enforcer PASS WITH NOTES (0 critical); test-guardian «suite protege adecuadamente».
 - Refs: `.planning/phases/36-admin-forward-besitos-grant/PLAN.md` + SUMMARY + gsd log + impact/arch/test-guardian reports item36.
 
+## VIP Admin Reduce Time Without Kick (vip-admin-subscriber-list-sort-reduce)
+
+**Motivo:** Custodios need to shorten remaining VIP time from subscriber admin profile without expelling; list should show newest subscriptions first.
+
+**Riesgos (mitigados):**
+- Reduce → `end_date <= now` would let scheduler kick. Mit: reject `would_expire` with zero mutation; unit real-DB.
+- Accidental reuse of revoke/ban on reduce path. Mit: separate `admin_reduce_subscription_time` (end_date-only); handler never calls `admin_revoke_subscription`; tests assert_not_called.
+- EventBus side-effects (extend emits). Mit: reduce path omits `schedule_emit` / `EVENT_VIP_ACTIVATED`.
+
+**Decisión:**
+- Sort: `get_subscriber_list_page` → `created_at.desc(), id.desc()` (first-subscribe time; not `end_date`).
+- Service: `admin_reduce_subscription_time(days|new_end_date)` mutates only `end_date` earlier; keeps `is_active=True`; result codes `ok|not_found|inactive|invalid_args|would_expire|not_earlier`.
+- FSM: mode → free text → confirm; confirm = 1× `get_service(VIPService)`; pure parse helpers DD/MM/YYYY EOD UTC.
+- Non-goals: `search_active_subscribers` order; grant/revoke/expire/scheduler semantics.
+
+**Resultado:**
+- Targeted 99p (post review fix); VIP golds 306p; arch PASS WITH NOTES 0 crit; test-guardian suite protege; review effort 3 / 2 rounds / 0 open.
+- Refs: `.planning/quick/20260728-vip-admin-subscriber-list-sort-reduce/{PLAN,SUMMARY}.md`, commits `a1d4be3`..`7a65964`, `.grok/agent-memory/{impact-analyzer,arch-enforcer,test-guardian,documentador}/vip-admin-subscriber-list-sort-reduce.md`
+
 ## VIP Subscriber Admin Profiles Etapa 1 (Item 36 — vip-subscriber-admin-profiles)
 
 **Motivo:** `list_subscribers` en `vip_handlers.py` era plano (10 max), sin `is_admin`, sin paginación, sin perfil ni acciones; callback `list_subscribers_{channel_id}` muerto en teclado de canal.

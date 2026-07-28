@@ -29,7 +29,17 @@ Custodios: newest-first VIP subscriber list; reduce remaining VIP time without k
 | T1 Service sort + `admin_reduce_subscription_time` | GREEN | `a1d4be3` feat(vip): newest-first list + admin reduce time service |
 | T2 UI surface + pure parse helpers | GREEN | `c463b4d` feat(vip): reduce-time UI surface and parse helpers |
 | T3 Handler FSM reduce flow + tests + golds | GREEN | `ab630e7` feat(vip): admin FSM to reduce subscription time without kick |
-| Fix Round 1 (review tests) | GREEN | `test(vip): cover reduce not_found/inactive and sort id tiebreak` |
+| Fix Round 1 (review tests) | GREEN | `7a65964` test(vip): cover reduce not_found/inactive and sort id tiebreak |
+| Documentador close | DONE | docs only (this SUMMARY + agent-memory report) |
+
+## Commits (authoritative)
+
+| SHA | Message |
+|-----|---------|
+| `a1d4be3` | feat(vip): newest-first list + admin reduce time service |
+| `c463b4d` | feat(vip): reduce-time UI surface and parse helpers |
+| `ab630e7` | feat(vip): admin FSM to reduce subscription time without kick |
+| `7a65964` | test(vip): cover reduce not_found/inactive and sort id tiebreak |
 
 ## What shipped
 
@@ -74,6 +84,22 @@ python -m pytest -q --tb=line -p no:cov --override-ini="addopts=" \
 - [x] New funcs ≤50 LOC
 - [x] Logging on reduce success/fail
 
+## Gates (post-impl + Fix Round 1)
+
+| Gate | Result |
+|------|--------|
+| Arch-enforcer | **PASS WITH NOTES**, **0 critical** |
+| Test-guardian | **"suite protege adecuadamente"** |
+| Review | effort **3**, **2** rounds, **4** suggestions fixed (tests only), final **0** open issues |
+| Self-check | **PASSED** (executor + Fix Round 1) |
+
+Report paths:
+- impact: `.grok/agent-memory/impact-analyzer/vip-admin-subscriber-list-sort-reduce.md`
+- arch: `.grok/agent-memory/arch-enforcer/vip-admin-subscriber-list-sort-reduce.md`
+- test-guardian: `.grok/agent-memory/test-guardian/vip-admin-subscriber-list-sort-reduce.md`
+- review: `.grok/agent-memory/review/vip-admin-subscriber-list-sort-reduce.md`
+- documentador: `.grok/agent-memory/documentador/vip-admin-subscriber-list-sort-reduce.md`
+
 ## Review Fix Round 1
 
 Closed 4 open test suggestions/nits (no production code change):
@@ -82,19 +108,23 @@ Closed 4 open test suggestions/nits (no production code change):
 3. Handler confirm date-mode kwargs (`days=None`, `new_end_date=…`) + no revoke
 4. `not_earlier` boundary when `new_end == current`
 
-Targeted re-run: **99 passed** (`env -u DATABASE_URL DATABASE_URL=sqlite:///lucien_bot.db`).
+Targeted re-run: **99 passed** (`env -u DATABASE_URL DATABASE_URL=sqlite:///lucien_bot.db`).  
+Round 2 re-review: **0 open** (HARD_ID 7315708d).
 
-## Residuals
+## Residuals (classified)
 
-- **title:** `test_real_with_get_service_usage_in_test` fails with `sqlalchemy.exc.MissingGreenlet` (asyncpg)
-- **clase_sugerida:** out-of-scope
-- **por_qué:** Environment/DB URL async driver issue; unrelated to VIP reduce/sort; not in plan surface
-- **archivos:** `tests/unit/test_broadcast_service_reaction_flow.py`
+| title | clase_sugerida | por_qué | archivos |
+|-------|----------------|---------|----------|
+| `test_real_with_get_service_usage_in_test` MissingGreenlet (asyncpg) | **out-of-scope** | Env/DB URL async driver flake; unrelated to VIP reduce/sort; not in PLAN surface | `tests/unit/test_broadcast_service_reaction_flow.py` |
+| `search_active_subscribers` still `end_date.asc` | **out-of-scope** | Explicit non-goal in PLAN; only list page reordered | `services/vip_service.py` |
 
-- **title:** `search_active_subscribers` still `end_date.asc`
-- **clase_sugerida:** out-of-scope
-- **por_qué:** Explicit non-goal in PLAN
-- **archivos:** `services/vip_service.py`
+## 3 critical systems
+
+| System | Impact |
+|--------|--------|
+| Gamificación | **None** — no BesitoService / credit / debit / reaction / daily on reduce path |
+| Narrativa | **None** |
+| Canales-VIP | **Controlled** — list newest-first; reduce shortens `end_date` only while active + `end_date > now`; no ban/revoke/deactivate/EventBus |
 
 ## Self-Check: PASSED
 
@@ -102,5 +132,10 @@ Targeted re-run: **99 passed** (`env -u DATABASE_URL DATABASE_URL=sqlite:///luci
 - [x] Tests del PLAN corridos
 - [x] 0 regresiones atribuibles
 - [x] Convenciones del proyecto respetadas
+- [x] Review 0 open; arch PASS WITH NOTES 0 crit; test-guardian suite protege
+- [x] Residuals classified (out-of-scope ×2)
+- [x] Documentador report + MEMORY pointer
 
-**ready_for_arch-enforcer: yes**
+**status:** complete  
+**ready_for_arch-enforcer:** yes (done)  
+**pool_closed:** yes
