@@ -764,7 +764,7 @@ class VIPService:
         page: int = 0,
         page_size: int = 8,
     ) -> tuple[list[Subscription], int]:
-        """Página de suscripciones activas ordenadas por end_date ASC + total."""
+        """Página de suscripciones activas ordenadas por created_at DESC, id DESC + total."""
         db = self._get_db()
         now = datetime.now(UTC).replace(tzinfo=None)
         base = db.query(Subscription).filter(
@@ -782,7 +782,7 @@ class VIPService:
                 joinedload(Subscription.tariff),
                 joinedload(Subscription.token).joinedload(Token.tariff),
             )
-            .order_by(Subscription.end_date.asc())
+            .order_by(Subscription.created_at.desc(), Subscription.id.desc())
             .offset(clamped_page * page_size)
             .limit(page_size)
             .all()
@@ -912,6 +912,78 @@ class VIPService:
         snapshot = self.get_subscriber_admin_snapshot(subscription_id)
         tariffs = self.get_all_tariffs(active_only=True)
         return snapshot, tariffs
+
+    def admin_reduce_subscription_time(
+        self,
+        subscription_id: int,
+        admin_id: int,
+        *,
+        days: int | None = None,
+        new_end_date: datetime | None = None,
+    ) -> tuple[bool, str, dict]:
+        """
+        Shortens VIP end_date only. Never ban/revoke/is_active=False. No EventBus.
+        Returns (ok, result_code, meta).
+        """
+        if (days is None) == (new_end_date is None) or (
+            days is not None and (not isinstance(days, int) or days < 1)
+        ):
+            logger.warning(
+                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | resultado=invalid_args"
+            )
+            return False, "invalid_args", {}
+
+        db = self._get_db()
+        subscription = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+        if not subscription:
+            logger.warning(
+                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | resultado=not_found"
+            )
+            return False, "not_found", {}
+
+        now = datetime.now(UTC)
+        current = _ensure_aware(subscription.end_date)
+        if not subscription.is_active or current is None or current <= now:
+            logger.warning(
+                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | resultado=inactive"
+            )
+            return False, "inactive", {}
+
+        candidate = (
+            current - timedelta(days=days)
+            if days is not None
+            else _ensure_aware(new_end_date)
+        )
+        if candidate <= now:
+            logger.warning(
+                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | resultado=would_expire"
+            )
+            return False, "would_expire", {}
+        if candidate >= current:
+            logger.warning(
+                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+                f"subscription_id={subscription_id} | resultado=not_earlier"
+            )
+            return False, "not_earlier", {}
+
+        old_end = current
+        subscription.end_date = candidate
+        db.commit()
+        db.refresh(subscription)
+        logger.info(
+            f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+            f"subscription_id={subscription_id} | resultado=ok"
+        )
+        return True, "ok", {
+            "subscription_id": subscription.id,
+            "old_end_date": old_end,
+            "new_end_date": candidate,
+            "user_id": subscription.user_id,
+        }
 
     async def admin_revoke_subscription(
         self, bot, subscription_id: int, admin_id: int

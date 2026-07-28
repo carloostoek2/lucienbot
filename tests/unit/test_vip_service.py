@@ -1273,6 +1273,185 @@ class TestSubscriberAdminVIPService:
         assert sample_subscription.is_active is False
         assert meta["subscription_id"] == sample_subscription.id
 
+    def test_get_subscriber_list_page_orders_by_created_at_desc(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """Active subs ordered newest created_at first, id desc tiebreak."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        tokens = []
+        for i in range(3):
+            tok = Token(
+                token_code=f"SORTORD{i}",
+                tariff_id=sample_tariff.id,
+                status=TokenStatus.ACTIVE,
+            )
+            db_session.add(tok)
+            tokens.append(tok)
+        db_session.commit()
+        subs = []
+        for i, tok in enumerate(tokens):
+            db_session.refresh(tok)
+            sub = Subscription(
+                user_id=sample_user.telegram_id,
+                channel_id=sample_vip_channel.id,
+                token_id=tok.id,
+                end_date=now + timedelta(days=10 + i),
+                is_active=True,
+            )
+            db_session.add(sub)
+            subs.append(sub)
+        db_session.commit()
+        # Explicit distinct created_at (server_default may collide)
+        base = datetime(2026, 1, 1, tzinfo=UTC)
+        for i, sub in enumerate(subs):
+            db_session.refresh(sub)
+            sub.created_at = base + timedelta(days=i)  # 0 oldest, 2 newest
+        db_session.commit()
+
+        page0, total = service.get_subscriber_list_page(page=0, page_size=8)
+        assert total == 3
+        page_ids = [s.id for s in page0]
+        expected_newest_first = [subs[2].id, subs[1].id, subs[0].id]
+        assert page_ids == expected_newest_first
+
+    def test_admin_reduce_subscription_time_by_days_keeps_active(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        db_session.refresh(sample_subscription)
+        old_end = sample_subscription.end_date
+        old_end_aware = (
+            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
+        )
+
+        ok, code, meta = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, days=5
+        )
+
+        assert ok is True
+        assert code == "ok"
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.is_active is True
+        new_end = sample_subscription.end_date
+        new_end_aware = (
+            new_end.replace(tzinfo=UTC) if new_end.tzinfo is None else new_end
+        )
+        assert new_end_aware == old_end_aware - timedelta(days=5)
+        assert meta["subscription_id"] == sample_subscription.id
+        assert meta["user_id"] == sample_subscription.user_id
+
+    def test_admin_reduce_subscription_time_by_new_end_date(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        db_session.refresh(sample_subscription)
+        old_end = sample_subscription.end_date
+        old_end_aware = (
+            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
+        )
+        candidate = old_end_aware - timedelta(days=10)
+
+        ok, code, meta = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, new_end_date=candidate
+        )
+
+        assert ok is True
+        assert code == "ok"
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.is_active is True
+        new_end = sample_subscription.end_date
+        new_end_aware = (
+            new_end.replace(tzinfo=UTC) if new_end.tzinfo is None else new_end
+        )
+        assert new_end_aware == candidate
+        assert meta["new_end_date"] is not None
+
+    def test_admin_reduce_subscription_time_rejects_would_expire(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        db_session.refresh(sample_subscription)
+        old_end = sample_subscription.end_date
+
+        ok, code, meta = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, days=9999
+        )
+
+        assert ok is False
+        assert code == "would_expire"
+        assert meta == {}
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.end_date == old_end
+        assert sample_subscription.is_active is True
+
+    def test_admin_reduce_subscription_time_rejects_not_earlier(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        db_session.refresh(sample_subscription)
+        old_end = sample_subscription.end_date
+        old_end_aware = (
+            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
+        )
+        later = old_end_aware + timedelta(days=5)
+
+        ok, code, meta = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, new_end_date=later
+        )
+
+        assert ok is False
+        assert code == "not_earlier"
+        assert meta == {}
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.end_date == old_end
+
+    def test_admin_reduce_subscription_time_rejects_invalid_args(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+
+        ok, code, _ = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001
+        )
+        assert ok is False and code == "invalid_args"
+
+        ok, code, _ = service.admin_reduce_subscription_time(
+            sample_subscription.id,
+            999001,
+            days=3,
+            new_end_date=now + timedelta(days=5),
+        )
+        assert ok is False and code == "invalid_args"
+
+        ok, code, _ = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, days=0
+        )
+        assert ok is False and code == "invalid_args"
+
+        ok, code, _ = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, days=-1
+        )
+        assert ok is False and code == "invalid_args"
+
+    def test_admin_reduce_subscription_time_never_sets_inactive(
+        self, db_session, sample_subscription
+    ):
+        service = VIPService(db_session)
+        ok, code, _ = service.admin_reduce_subscription_time(
+            sample_subscription.id, 999001, days=3
+        )
+        assert ok is True
+        assert code == "ok"
+        db_session.refresh(sample_subscription)
+        assert sample_subscription.is_active is True
+        snapshot = service.get_subscriber_admin_snapshot(sample_subscription.id)
+        assert snapshot is not None
+        page, total = service.get_subscriber_list_page(page=0, page_size=8)
+        assert total >= 1
+        assert any(s.id == sample_subscription.id for s in page)
+
 
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
 # (has_other check + conditional ban + direct User state clear + send + commit/rollback per sub;
