@@ -128,6 +128,31 @@ def build_subscriber_search_results_text(query: str, count: int) -> str:
     return LucienVoice.admin_subscriber_search_results_header(query, count)
 
 
+def parse_reduce_days_input(text: str) -> int | None:
+    """Parse positive integer days for VIP reduce. Función pura (sin estado ni side-effects)."""
+    if text is None:
+        return None
+    stripped = text.strip()
+    if not stripped.isdigit():
+        return None
+    value = int(stripped)
+    return value if value >= 1 else None
+
+
+def parse_reduce_end_date_input(text: str) -> datetime | None:
+    """Parse DD/MM/YYYY → aware UTC end-of-day. Función pura (sin estado ni side-effects)."""
+    if text is None:
+        return None
+    stripped = text.strip()
+    try:
+        # End-of-day UTC so "same calendar day" remains usable as VIP window.
+        return datetime.strptime(stripped, "%d/%m/%Y").replace(
+            hour=23, minute=59, second=59, tzinfo=UTC
+        )
+    except ValueError:
+        return None
+
+
 def _channel_filter(channel_id: int) -> int | None:
     """Función pura (sin estado ni side-effects)."""
     return channel_id if channel_id else None

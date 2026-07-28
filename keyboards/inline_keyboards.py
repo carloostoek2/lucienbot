@@ -531,6 +531,12 @@ def subscriber_profile_keyboard(
         ],
         [
             InlineKeyboardButton(
+                text="⏱ Reducir tiempo",
+                callback_data=SubscriberActionCallback(action="reduce", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text="🚪 Expulsar",
                 callback_data=SubscriberActionCallback(action="kick", **ctx).pack(),
             )
@@ -539,6 +545,36 @@ def subscriber_profile_keyboard(
             InlineKeyboardButton(
                 text="🔙 Volver a lista",
                 callback_data=SubscriberListCallback(channel_id=channel_id, page=page).pack(),
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def subscriber_reduce_mode_keyboard(
+    subscription_id: int, channel_id: int = 0, page: int = 0
+) -> InlineKeyboardMarkup:
+    """Elegir modo de reducción de tiempo VIP (días | fecha)."""
+    ctx = {"subscription_id": subscription_id, "channel_id": channel_id, "page": page}
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="📅 Por días",
+                callback_data=SubscriberActionCallback(action="reduce_days", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🗓 Por fecha",
+                callback_data=SubscriberActionCallback(action="reduce_date", **ctx).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔙 Volver al perfil",
+                callback_data=SubscriberProfileCallback(
+                    subscription_id=subscription_id, channel_id=channel_id, page=page
+                ).pack(),
             )
         ],
     ]

@@ -731,6 +731,58 @@ El canal asociado está inactivo; no se realizó expulsión en Telegram."""
 Su suscripción VIP fue revocada y se le notificó."""
 
     @staticmethod
+    def admin_subscriber_reduce_mode_prompt(display: str, user_id: int) -> str:
+        """Elegir modo de reducción de tiempo VIP."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>¿Cómo desea reducir el tiempo VIP de {safe} (ID {user_id})?</i>
+
+Elija por días o por fecha de vencimiento más cercana."""
+
+    @staticmethod
+    def admin_subscriber_reduce_days_prompt(display: str) -> str:
+        """Pedir cantidad de días a restar del VIP."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Indique cuántos días desea restar al VIP de {safe}:</i>
+
+Ejemplo: 5"""
+
+    @staticmethod
+    def admin_subscriber_reduce_date_prompt(display: str) -> str:
+        """Pedir nueva fecha de vencimiento (DD/MM/YYYY)."""
+        safe = html.escape(display)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Indique la nueva fecha de vencimiento VIP de {safe} (formato DD/MM/YYYY):</i>
+
+Ejemplo: 01/08/2026"""
+
+    @staticmethod
+    def admin_subscriber_reduce_confirm(display: str, summary: str) -> str:
+        """Confirmar reducción de tiempo VIP."""
+        safe = html.escape(display)
+        safe_summary = html.escape(summary)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>¿Confirmar reducir VIP de {safe}: <b>{safe_summary}</b>?</i>
+
+La suscripción permanecerá activa; solo se adelanta el vencimiento."""
+
+    @staticmethod
+    def admin_subscriber_reduce_success(display: str, new_expiry: str) -> str:
+        """Éxito tras reducir tiempo VIP sin expulsión."""
+        safe = html.escape(display)
+        safe_exp = html.escape(new_expiry)
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Tiempo VIP de {safe} reducido. Nuevo vencimiento: <b>{safe_exp}</b>.</i>
+
+El visitante conserva su acceso activo."""
+
+    @staticmethod
     def admin_subscriber_action_failed(reason: str) -> str:
         """Error genérico en acción admin sobre suscriptor."""
         safe = html.escape(reason)

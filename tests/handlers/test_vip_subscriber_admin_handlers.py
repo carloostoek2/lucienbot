@@ -108,6 +108,28 @@ class TestPureHelpers:
         assert "diana" in text
         assert "3" in text
 
+    def test_parse_reduce_days_input(self):
+        from handlers.vip_subscriber_admin_handlers import parse_reduce_days_input
+
+        assert parse_reduce_days_input("5") == 5
+        assert parse_reduce_days_input(" 12 ") == 12
+        assert parse_reduce_days_input("0") is None
+        assert parse_reduce_days_input("") is None
+        assert parse_reduce_days_input("abc") is None
+        assert parse_reduce_days_input("-3") is None
+
+    def test_parse_reduce_end_date_input(self):
+        from handlers.vip_subscriber_admin_handlers import parse_reduce_end_date_input
+
+        dt = parse_reduce_end_date_input("01/08/2026")
+        assert dt is not None
+        assert dt.year == 2026 and dt.month == 8 and dt.day == 1
+        assert dt.hour == 23 and dt.minute == 59 and dt.second == 59
+        assert dt.tzinfo == UTC
+        assert parse_reduce_end_date_input("2026-08-01") is None
+        assert parse_reduce_end_date_input("") is None
+        assert parse_reduce_end_date_input("32/13/2026") is None
+
 
 class TestSubscriberListCallback:
     def test_subscriber_list_callback_pack_unpack(self):

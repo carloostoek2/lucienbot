@@ -85,6 +85,29 @@ class TestSubscriberAdminCallbacks:
         )
         assert "kick" in cb.pack()
 
+    def test_subscriber_action_callback_pack_reduce(self):
+        cb = SubscriberActionCallback(
+            action="reduce", subscription_id=5, channel_id=1, page=0
+        )
+        packed = cb.pack()
+        assert "reduce" in packed
+        unpacked = SubscriberActionCallback.unpack(packed)
+        assert unpacked.action == "reduce"
+        assert unpacked.subscription_id == 5
+
+    def test_subscriber_action_callback_pack_reduce_days_date(self):
+        for action in ("reduce_days", "reduce_date"):
+            cb = SubscriberActionCallback(
+                action=action, subscription_id=2, channel_id=0, page=1
+            )
+            assert action in cb.pack()
+
+    def test_subscriber_confirm_callback_pack_reduce(self):
+        cb = SubscriberConfirmCallback(
+            action="reduce", subscription_id=9, channel_id=0, page=0
+        )
+        assert "reduce" in cb.pack()
+
     def test_subscriber_extend_tariff_callback_pack(self):
         cb = SubscriberExtendTariffCallback(
             subscription_id=1, tariff_id=7, channel_id=0, page=0
