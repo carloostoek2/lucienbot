@@ -32,6 +32,35 @@ def _ensure_aware(dt):
     return dt
 
 
+def _is_valid_reduce_args(days: int | None, new_end_date: datetime | None) -> bool:
+    """XOR days/new_end_date with days>=1. Función pura (sin estado ni side-effects)."""
+    if (days is None) == (new_end_date is None):
+        return False
+    if days is not None and (not isinstance(days, int) or days < 1):
+        return False
+    return True
+
+
+def _compute_reduced_end_candidate(
+    current_end: datetime,
+    now: datetime,
+    *,
+    days: int | None = None,
+    new_end_date: datetime | None = None,
+) -> tuple[datetime | None, str | None]:
+    """Compute earlier end candidate or error code. Función pura (sin estado ni side-effects)."""
+    candidate = (
+        current_end - timedelta(days=days)
+        if days is not None
+        else _ensure_aware(new_end_date)
+    )
+    if candidate <= now:
+        return None, "would_expire"
+    if candidate >= current_end:
+        return None, "not_earlier"
+    return candidate, None
+
+
 @contextmanager
 def get_db_session():
     """Context manager para sesiones de base de datos."""
@@ -913,6 +942,19 @@ class VIPService:
         tariffs = self.get_all_tariffs(active_only=True)
         return snapshot, tariffs
 
+    def _log_reduce_result(
+        self, admin_id: int, subscription_id: int, code: str, *, level: str = "warning"
+    ) -> None:
+        """Log reduce outcome with standard vip_service format."""
+        msg = (
+            f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
+            f"subscription_id={subscription_id} | resultado={code}"
+        )
+        if level == "info":
+            logger.info(msg)
+        else:
+            logger.warning(msg)
+
     def admin_reduce_subscription_time(
         self,
         subscription_id: int,
@@ -925,59 +967,34 @@ class VIPService:
         Shortens VIP end_date only. Never ban/revoke/is_active=False. No EventBus.
         Returns (ok, result_code, meta).
         """
-        if (days is None) == (new_end_date is None) or (
-            days is not None and (not isinstance(days, int) or days < 1)
-        ):
-            logger.warning(
-                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
-                f"subscription_id={subscription_id} | resultado=invalid_args"
-            )
+        if not _is_valid_reduce_args(days, new_end_date):
+            self._log_reduce_result(admin_id, subscription_id, "invalid_args")
             return False, "invalid_args", {}
 
         db = self._get_db()
         subscription = db.query(Subscription).filter(Subscription.id == subscription_id).first()
         if not subscription:
-            logger.warning(
-                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
-                f"subscription_id={subscription_id} | resultado=not_found"
-            )
+            self._log_reduce_result(admin_id, subscription_id, "not_found")
             return False, "not_found", {}
 
         now = datetime.now(UTC)
         current = _ensure_aware(subscription.end_date)
         if not subscription.is_active or current is None or current <= now:
-            logger.warning(
-                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
-                f"subscription_id={subscription_id} | resultado=inactive"
-            )
+            self._log_reduce_result(admin_id, subscription_id, "inactive")
             return False, "inactive", {}
 
-        candidate = (
-            current - timedelta(days=days)
-            if days is not None
-            else _ensure_aware(new_end_date)
+        candidate, err = _compute_reduced_end_candidate(
+            current, now, days=days, new_end_date=new_end_date
         )
-        if candidate <= now:
-            logger.warning(
-                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
-                f"subscription_id={subscription_id} | resultado=would_expire"
-            )
-            return False, "would_expire", {}
-        if candidate >= current:
-            logger.warning(
-                f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
-                f"subscription_id={subscription_id} | resultado=not_earlier"
-            )
-            return False, "not_earlier", {}
+        if err:
+            self._log_reduce_result(admin_id, subscription_id, err)
+            return False, err, {}
 
         old_end = current
         subscription.end_date = candidate
         db.commit()
         db.refresh(subscription)
-        logger.info(
-            f"vip_service | admin_reduce_subscription_time | user_id={admin_id} | "
-            f"subscription_id={subscription_id} | resultado=ok"
-        )
+        self._log_reduce_result(admin_id, subscription_id, "ok", level="info")
         return True, "ok", {
             "subscription_id": subscription.id,
             "old_end_date": old_end,

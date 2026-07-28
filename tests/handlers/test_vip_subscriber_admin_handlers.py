@@ -593,3 +593,130 @@ async def test_confirm_rejects_fsm_subscription_mismatch(
     await confirm_subscriber_kick(cb, fsm, cbdata)
     cb.answer.assert_called_with("Contexto expirado. Vuelva al perfil.", show_alert=True)
     mock_get_service.assert_not_called()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_start_subscriber_reduce_calls_snapshot_once(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        start_subscriber_reduce,
+    )
+    from keyboards.callback_data import SubscriberActionCallback
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.get_subscriber_admin_snapshot.return_value = {
+        "subscription_id": 1,
+        "user_id": 42,
+        "display_name": "@vip",
+        "besitos_balance": 10,
+        "tariff_name": "Mensual",
+        "expiry_iso": "01/08/2026",
+        "days_remaining": 30,
+        "channel_db_id": 1,
+    }
+    fsm = await make_fsm_context()
+    cb = make_callback(
+        data=SubscriberActionCallback(action="reduce", subscription_id=1).pack()
+    )
+    cbdata = SubscriberActionCallback(action="reduce", subscription_id=1)
+    await start_subscriber_reduce(cb, fsm, cbdata)
+    mock_svc.get_subscriber_admin_snapshot.assert_called_once_with(1)
+    assert await fsm.get_state() == SubscriberAdminStates.reduce_choosing_mode
+    cb.message.edit_text.assert_called_once()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_confirm_subscriber_reduce_calls_service_once(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        confirm_subscriber_reduce,
+    )
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.admin_reduce_subscription_time.return_value = (
+        True,
+        "ok",
+        {
+            "subscription_id": 1,
+            "old_end_date": datetime(2026, 8, 10, tzinfo=UTC),
+            "new_end_date": datetime(2026, 8, 5, 23, 59, 59, tzinfo=UTC),
+            "user_id": 42,
+        },
+    )
+    fsm = await make_fsm_context()
+    await fsm.update_data(
+        target_subscription_id=1,
+        target_display="@vip",
+        reduce_days=5,
+        reduce_mode="days",
+    )
+    await fsm.set_state(SubscriberAdminStates.reduce_confirming)
+    cb = make_callback(
+        data=SubscriberConfirmCallback(action="reduce", subscription_id=1).pack()
+    )
+    cbdata = SubscriberConfirmCallback(action="reduce", subscription_id=1)
+    await confirm_subscriber_reduce(cb, fsm, cbdata)
+    mock_svc.admin_reduce_subscription_time.assert_called_once_with(
+        1, cb.from_user.id, days=5, new_end_date=None
+    )
+    mock_svc.admin_revoke_subscription.assert_not_called()
+    text = cb.message.edit_text.call_args[0][0]
+    assert "reducido" in text.lower() or "vencimiento" in text.lower()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_confirm_subscriber_reduce_does_not_call_revoke(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        confirm_subscriber_reduce,
+    )
+
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.admin_reduce_subscription_time.return_value = (False, "would_expire", {})
+    fsm = await make_fsm_context()
+    await fsm.update_data(
+        target_subscription_id=1,
+        target_display="@vip",
+        reduce_days=999,
+        reduce_mode="days",
+    )
+    await fsm.set_state(SubscriberAdminStates.reduce_confirming)
+    cb = make_callback(
+        data=SubscriberConfirmCallback(action="reduce", subscription_id=1).pack()
+    )
+    cbdata = SubscriberConfirmCallback(action="reduce", subscription_id=1)
+    await confirm_subscriber_reduce(cb, fsm, cbdata)
+    mock_svc.admin_revoke_subscription.assert_not_called()
+    mock_svc.admin_reduce_subscription_time.assert_called_once()
+
+
+@patch("handlers.vip_subscriber_admin_handlers.is_admin", return_value=True)
+@patch("handlers.vip_subscriber_admin_handlers.get_service")
+async def test_confirm_subscriber_reduce_rejects_fsm_mismatch(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    from handlers.vip_subscriber_admin_handlers import (
+        SubscriberAdminStates,
+        confirm_subscriber_reduce,
+    )
+
+    _mock_vip_ctx(mock_get_service)
+    fsm = await make_fsm_context()
+    await fsm.update_data(target_subscription_id=99, reduce_days=3)
+    await fsm.set_state(SubscriberAdminStates.reduce_confirming)
+    cb = make_callback(
+        data=SubscriberConfirmCallback(action="reduce", subscription_id=1).pack()
+    )
+    cbdata = SubscriberConfirmCallback(action="reduce", subscription_id=1)
+    await confirm_subscriber_reduce(cb, fsm, cbdata)
+    cb.answer.assert_called_with("Contexto expirado. Vuelva al perfil.", show_alert=True)
+    mock_get_service.assert_not_called()
