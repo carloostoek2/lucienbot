@@ -48,3 +48,23 @@ def validate_reaction_not_duplicate(has_user_reacted: bool) -> str | None:
     if has_user_reacted:
         return "duplicate"
     return None
+
+
+def should_heal_message_id(
+    broadcast: BroadcastMessage,
+    channel_id: int | None,
+    message_id: int | None,
+) -> bool:
+    """Detecta un broadcast en tracking_failed (message_id=0) reparable desde el callback.
+
+    Solo se repara cuando el broadcast quedó en 0 (el envío a Telegram pudo llegar pero
+    el ID nunca se registró), el callback pertenece al mismo canal y trae un message_id
+    real (>0). Función pura.
+    """
+    if broadcast.message_id != 0:
+        return False
+    if channel_id is None or broadcast.channel_id != channel_id:
+        return False
+    if not message_id or message_id <= 0:
+        return False
+    return True

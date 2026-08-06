@@ -94,7 +94,11 @@ Reason codes: `duplicate`, `invalid_broadcast`, `no_reactions`, `message_mismatc
 
 - `create_broadcast_message(message_id=0)` then `update_broadcast_message_id` after TG send
 - If update fails → `tracking_failed`; admin alert; row stays at `message_id=0`
-- Reactions on that broadcast return `message_mismatch` (validator blocks stale context)
+- **Self-heal (fix):** `check_and_register_reaction` re-syncs `broadcast.message_id` from the
+  callback when the row is stuck at `message_id=0` (`should_heal_message_id` pure guard + 
+  `heal_broadcast_message_id` best-effort). Only heals when channel matches + message_id>0;
+  never overwrites a valid message_id, never heals across channels. Commit independiente
+  (no rompe la atomicidad reacción+crédito). First reaction on a broken broadcast repairs it.
 
 ### Atomicity
 

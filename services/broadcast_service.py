@@ -27,6 +27,7 @@ from models.models import (
 )
 from services.besito_service import BesitoService
 from services.broadcast.reaction_validators import (
+    should_heal_message_id,
     validate_broadcast_context_match,
     validate_broadcast_exists_for_reaction,
     validate_reaction_emoji_allowed,
@@ -231,6 +232,29 @@ class BroadcastService:
         self.db.commit()
         return True
 
+    def heal_broadcast_message_id(self, broadcast_id: int, message_id: int) -> bool:
+        """Re-sincroniza el message_id de un broadcast en tracking_failed (message_id=0).
+
+        Best-effort: si la escritura falla, el broadcast queda como estaba y la reacción
+        se rechaza como antes (message_mismatch); nunca invalida una reacción válida.
+        """
+        broadcast = self.get_broadcast(broadcast_id)
+        if not broadcast or broadcast.message_id != 0:
+            return False
+        try:
+            broadcast.message_id = message_id
+            self.db.commit()
+            logger.info(
+                f"broadcast_service | heal_broadcast_message_id | broadcast_id={broadcast_id} | message_id={message_id} | healed"
+            )
+            return True
+        except Exception as exc:
+            self.db.rollback()
+            logger.error(
+                f"broadcast_service | heal_broadcast_message_id | broadcast_id={broadcast_id} | error={exc}"
+            )
+            return False
+
     def delete_broadcast(self, broadcast_id: int) -> bool:
         """Elimina un broadcast huérfano (p. ej. fallo de envío a Telegram)."""
         broadcast = self.get_broadcast(broadcast_id)
@@ -407,6 +431,11 @@ class BroadcastService:
             return self._reaction_failure(reason)
         if not broadcast.has_reactions:
             return self._reaction_failure("no_reactions")
+        # Self-heal tracking_failed: si el broadcast quedó con message_id=0 (envío a Telegram
+        # interrumpido sin registrar el ID), re-sincronizar desde el callback para que la
+        # validación pase y el markup apunte al mensaje real. Best-effort, commit independiente.
+        if should_heal_message_id(broadcast, channel_id, message_id):
+            self.heal_broadcast_message_id(broadcast_id, message_id)
         reason = validate_broadcast_context_match(broadcast, channel_id, message_id)
         if reason:
             return self._reaction_failure(reason)

@@ -286,7 +286,7 @@ class TestCheckAndRegisterReaction:
         assert result["success"] is False
         assert result["reason"] == "message_mismatch"
 
-    async def test_message_mismatch_when_broadcast_stuck_at_message_id_zero(
+    async def test_self_heals_when_broadcast_stuck_at_message_id_zero(
         self,
         db_session,
         sample_user,
@@ -294,20 +294,41 @@ class TestCheckAndRegisterReaction:
         sample_reaction_emoji,
         sample_free_channel,
     ):
-        """Simulates tracking_failed persistence: broadcast sent but message_id never updated."""
+        """
+        Self-heal tracking_failed: broadcast sent but message_id never updated (stuck at 0).
+        A reaction from the SAME channel with a real message_id re-syncs broadcast.message_id
+        before validation, so the reaction registers and the broadcast row is repaired.
+        """
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        balance = BesitoBalance(
+            user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0
+        )
+        db_session.add(balance)
         sample_broadcast_message.message_id = 0  # tracking_failed left row at 0
         db_session.commit()
+
         service = BroadcastService(db_session)
-        result = await service.check_and_register_reaction(
-            broadcast_id=sample_broadcast_message.id,
-            user_id=sample_user.telegram_id,
-            emoji_id=sample_reaction_emoji.id,
-            bot=AsyncMock(),
-            channel_id=sample_free_channel.channel_id,
-            message_id=1001,  # real TG message user clicked
-        )
-        assert result["success"] is False
-        assert result["reason"] == "message_mismatch"
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            result = await service.check_and_register_reaction(
+                broadcast_id=sample_broadcast_message.id,
+                user_id=sample_user.telegram_id,
+                emoji_id=sample_reaction_emoji.id,
+                bot=AsyncMock(),
+                channel_id=sample_free_channel.channel_id,
+                message_id=5000,  # real TG message user clicked
+            )
+
+        assert result["success"] is True
+        assert result["besitos_awarded"] == sample_reaction_emoji.besito_value
+
+        # Broadcast repaired in DB + reaction row created
+        db_session.refresh(sample_broadcast_message)
+        assert sample_broadcast_message.message_id == 5000
         reaction_row = (
             db_session.query(BroadcastReaction)
             .filter(
@@ -316,7 +337,67 @@ class TestCheckAndRegisterReaction:
             )
             .first()
         )
-        assert reaction_row is None
+        assert reaction_row is not None
+        assert mock_mission.await_count == 1
+
+    async def test_no_heal_when_tracking_failed_channel_mismatch(
+        self,
+        db_session,
+        sample_user,
+        sample_broadcast_message,
+        sample_reaction_emoji,
+    ):
+        """Broadcast stuck at 0 but callback from a DIFFERENT channel: still message_mismatch, no heal."""
+        sample_broadcast_message.message_id = 0
+        db_session.commit()
+        service = BroadcastService(db_session)
+        result = await service.check_and_register_reaction(
+            broadcast_id=sample_broadcast_message.id,
+            user_id=sample_user.telegram_id,
+            emoji_id=sample_reaction_emoji.id,
+            bot=AsyncMock(),
+            channel_id=-999,  # callback from a different channel
+            message_id=5000,
+        )
+        assert result["success"] is False
+        assert result["reason"] == "message_mismatch"
+        db_session.refresh(sample_broadcast_message)
+        assert sample_broadcast_message.message_id == 0  # NOT healed
+
+    async def test_no_heal_without_callback_message_id(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """
+        Sin message_id de callback (solo contexto de canal) el heal NO corre: el validator
+        preexistente salta la comparación de message_id cuando es None, así que la reacción
+        registra igual, pero broadcast.message_id permanece en 0 (sin reparar).
+        """
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        db_session.add(
+            BesitoBalance(user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0)
+        )
+        sample_broadcast_message.message_id = 0
+        db_session.commit()
+        service = BroadcastService(db_session)
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            result = await service.check_and_register_reaction(
+                broadcast_id=sample_broadcast_message.id,
+                user_id=sample_user.telegram_id,
+                emoji_id=sample_reaction_emoji.id,
+                bot=AsyncMock(),
+                channel_id=sample_broadcast_message.channel_id,
+                message_id=None,
+            )
+        # reaction registers (validator preexistente salta context match con None),
+        # pero el broadcast NO se repara sin un message_id real
+        assert result["success"] is True
+        db_session.refresh(sample_broadcast_message)
+        assert sample_broadcast_message.message_id == 0
 
     async def test_inactive_emoji_returns_structured_reason(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
@@ -793,6 +874,47 @@ class TestProcessChannelReaction:
         btn_text = kwargs["new_markup"].inline_keyboard[0][0].text
         assert "💋" in btn_text and "1" in btn_text
 
+    async def test_success_heals_and_targets_healed_message_id(
+        self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
+    ):
+        """process_channel_reaction on a tracking_failed broadcast heals message_id and
+        refreshes markup at the healed (real) message_id, not 0."""
+        db_session.query(BesitoBalance).filter(
+            BesitoBalance.user_id == sample_user.telegram_id
+        ).delete()
+        db_session.add(
+            BesitoBalance(user_id=sample_user.telegram_id, balance=0, total_earned=0, total_spent=0)
+        )
+        sample_broadcast_message.message_id = 0
+        db_session.commit()
+
+        service = BroadcastService(db_session)
+        mock_bot = AsyncMock()
+
+        with patch.object(
+            MissionService, "increment_progress_and_deliver", new_callable=AsyncMock
+        ) as mock_mission:
+            mock_mission.return_value = []
+            with patch.object(
+                service, "update_reaction_message", new_callable=AsyncMock
+            ) as mock_update:
+                mock_update.return_value = True
+                result = await service.process_channel_reaction(
+                    broadcast_id=sample_broadcast_message.id,
+                    user_id=sample_user.telegram_id,
+                    emoji_id=sample_reaction_emoji.id,
+                    username=sample_user.username,
+                    bot=mock_bot,
+                    channel_id=sample_broadcast_message.channel_id,
+                    message_id=5000,
+                )
+
+        assert result["success"] is True
+        mock_update.assert_awaited_once()
+        assert mock_update.call_args.kwargs["message_id"] == 5000
+        db_session.refresh(sample_broadcast_message)
+        assert sample_broadcast_message.message_id == 5000
+
     async def test_success_includes_extra_button_url_row(
         self, db_session, sample_user, sample_broadcast_message, sample_reaction_emoji
     ):
@@ -893,3 +1015,55 @@ class TestProcessChannelReaction:
 
         assert result["success"] is True
         assert result["besitos_awarded"] == sample_reaction_emoji.besito_value
+
+
+class TestShouldHealMessageIdPureHelper:
+    """Pure helper tests: should_heal_message_id decides when a tracking_failed
+    broadcast (message_id=0) is repairable from the reaction callback."""
+
+    def _broadcast(self, message_id: int, channel_id: int = -100):
+        from models.models import BroadcastMessage
+
+        return BroadcastMessage(message_id=message_id, channel_id=channel_id)
+
+    def test_heals_when_tracking_failed_and_callback_matches_channel(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=0)
+        assert should_heal_message_id(b, channel_id=-100, message_id=5000) is True
+
+    def test_no_heal_when_broadcast_has_valid_message_id(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=1001)
+        assert should_heal_message_id(b, channel_id=-100, message_id=5000) is False
+
+    def test_no_heal_when_channel_mismatch(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=0)
+        assert should_heal_message_id(b, channel_id=-999, message_id=5000) is False
+
+    def test_no_heal_when_channel_id_missing(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=0)
+        assert should_heal_message_id(b, channel_id=None, message_id=5000) is False
+
+    def test_no_heal_when_message_id_missing(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=0)
+        assert should_heal_message_id(b, channel_id=-100, message_id=None) is False
+
+    def test_no_heal_when_message_id_zero(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=0)
+        assert should_heal_message_id(b, channel_id=-100, message_id=0) is False
+
+    def test_no_heal_when_message_id_negative(self):
+        from services.broadcast.reaction_validators import should_heal_message_id
+
+        b = self._broadcast(message_id=0)
+        assert should_heal_message_id(b, channel_id=-100, message_id=-5) is False
