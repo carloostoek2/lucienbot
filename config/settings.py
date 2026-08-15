@@ -16,6 +16,9 @@ class BotConfig:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///lucien_bot.db")
     TIMEZONE: str = os.getenv("TIMEZONE", "America/Mexico_City")
     CREATOR_CONTACT_URL: str = os.getenv("CREATOR_CONTACT_URL", "")
+    # Fase 6 link: emisor de avisos [LINK] hacia Diana (default off = comportamiento idéntico)
+    FEATURE_LINK_ENABLED: bool = os.getenv("FEATURE_LINK_ENABLED") == "1"
+    LINK_CHAT_ID: int = int(os.getenv("LINK_CHAT_ID", "0"))
 
     def __post_init__(self):
         admin_ids_str = os.getenv("ADMIN_IDS", "")

@@ -6,6 +6,7 @@ from .models import (
     BroadcastButton,
     BroadcastMessage,
     BroadcastReaction,
+    BusinessConnection,
     CartItem,
     Channel,
     DailyGiftClaim,
@@ -56,6 +57,7 @@ __all__ = [
     "BroadcastButton",
     "BroadcastMessage",
     "BroadcastReaction",
+    "BusinessConnection",
     "DailyGiftConfig",
     "DailyGiftClaim",
     # Fase 2 - Paquetes

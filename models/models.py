@@ -108,6 +108,18 @@ class Channel(Base):
     )
 
 
+class BusinessConnection(Base):
+    """Business connection de la dueña (Fase 6 - vínculo con Diana)."""
+
+    __tablename__ = "business_connections"
+
+    business_connection_id = Column(Text, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    user_chat_id = Column(BigInteger, nullable=True)
+    is_enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Tariff(Base):
     """Modelo de tarifa VIP"""
 
