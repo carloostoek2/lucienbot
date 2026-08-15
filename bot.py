@@ -86,7 +86,7 @@ from services.event_bus import (
     schedule_emit,
 )
 from services.game_service import on_besitos_awarded_game_award_observer
-from services.link_notifier import on_vip_kicked
+from services.link_notifier import build_vip_kicked_payload, on_vip_kicked
 from services.nurture_service import on_vip_activated
 from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
@@ -199,14 +199,13 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                         schedule_emit(
                             get_event_bus().emit(
                                 EVENT_VIP_KICKED,
-                                {
-                                    "user_id": user.telegram_id,
-                                    "username": user.username if user else None,
-                                    "channel_id": channel.channel_id,
-                                    "channel_name": channel.channel_name,
-                                    "reason": "expired",
-                                    "ts": int(datetime.now(UTC).timestamp()),
-                                },
+                                build_vip_kicked_payload(
+                                    user.telegram_id,
+                                    user.username if user else None,
+                                    channel.channel_id,
+                                    channel.channel_name,
+                                    "expired",
+                                ),
                             )
                         )
                     except Exception as e:

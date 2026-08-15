@@ -9,6 +9,7 @@ depende de _bot_token seteado después del startup check (corrección R1).
 import json
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from aiogram import Bot
 
@@ -28,6 +29,20 @@ def _fetch_enabled_business_connection_id(db) -> str | None:
         .first()
     )
     return row.business_connection_id if row else None
+
+
+def build_vip_kicked_payload(
+    user_id: int, username: str | None, channel_id: int, channel_name: str | None, reason: str
+) -> dict:
+    """Pure helper: build the EVENT_VIP_KICKED payload (plain values, no ORM access)."""
+    return {
+        "user_id": user_id,
+        "username": username,
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+        "reason": reason,
+        "ts": int(datetime.now(UTC).timestamp()),
+    }
 
 
 class LinkNotifier:

@@ -20,6 +20,7 @@ from services.event_bus import (
     get_event_bus,
     schedule_emit,
 )
+from services.link_notifier import build_vip_kicked_payload
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -1065,14 +1066,13 @@ class VIPService:
             schedule_emit(
                 get_event_bus().emit(
                     EVENT_VIP_KICKED,
-                    {
-                        "user_id": subscription.user_id,
-                        "username": user.username if user else None,
-                        "channel_id": channel.channel_id,
-                        "channel_name": channel.channel_name,
-                        "reason": "admin_revoke",
-                        "ts": int(datetime.now(UTC).timestamp()),
-                    },
+                    build_vip_kicked_payload(
+                        subscription.user_id,
+                        user.username if user else None,
+                        channel.channel_id,
+                        channel.channel_name,
+                        "admin_revoke",
+                    ),
                 )
             )
             logger.info(

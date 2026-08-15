@@ -23,6 +23,7 @@ from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
 from services.event_bus import EVENT_VIP_KICKED, get_event_bus, schedule_emit
+from services.link_notifier import build_vip_kicked_payload
 from services.channel_grant import build_approval_payload, grant_pending_request
 from services.channel_service import ChannelService
 from services.package_service import PackageService
@@ -238,14 +239,13 @@ async def _process_expired_subscriptions():
                 schedule_emit(
                     get_event_bus().emit(
                         EVENT_VIP_KICKED,
-                        {
-                            "user_id": subscription.user_id,
-                            "username": user.username if user else None,
-                            "channel_id": channel.channel_id,
-                            "channel_name": channel.channel_name,
-                            "reason": "expired",
-                            "ts": int(datetime.now(UTC).timestamp()),
-                        },
+                        build_vip_kicked_payload(
+                            subscription.user_id,
+                            user.username if user else None,
+                            channel.channel_id,
+                            channel.channel_name,
+                            "expired",
+                        ),
                     )
                 )
 

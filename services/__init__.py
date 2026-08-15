@@ -15,6 +15,9 @@ from .event_bus import (
     InternalEventBus,
     get_event_bus,
 )
+# Fase 6 link - payload helper (emisor [LINK] hacia Diana)
+from .link_notifier import build_vip_kicked_payload
+
 from .game_service import GameService
 
 # Item 11 - Observability / Health (read-only best-effort; follows Analytics pattern)
@@ -83,6 +86,8 @@ __all__ = [
     "EVENT_BESITOS_AWARDED",
     "EVENT_VIP_ACTIVATED",
     "EVENT_VIP_KICKED",
+    # Fase 6 link - payload helper (emisor [LINK] hacia Diana)
+    "build_vip_kicked_payload",
 ]
 
 
