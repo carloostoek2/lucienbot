@@ -25,6 +25,8 @@ from handlers import (
     anonymous_message_admin_router,
     # Phase 15 - Mochila
     backpack_router,
+    # Fase 6 link - business connection de la dueña (emisor [LINK] hacia Diana)
+    business_connection_router,
     broadcast_router,
     # Phase 12 - Categorías de Tienda
     category_admin_handlers,
@@ -76,8 +78,15 @@ from models.database import init_db
 from services.broadcast_service import on_besitos_awarded_broadcast_reaction_observer
 
 # InternalEventBus (PoC Item 1) + first listener (narrative domain)
-from services.event_bus import EVENT_BESITOS_AWARDED, EVENT_VIP_ACTIVATED, get_event_bus
+from services.event_bus import (
+    EVENT_BESITOS_AWARDED,
+    EVENT_VIP_ACTIVATED,
+    EVENT_VIP_KICKED,
+    get_event_bus,
+    schedule_emit,
+)
 from services.game_service import on_besitos_awarded_game_award_observer
+from services.link_notifier import on_vip_kicked
 from services.nurture_service import on_vip_activated
 from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
@@ -208,6 +217,10 @@ async def on_startup(bot: Bot):
     # Inicializar base de datos
     init_db()
     logger.info("Base de datos inicializada")
+
+    # Fase 6 link: register BEFORE the startup kick check so the startup emit hits a
+    # live listener. Bot lazy is self-contained (bot_config.TOKEN) — see link_notifier._get_bot.
+    get_event_bus().register(EVENT_VIP_KICKED, on_vip_kicked)
 
     # Verificar suscripciones expiradas (maneja casos donde bot estuvo offline)
     await check_expired_subscriptions_on_startup(bot)
@@ -368,6 +381,8 @@ async def main():
     dp.include_router(trivia_streak_admin_router)
     # Configuracion de Trivias
     dp.include_router(trivia_config_admin_router)
+    # Fase 6 link - business connection de la dueña
+    dp.include_router(business_connection_router)
 
     # Configurar eventos de startup/shutdown
     dp.startup.register(on_startup)
