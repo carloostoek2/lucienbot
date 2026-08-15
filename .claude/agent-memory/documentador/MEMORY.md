@@ -18,3 +18,4 @@ This index is automatically loaded. Keep entries under ~150 characters. One line
 (Agent will append more as tirones are documented.)
 
 - [vip-admin-subscriber-list-sort-reduce.md](../../.grok/agent-memory/documentador/vip-admin-subscriber-list-sort-reduce.md) — Product feature quick 2026-07-28: newest-first list + reduce time without kick; arch PWN 0c; testg suite protege; review 0 open; residuals OOS search order + broadcast flake. (report lives under .grok/agent-memory/documentador/)
+- [30-subscription-activation-notify-closed.md](30-subscription-activation-notify-closed.md) — Feature pool close 2026-08-15: VIP activation DM notify a Custodios (success reuse EVENT_VIP_ACTIVATED + failure new EVENT_VIP_ACTIVATION_FAILED, 6 emits). All gates green: arch PWN 0c, testg suite protege, tests 110/34/61, review 2 rounds 0 open; residuals W-1..W-4 classified; no ROADMAP (feature, not hardening).
