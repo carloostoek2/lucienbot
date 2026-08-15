@@ -12,6 +12,15 @@ from datetime import datetime
 class LucienVoice:
     """Clase para generar mensajes con la voz de Lucien"""
 
+    # Item 30: razón de fallo de activación VIP → texto legible (voz de Lucien).
+    _VIP_FAILURE_REASONS: dict[str, str] = {
+        "not_found": "Token inexistente o inválido",
+        "used": "Token ya utilizado",
+        "expired": "Token expirado",
+        "tariff_not_found": "Tarifa del token no encontrada",
+        "no_vip_channel": "Canal VIP no configurado",
+    }
+
     @staticmethod
     def _safe_channel_name(channel_name: str | None, default: str = "Los Kinkys") -> str:
         """Escapa channel_name para interpolación HTML."""
@@ -1148,6 +1157,54 @@ En circulación: {e.get("circulation", 0)}   •   Tasa de gasto: {e.get("burn_r
             lines.append(f"• {safe_name} x{qty} — {subtotal} besitos · <i>{kind}</i>")
         lines.extend(["", f"<b>Total:</b> {total_price} besitos"])
         return "\n".join(lines)
+
+    @staticmethod
+    def vip_activation_admin_success(
+        username: str,
+        first_name: str,
+        user_id: int,
+        tariff_name: str,
+        duration_days: str,
+    ) -> str:
+        """DM a Custodios: activación VIP exitosa (visitante + tarifa + duración). Item 30."""
+        safe_username = html.escape(username)
+        safe_first = html.escape(first_name)
+        safe_tariff = html.escape(tariff_name)
+        duration_part = (
+            "Duración: N/A"
+            if duration_days in (None, "N/A")
+            else f"Duración: {duration_days} días"
+        )
+        return (
+            "🎩 <b>Lucien:</b>\n\n"
+            "✅ <b>Activación VIP exitosa</b>\n\n"
+            f"Visitante: <b>{safe_first}</b> ({safe_username})\n"
+            f"ID: <code>{user_id}</code>\n"
+            f"Tarifa: {safe_tariff}\n"
+            f"{duration_part}"
+        )
+
+    @staticmethod
+    def vip_activation_admin_failure(
+        username: str,
+        first_name: str,
+        user_id: int,
+        reason: str,
+        token_code: str | None = None,
+    ) -> str:
+        """DM a Custodios: activación VIP fallida (visitante + motivo). Item 30."""
+        safe_username = html.escape(username)
+        safe_first = html.escape(first_name)
+        # Escapa también el fallback de razón desconocida (futuros emisores con reason user-derived).
+        label = html.escape(LucienVoice._VIP_FAILURE_REASONS.get(reason, reason))
+        token_part = f"\nToken: <code>{html.escape(token_code)}</code>" if token_code else ""
+        return (
+            "🎩 <b>Lucien:</b>\n\n"
+            "⚠️ <b>Activación VIP fallida</b>\n\n"
+            f"Visitante: <b>{safe_first}</b> ({safe_username})\n"
+            f"ID: <code>{user_id}</code>\n"
+            f"Motivo: {label}{token_part}"
+        )
 
     @staticmethod
     def store_admin_purchase_notification(

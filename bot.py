@@ -81,6 +81,7 @@ from services.broadcast_service import on_besitos_awarded_broadcast_reaction_obs
 from services.event_bus import (
     EVENT_BESITOS_AWARDED,
     EVENT_VIP_ACTIVATED,
+    EVENT_VIP_ACTIVATION_FAILED,
     EVENT_VIP_KICKED,
     get_event_bus,
     schedule_emit,
@@ -88,6 +89,10 @@ from services.event_bus import (
 from services.game_service import on_besitos_awarded_game_award_observer
 from services.link_notifier import build_vip_kicked_payload, on_vip_kicked
 from services.nurture_service import on_vip_activated
+from services.vip_notifier import (
+    on_vip_activated_admin_notify,
+    on_vip_activation_failed_admin_notify,
+)
 from services.reward_service import on_besitos_awarded_rewards_observer
 from services.scheduler_service import get_scheduler
 from services.store_service import on_besitos_awarded_store_observer
@@ -250,8 +255,11 @@ async def on_startup(bot: Bot):
     get_event_bus().register(EVENT_BESITOS_AWARDED, on_besitos_awarded_streak_promotion_observer)
     # Nurture / lifecycle: VIP activation triggers per-user sequence enrollment + scheduling (no batch)
     get_event_bus().register(EVENT_VIP_ACTIVATED, on_vip_activated)
+    # Item 30: VIP activation success + failure -> DM each Custodio (best-effort, observational).
+    get_event_bus().register(EVENT_VIP_ACTIVATED, on_vip_activated_admin_notify)
+    get_event_bus().register(EVENT_VIP_ACTIVATION_FAILED, on_vip_activation_failed_admin_notify)
     logger.info(
-        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store, streak; vip_activated -> nurture); + Item 3/35 logging expansion"
+        "Event listeners registrados (besitos_awarded -> narrative, rewards, broadcast, game, store, streak; vip_activated -> nurture + admin_notify; vip_activation_failed -> admin_notify); + Item 3/35 logging expansion"
     )
 
     # Health/observability (Item 11 spike)

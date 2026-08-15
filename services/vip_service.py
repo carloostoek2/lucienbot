@@ -16,6 +16,7 @@ from models.database import SessionLocal
 from models.models import Channel, ChannelType, Subscription, Tariff, Token, TokenStatus, User
 from services.event_bus import (
     EVENT_VIP_ACTIVATED,
+    EVENT_VIP_ACTIVATION_FAILED,
     EVENT_VIP_KICKED,
     get_event_bus,
     schedule_emit,
@@ -216,25 +217,52 @@ class VIPService:
         Retorna la suscripción creada o None si falla
         """
         db = self._get_db()
+        # Truncar a la anchura de la columna (String(64)) para evitar payloads inflados.
+        token_code = (token_code or "").strip()[:64]
 
         # Buscar token con bloqueo para prevenir race conditions
         token = db.query(Token).filter(Token.token_code == token_code).with_for_update().first()
 
         if not token:
+            db.rollback()
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATION_FAILED,
+                    {"user_id": user_id, "token_code": token_code, "reason": "not_found"},
+                )
+            )
             return None
 
         # Validar estado del token
         if token.status == TokenStatus.USED:
             db.rollback()
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATION_FAILED,
+                    {"user_id": user_id, "token_code": token_code, "reason": "used"},
+                )
+            )
             return None
 
         if token.status == TokenStatus.EXPIRED:
             db.rollback()
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATION_FAILED,
+                    {"user_id": user_id, "token_code": token_code, "reason": "expired"},
+                )
+            )
             return None
 
         if token.expires_at and _ensure_aware(token.expires_at) < datetime.now(UTC):
             token.status = TokenStatus.EXPIRED
             db.commit()
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATION_FAILED,
+                    {"user_id": user_id, "token_code": token_code, "reason": "expired"},
+                )
+            )
             return None
 
         # Marcar token como usado
@@ -246,6 +274,12 @@ class VIPService:
         tariff = self.get_tariff(token.tariff_id)
         if not tariff:
             db.rollback()
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATION_FAILED,
+                    {"user_id": user_id, "token_code": token_code, "reason": "tariff_not_found"},
+                )
+            )
             return None
 
         # Verificar si el usuario ya tiene una suscripción activa
@@ -316,6 +350,12 @@ class VIPService:
 
         if not vip_channel:
             db.rollback()
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_ACTIVATION_FAILED,
+                    {"user_id": user_id, "token_code": token_code, "reason": "no_vip_channel"},
+                )
+            )
             return None
 
         subscription = Subscription(

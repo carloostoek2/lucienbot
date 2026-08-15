@@ -207,7 +207,15 @@ class TestSubscriptionService:
         """Test canjear token ya usado"""
         service = VIPService(db_session)
 
-        subscription = service.redeem_token(sample_used_token.token_code, sample_user.telegram_id)
+        # Item 30: failure path now emits EVENT_VIP_ACTIVATION_FAILED via schedule_emit;
+        # patch schedule_emit + get_event_bus (mock bus) so the real emit coroutine is
+        # not created/dropped unawaited (avoids RuntimeWarning never-awaited in sync tests).
+        with patch("services.vip_service.schedule_emit"), patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            subscription = service.redeem_token(
+                sample_used_token.token_code, sample_user.telegram_id
+            )
 
         assert subscription is None
 
@@ -215,9 +223,15 @@ class TestSubscriptionService:
         """Test canjear token expirado"""
         service = VIPService(db_session)
 
-        subscription = service.redeem_token(
-            sample_expired_token.token_code, sample_user.telegram_id
-        )
+        # Item 30: failure path now emits EVENT_VIP_ACTIVATION_FAILED via schedule_emit;
+        # patch schedule_emit + get_event_bus (mock bus) so the real emit coroutine is
+        # not created/dropped unawaited (avoids RuntimeWarning never-awaited in sync tests).
+        with patch("services.vip_service.schedule_emit"), patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            subscription = service.redeem_token(
+                sample_expired_token.token_code, sample_user.telegram_id
+            )
 
         assert subscription is None
 
@@ -464,7 +478,10 @@ class TestVIPServiceNurtureEmit:
         service = VIPService(db_session)
         tok = service.generate_token(sample_tariff.id)
 
-        with patch("services.vip_service.schedule_emit") as mock_emit:
+        # Mock bus too: real emit coroutine would be dropped unawaited by the schedule mock.
+        with patch("services.vip_service.schedule_emit") as mock_emit, patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
             sub = service.redeem_token(tok.token_code, sample_user.telegram_id)
             assert sub is not None
             assert mock_emit.called
@@ -475,18 +492,21 @@ class TestVIPServiceNurtureEmit:
         from unittest.mock import patch
 
         service = VIPService(db_session)
-        # first sub
-        tok1 = service.generate_token(sample_tariff.id)
-        sub1 = service.redeem_token(tok1.token_code, sample_user.telegram_id)
-        assert sub1 is not None
+        # Mock bus for the whole flow: every redeem emits post-commit; avoid dropping a
+        # real unawaited emit coroutine when only schedule_emit is patched.
+        with patch("services.vip_service.get_event_bus", return_value=MagicMock()):
+            # first sub
+            tok1 = service.generate_token(sample_tariff.id)
+            sub1 = service.redeem_token(tok1.token_code, sample_user.telegram_id)
+            assert sub1 is not None
 
-        # second token for extend
-        tok2 = service.generate_token(sample_tariff.id)
-        with patch("services.vip_service.schedule_emit") as mock_emit:
-            sub2 = service.redeem_token(tok2.token_code, sample_user.telegram_id)
-            assert sub2 is not None
-            assert sub2.id == sub1.id  # extended
-            assert mock_emit.called
+            # second token for extend
+            tok2 = service.generate_token(sample_tariff.id)
+            with patch("services.vip_service.schedule_emit") as mock_emit:
+                sub2 = service.redeem_token(tok2.token_code, sample_user.telegram_id)
+                assert sub2 is not None
+                assert sub2.id == sub1.id  # extended
+                assert mock_emit.called
         # Non-existent exclude when user HAS 1 active: finds the sub (id != 999999) -> True (correct semantic)
         assert service.has_other_active_subscription(sample_user.telegram_id, 999999) is True
         # Edge: 0-subs fresh user + bogus exclude -> False
@@ -1220,7 +1240,10 @@ class TestSubscriberAdminVIPService:
         db_session.refresh(sub_later)
         original_later_end = sub_later.end_date
 
-        with patch("services.vip_service.schedule_emit"):
+        # Mock bus too: real emit coroutine would be dropped unawaited by the schedule mock.
+        with patch("services.vip_service.schedule_emit"), patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
             ok, extended, _meta = await service.grant_internal_vip_access_for_subscription(
                 sub_soon.id, sample_tariff.id
             )

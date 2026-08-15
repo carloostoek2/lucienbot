@@ -28,6 +28,9 @@ EVENT_VIP_ACTIVATED: str = "vip_activated"
 # Fase 6 link: kick de VIP (admin_revoke | expired) → coordinación con Diana.
 EVENT_VIP_KICKED: str = "vip_kicked"
 
+# Item 30: activación VIP fallida en redeem_token → DM a Custodios.
+EVENT_VIP_ACTIVATION_FAILED: str = "vip_activation_failed"
+
 # Type alias for listeners: async callables receiving a payload dict.
 Listener = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -146,6 +149,7 @@ def schedule_emit(coro: Awaitable[None]) -> None:
         loop.create_task(coro)
     except RuntimeError:
         # No running event loop in this context.
+        coro.close()
         logger.debug("event_bus | schedule_emit | no running loop; skipping (best effort)")
 
 

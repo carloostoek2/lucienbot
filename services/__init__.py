@@ -11,6 +11,7 @@ from .daily_gift_service import DailyGiftService
 from .event_bus import (
     EVENT_BESITOS_AWARDED,
     EVENT_VIP_ACTIVATED,
+    EVENT_VIP_ACTIVATION_FAILED,
     EVENT_VIP_KICKED,
     InternalEventBus,
     get_event_bus,
@@ -85,6 +86,7 @@ __all__ = [
     "get_event_bus",
     "EVENT_BESITOS_AWARDED",
     "EVENT_VIP_ACTIVATED",
+    "EVENT_VIP_ACTIVATION_FAILED",
     "EVENT_VIP_KICKED",
     # Fase 6 link - payload helper (emisor [LINK] hacia Diana)
     "build_vip_kicked_payload",
