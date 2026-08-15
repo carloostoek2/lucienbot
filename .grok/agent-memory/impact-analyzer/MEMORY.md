@@ -6,3 +6,4 @@
 - [Pool34 Item1 User Flows Reality](pool34-item1-user-flows-reality.md) — Story (crit#2 quiz/archetype/advance/achievements) + backpack fulfillment/VIP + mission claim/list; 28/15/11 get_service patches; golds listed; tight tests-only per pool33 precedent
 
 - [VIP Admin List Sort + Reduce](vip-admin-subscriber-list-sort-reduce.md) — end_date ASC→created_at DESC; admin_reduce_subscription_time (no kick); FSM mirror besitos; channels-VIP critical
+- [Fase6 Link Item1 Lucien](fase6-link-item1-impact.md) — business_connections + LinkNotifier + 3 kick hooks emit EVENT_VIP_KICKED; 3 correcciones: channel.channel_name (no .name), handler NO DB (delegar a service), on_startup orden listener+bot lazy propio

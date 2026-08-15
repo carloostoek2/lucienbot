@@ -45,6 +45,15 @@ Fecha: 2026-08-15
 - **Test 5 dividido** (tests/unit/test_link_notifier.py) — `in-scope-followup` — 2 tests en vez de 1; comportamiento idéntico.
 - **pytest.ini no existe** — `out-of-scope` — `asyncio_mode="auto"` vive en `pyproject.toml [tool.pytest.ini_options]`; solo contexto del entorno.
 
+## Fix Round (arch-enforcer PASS WITH NOTES → 2 medium resueltos)
+
+Commit: `3fd7f02` fix(link): guard empty LINK_CHAT_ID and dedupe kick payload (6 archivos, +45/-26)
+
+1. **Medium #1 — `LINK_CHAT_ID` vacío crasheaba al importar**: `config/settings.py:21` → `int(os.getenv("LINK_CHAT_ID") or "0")`. Verificado con `LINK_CHAT_ID= python3 -c "import config.settings"` = OK (antes `ValueError`).
+2. **Medium #2 — payload `vip_kicked` duplicado en 3 emisores**: helper puro `build_vip_kicked_payload(...)` en `services/link_notifier.py`, exportado en `services/__init__.py`, usado en los 3 sitios (`vip_service.py` admin_revoke, `scheduler_service.py` expired, `bot.py` startup expired) con el MISMO contrato de payload y la misma ubicación post-ban del `schedule_emit`. No se tocaron branches ni sistemas sensibles.
+
+Verificaciones: directos 95 passed/3 xfailed; smoke `tests/unit/` 746 passed/10 xfailed (baseline idéntico); ruff 0 errores nuevos; `rg build_vip_kicked_payload` = 3 usos.
+
 ## Archivos tocados (14)
 
 - `config/settings.py`, `models/models.py`, `models/__init__.py`, `alembic/versions/20260815_business_connections.py`
