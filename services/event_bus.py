@@ -25,6 +25,9 @@ EVENT_BESITOS_AWARDED: str = "besitos_awarded"
 # Nurture trigger: emitted post-commit after successful VIP redeem (in VIPService).
 EVENT_VIP_ACTIVATED: str = "vip_activated"
 
+# Fase 6 link: kick de VIP (admin_revoke | expired) → coordinación con Diana.
+EVENT_VIP_KICKED: str = "vip_kicked"
+
 # Type alias for listeners: async callables receiving a payload dict.
 Listener = Callable[[dict[str, Any]], Awaitable[None]]
 

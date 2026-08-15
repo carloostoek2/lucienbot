@@ -8,7 +8,13 @@ from .channel_service import ChannelService
 from .daily_gift_service import DailyGiftService
 
 # Internal EventBus (PoC Item 1)
-from .event_bus import EVENT_BESITOS_AWARDED, EVENT_VIP_ACTIVATED, InternalEventBus, get_event_bus
+from .event_bus import (
+    EVENT_BESITOS_AWARDED,
+    EVENT_VIP_ACTIVATED,
+    EVENT_VIP_KICKED,
+    InternalEventBus,
+    get_event_bus,
+)
 from .game_service import GameService
 
 # Item 11 - Observability / Health (read-only best-effort; follows Analytics pattern)
@@ -76,6 +82,7 @@ __all__ = [
     "get_event_bus",
     "EVENT_BESITOS_AWARDED",
     "EVENT_VIP_ACTIVATED",
+    "EVENT_VIP_KICKED",
 ]
 
 

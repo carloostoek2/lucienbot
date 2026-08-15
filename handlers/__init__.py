@@ -6,6 +6,9 @@ from .anonymous_message_admin_handlers import router as anonymous_message_admin_
 
 # Phase 15 - Mochila
 from .backpack_handler import router as backpack_router
+
+# Fase 6 link - business connection de la dueña (emisor [LINK] hacia Diana)
+from .business_connection_handlers import router as business_connection_router
 from .broadcast_handlers import router as broadcast_router
 from .channel_handlers import router as channel_router
 from .common_handlers import router as common_router
@@ -67,6 +70,7 @@ __all__ = [
     # Fase 1 - Gamificacion
     "gamification_user_router",
     "gamification_admin_router",
+    "business_connection_router",
     "broadcast_router",
     # Fase 2 - Paquetes
     "package_router",
