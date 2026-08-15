@@ -7,6 +7,7 @@ from aiogram.types import Chat, Message as TgMessage, User
 
 from handlers.broadcast_handlers import (
     confirm_and_send_broadcast,
+    publish_broadcast_to_channel,
     validate_broadcast_content_for_send,
 )
 
@@ -126,6 +127,83 @@ class TestConfirmAndSendBroadcast:
         bot.send_photo.assert_awaited_once()
         assert bot.send_photo.await_args.kwargs.get("parse_mode") == "HTML"
         bot.send_message.assert_not_awaited()
+
+    @patch("handlers.broadcast_handlers.get_service")
+    async def test_tracking_failed_shows_alert_without_success_notify(self, mock_get_service):
+        """Mensaje enviado pero message_id no persistido: alerta admin, sin confirmación exitosa."""
+        broadcast_svc = MagicMock()
+        broadcast_svc.create_broadcast_message.return_value = MagicMock(id=42)
+        broadcast_svc.get_reaction_emoji.return_value = MagicMock(id=1, emoji="💋")
+        broadcast_svc.update_broadcast_message_id.return_value = False
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__.return_value = broadcast_svc
+        mock_get_service.return_value = mock_ctx
+
+        sent = MagicMock(message_id=888)
+        bot = AsyncMock()
+        bot.send_message = AsyncMock(return_value=sent)
+
+        state = AsyncMock()
+        state.get_data = AsyncMock(
+            return_value={
+                "channel_id": -100123,
+                "channel_name": "Test",
+                "text": "Hola reino",
+                "has_attachment": False,
+                "selected_emojis": [1],
+                "is_protected": False,
+            }
+        )
+        state.clear = AsyncMock()
+        callback = _make_confirm_callback()
+
+        await confirm_and_send_broadcast(callback, state, bot)
+
+        bot.send_message.assert_awaited_once()
+        broadcast_svc.update_broadcast_message_id.assert_called_once_with(42, 888)
+
+        alert_calls = [
+            c
+            for c in callback.answer.await_args_list
+            if c.args and "registrar el ID" in c.args[0]
+        ]
+        assert len(alert_calls) == 1
+        assert alert_calls[0].kwargs.get("show_alert") is True
+
+        edit_texts = [
+            str(c.args[0]) for c in callback.message.edit_text.await_args_list if c.args
+        ]
+        assert not any("exitosamente" in t.lower() for t in edit_texts)
+
+        state.clear.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+class TestPublishBroadcastToChannel:
+    async def test_returns_tracking_failed_when_message_id_update_fails(self):
+        """publish_broadcast_to_channel retorna tracking_failed si update_broadcast_message_id falla."""
+        broadcast_svc = MagicMock()
+        broadcast_svc.update_broadcast_message_id.return_value = False
+
+        sent = MagicMock(message_id=999)
+        bot = AsyncMock()
+        bot.send_message = AsyncMock(return_value=sent)
+
+        broadcast = MagicMock(id=7)
+        data = {
+            "channel_id": -100123,
+            "text": "Hola",
+            "has_attachment": False,
+            "is_protected": False,
+        }
+
+        status, message_id = await publish_broadcast_to_channel(
+            bot, broadcast_svc, broadcast, data, None
+        )
+
+        assert status == "tracking_failed"
+        assert message_id == 999
+        broadcast_svc.update_broadcast_message_id.assert_called_once_with(7, 999)
 
 
 class TestValidateBroadcastContentForSend:
