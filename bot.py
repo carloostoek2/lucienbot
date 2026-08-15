@@ -196,6 +196,19 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                         logger.info(
                             f"Usuario {user.telegram_id} removido del canal VIP {channel.channel_id}"
                         )
+                        schedule_emit(
+                            get_event_bus().emit(
+                                EVENT_VIP_KICKED,
+                                {
+                                    "user_id": user.telegram_id,
+                                    "username": user.username if user else None,
+                                    "channel_id": channel.channel_id,
+                                    "channel_name": channel.channel_name,
+                                    "reason": "expired",
+                                    "ts": int(datetime.now(UTC).timestamp()),
+                                },
+                            )
+                        )
                     except Exception as e:
                         logger.error(f"Error removiendo usuario {user.telegram_id} del canal: {e}")
 

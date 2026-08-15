@@ -22,6 +22,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
+from services.event_bus import EVENT_VIP_KICKED, get_event_bus, schedule_emit
 from services.channel_grant import build_approval_payload, grant_pending_request
 from services.channel_service import ChannelService
 from services.package_service import PackageService
@@ -232,6 +233,20 @@ async def _process_expired_subscriptions():
 
                 await bot.send_message(
                     chat_id=subscription.user_id, text=LucienVoice.vip_expired(), parse_mode="HTML"
+                )
+
+                schedule_emit(
+                    get_event_bus().emit(
+                        EVENT_VIP_KICKED,
+                        {
+                            "user_id": subscription.user_id,
+                            "username": user.username if user else None,
+                            "channel_id": channel.channel_id,
+                            "channel_name": channel.channel_name,
+                            "reason": "expired",
+                            "ts": int(datetime.now(UTC).timestamp()),
+                        },
+                    )
                 )
 
                 logger.info(f"Suscripción expirada (única): subscription={subscription.id}")

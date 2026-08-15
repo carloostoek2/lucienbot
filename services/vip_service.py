@@ -14,7 +14,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from models.database import SessionLocal
 from models.models import Channel, ChannelType, Subscription, Tariff, Token, TokenStatus, User
-from services.event_bus import EVENT_VIP_ACTIVATED, get_event_bus, schedule_emit
+from services.event_bus import (
+    EVENT_VIP_ACTIVATED,
+    EVENT_VIP_KICKED,
+    get_event_bus,
+    schedule_emit,
+)
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -1056,6 +1061,19 @@ class VIPService:
                 chat_id=subscription.user_id,
                 text=LucienVoice.vip_expired(),
                 parse_mode="HTML",
+            )
+            schedule_emit(
+                get_event_bus().emit(
+                    EVENT_VIP_KICKED,
+                    {
+                        "user_id": subscription.user_id,
+                        "username": user.username if user else None,
+                        "channel_id": channel.channel_id,
+                        "channel_name": channel.channel_name,
+                        "reason": "admin_revoke",
+                        "ts": int(datetime.now(UTC).timestamp()),
+                    },
+                )
             )
             logger.info(
                 f"vip_service | admin_revoke_subscription | user_id={admin_id} | "
