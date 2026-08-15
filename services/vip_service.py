@@ -1057,23 +1057,20 @@ class VIPService:
             if user and user.vip_entry_status is not None:
                 user.vip_entry_status = None
                 user.vip_entry_stage = None
+            # Snapshot payload BEFORE commit: post-commit attribute reads would lazy-refresh.
+            kicked_payload = build_vip_kicked_payload(
+                subscription.user_id,
+                user.username if user else None,
+                channel.channel_id,
+                channel.channel_name,
+                "admin_revoke",
+            )
             db.commit()
+            schedule_emit(get_event_bus().emit(EVENT_VIP_KICKED, kicked_payload))
             await bot.send_message(
                 chat_id=subscription.user_id,
                 text=LucienVoice.vip_expired(),
                 parse_mode="HTML",
-            )
-            schedule_emit(
-                get_event_bus().emit(
-                    EVENT_VIP_KICKED,
-                    build_vip_kicked_payload(
-                        subscription.user_id,
-                        user.username if user else None,
-                        channel.channel_id,
-                        channel.channel_name,
-                        "admin_revoke",
-                    ),
-                )
             )
             logger.info(
                 f"vip_service | admin_revoke_subscription | user_id={admin_id} | "

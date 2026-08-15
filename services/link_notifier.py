@@ -53,26 +53,39 @@ class LinkNotifier:
 
     @staticmethod
     def upsert_business_connection(bc) -> None:
-        """Persist the owner's business connection (idempotent upsert by PK)."""
-        with get_db_session() as db:
-            row = db.get(BusinessConnection, bc.id)
-            if row is None:
-                db.add(
-                    BusinessConnection(
-                        business_connection_id=bc.id,
-                        user_id=bc.user.id,
-                        user_chat_id=bc.user_chat_id,
-                        is_enabled=bc.is_enabled,
-                    )
+        """Persist the owner's business connection (idempotent upsert by PK). Best-effort."""
+        user_id = getattr(getattr(bc, "user", None), "id", None)
+        try:
+            if user_id not in bot_config.ADMIN_IDS:
+                logger.info(
+                    f"link_notifier | upsert_business_connection | user_id={user_id} | "
+                    "result=ignored_non_owner"
                 )
-            else:
-                row.user_id = bc.user.id
-                row.user_chat_id = bc.user_chat_id
-                row.is_enabled = bc.is_enabled
-        logger.info(
-            f"link_notifier | upsert_business_connection | user_id={bc.user.id} | "
-            f"result={'enabled' if bc.is_enabled else 'disabled'}"
-        )
+                return
+            with get_db_session() as db:
+                row = db.get(BusinessConnection, bc.id)
+                if row is None:
+                    db.add(
+                        BusinessConnection(
+                            business_connection_id=bc.id,
+                            user_id=user_id,
+                            user_chat_id=bc.user_chat_id,
+                            is_enabled=bc.is_enabled,
+                        )
+                    )
+                else:
+                    row.user_id = user_id
+                    row.user_chat_id = bc.user_chat_id
+                    row.is_enabled = bc.is_enabled
+            logger.info(
+                f"link_notifier | upsert_business_connection | user_id={user_id} | "
+                f"result={'enabled' if bc.is_enabled else 'disabled'}"
+            )
+        except Exception as exc:
+            logger.warning(
+                f"link_notifier | upsert_business_connection | user_id={user_id} | "
+                f"error={exc} | result=upsert_error"
+            )
 
     async def notify_vip_kicked(self, payload: dict) -> None:
         """Best-effort [LINK] notification. Never raises; never blocks the kick flow."""

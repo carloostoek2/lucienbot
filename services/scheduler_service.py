@@ -230,23 +230,21 @@ async def _process_expired_subscriptions():
                     user.vip_entry_stage = None
                     logger.info(f"VIP entry state cleared: user_id={subscription.user_id}")
 
+                # Snapshot payload BEFORE commit: post-commit attribute reads would lazy-refresh.
+                kicked_payload = build_vip_kicked_payload(
+                    subscription.user_id,
+                    user.username if user else None,
+                    channel.channel_id,
+                    channel.channel_name,
+                    "expired",
+                )
+
                 db.commit()
+
+                schedule_emit(get_event_bus().emit(EVENT_VIP_KICKED, kicked_payload))
 
                 await bot.send_message(
                     chat_id=subscription.user_id, text=LucienVoice.vip_expired(), parse_mode="HTML"
-                )
-
-                schedule_emit(
-                    get_event_bus().emit(
-                        EVENT_VIP_KICKED,
-                        build_vip_kicked_payload(
-                            subscription.user_id,
-                            user.username if user else None,
-                            channel.channel_id,
-                            channel.channel_name,
-                            "expired",
-                        ),
-                    )
                 )
 
                 logger.info(f"Suscripción expirada (única): subscription={subscription.id}")

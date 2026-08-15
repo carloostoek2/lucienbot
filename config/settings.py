@@ -8,6 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _parse_link_chat_id() -> int:
+    """Parse LINK_CHAT_ID defensively; 0 on missing or non-numeric value."""
+    try:
+        return int(os.getenv("LINK_CHAT_ID") or "0")
+    except (TypeError, ValueError):
+        return 0
+
+
 @dataclass
 class BotConfig:
     """Configuración principal del bot"""
@@ -18,7 +26,7 @@ class BotConfig:
     CREATOR_CONTACT_URL: str = os.getenv("CREATOR_CONTACT_URL", "")
     # Fase 6 link: emisor de avisos [LINK] hacia Diana (default off = comportamiento idéntico)
     FEATURE_LINK_ENABLED: bool = os.getenv("FEATURE_LINK_ENABLED") == "1"
-    LINK_CHAT_ID: int = int(os.getenv("LINK_CHAT_ID") or "0")
+    LINK_CHAT_ID: int = _parse_link_chat_id()
 
     def __post_init__(self):
         admin_ids_str = os.getenv("ADMIN_IDS", "")

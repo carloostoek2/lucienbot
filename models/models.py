@@ -116,7 +116,7 @@ class BusinessConnection(Base):
     business_connection_id = Column(Text, primary_key=True)
     user_id = Column(BigInteger, nullable=False)
     user_chat_id = Column(BigInteger, nullable=True)
-    is_enabled = Column(Boolean, default=True)
+    is_enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
