@@ -21,10 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 def _fetch_enabled_business_connection_id(db) -> str | None:
-    """Return the most recent enabled business_connection_id, or None."""
+    """Return the most recent enabled owner business_connection_id, or None."""
     row = (
         db.query(BusinessConnection)
-        .filter(BusinessConnection.is_enabled.is_(True))
+        .filter(
+            BusinessConnection.is_enabled.is_(True),
+            BusinessConnection.user_id.in_(bot_config.ADMIN_IDS),
+        )
         .order_by(BusinessConnection.created_at.desc())
         .first()
     )

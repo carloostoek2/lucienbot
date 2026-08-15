@@ -175,17 +175,26 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                     )
                     continue
 
+                # Snapshot payload BEFORE commit: post-commit attribute reads would lazy-refresh.
+                user = subscription.user
+                channel = subscription.channel
+                kicked_payload = None
+                if user and channel:
+                    kicked_payload = build_vip_kicked_payload(
+                        user.telegram_id,
+                        user.username if user else None,
+                        channel.channel_id,
+                        channel.channel_name,
+                        "expired",
+                    )
+
                 # Desactivar la suscripción
                 vip_service.expire_subscription(subscription.id)
 
                 # Limpiar estado VIP del usuario (consistente con _process_expired_subscriptions)
-                user = subscription.user
                 if user and user.vip_entry_status is not None:
                     vip_service.clear_vip_entry_state(user.telegram_id)
                     logger.info(f"VIP entry state cleared on startup: user_id={user.telegram_id}")
-
-                # Obtener información del usuario
-                channel = subscription.channel
 
                 if user and channel:
                     # Intentar remover al usuario del canal VIP
@@ -196,18 +205,7 @@ async def check_expired_subscriptions_on_startup(bot: Bot):
                         logger.info(
                             f"Usuario {user.telegram_id} removido del canal VIP {channel.channel_id}"
                         )
-                        schedule_emit(
-                            get_event_bus().emit(
-                                EVENT_VIP_KICKED,
-                                build_vip_kicked_payload(
-                                    user.telegram_id,
-                                    user.username if user else None,
-                                    channel.channel_id,
-                                    channel.channel_name,
-                                    "expired",
-                                ),
-                            )
-                        )
+                        schedule_emit(get_event_bus().emit(EVENT_VIP_KICKED, kicked_payload))
                     except Exception as e:
                         logger.error(f"Error removiendo usuario {user.telegram_id} del canal: {e}")
 

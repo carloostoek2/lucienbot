@@ -2,6 +2,7 @@
 import json
 import uuid
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,17 +27,29 @@ def _session_ctx(session):
         raise
 
 
-def _add_bc(db_session, bc_id, is_enabled, user_id=1):
+def _add_bc(db_session, bc_id, is_enabled, user_id=1, created_at=None):
     """Añade una fila business_connections habilitada/disabled en la sesión de test."""
-    db_session.add(
-        BusinessConnection(business_connection_id=bc_id, user_id=user_id, is_enabled=is_enabled)
-    )
+    kwargs = {
+        "business_connection_id": bc_id,
+        "user_id": user_id,
+        "is_enabled": is_enabled,
+    }
+    if created_at is not None:
+        kwargs["created_at"] = created_at
+    db_session.add(BusinessConnection(**kwargs))
     db_session.commit()
 
 
 def _get_db_session_raises():
     """Helper: get_db_session que siempre falla (simula DB caída / migración no aplicada)."""
     raise RuntimeError("db down")
+
+
+@pytest.fixture(autouse=True)
+def _owner_admin_ids(monkeypatch):
+    """Owner scoping (Fix 2): pin ADMIN_IDS a [1] para que las filas sembradas (user_id=1)
+    pasen el filtro por owner del read (el env .env real trae otro valor)."""
+    monkeypatch.setattr(link_notifier.bot_config, "ADMIN_IDS", [1])
 
 
 @pytest.mark.unit
@@ -176,9 +189,11 @@ async def test_notify_vip_kicked_event_id_fresh_per_event(mock_bot, db_session, 
 
 @pytest.mark.unit
 def test_fetch_enabled_business_connection_id_returns_most_recent_enabled(db_session):
-    """Con una fila habilitada → devuelve su business_connection_id."""
-    _add_bc(db_session, "bc_row", is_enabled=True)
-    assert link_notifier._fetch_enabled_business_connection_id(db_session) == "bc_row"
+    """Con 2 filas ENABLED con created_at explícitos distintos → devuelve la más reciente
+    (ejercita order_by(created_at.desc()); no depende de server_default de segundo)."""
+    _add_bc(db_session, "bc_old", is_enabled=True, created_at=datetime(2026, 8, 1, tzinfo=UTC))
+    _add_bc(db_session, "bc_new", is_enabled=True, created_at=datetime(2026, 8, 10, tzinfo=UTC))
+    assert link_notifier._fetch_enabled_business_connection_id(db_session) == "bc_new"
 
 
 @pytest.mark.unit
