@@ -211,6 +211,13 @@ def test_fetch_enabled_business_connection_id_returns_none_when_empty(db_session
 
 
 @pytest.mark.unit
+def test_fetch_enabled_business_connection_id_ignores_non_owner(db_session):
+    """Fila enabled de cuenta ajena (user_id no ADMIN_IDS) → el filtro owner la excluye → None."""
+    _add_bc(db_session, "bc_ajena", is_enabled=True, user_id=999)
+    assert link_notifier._fetch_enabled_business_connection_id(db_session) is None
+
+
+@pytest.mark.unit
 def test_build_vip_kicked_payload_builds_contract_dict():
     """Helper puro: keys exactas + ts int unix; username/channel_name pasan raw (el '@' se agrega en notify)."""
     payload = link_notifier.build_vip_kicked_payload(
