@@ -2,7 +2,6 @@
 import json
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,19 +24,6 @@ def _session_ctx(session):
     except Exception:
         session.rollback()
         raise
-
-
-def _add_bc(db_session, bc_id, is_enabled, user_id=1, created_at=None):
-    """Añade una fila business_connections habilitada/disabled en la sesión de test."""
-    kwargs = {
-        "business_connection_id": bc_id,
-        "user_id": user_id,
-        "is_enabled": is_enabled,
-    }
-    if created_at is not None:
-        kwargs["created_at"] = created_at
-    db_session.add(BusinessConnection(**kwargs))
-    db_session.commit()
 
 
 def _get_db_session_raises():
@@ -73,33 +59,8 @@ async def test_notify_vip_kicked_chat_id_none_does_not_send(mock_bot):
 
 
 @pytest.mark.unit
-async def test_notify_vip_kicked_no_enabled_row_does_not_send(mock_bot, db_session, monkeypatch):
-    """Sin fila habilitada en business_connections → no send (result=no_business_connection)."""
-    monkeypatch.setattr(link_notifier, "SessionLocal", lambda: db_session)
-    notifier = LinkNotifier(bot=mock_bot, chat_id=-100, enabled=True)
-    await notifier.notify_vip_kicked(
-        {"user_id": 1, "username": "testuser", "channel_id": 2, "reason": "admin_revoke", "ts": 123}
-    )
-    mock_bot.send_message.assert_not_awaited()
-
-
-@pytest.mark.unit
-async def test_notify_vip_kicked_disabled_row_does_not_send(mock_bot, db_session, monkeypatch):
-    """Fila disabled (is_enabled=False) → el helper la filtra → no send."""
-    _add_bc(db_session, "bc_disabled", is_enabled=False)
-    monkeypatch.setattr(link_notifier, "SessionLocal", lambda: db_session)
-    notifier = LinkNotifier(bot=mock_bot, chat_id=-100, enabled=True)
-    await notifier.notify_vip_kicked(
-        {"user_id": 1, "username": "testuser", "channel_id": 2, "reason": "admin_revoke", "ts": 123}
-    )
-    mock_bot.send_message.assert_not_awaited()
-
-
-@pytest.mark.unit
-async def test_notify_vip_kicked_enabled_sends_exact_link_payload(mock_bot, db_session, monkeypatch):
-    """Flag ON + fila habilitada → payload [LINK] one-line JSON exacto con username '@'."""
-    _add_bc(db_session, "bc_test", is_enabled=True)
-    monkeypatch.setattr(link_notifier, "SessionLocal", lambda: db_session)
+async def test_notify_vip_kicked_enabled_sends_exact_link_payload(mock_bot):
+    """Flag ON + chat_id set → payload [LINK] one-line JSON exacto con username '@'."""
     notifier = LinkNotifier(bot=mock_bot, chat_id=-100, enabled=True)
     await notifier.notify_vip_kicked(
         {
@@ -114,7 +75,7 @@ async def test_notify_vip_kicked_enabled_sends_exact_link_payload(mock_bot, db_s
     mock_bot.send_message.assert_awaited_once()
     kwargs = mock_bot.send_message.await_args.kwargs
     assert kwargs["chat_id"] == -100
-    assert kwargs["business_connection_id"] == "bc_test"
+    assert "business_connection_id" not in kwargs
     text = kwargs["text"]
     assert text.startswith("[LINK] ")
     body = json.loads(text[7:])
@@ -129,10 +90,8 @@ async def test_notify_vip_kicked_enabled_sends_exact_link_payload(mock_bot, db_s
 
 
 @pytest.mark.unit
-async def test_notify_vip_kicked_nullable_wire_fields(mock_bot, db_session, monkeypatch):
+async def test_notify_vip_kicked_nullable_wire_fields(mock_bot):
     """username=None y channel_name=None → el payload los serializa como null."""
-    _add_bc(db_session, "bc_nullable", is_enabled=True)
-    monkeypatch.setattr(link_notifier, "SessionLocal", lambda: db_session)
     notifier = LinkNotifier(bot=mock_bot, chat_id=-100, enabled=True)
     await notifier.notify_vip_kicked(
         {
@@ -152,10 +111,8 @@ async def test_notify_vip_kicked_nullable_wire_fields(mock_bot, db_session, monk
 
 
 @pytest.mark.unit
-async def test_notify_vip_kicked_send_error_is_swallowed(mock_bot, db_session, monkeypatch):
+async def test_notify_vip_kicked_send_error_is_swallowed(mock_bot):
     """send_message lanza → la excepción se traga; no rompe el flujo de expulsión."""
-    _add_bc(db_session, "bc_swallow", is_enabled=True)
-    monkeypatch.setattr(link_notifier, "SessionLocal", lambda: db_session)
     mock_bot.send_message = AsyncMock(side_effect=Exception("boom"))
     notifier = LinkNotifier(bot=mock_bot, chat_id=-100, enabled=True)
     await notifier.notify_vip_kicked(
@@ -165,10 +122,8 @@ async def test_notify_vip_kicked_send_error_is_swallowed(mock_bot, db_session, m
 
 
 @pytest.mark.unit
-async def test_notify_vip_kicked_event_id_fresh_per_event(mock_bot, db_session, monkeypatch):
+async def test_notify_vip_kicked_event_id_fresh_per_event(mock_bot):
     """Cada envío genera un event_id uuid4 distinto y válido."""
-    _add_bc(db_session, "bc_fresh", is_enabled=True)
-    monkeypatch.setattr(link_notifier, "SessionLocal", lambda: db_session)
     notifier = LinkNotifier(bot=mock_bot, chat_id=-100, enabled=True)
     payload = {
         "user_id": 1,
@@ -185,36 +140,6 @@ async def test_notify_vip_kicked_event_id_fresh_per_event(mock_bot, db_session, 
     assert first_id != second_id
     uuid.UUID(first_id)
     uuid.UUID(second_id)
-
-
-@pytest.mark.unit
-def test_fetch_enabled_business_connection_id_returns_most_recent_enabled(db_session):
-    """Con 2 filas ENABLED con created_at explícitos distintos → devuelve la más reciente
-    (ejercita order_by(created_at.desc()); no depende de server_default de segundo)."""
-    _add_bc(db_session, "bc_old", is_enabled=True, created_at=datetime(2026, 8, 1, tzinfo=UTC))
-    _add_bc(db_session, "bc_new", is_enabled=True, created_at=datetime(2026, 8, 10, tzinfo=UTC))
-    assert link_notifier._fetch_enabled_business_connection_id(db_session) == "bc_new"
-
-
-@pytest.mark.unit
-def test_fetch_enabled_business_connection_id_picks_enabled_over_disabled(db_session):
-    """Con 2 filas (una disabled, una enabled) → devuelve la enabled."""
-    _add_bc(db_session, "bc_disabled", is_enabled=False)
-    _add_bc(db_session, "bc_enabled", is_enabled=True)
-    assert link_notifier._fetch_enabled_business_connection_id(db_session) == "bc_enabled"
-
-
-@pytest.mark.unit
-def test_fetch_enabled_business_connection_id_returns_none_when_empty(db_session):
-    """Sin filas → None."""
-    assert link_notifier._fetch_enabled_business_connection_id(db_session) is None
-
-
-@pytest.mark.unit
-def test_fetch_enabled_business_connection_id_ignores_non_owner(db_session):
-    """Fila enabled de cuenta ajena (user_id no ADMIN_IDS) → el filtro owner la excluye → None."""
-    _add_bc(db_session, "bc_ajena", is_enabled=True, user_id=999)
-    assert link_notifier._fetch_enabled_business_connection_id(db_session) is None
 
 
 @pytest.mark.unit

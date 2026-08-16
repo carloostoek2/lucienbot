@@ -1,10 +1,10 @@
 """
 LinkNotifier - Fase 6 link (emisor).
 
-Persiste la business_connection de la dueña y envía el aviso [LINK] al chat de
-coordinación. Best-effort: nunca rompe el flujo de expulsión. Flag OFF = no-op.
-Bot lazy PROPIO (bot_config.TOKEN) — NO reusa el _get_bot del scheduler, que
-depende de _bot_token seteado después del startup check (corrección R1).
+Envía el aviso [LINK] a Diana por DM bot-to-bot (Bot API 10.0). Best-effort:
+nunca rompe el flujo de expulsión. Flag OFF = no-op. Bot lazy PROPIO
+(bot_config.TOKEN) — NO reusa el _get_bot del scheduler, que depende de
+_bot_token seteado después del startup check (corrección R1).
 """
 import json
 import logging
@@ -14,24 +14,10 @@ from datetime import UTC, datetime
 from aiogram import Bot
 
 from config.settings import bot_config
-from models.database import SessionLocal, get_db_session
+from models.database import get_db_session
 from models.models import BusinessConnection
 
 logger = logging.getLogger(__name__)
-
-
-def _fetch_enabled_business_connection_id(db) -> str | None:
-    """Return the most recent enabled owner business_connection_id, or None."""
-    row = (
-        db.query(BusinessConnection)
-        .filter(
-            BusinessConnection.is_enabled.is_(True),
-            BusinessConnection.user_id.in_(bot_config.ADMIN_IDS),
-        )
-        .order_by(BusinessConnection.created_at.desc())
-        .first()
-    )
-    return row.business_connection_id if row else None
 
 
 def build_vip_kicked_payload(
@@ -95,17 +81,6 @@ class LinkNotifier:
         if not self._enabled or self._chat_id is None:
             return
         try:
-            db = SessionLocal()
-            try:
-                bc_id = _fetch_enabled_business_connection_id(db)
-            finally:
-                db.close()
-            if not bc_id:
-                logger.info(
-                    f"link_notifier | notify_vip_kicked | user_id={payload.get('user_id')} | "
-                    "result=no_business_connection"
-                )
-                return
             raw_username = payload.get("username")
             body = {
                 "v": 1,
@@ -119,9 +94,7 @@ class LinkNotifier:
                 "ts": payload.get("ts"),
             }
             text = "[LINK] " + json.dumps(body, ensure_ascii=False, separators=(",", ":"))
-            await self._bot.send_message(
-                chat_id=self._chat_id, business_connection_id=bc_id, text=text
-            )
+            await self._bot.send_message(chat_id=self._chat_id, text=text)
             logger.info(
                 f"link_notifier | notify_vip_kicked | user_id={payload.get('user_id')} | "
                 f"event_id={body['event_id']} | result=sent"
