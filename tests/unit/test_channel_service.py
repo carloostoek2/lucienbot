@@ -112,6 +112,76 @@ class TestChannelService:
 
         assert result is False
 
+    def test_delete_channel_cleans_dependents(
+        self,
+        db_session,
+        sample_free_channel,
+        sample_user,
+        sample_admin,
+        sample_token,
+        sample_reaction_emoji,
+    ):
+        """Regresión bug prod: delete_channel limpia dependencias (broadcasts/subs).
+
+        En Postgres estas tablas referencian al canal sin ON DELETE, así que el
+        DELETE crudo lanza ForeignKeyViolation. SQLite de tests no enforcea FK;
+        este test valida la limpieza en cascada que evita ese error en producción.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from models.models import BroadcastMessage, BroadcastReaction, Subscription
+
+        service = ChannelService(db_session)
+        channel_id = sample_free_channel.id
+        tg_id = sample_free_channel.channel_id
+
+        broadcast = BroadcastMessage(
+            message_id=7770001,
+            channel_id=tg_id,
+            admin_id=sample_admin.telegram_id,
+            text="broadcast de canal viejo",
+        )
+        db_session.add(broadcast)
+        db_session.flush()
+        db_session.add(
+            BroadcastReaction(
+                broadcast_id=broadcast.id,
+                user_id=sample_user.telegram_id,
+                reaction_emoji_id=sample_reaction_emoji.id,
+                besitos_awarded=5,
+            )
+        )
+        db_session.add(
+            Subscription(
+                user_id=sample_user.telegram_id,
+                channel_id=channel_id,
+                token_id=sample_token.id,
+                end_date=datetime.now(UTC) + timedelta(days=30),
+            )
+        )
+        db_session.commit()
+
+        assert service.delete_channel(channel_id) is True
+        assert service.get_channel_by_db_id(channel_id) is None
+        assert (
+            db_session.query(BroadcastMessage)
+            .filter(BroadcastMessage.channel_id == tg_id)
+            .count()
+            == 0
+        )
+        assert (
+            db_session.query(BroadcastReaction)
+            .filter(BroadcastReaction.broadcast_id == broadcast.id)
+            .count()
+            == 0
+        )
+        assert (
+            db_session.query(Subscription)
+            .filter(Subscription.channel_id == channel_id)
+            .count()
+            == 0
+        )
+
     def test_update_wait_time(self, db_session, sample_free_channel):
         """Test actualizar tiempo de espera de canal Free"""
         service = ChannelService(db_session)

@@ -10,7 +10,14 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from models.database import SessionLocal
-from models.models import Channel, ChannelType, PendingRequest
+from models.models import (
+    BroadcastMessage,
+    BroadcastReaction,
+    Channel,
+    ChannelType,
+    PendingRequest,
+    Subscription,
+)
 from services.channel_grant import (
     ApproveAllResult,
     GrantResult,
@@ -93,12 +100,27 @@ class ChannelService:
         )
 
     def delete_channel(self, channel_id: int) -> bool:
-        """Elimina un canal de la base de datos"""
+        """Elimina un canal y sus dependencias (broadcasts y suscripciones)."""
         db = self._get_db()
         channel = self.get_channel_by_db_id(channel_id)
         if not channel:
             logger.warning(f"Canal {channel_id} no encontrado para eliminar")
             return False
+
+        # Cascada manual: broadcast_messages y subscriptions referencian al canal sin
+        # ON DELETE en BD. pending_requests se elimina por cascade del ORM al borrar.
+        broadcast_ids = db.query(BroadcastMessage.id).filter(
+            BroadcastMessage.channel_id == channel.channel_id
+        )
+        db.query(BroadcastReaction).filter(
+            BroadcastReaction.broadcast_id.in_(broadcast_ids)
+        ).delete(synchronize_session=False)
+        db.query(BroadcastMessage).filter(
+            BroadcastMessage.channel_id == channel.channel_id
+        ).delete(synchronize_session=False)
+        db.query(Subscription).filter(Subscription.channel_id == channel.id).delete(
+            synchronize_session=False
+        )
 
         db.delete(channel)
         db.commit()
