@@ -127,6 +127,7 @@ class TestForwardAdminCallbacks:
     def test_forward_action_packs(self):
         assert ForwardActionCallback(action="vip").pack() == "fwd_action:vip"
         assert ForwardActionCallback(action="besitos").pack() == "fwd_action:besitos"
+        assert ForwardActionCallback(action="reintegrar").pack() == "fwd_action:reintegrar"
 
     def test_forward_confirm_packs(self):
         assert ForwardConfirmCallback(action="vip").pack() == "fwd_confirm:vip"
@@ -139,6 +140,7 @@ class TestForwardAdminCallbacks:
         kb = forward_action_keyboard()
         callbacks = [row[0].callback_data for row in kb.inline_keyboard]
         assert "fwd_action:vip" in callbacks
+        assert "fwd_action:reintegrar" in callbacks
         assert "fwd_action:besitos" in callbacks
         assert "fwd_cancel:cancel" in callbacks
 

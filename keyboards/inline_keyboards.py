@@ -217,6 +217,8 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
             ]
         )
     else:  # VIP
+        from keyboards.callback_data import AdoptVipChannelCallback, VipConvocatoriaCallback
+
         buttons.extend(
             [
                 [
@@ -240,6 +242,18 @@ def channel_actions_keyboard(channel_id: int, channel_type: str) -> InlineKeyboa
                     InlineKeyboardButton(
                         text="🔍 Buscar usuario",
                         callback_data=SubscriberSearchCallback(channel_id=channel_id).pack(),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="👑 Activar como Diván vigente",
+                        callback_data=AdoptVipChannelCallback(channel_id=channel_id).pack(),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="📣 Enlace de convocatoria",
+                        callback_data=VipConvocatoriaCallback(channel_id=channel_id).pack(),
                     )
                 ],
             ]
@@ -366,6 +380,12 @@ def forward_action_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="👑 Activar VIP",
                 callback_data=ForwardActionCallback(action="vip").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔄 Reintegrar al Diván",
+                callback_data=ForwardActionCallback(action="reintegrar").pack(),
             )
         ],
         [

@@ -164,6 +164,24 @@ def build_forward_action_menu_text(display: str, candidate_id: int) -> str:
     )
 
 
+def build_forward_reintegration_result_text(
+    ok: bool, display: str, candidate_id: int, meta: dict | None
+) -> str:
+    """Texto para Custodio tras reintegrar por reenvío. Función pura (sin estado ni side-effects)."""
+    reason = (meta or {}).get("reason")
+    if ok:
+        return LucienVoice.vip_reintegration_admin_ok(
+            display=display,
+            user_id=candidate_id,
+            expiry=(meta or {}).get("expiry", "—"),
+            days_remaining=int((meta or {}).get("days_remaining") or 0),
+            invite_link=(meta or {}).get("invite_link") or "",
+        )
+    if reason in ("invite_failed", "no_channel"):
+        return LucienVoice.vip_reintegration_admin_invite_failed(display, candidate_id)
+    return LucienVoice.vip_reintegration_admin_denied(display, candidate_id)
+
+
 def build_forward_besitos_amount_prompt(display: str, candidate_id: int) -> str:
     """Construye prompt para cantidad de besitos en forward admin. Función pura (sin estado ni side-effects)."""
     return (
@@ -737,6 +755,34 @@ async def process_forwarded_admin_candidate(message: Message, state: FSMContext)
     )
     await state.set_state(AdminForwardStates.selecting_action)
     await state.update_data(forward_target_user_id=candidate_id, forward_target_display=display)
+
+
+@router.callback_query(
+    AdminForwardStates.selecting_action,
+    ForwardActionCallback.filter(F.action == "reintegrar"),
+    lambda cb: is_admin(cb.from_user.id),
+)
+async def select_forward_action_reintegrar(callback: CallbackQuery, state: FSMContext):
+    """Reintegra VIP vigente: 1 svc, invite de un solo uso para que Diana lo envíe."""
+    data = await state.get_data()
+    target_id = data.get("forward_target_user_id")
+    display = data.get("forward_target_display", str(target_id))
+    admin_id = callback.from_user.id
+    if not target_id:
+        await callback.answer("Visitante no identificado", show_alert=True)
+        return
+    with get_service(VIPService) as vip:
+        ok, _msg, meta = await vip.prepare_vip_reintegration_invite(callback.bot, target_id)
+    await state.clear()
+    logger.info(
+        f"{__name__} | reintegrar_vip_forward | user_id={admin_id} | "
+        f"target_user_id={target_id} | result={'ok' if ok else meta.get('reason')}"
+    )
+    await callback.message.edit_text(
+        build_forward_reintegration_result_text(ok, display, target_id, meta),
+        parse_mode="HTML",
+    )
+    await callback.answer()
 
 
 @router.callback_query(

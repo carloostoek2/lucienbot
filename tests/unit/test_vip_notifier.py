@@ -267,6 +267,23 @@ class TestVipActivationListeners:
         assert bot.send_message.await_count == 2
         assert "notify_error" in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_notify_reintegration_attempt_denied_dms_admin(self):
+        from services.vip_notifier import notify_reintegration_attempt
+
+        bot = AsyncMock()
+        with patch("services.vip_notifier._get_bot", return_value=bot), patch(
+            "services.vip_notifier.bot_config"
+        ) as mock_cfg:
+            mock_cfg.ADMIN_IDS = [999001]
+            await notify_reintegration_attempt(
+                111, "impostor", "Impostor", False, {"reason": "not_vip"}
+            )
+        bot.send_message.assert_awaited_once()
+        text = bot.send_message.await_args.kwargs["text"]
+        assert "111" in text
+        assert "no" in text.lower()
+
 
 @pytest.mark.unit
 class TestVipActivationPureBuilders:

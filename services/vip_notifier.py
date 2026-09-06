@@ -139,6 +139,43 @@ async def on_vip_activated_admin_notify(payload: dict) -> None:
         )
 
 
+async def notify_reintegration_attempt(
+    user_id: int,
+    username: str | None,
+    first_name: str | None,
+    ok: bool,
+    meta: dict | None,
+) -> None:
+    """Avisa a Custodios el resultado de /start reintegrar. Best-effort, no muta VIP."""
+    display = first_name or (f"@{username}" if username else f"ID:{user_id}")
+    if username and first_name:
+        display = f"{first_name} (@{username})"
+    reason = (meta or {}).get("reason")
+    try:
+        if ok:
+            text = LucienVoice.vip_reintegration_admin_ok(
+                display=display,
+                user_id=user_id,
+                expiry=(meta or {}).get("expiry", "—"),
+                days_remaining=int((meta or {}).get("days_remaining") or 0),
+                invite_link=(meta or {}).get("invite_link") or "",
+            )
+        elif reason == "invite_failed" or reason == "no_channel":
+            text = LucienVoice.vip_reintegration_admin_invite_failed(display, user_id)
+        else:
+            text = LucienVoice.vip_reintegration_admin_denied(display, user_id)
+        await _notify_admins(_get_bot(), text)
+        logger.info(
+            f"vip_notifier | notify_reintegration_attempt | user_id={user_id} | "
+            f"ok={ok} | reason={reason} | result=handled"
+        )
+    except Exception as exc:
+        logger.warning(
+            f"vip_notifier | notify_reintegration_attempt | user_id={user_id} | "
+            f"error={exc} | result=swallowed_best_effort"
+        )
+
+
 async def on_vip_activation_failed_admin_notify(payload: dict) -> None:
     """Listener for EVENT_VIP_ACTIVATION_FAILED: DM each Custodio with the failure reason."""
     user_id = payload.get("user_id") if isinstance(payload, dict) else None

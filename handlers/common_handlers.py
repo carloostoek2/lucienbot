@@ -31,8 +31,8 @@ def _redact_start_log_args(args: str | None) -> str:
     """Redact sensitive deep-link tokens; log presence/length only."""
     if not args:
         return "none"
-    if args == "free":
-        return "free"
+    if args in ("free", "acceso_vip", "reintegrar"):
+        return args
     return f"token(len={len(args)})"
 
 
@@ -48,17 +48,24 @@ async def cmd_start(message: Message):
     logger.info(f"/start recibido - user_id={user.id}, args={_redact_start_log_args(args)}")
 
     try:
-        if args == "acceso_vip":
-            if vip_service.is_user_vip(user.id):
-                ok, msg, _invite = await vip_service.resend_vip_invite_for_user(
-                    message.bot, user.id
-                )
-                if ok:
-                    await message.answer(msg, reply_markup=vip_access_keyboard(), parse_mode="HTML")
-                else:
-                    await message.answer(msg, parse_mode="HTML")
+        if args in ("acceso_vip", "reintegrar"):
+            ok, msg, meta = await vip_service.prepare_vip_reintegration_invite(
+                message.bot, user.id
+            )
+            if ok:
+                await message.answer(msg, reply_markup=vip_access_keyboard(), parse_mode="HTML")
             else:
-                await message.answer(LucienVoice.reward_vip_not_configured(), parse_mode="HTML")
+                await message.answer(msg, parse_mode="HTML")
+            try:
+                from services.vip_notifier import notify_reintegration_attempt
+
+                await notify_reintegration_attempt(
+                    user.id, user.username, user.first_name, ok, meta
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"common_handlers | reintegrar_notify | user_id={user.id} | error={exc}"
+                )
             return
 
         # Verificar si es deep link "free"

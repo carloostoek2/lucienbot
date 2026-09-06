@@ -872,6 +872,80 @@ class TestVIPServiceInviteLinks:
         assert "círculo íntimo" in msg2
 
     @pytest.mark.asyncio
+    async def test_prepare_reintegration_denied_does_not_create_invite(
+        self, db_session, sample_user, sample_vip_channel
+    ):
+        """No VIP vigente: cero invite, cero mutación."""
+        service = VIPService(db_session)
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+shouldnot")
+        )
+        ok, msg, meta = await service.prepare_vip_reintegration_invite(
+            mock_bot, sample_user.telegram_id
+        )
+        assert ok is False
+        assert meta["reason"] == "not_vip"
+        mock_bot.create_chat_invite_link.assert_not_called()
+        assert "archivos" in msg.lower() or "no figura" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_prepare_reintegration_keeps_end_date(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """VIP vigente: invite de un uso y fechas intactas."""
+        service = VIPService(db_session)
+        token = service.generate_token(sample_tariff.id)
+        sub = service.redeem_token(token.token_code, sample_user.telegram_id)
+        end_before = sub.end_date
+        start_before = sub.start_date
+        mock_bot = MagicMock()
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+reint")
+        )
+        ok, msg, meta = await service.prepare_vip_reintegration_invite(
+            mock_bot, sample_user.telegram_id
+        )
+        assert ok is True
+        refreshed = service.get_user_subscription(sample_user.telegram_id)
+        assert refreshed.end_date == end_before
+        assert refreshed.start_date == start_before
+        assert refreshed.is_active is True
+        assert meta["invite_link"] == "https://t.me/+reint"
+        assert "intacto" in msg.lower() or "círculo" in msg.lower()
+        call_kwargs = mock_bot.create_chat_invite_link.await_args.kwargs
+        assert call_kwargs["member_limit"] == 1
+        assert call_kwargs["creates_join_request"] is False
+
+    def test_adopt_remounts_without_changing_dates(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """Adoptar Diván nuevo remonta channel_id y no toca vencimiento."""
+        service = VIPService(db_session)
+        token = service.generate_token(sample_tariff.id)
+        sub = service.redeem_token(token.token_code, sample_user.telegram_id)
+        end_before = sub.end_date
+        new_ch = Channel(
+            channel_id=-100999888777,
+            channel_name="Nuevo Divan",
+            channel_type=ChannelType.VIP,
+            is_active=True,
+        )
+        db_session.add(new_ch)
+        db_session.commit()
+        db_session.refresh(new_ch)
+        ok, moved, name = service.adopt_active_vip_channel(new_ch.id)
+        assert ok is True
+        assert moved == 1
+        assert "Divan" in name
+        db_session.refresh(sample_vip_channel)
+        assert sample_vip_channel.is_active is False
+        refreshed = service.get_user_subscription(sample_user.telegram_id)
+        assert refreshed.channel_id == new_ch.id
+        assert refreshed.end_date == end_before
+        assert refreshed.is_active is True
+
+    @pytest.mark.asyncio
     async def test_grant_vip_from_tariff_fails_without_vip_channel(
         self, db_session, sample_user, sample_tariff
     ):

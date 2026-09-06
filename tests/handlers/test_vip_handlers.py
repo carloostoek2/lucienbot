@@ -140,6 +140,21 @@ def test_build_forward_besitos_helpers_pure():
     from services.besito_service import MAX_ADMIN_BESITO_GRANT
 
     assert "424242" in build_forward_action_menu_text("Cand", 424242)
+    from handlers.vip_handlers import build_forward_reintegration_result_text
+
+    denied = build_forward_reintegration_result_text(
+        False, "Impostor", 7, {"reason": "not_vip"}
+    )
+    assert "7" in denied
+    assert "no" in denied.lower()
+    ok_text = build_forward_reintegration_result_text(
+        True,
+        "Cand",
+        7,
+        {"invite_link": "https://t.me/+z", "expiry": "01/01/2027", "days_remaining": 3},
+    )
+    assert "https://t.me/+z" in ok_text
+    assert "3" in ok_text
     assert "50 besitos" in build_forward_besitos_confirm_text("Cand", 424242, 50)
     assert "50" in build_forward_besitos_success_text(50, 150)
     notify = build_forward_besitos_visitor_notify(50, 150)
@@ -208,6 +223,65 @@ async def test_select_forward_action_vip_uses_exactly_1_svc(
     cb.message.edit_text.assert_called()
     st = await fsm.get_state()
     assert st is None or "vip_selecting_tariff" in str(st).lower()
+
+
+@patch("handlers.vip_handlers.is_admin", return_value=True)
+@patch("handlers.vip_handlers.get_service")
+async def test_select_forward_action_reintegrar_denied_no_invite(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    """No VIP vigente: avisa al Custodio y no entrega enlace."""
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.prepare_vip_reintegration_invite = AsyncMock(
+        return_value=(False, "denied", {"reason": "not_vip"})
+    )
+    cb = make_callback(data=ForwardActionCallback(action="reintegrar").pack())
+    fsm = await make_fsm_context()
+    await fsm.update_data(forward_target_user_id=424242, forward_target_display="Impostor")
+    from handlers.vip_handlers import AdminForwardStates, select_forward_action_reintegrar
+
+    await fsm.set_state(AdminForwardStates.selecting_action)
+    await select_forward_action_reintegrar(cb, fsm)
+
+    mock_get_service.assert_called_once()
+    mock_svc.prepare_vip_reintegration_invite.assert_awaited_once()
+    text = cb.message.edit_text.call_args[0][0]
+    assert "no" in text.lower()
+    assert "424242" in text
+    assert await fsm.get_state() is None
+
+
+@patch("handlers.vip_handlers.is_admin", return_value=True)
+@patch("handlers.vip_handlers.get_service")
+async def test_select_forward_action_reintegrar_ok_gives_admin_invite(
+    mock_get_service, _mock_is_admin, make_callback, make_fsm_context
+):
+    """VIP vigente: Custodio recibe invite de un uso para enviarlo a mano."""
+    mock_svc = _mock_vip_ctx(mock_get_service)
+    mock_svc.prepare_vip_reintegration_invite = AsyncMock(
+        return_value=(
+            True,
+            "ok",
+            {
+                "reason": "ok",
+                "invite_link": "https://t.me/+onlyone",
+                "expiry": "01/01/2027",
+                "days_remaining": 12,
+            },
+        )
+    )
+    cb = make_callback(data=ForwardActionCallback(action="reintegrar").pack())
+    fsm = await make_fsm_context()
+    await fsm.update_data(forward_target_user_id=424242, forward_target_display="Cand")
+    from handlers.vip_handlers import AdminForwardStates, select_forward_action_reintegrar
+
+    await fsm.set_state(AdminForwardStates.selecting_action)
+    await select_forward_action_reintegrar(cb, fsm)
+
+    text = cb.message.edit_text.call_args[0][0]
+    assert "https://t.me/+onlyone" in text
+    assert "12" in text
+    assert "no" in text.lower()
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)

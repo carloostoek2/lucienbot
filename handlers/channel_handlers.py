@@ -14,6 +14,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from keyboards.callback_data import (
+    AdoptVipChannelCallback,
     ApproveAllCallback,
     ApproveOneCallback,
     ChannelDetailCallback,
@@ -22,6 +23,7 @@ from keyboards.callback_data import (
     ConfigMessagesCallback,
     ConfigMessageTypeCallback,
     ConfigWaitCallback,
+    ConfirmAdoptVipCallback,
     ConfirmDeleteChannelCallback,
     ConfirmRejectCallback,
     DeleteChannelCallback,
@@ -30,6 +32,7 @@ from keyboards.callback_data import (
     RejectOneCallback,
     RestoreMessagesCallback,
     ViewMessagesCallback,
+    VipConvocatoriaCallback,
     WaitTimeCallback,
 )
 from keyboards.inline_keyboards import (
@@ -43,6 +46,7 @@ from keyboards.inline_keyboards import (
 from services import get_service
 from services.channel_grant import is_valid_telegram_invite_link
 from services.channel_service import ChannelService
+from services.vip_service import VIPService
 from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
 
@@ -965,6 +969,78 @@ async def approve_all_requests(callback: CallbackQuery, callback_data: ApproveAl
         await callback.answer(LucienVoice.toast_approve_all_failed(), show_alert=True)
     else:
         await callback.answer(LucienVoice.toast_approve_all_success(result.approved))
+
+
+# ==================== DIVÁN VIGENTE / CONVOCATORIA ====================
+
+
+@router.callback_query(VipConvocatoriaCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def show_vip_convocatoria_link(
+    callback: CallbackQuery, callback_data: VipConvocatoriaCallback
+):
+    """Muestra el deep link de convocatoria para pegar a quien escriba."""
+    me = await callback.bot.get_me()
+    username = getattr(me, "username", None) or ""
+    deep = f"https://t.me/{username}?start=reintegrar" if username else ""
+    await callback.message.edit_text(
+        LucienVoice.admin_vip_convocatoria_link(deep),
+        reply_markup=back_keyboard(
+            ChannelDetailCallback(channel_id=callback_data.channel_id).pack()
+        ),
+        parse_mode="HTML",
+    )
+    logger.info(
+        f"channel_handlers | vip_convocatoria | user_id={callback.from_user.id} | result=ok"
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdoptVipChannelCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def confirm_adopt_vip_channel(
+    callback: CallbackQuery, callback_data: AdoptVipChannelCallback
+):
+    """Pide confirmación para marcar este canal como Diván vigente."""
+    channel_id = callback_data.channel_id
+    await callback.message.edit_text(
+        "🎩 <b>Lucien:</b>\n\n"
+        "<i>¿Convertir este canal en el Diván vigente?</i>\n\n"
+        "Las membresías activas se reasignan aquí. "
+        "Las fechas de vencimiento no se mueven.\n"
+        "El canal anterior se desactiva; no lo elimine.",
+        reply_markup=confirmation_keyboard(
+            ConfirmAdoptVipCallback(channel_id=channel_id).pack(),
+            ChannelDetailCallback(channel_id=channel_id).pack(),
+        ),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(ConfirmAdoptVipCallback.filter(), lambda cb: is_admin(cb.from_user.id))
+async def adopt_vip_channel(callback: CallbackQuery, callback_data: ConfirmAdoptVipCallback):
+    """Adopta el canal VIP como Diván vigente (1 svc)."""
+    channel_id = callback_data.channel_id
+    admin_id = callback.from_user.id
+    with get_service(VIPService) as vip:
+        ok, moved, name = vip.adopt_active_vip_channel(channel_id)
+    if not ok:
+        await callback.message.edit_text(
+            LucienVoice.error_message("activar el Diván vigente"),
+            reply_markup=channel_management_keyboard(),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+    logger.info(
+        f"channel_handlers | adopt_vip | user_id={admin_id} | "
+        f"channel_id={channel_id} | moved={moved} | result=ok"
+    )
+    await callback.message.edit_text(
+        LucienVoice.admin_vip_channel_adopted(name, moved),
+        reply_markup=back_keyboard(ChannelDetailCallback(channel_id=channel_id).pack()),
+        parse_mode="HTML",
+    )
+    await callback.answer()
 
 
 # ==================== ELIMINAR CANAL ====================

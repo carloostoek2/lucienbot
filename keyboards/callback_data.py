@@ -97,9 +97,9 @@ class VipPromoInterestCallback(CallbackData, prefix="vip_promo_interest"):
 
 
 class ForwardActionCallback(CallbackData, prefix="fwd_action"):
-    """Acción tras reenvío admin: activar VIP u otorgar besitos."""
+    """Acción tras reenvío admin: activar VIP, reintegrar u otorgar besitos."""
 
-    action: str  # "vip" | "besitos"
+    action: str  # "vip" | "besitos" | "reintegrar"
 
 
 class ForwardConfirmCallback(CallbackData, prefix="fwd_confirm"):
@@ -392,6 +392,24 @@ class ChannelTypeCallback(CallbackData, prefix="channel_type"):
 
 class ChannelDetailCallback(CallbackData, prefix="channel_detail"):
     """Detalle de canal"""
+
+    channel_id: int
+
+
+class AdoptVipChannelCallback(CallbackData, prefix="adopt_vip"):
+    """Marcar canal VIP como Diván vigente (sin borrar el anterior)."""
+
+    channel_id: int
+
+
+class ConfirmAdoptVipCallback(CallbackData, prefix="confirm_adopt_vip"):
+    """Confirmar adopción del Diván vigente."""
+
+    channel_id: int
+
+
+class VipConvocatoriaCallback(CallbackData, prefix="vip_convocatoria"):
+    """Mostrar enlace de convocatoria de reintegración VIP."""
 
     channel_id: int
 

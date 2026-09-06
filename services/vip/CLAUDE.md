@@ -52,8 +52,25 @@ get_active_subscriptions(channel_id=None) -> list[Subscription]
 get_expiring_subscriptions(hours=24) -> list[Subscription]
 expire_subscription(subscription_id) -> bool
 is_user_vip(user_id, channel_id=None) -> bool
-get_vip_channel() -> Channel
+get_vip_channel() -> Channel  # VIP activo más reciente (id DESC)
+reattach_active_subscription_to_channel(user_id, channel_db_id) -> bool  # solo channel_id
+adopt_active_vip_channel(channel_db_id) -> (ok, moved, name)
+prepare_vip_reintegration_invite(bot, user_id) -> (ok, msg, meta)
+  # Invite 1 uso si VIP vigente. 0 tokens, 0 cambio de fechas.
 ```
+
+## Reintegración a canal VIP nuevo (bot nuevo, misma DB)
+
+Convocatoria abierta: el bot nuevo no puede escribir primero. El Custodio
+reenvía el mensaje del visitante y elige **Reintegrar al Diván**, o pega el
+deep link `t.me/<bot>?start=reintegrar`. Lucien verifica `is_user_vip` ahora.
+
+- VIP vigente → invite `member_limit=1` (Custodio lo envía a mano, o el
+  visitante lo recibe al abrir el deep link). `end_date`/`start_date` intactos.
+- No vigente → error al visitante + aviso a Custodios. Cero tokens.
+- Activar como Diván vigente: desactiva otros VIP y remonta `channel_id` de
+  suscripciones activas. **No eliminar** el canal viejo (borra historial).
+
 
 ## AnonymousMessageService API
 ```python

@@ -532,11 +532,12 @@ class VIPService:
         return subscription is not None
 
     def get_vip_channel(self) -> Channel | None:
-        """Obtiene el canal VIP activo"""
+        """Obtiene el canal VIP activo (el más reciente si hay varios)."""
         db = self._get_db()
         return (
             db.query(Channel)
             .filter(Channel.channel_type == ChannelType.VIP, Channel.is_active)
+            .order_by(Channel.id.desc())
             .first()
         )
 
@@ -811,6 +812,98 @@ class VIPService:
         if not invite_link:
             return False, LucienVoice.reward_vip_invite_failed(), None
         return True, LucienVoice.vip_direct_access(invite_link), invite_link
+
+    def reattach_active_subscription_to_channel(self, user_id: int, channel_db_id: int) -> bool:
+        """Mueve la suscripción activa al canal dado. No toca fechas ni is_active."""
+        db = self._get_db()
+        subscription = self.get_user_subscription(user_id)
+        if not subscription:
+            return False
+        if subscription.channel_id == channel_db_id:
+            return True
+        subscription.channel_id = channel_db_id
+        db.commit()
+        logger.info(
+            f"vip_service | reattach_active_subscription_to_channel | user_id={user_id} | "
+            f"channel_id={channel_db_id} | result=ok"
+        )
+        return True
+
+    def adopt_active_vip_channel(self, channel_db_id: int) -> tuple[bool, int, str]:
+        """Marca este canal como Diván vigente; remonta activas sin tocar fechas."""
+        db = self._get_db()
+        channel = db.query(Channel).filter(Channel.id == channel_db_id).first()
+        if not channel or channel.channel_type != ChannelType.VIP:
+            return False, 0, ""
+        others = (
+            db.query(Channel)
+            .filter(
+                Channel.channel_type == ChannelType.VIP,
+                Channel.id != channel_db_id,
+                Channel.is_active.is_(True),
+            )
+            .all()
+        )
+        for other in others:
+            other.is_active = False
+        channel.is_active = True
+        moved = 0
+        for sub in self.get_active_subscriptions():
+            if sub.channel_id != channel_db_id:
+                sub.channel_id = channel_db_id
+                moved += 1
+        name = channel.channel_name or "Diván"
+        db.commit()
+        logger.info(
+            f"vip_service | adopt_active_vip_channel | channel_id={channel_db_id} | "
+            f"moved={moved} | result=ok"
+        )
+        return True, moved, name
+
+    def _reintegration_meta_from_subscription(self, subscription: Subscription) -> dict:
+        """Arma metadatos de reintegración. No muta la suscripción."""
+        end_date = _ensure_aware(subscription.end_date)
+        now = datetime.now(UTC)
+        days = max(0, (end_date - now).days) if end_date else 0
+        expiry = end_date.strftime("%d/%m/%Y") if end_date else "—"
+        return {
+            "reason": "ok",
+            "end_date": subscription.end_date,
+            "days_remaining": days,
+            "expiry": expiry,
+            "subscription_id": subscription.id,
+        }
+
+    async def prepare_vip_reintegration_invite(
+        self, bot, user_id: int
+    ) -> tuple[bool, str, dict]:
+        """Invite de un solo uso si es VIP vigente. No crea token ni cambia vencimiento."""
+        subscription = self.get_user_subscription(user_id)
+        if not subscription:
+            logger.info(
+                f"vip_service | prepare_vip_reintegration_invite | user_id={user_id} | "
+                f"result=denied"
+            )
+            return False, LucienVoice.vip_reintegration_denied(), {"reason": "not_vip"}
+        vip_channel = self.get_vip_channel()
+        if not vip_channel:
+            return False, LucienVoice.reward_vip_invite_failed(), {"reason": "no_channel"}
+        self.reattach_active_subscription_to_channel(user_id, vip_channel.id)
+        invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
+        if not invite_link:
+            logger.error(
+                f"vip_service | prepare_vip_reintegration_invite | user_id={user_id} | "
+                f"result=invite_failed"
+            )
+            return False, LucienVoice.reward_vip_invite_failed(), {"reason": "invite_failed"}
+        meta = self._reintegration_meta_from_subscription(subscription)
+        meta["invite_link"] = invite_link
+        meta["channel_id"] = vip_channel.id
+        logger.info(
+            f"vip_service | prepare_vip_reintegration_invite | user_id={user_id} | "
+            f"result=ok"
+        )
+        return True, LucienVoice.vip_reintegration_granted(invite_link), meta
 
     # ==================== VIP ENTRY STATE (legacy cleanup) ====================
 

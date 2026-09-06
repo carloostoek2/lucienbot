@@ -208,6 +208,91 @@ Su membresía VIP está activa. El Diván lo espera.
 
 <i>Entre con intención.</i>"""
 
+    @staticmethod
+    def vip_reintegration_denied() -> str:
+        """Visitante que no consta como VIP vigente (convocatoria abierta)."""
+        return """🎩 <b>Lucien:</b>
+
+<i>Lucien consulta los archivos del círculo.</i>
+
+Su nombre no figura entre las membresías vigentes de Diana.
+Este umbral no se abre con palabras, sino con un registro vivo.
+
+Si desea formar parte, converse con Diana."""
+
+    @staticmethod
+    def vip_reintegration_granted(invite_link: str | None = None) -> str:
+        """VIP vigente reintegrado: enlace de un solo uso, tiempo intacto."""
+        link_text = f"\n🔗 <b>Su acceso:</b> {invite_link}" if invite_link else ""
+        return f"""🎩 <b>Lucien:</b>
+
+<i>Lucien reconoce su lugar en el círculo.</i>
+
+Su tiempo restante permanece intacto. El nuevo Diván le espera.
+{link_text}
+
+<i>Entre con intención. Este paso no altera su historia.</i>"""
+
+    @staticmethod
+    def vip_reintegration_admin_denied(display: str, user_id: int) -> str:
+        """Custodio: el reenviado no es VIP vigente. No se genera enlace."""
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>Consultó los archivos del círculo.</i>\n\n"
+            f"{display} (ID <code>{user_id}</code>) "
+            f"<b>no</b> figura como membresía VIP vigente.\n\n"
+            f"No se generó enlace de acceso. Lucien no abre el umbral "
+            f"a quien no consta en los registros."
+        )
+
+    @staticmethod
+    def vip_reintegration_admin_ok(
+        display: str, user_id: int, expiry: str, days_remaining: int, invite_link: str
+    ) -> str:
+        """Custodio: VIP vigente; enlace de un solo uso para enviar a mano."""
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>{display} (ID <code>{user_id}</code>) consta como VIP vigente.</i>\n\n"
+            f"📅 <b>Vencimiento:</b> {expiry} ({days_remaining} días restantes)\n"
+            f"El tiempo <b>no</b> se alteró.\n\n"
+            f"Envíele este enlace de un solo uso al nuevo Diván:\n"
+            f"<code>{invite_link}</code>\n\n"
+            f"<i>No reenvíe este enlace a otra persona.</i>"
+        )
+
+    @staticmethod
+    def vip_reintegration_admin_invite_failed(display: str, user_id: int) -> str:
+        """Custodio: es VIP pero falló generar el invite del canal."""
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"{display} (ID <code>{user_id}</code>) es VIP vigente, "
+            f"pero Lucien no pudo forjar el enlace del Diván.\n\n"
+            f"Verifique que el bot sea administrador del canal VIP nuevo "
+            f"con permiso para invitar."
+        )
+
+    @staticmethod
+    def admin_vip_channel_adopted(channel_name: str, moved: int) -> str:
+        """Custodio: el canal queda como Diván vigente; fechas intactas."""
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>{channel_name}</i> es ahora el Diván vigente.\n\n"
+            f"Membresías activas reasignadas a este canal: {moved}.\n"
+            f"Fechas de vencimiento intactas. No elimine el canal anterior "
+            f"(eso borraría el historial)."
+        )
+
+    @staticmethod
+    def admin_vip_convocatoria_link(deep_link: str) -> str:
+        """Custodio: enlace único de convocatoria para pegar a quien escriba."""
+        return (
+            f"🎩 <b>Lucien:</b>\n\n"
+            f"<i>Enlace de convocatoria (el mismo para todos):</i>\n"
+            f"<code>{deep_link}</code>\n\n"
+            f"Quien lo abra será medido contra los archivos. "
+            f"Si no es VIP vigente, Lucien le negará el umbral y le avisará."
+        )
+
     # ==================== CANAL VIP ====================
 
     @staticmethod

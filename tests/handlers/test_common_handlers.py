@@ -236,6 +236,51 @@ class TestCmdStart:
         mock_vip_svc.return_value.create_vip_invite_link.assert_awaited_once()
         msg.answer.assert_called_once()
 
+    @patch("services.vip_notifier.notify_reintegration_attempt", new_callable=AsyncMock)
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_start_reintegrar_not_vip_notifies_admin(
+        self, mock_user_svc, mock_vip_svc, mock_notify, make_message, make_user
+    ):
+        """Deep link reintegrar: no VIP → error al visitante y aviso a Custodios."""
+        user = make_user()
+        mock_vip_svc.return_value.prepare_vip_reintegration_invite = AsyncMock(
+            return_value=(False, "denied copy", {"reason": "not_vip"})
+        )
+        msg = make_message(text="/start reintegrar", user=user)
+
+        from handlers.common_handlers import cmd_start
+
+        await cmd_start(msg)
+
+        mock_vip_svc.return_value.prepare_vip_reintegration_invite.assert_awaited_once()
+        msg.answer.assert_called_once()
+        assert "denied copy" in msg.answer.call_args[0][0]
+        mock_notify.assert_awaited_once()
+        assert mock_notify.await_args.args[3] is False
+
+    @patch("services.vip_notifier.notify_reintegration_attempt", new_callable=AsyncMock)
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_start_reintegrar_vip_sends_invite(
+        self, mock_user_svc, mock_vip_svc, mock_notify, make_message, make_user
+    ):
+        """Deep link reintegrar: VIP vigente recibe invite; Custodios avisados."""
+        user = make_user()
+        mock_vip_svc.return_value.prepare_vip_reintegration_invite = AsyncMock(
+            return_value=(True, "granted copy", {"reason": "ok", "invite_link": "https://t.me/+x"})
+        )
+        msg = make_message(text="/start reintegrar", user=user)
+
+        from handlers.common_handlers import cmd_start
+
+        await cmd_start(msg)
+
+        msg.answer.assert_called_once()
+        assert "granted copy" in msg.answer.call_args[0][0]
+        mock_notify.assert_awaited_once()
+        assert mock_notify.await_args.args[3] is True
+
     @patch("handlers.common_handlers.VIPService", autospec=True)
     @patch("handlers.common_handlers.UserService", autospec=True)
     async def test_token_used_shows_message(
