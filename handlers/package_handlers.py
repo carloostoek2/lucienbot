@@ -40,6 +40,7 @@ from services.package_service import PackageService
 from services.store_service import StoreService
 from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
+from utils.message_edit import edit_or_send_text
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -95,7 +96,8 @@ async def manage_packages_menu(callback: CallbackQuery):
             ]
         )
 
-        await callback.message.edit_text(
+        await edit_or_send_text(
+            callback.message,
             f"""🎩 <b>Lucien:</b>
 
         <i>Los tesoros que Diana ha seleccionado...</i>
@@ -242,7 +244,8 @@ async def package_detail(callback: CallbackQuery, callback_data: PackageDetailCa
             ]
         )
 
-        await callback.message.edit_text(
+        await edit_or_send_text(
+            callback.message,
             f"""🎩 <b>Lucien:</b>
 
         <i>Detalles del tesoro seleccionado...</i>
@@ -886,7 +889,8 @@ async def cancel_package_wizard(callback: CallbackQuery, state: FSMContext):
 
     if not return_context_raw:
         await state.clear()
-        await callback.message.edit_text(
+        await edit_or_send_text(
+            callback.message,
             "🎩 <b>Lucien:</b>\n\n<i>Acción cancelada.</i>",
             reply_markup=back_keyboard("manage_packages"),
             parse_mode="HTML",
@@ -1749,8 +1753,9 @@ async def finish_delete_files(
 
     await state.clear()
 
-    await callback.message.edit_caption(
-        caption="✅ <b>Operación finalizada.</b>",
+    await edit_or_send_text(
+        callback.message,
+        "✅ <b>Operación finalizada.</b>",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [
