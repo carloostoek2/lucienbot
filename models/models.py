@@ -171,7 +171,9 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
-    token_id = Column(Integer, ForeignKey("tokens.id"), nullable=False)
+    token_id = Column(
+        Integer, ForeignKey("tokens.id"), nullable=True
+    )  # Nullable: internal grants (grant_internal_vip_access) set token_id=None; manual redeem still sets token_id.
     tariff_id = Column(
         Integer, ForeignKey("tariffs.id"), nullable=True
     )  # Direct tariff for internal grants (missions, store, admin forward). Null for legacy/manual token-based subs.
