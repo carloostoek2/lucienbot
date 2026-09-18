@@ -160,12 +160,9 @@ Diana observa con interés su... entusiasmo.</i>"""
         safe = LucienVoice._safe_channel_name(channel_name)
         return f"""🎩 <b>Lucien:</b>
 
-<i>El tiempo ha transcurrido y Diana ha observado su paciencia
-con... aprobación. Los velos del vestíbulo se descorren.</i>
+<i>El tiempo cumplió su parte. Diana midió su paciencia… y la encontró útil.</i>
 
-Las puertas de <b>{safe}</b> están ante usted.
-
-<i>Entre con intención. Diana espera al otro lado.</i>"""
+Las puertas de <b>{safe}</b> están abiertas. Entre con intención: el vestíbulo es solo el umbral."""
 
     @staticmethod
     def free_entry_welcome(channel_name: str) -> str:
@@ -196,17 +193,28 @@ Si desea explorar este camino, contacte a Diana directamente.
 <i>Diana observa con interés su curiosidad...</i>"""
 
     @staticmethod
-    def vip_direct_access(invite_link: str = None) -> str:
-        """Mensaje con enlace directo al canal VIP"""
-        link_text = f"\n🔗 <b>Su acceso:</b> {invite_link}" if invite_link else ""
-        return f"""🎩 <b>Lucien:</b>
+    def vip_direct_access(
+        invite_link: str = None,
+        tariff_name: str | None = None,
+        expiration_date: datetime | None = None,
+    ) -> str:
+        """Mensaje con enlace directo al canal VIP (Copywriter Free→VIP hook).
 
-<i>Bienvenido al círculo íntimo de Diana.</i>
-
-Su membresía VIP está activa. El Diván lo espera.
-{link_text}
-
-<i>Entre con intención.</i>"""
+        When tariff_name + expiration_date are provided, includes activation seal copy
+        (vip_activated + vip_direct_access combined). Invite link is 1-member / 7 days
+        from vip_service.create_vip_invite_link.
+        """
+        lines = ["🎩 <b>Lucien:</b>", "", "<i>Bienvenido a El Diván.</i>"]
+        if tariff_name and expiration_date is not None:
+            safe_tariff = html.escape(str(tariff_name))
+            exp_date_str = expiration_date.strftime("%d/%m/%Y")
+            lines.append(f"<b>{safe_tariff}</b> queda sellada hasta {exp_date_str}.")
+        if invite_link:
+            lines.append("")
+            lines.append(f"🔗 <b>Su enlace</b> (un solo uso, 7 días): {invite_link}")
+        lines.append("")
+        lines.append("<i>Aquí los secretos pesan más. Diana lo espera entre los selectos.</i>")
+        return "\n".join(lines)
 
     @staticmethod
     def vip_reintegration_denied() -> str:
@@ -297,19 +305,14 @@ Su tiempo restante permanece intacto. El nuevo Diván le espera.
 
     @staticmethod
     def vip_activated(tariff_name: str, expiration_date: datetime) -> str:
-        """Mensaje cuando se activa membresía VIP"""
+        """Mensaje cuando se activa membresía VIP (sin enlace; ver vip_direct_access)."""
+        safe_tariff = html.escape(str(tariff_name))
         exp_date_str = expiration_date.strftime("%d/%m/%Y")
         return f"""🎩 <b>Lucien:</b>
 
-<i>Bienvenido a El Diván de Diana.</i>
+<i>Bienvenido a El Diván.</i> <b>{safe_tariff}</b> queda sellada hasta {exp_date_str}.
 
-👑 <b>Tarifa activada:</b> {tariff_name}
-📅 <b>Vencimiento:</b> {exp_date_str}
-
-<i>Aquí, los secretos son más profundos y las experiencias...
-más íntimas. Diana se complace de tenerle entre sus selectos.</i>
-
-👉 <i>Su enlace de acceso ha sido preparado especialmente para usted.</i>"""
+<i>Aquí los secretos pesan más. Diana lo espera entre los selectos.</i>"""
 
     @staticmethod
     def vip_renewal_reminder(expiration_date: datetime) -> str:
@@ -317,26 +320,26 @@ más íntimas. Diana se complace de tenerle entre sus selectos.</i>
         exp_date_str = expiration_date.strftime("%d/%m/%Y")
         return f"""🎩 <b>Lucien:</b>
 
-<i>Una observación delicada... su acceso a El Diván
-culmina mañana, {exp_date_str}.</i>
+<i>Una observación delicada: su acceso culmina mañana, {exp_date_str}.</i>
 
-Diana se pregunta si desea extender esta... relación privilegiada.
-
-👉 <i>Contacte al custodio del reino para renovar su membresía.</i>"""
+Diana pregunta si desea extender esta relación privilegiada. El custodio puede renovar."""
 
     @staticmethod
     def vip_expired() -> str:
         """Mensaje cuando expira la suscripción VIP"""
         return """🎩 <b>Lucien:</b>
 
-<i>Su acceso exclusivo ha... pausado.
-Pero los recuerdos de lo vivido permanecen, ¿verdad?</i>
+<i>Su acceso exclusivo… pausa. Los recuerdos quedan.</i>
 
-Diana espera que haya encontrado valor en su tiempo
-entre los privilegiados.
+Si desea volver al círculo, el custodio forja un nuevo enlace."""
 
-👉 <i>Si desea regresar al círculo, el custodio del reino
-puede prepararle un nuevo enlace.</i>"""
+    @staticmethod
+    def nurture_vip_step_1() -> str:
+        """Canonical fallback_text for VIP nurture step 1 (+24h). Plain text (nurture sends without HTML)."""
+        return (
+            "Ya cruzó el umbral. Hoy no hay prisa: explore El Diván; "
+            "mañana le traigo lo que Diana reserva a quien se queda."
+        )
 
     @staticmethod
     def vip_renewed() -> str:
@@ -1256,9 +1259,7 @@ En circulación: {e.get("circulation", 0)}   •   Tasa de gasto: {e.get("burn_r
         safe_first = html.escape(first_name)
         safe_tariff = html.escape(tariff_name)
         duration_part = (
-            "Duración: N/A"
-            if duration_days in (None, "N/A")
-            else f"Duración: {duration_days} días"
+            "Duración: N/A" if duration_days in (None, "N/A") else f"Duración: {duration_days} días"
         )
         return (
             "🎩 <b>Lucien:</b>\n\n"
@@ -1438,16 +1439,11 @@ ser revelados correctamente.</i>"""
     @staticmethod
     def store_stock_insufficient(product_name: str, available: int) -> str:
         safe_name = html.escape(product_name)
-        return (
-            f"Quedan pocas unidades de <i>{safe_name}</i> "
-            f"(disponibles: {available})."
-        )
+        return f"Quedan pocas unidades de <i>{safe_name}</i> " f"(disponibles: {available})."
 
     @staticmethod
     def store_balance_insufficient(needed: int, have: int) -> str:
-        return (
-            f"Necesita {needed} besitos; dispone de {have} por ahora."
-        )
+        return f"Necesita {needed} besitos; dispone de {have} por ahora."
 
     @staticmethod
     def store_order_not_found() -> str:
@@ -1642,10 +1638,7 @@ Seleccione un nivel para administrar."""
 
     @staticmethod
     def store_product_discount_line(list_price: int) -> str:
-        return (
-            f"\n🏷️ <b>Precio de lista:</b> {list_price} besitos "
-            f"· <i>ventaja activa</i>"
-        )
+        return f"\n🏷️ <b>Precio de lista:</b> {list_price} besitos " f"· <i>ventaja activa</i>"
 
     @staticmethod
     def store_product_availability_lines(stock_text: str, file_count: int) -> str:
@@ -2012,11 +2005,7 @@ Estado: {status}{input_block}"""
 
     @staticmethod
     def fulfillment_admin_wizard_step_limited_stock() -> str:
-        return (
-            "🎩 Lucien:\n\n"
-            "Indica la cantidad de unidades disponibles:\n"
-            "Ejemplo: 50"
-        )
+        return "🎩 Lucien:\n\n" "Indica la cantidad de unidades disponibles:\n" "Ejemplo: 50"
 
     @staticmethod
     def fulfillment_admin_wizard_invalid_stock() -> str:
@@ -2465,9 +2454,7 @@ Use besitos para comprar en la tienda o gánelos con misiones, regalo diario, re
                 LucienVoice.fulfillment_input_prompt_question()
             ),
         }
-        return fallbacks.get(
-            kind, LucienVoice.fulfillment_manual_queued(product_name)
-        )
+        return fallbacks.get(kind, LucienVoice.fulfillment_manual_queued(product_name))
 
     # ==================== SERVICIOS - PAQUETES ====================
 
@@ -2884,11 +2871,11 @@ Compras realizadas:
     def backpack_purchase_detail(purchase: dict) -> str:
         """Detalle de compra en mochila con estado fulfillment."""
         date_str = (
-            purchase["purchased_at"].strftime("%d/%m/%Y")
-            if purchase.get("purchased_at")
-            else "N/A"
+            purchase["purchased_at"].strftime("%d/%m/%Y") if purchase.get("purchased_at") else "N/A"
         )
-        status = purchase.get("status_display", LucienVoice.backpack_fulfillment_status_processing())
+        status = purchase.get(
+            "status_display", LucienVoice.backpack_fulfillment_status_processing()
+        )
         product_name = html.escape(purchase.get("product_name", ""))
         return f"""🎩 <b>Lucien:</b>
 

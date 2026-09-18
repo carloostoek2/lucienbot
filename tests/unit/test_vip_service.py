@@ -848,7 +848,7 @@ class TestVIPServiceInviteLinks:
         assert metadata["vip_activated"] is True
         assert metadata["invite_link"] == "https://t.me/+grant"
         assert service.is_user_vip(sample_user.telegram_id)
-        assert "círculo íntimo" in msg
+        assert "El Diván" in msg and "un solo uso" in msg
 
     @pytest.mark.asyncio
     async def test_resend_vip_invite_requires_active_subscription(
@@ -870,7 +870,7 @@ class TestVIPServiceInviteLinks:
         )
         assert ok2 is True
         assert link2 == "https://t.me/+resend"
-        assert "círculo íntimo" in msg2
+        assert "El Diván" in msg2 and "un solo uso" in msg2
 
     @pytest.mark.asyncio
     async def test_prepare_reintegration_denied_does_not_create_invite(
@@ -1745,7 +1745,11 @@ class TestGrantInternalVipAccessWithInvite:
         sub = service.get_user_subscription(sample_user.telegram_id)
         assert sub is not None
         assert sub.token_id is None
-        assert msg == LucienVoice.vip_direct_access("https://t.me/+internal")
+        assert msg == LucienVoice.vip_direct_access(
+            "https://t.me/+internal",
+            tariff_name=sample_tariff.name,
+            expiration_date=sub.end_date,
+        )
 
     @pytest.mark.asyncio
     async def test_with_invite_partial_on_invite_failure(
