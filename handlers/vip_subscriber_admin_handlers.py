@@ -872,8 +872,7 @@ async def process_reduce_input(message: Message, state: FSMContext):
         new_end = parse_reduce_end_date_input(message.text or "")
         if new_end is None:
             await message.answer(
-                "🎩 <b>Lucien:</b>\n\n"
-                "<i>Fecha inválida. Use el formato DD/MM/YYYY.</i>",
+                "🎩 <b>Lucien:</b>\n\n" "<i>Fecha inválida. Use el formato DD/MM/YYYY.</i>",
                 parse_mode="HTML",
             )
             return
@@ -927,9 +926,7 @@ async def confirm_subscriber_reduce(
     if ok:
         new_end = meta.get("new_end_date")
         expiry = (
-            new_end.strftime("%d/%m/%Y")
-            if hasattr(new_end, "strftime")
-            else str(new_end or "—")
+            new_end.strftime("%d/%m/%Y") if hasattr(new_end, "strftime") else str(new_end or "—")
         )
         text = LucienVoice.admin_subscriber_reduce_success(display, expiry)
     else:

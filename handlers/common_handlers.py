@@ -49,9 +49,7 @@ async def cmd_start(message: Message):
 
     try:
         if args in ("acceso_vip", "reintegrar"):
-            ok, msg, meta = await vip_service.prepare_vip_reintegration_invite(
-                message.bot, user.id
-            )
+            ok, msg, meta = await vip_service.prepare_vip_reintegration_invite(message.bot, user.id)
             if ok:
                 await message.answer(msg, reply_markup=vip_access_keyboard(), parse_mode="HTML")
             else:

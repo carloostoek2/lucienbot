@@ -115,9 +115,9 @@ class ChannelService:
         db.query(BroadcastReaction).filter(
             BroadcastReaction.broadcast_id.in_(broadcast_ids)
         ).delete(synchronize_session=False)
-        db.query(BroadcastMessage).filter(
-            BroadcastMessage.channel_id == channel.channel_id
-        ).delete(synchronize_session=False)
+        db.query(BroadcastMessage).filter(BroadcastMessage.channel_id == channel.channel_id).delete(
+            synchronize_session=False
+        )
         db.query(Subscription).filter(Subscription.channel_id == channel.id).delete(
             synchronize_session=False
         )
