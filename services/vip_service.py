@@ -757,8 +757,8 @@ class VIPService:
     ) -> tuple[bool, str, dict]:
         """
         Grant/extend VIP without Token, then create invite + LucienVoice.vip_direct_access.
-        For internal callers (missions/rewards, admin forward). Sales/token redeem stays on
-        grant_vip_from_tariff. Emits EVENT_VIP_ACTIVATED via grant_internal_vip_access.
+        For internal callers (missions/rewards, store VIP_GRANT, admin forward). Sales/token
+        redeem stays on grant_vip_from_tariff. Emits EVENT_VIP_ACTIVATED via grant_internal_vip_access.
         """
         tariff = self.get_tariff(tariff_id)
         if not tariff:

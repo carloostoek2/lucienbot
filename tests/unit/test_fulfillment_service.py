@@ -152,13 +152,13 @@ class TestFulfillmentServiceGold:
                 "subscription_id": 1,
                 "invite_link": "https://t.me/+vipinvite",
                 "tariff_name": tariff.name,
-                "token_id": 99,
-                "token_code": "ABC123",
+                "tariff_id": tariff.id,
+                "token_id": None,
             }
             with patch("services.fulfillment_service.VIPService") as MockVip:
                 mock_vip = MockVip.return_value
                 mock_vip.is_user_vip.return_value = False
-                mock_vip.grant_vip_from_tariff = AsyncMock(
+                mock_vip.grant_internal_vip_access_with_invite = AsyncMock(
                     return_value=(True, "VIP activated", metadata)
                 )
                 mock_vip.resend_vip_invite_for_user = AsyncMock(
@@ -171,7 +171,7 @@ class TestFulfillmentServiceGold:
                 db.commit()
                 ok2, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
             assert ok1 and ok2
-            mock_vip.grant_vip_from_tariff.assert_awaited_once()
+            mock_vip.grant_internal_vip_access_with_invite.assert_awaited_once()
             mock_vip.resend_vip_invite_for_user.assert_awaited_once()
             final_row = svc.get_fulfillment_by_id(row.id)
             assert final_row.status == FulfillmentStatus.FULFILLED
@@ -183,8 +183,8 @@ class TestFulfillmentServiceGold:
             engine.dispose()
 
     @pytest.mark.asyncio
-    async def test_vip_grant_already_vip_calls_grant_from_tariff(self, tmp_path: Path):
-        """Compra nueva por usuario VIP activo debe extender vía grant_vip_from_tariff."""
+    async def test_vip_grant_already_vip_calls_internal_grant_with_invite(self, tmp_path: Path):
+        """Compra nueva por usuario VIP activo debe extender vía grant_internal_vip_access_with_invite."""
         engine, TestSession = self._session(tmp_path)
         db = TestSession()
         try:
@@ -232,18 +232,19 @@ class TestFulfillmentServiceGold:
                 "subscription_id": 2,
                 "invite_link": "https://t.me/+viprenew",
                 "tariff_name": tariff.name,
-                "token_id": 42,
+                "tariff_id": tariff.id,
+                "token_id": None,
             }
             with patch("services.fulfillment_service.VIPService") as MockVip:
                 mock_vip = MockVip.return_value
                 mock_vip.is_user_vip.return_value = True
-                mock_vip.grant_vip_from_tariff = AsyncMock(
+                mock_vip.grant_internal_vip_access_with_invite = AsyncMock(
                     return_value=(True, "VIP renewed", metadata)
                 )
                 mock_vip.resend_vip_invite_for_user = AsyncMock()
                 ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
             assert ok is True
-            mock_vip.grant_vip_from_tariff.assert_awaited_once()
+            mock_vip.grant_internal_vip_access_with_invite.assert_awaited_once()
             mock_vip.resend_vip_invite_for_user.assert_not_called()
         finally:
             db.close()
@@ -253,7 +254,7 @@ class TestFulfillmentServiceGold:
     async def test_vip_grant_invite_failure_keeps_auto_in_progress_with_metadata(
         self, tmp_path: Path
     ):
-        """Redeem OK + invite fallido: metadata parcial y AUTO_IN_PROGRESS para retry."""
+        """Internal grant OK + invite fallido: metadata parcial y AUTO_IN_PROGRESS para retry."""
         engine, TestSession = self._session(tmp_path)
         db = TestSession()
         try:
@@ -301,11 +302,12 @@ class TestFulfillmentServiceGold:
                 "subscription_id": 9,
                 "invite_link": None,
                 "tariff_name": tariff.name,
-                "token_id": 7,
+                "tariff_id": tariff.id,
+                "token_id": None,
             }
             with patch("services.fulfillment_service.VIPService") as MockVip:
                 MockVip.return_value.is_user_vip.return_value = False
-                MockVip.return_value.grant_vip_from_tariff = AsyncMock(
+                MockVip.return_value.grant_internal_vip_access_with_invite = AsyncMock(
                     return_value=(False, "invite failed", partial)
                 )
                 ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
@@ -315,7 +317,7 @@ class TestFulfillmentServiceGold:
             auto = json.loads(refreshed.auto_result or "{}")
             assert auto.get("vip_activated") is True
             assert auto.get("subscription_id") == 9
-            assert auto.get("token_id") == 7
+            assert auto.get("token_id") is None
             enrichment = svc.build_purchase_enrichment(item.id)
             assert "resend_vip_invite" in enrichment["actions_available"]
         finally:
@@ -368,7 +370,7 @@ class TestFulfillmentServiceGold:
             mock_bot = AsyncMock()
             with patch("services.fulfillment_service.VIPService") as MockVip:
                 MockVip.return_value.is_user_vip.return_value = False
-                MockVip.return_value.grant_vip_from_tariff = AsyncMock(
+                MockVip.return_value.grant_internal_vip_access_with_invite = AsyncMock(
                     return_value=(False, "activation failed", {})
                 )
                 ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)
@@ -429,11 +431,12 @@ class TestFulfillmentServiceGold:
                 "subscription_id": 1,
                 "invite_link": "https://t.me/+vipinvite",
                 "tariff_name": tariff.name,
-                "token_id": 1,
+                "tariff_id": tariff.id,
+                "token_id": None,
             }
             with patch("services.fulfillment_service.VIPService") as MockVip:
                 MockVip.return_value.is_user_vip.return_value = False
-                MockVip.return_value.grant_vip_from_tariff = AsyncMock(
+                MockVip.return_value.grant_internal_vip_access_with_invite = AsyncMock(
                     return_value=(True, "VIP activated", metadata)
                 )
                 ok, _ = await svc.dispatch_fulfillment(mock_bot, row.id)

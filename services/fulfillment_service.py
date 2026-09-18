@@ -371,7 +371,7 @@ class FulfillmentService:
             row.status = FulfillmentStatus.FAILED
             self._get_db().commit()
             return False, LucienVoice.reward_vip_not_configured()
-        ok, msg, metadata = await vip_svc.grant_vip_from_tariff(bot, row.user_id, product.tariff_id)
+        ok, msg, metadata = await vip_svc.grant_internal_vip_access_with_invite(bot, row.user_id, product.tariff_id)
         if not ok:
             if metadata.get("vip_activated"):
                 row.status = FulfillmentStatus.AUTO_IN_PROGRESS
