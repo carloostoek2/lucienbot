@@ -142,9 +142,7 @@ def test_build_forward_besitos_helpers_pure():
     assert "424242" in build_forward_action_menu_text("Cand", 424242)
     from handlers.vip_handlers import build_forward_reintegration_result_text
 
-    denied = build_forward_reintegration_result_text(
-        False, "Impostor", 7, {"reason": "not_vip"}
-    )
+    denied = build_forward_reintegration_result_text(False, "Impostor", 7, {"reason": "not_vip"})
     assert "7" in denied
     assert "no" in denied.lower()
     ok_text = build_forward_reintegration_result_text(
@@ -375,7 +373,9 @@ async def test_confirm_forward_besitos_calls_exactly_1_grant(
 
 
 @patch("handlers.vip_handlers.is_admin", return_value=True)
-async def test_process_besitos_amount_invalid_rejects(_mock_is_admin, make_message, make_fsm_context):
+async def test_process_besitos_amount_invalid_rejects(
+    _mock_is_admin, make_message, make_fsm_context
+):
     """Invalid amount does not advance FSM."""
     msg = make_message(text="not-a-number")
     fsm = await make_fsm_context()

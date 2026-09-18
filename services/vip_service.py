@@ -57,9 +57,7 @@ def _compute_reduced_end_candidate(
 ) -> tuple[datetime | None, str | None]:
     """Compute earlier end candidate or error code. Función pura (sin estado ni side-effects)."""
     candidate = (
-        current_end - timedelta(days=days)
-        if days is not None
-        else _ensure_aware(new_end_date)
+        current_end - timedelta(days=days) if days is not None else _ensure_aware(new_end_date)
     )
     if candidate <= now:
         return None, "would_expire"
@@ -746,7 +744,6 @@ class VIPService:
         )
         return True, subscription, {"subscription_id": subscription.id, "tariff_id": tariff_id}
 
-
     async def grant_internal_vip_access_with_invite(
         self, bot, user_id: int, tariff_id: int
     ) -> tuple[bool, str, dict]:
@@ -781,15 +778,23 @@ class VIPService:
                 f"vip_service | grant_internal_vip_access_with_invite | invite_failed | "
                 f"user_id={user_id} | tariff_id={tariff_id}"
             )
-            return False, LucienVoice.reward_vip_invite_failed(), {
-                **base_meta,
-                "invite_link": None,
-            }
+            return (
+                False,
+                LucienVoice.reward_vip_invite_failed(),
+                {
+                    **base_meta,
+                    "invite_link": None,
+                },
+            )
 
-        return True, LucienVoice.vip_direct_access(invite_link), {
-            **base_meta,
-            "invite_link": invite_link,
-        }
+        return (
+            True,
+            LucienVoice.vip_direct_access(invite_link),
+            {
+                **base_meta,
+                "invite_link": invite_link,
+            },
+        )
 
     async def grant_internal_vip_access_for_subscription(
         self, subscription_id: int, tariff_id: int
@@ -919,9 +924,7 @@ class VIPService:
             "subscription_id": subscription.id,
         }
 
-    async def prepare_vip_reintegration_invite(
-        self, bot, user_id: int
-    ) -> tuple[bool, str, dict]:
+    async def prepare_vip_reintegration_invite(self, bot, user_id: int) -> tuple[bool, str, dict]:
         """Invite de un solo uso si es VIP vigente. No crea token ni cambia vencimiento."""
         subscription = self.get_user_subscription(user_id)
         if not subscription:
@@ -945,8 +948,7 @@ class VIPService:
         meta["invite_link"] = invite_link
         meta["channel_id"] = vip_channel.id
         logger.info(
-            f"vip_service | prepare_vip_reintegration_invite | user_id={user_id} | "
-            f"result=ok"
+            f"vip_service | prepare_vip_reintegration_invite | user_id={user_id} | " f"result=ok"
         )
         return True, LucienVoice.vip_reintegration_granted(invite_link), meta
 
@@ -1179,12 +1181,16 @@ class VIPService:
         db.commit()
         db.refresh(subscription)
         self._log_reduce_result(admin_id, subscription_id, "ok", level="info")
-        return True, "ok", {
-            "subscription_id": subscription.id,
-            "old_end_date": old_end,
-            "new_end_date": candidate,
-            "user_id": subscription.user_id,
-        }
+        return (
+            True,
+            "ok",
+            {
+                "subscription_id": subscription.id,
+                "old_end_date": old_end,
+                "new_end_date": candidate,
+                "user_id": subscription.user_id,
+            },
+        )
 
     async def admin_revoke_subscription(
         self, bot, subscription_id: int, admin_id: int
