@@ -6,6 +6,7 @@ nunca rompe el flujo de expulsión. Flag OFF = no-op. Bot lazy PROPIO
 (bot_config.TOKEN) — NO reusa el _get_bot del scheduler, que depende de
 _bot_token seteado después del startup check (corrección R1).
 """
+
 import json
 import logging
 import uuid

@@ -210,8 +210,9 @@ class TestSubscriptionService:
         # Item 30: failure path now emits EVENT_VIP_ACTIVATION_FAILED via schedule_emit;
         # patch schedule_emit + get_event_bus (mock bus) so the real emit coroutine is
         # not created/dropped unawaited (avoids RuntimeWarning never-awaited in sync tests).
-        with patch("services.vip_service.schedule_emit"), patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit"),
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             subscription = service.redeem_token(
                 sample_used_token.token_code, sample_user.telegram_id
@@ -226,8 +227,9 @@ class TestSubscriptionService:
         # Item 30: failure path now emits EVENT_VIP_ACTIVATION_FAILED via schedule_emit;
         # patch schedule_emit + get_event_bus (mock bus) so the real emit coroutine is
         # not created/dropped unawaited (avoids RuntimeWarning never-awaited in sync tests).
-        with patch("services.vip_service.schedule_emit"), patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit"),
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             subscription = service.redeem_token(
                 sample_expired_token.token_code, sample_user.telegram_id
@@ -479,8 +481,9 @@ class TestVIPServiceNurtureEmit:
         tok = service.generate_token(sample_tariff.id)
 
         # Mock bus too: real emit coroutine would be dropped unawaited by the schedule mock.
-        with patch("services.vip_service.schedule_emit") as mock_emit, patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit") as mock_emit,
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             sub = service.redeem_token(tok.token_code, sample_user.telegram_id)
             assert sub is not None
@@ -856,9 +859,7 @@ class TestVIPServiceInviteLinks:
         mock_bot.create_chat_invite_link = AsyncMock(
             return_value=MagicMock(invite_link="https://t.me/+resend")
         )
-        ok, msg, link = await service.resend_vip_invite_for_user(
-            mock_bot, sample_user.telegram_id
-        )
+        ok, msg, link = await service.resend_vip_invite_for_user(mock_bot, sample_user.telegram_id)
         assert ok is False
         assert link is None
 
@@ -1315,8 +1316,9 @@ class TestSubscriberAdminVIPService:
         original_later_end = sub_later.end_date
 
         # Mock bus too: real emit coroutine would be dropped unawaited by the schedule mock.
-        with patch("services.vip_service.schedule_emit"), patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit"),
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             ok, extended, _meta = await service.grant_internal_vip_access_for_subscription(
                 sub_soon.id, sample_tariff.id
@@ -1344,9 +1346,7 @@ class TestSubscriberAdminVIPService:
         assert sub is None
         assert meta.get("error") == "tariff_inactive"
 
-    def test_get_subscriber_extend_context(
-        self, db_session, sample_subscription, sample_tariff
-    ):
+    def test_get_subscriber_extend_context(self, db_session, sample_subscription, sample_tariff):
         service = VIPService(db_session)
         snapshot, tariffs = service.get_subscriber_extend_context(sample_subscription.id)
         assert snapshot is not None
@@ -1418,9 +1418,7 @@ class TestSubscriberAdminVIPService:
         service = VIPService(db_session)
         db_session.refresh(sample_subscription)
         old_end = sample_subscription.end_date
-        old_end_aware = (
-            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
-        )
+        old_end_aware = old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
 
         ok, code, meta = service.admin_reduce_subscription_time(
             sample_subscription.id, 999001, days=5
@@ -1431,22 +1429,16 @@ class TestSubscriberAdminVIPService:
         db_session.refresh(sample_subscription)
         assert sample_subscription.is_active is True
         new_end = sample_subscription.end_date
-        new_end_aware = (
-            new_end.replace(tzinfo=UTC) if new_end.tzinfo is None else new_end
-        )
+        new_end_aware = new_end.replace(tzinfo=UTC) if new_end.tzinfo is None else new_end
         assert new_end_aware == old_end_aware - timedelta(days=5)
         assert meta["subscription_id"] == sample_subscription.id
         assert meta["user_id"] == sample_subscription.user_id
 
-    def test_admin_reduce_subscription_time_by_new_end_date(
-        self, db_session, sample_subscription
-    ):
+    def test_admin_reduce_subscription_time_by_new_end_date(self, db_session, sample_subscription):
         service = VIPService(db_session)
         db_session.refresh(sample_subscription)
         old_end = sample_subscription.end_date
-        old_end_aware = (
-            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
-        )
+        old_end_aware = old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
         candidate = old_end_aware - timedelta(days=10)
 
         ok, code, meta = service.admin_reduce_subscription_time(
@@ -1458,9 +1450,7 @@ class TestSubscriberAdminVIPService:
         db_session.refresh(sample_subscription)
         assert sample_subscription.is_active is True
         new_end = sample_subscription.end_date
-        new_end_aware = (
-            new_end.replace(tzinfo=UTC) if new_end.tzinfo is None else new_end
-        )
+        new_end_aware = new_end.replace(tzinfo=UTC) if new_end.tzinfo is None else new_end
         assert new_end_aware == candidate
         assert meta["new_end_date"] is not None
 
@@ -1488,9 +1478,7 @@ class TestSubscriberAdminVIPService:
         service = VIPService(db_session)
         db_session.refresh(sample_subscription)
         old_end = sample_subscription.end_date
-        old_end_aware = (
-            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
-        )
+        old_end_aware = old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
         later = old_end_aware + timedelta(days=5)
 
         ok, code, meta = service.admin_reduce_subscription_time(
@@ -1509,9 +1497,7 @@ class TestSubscriberAdminVIPService:
         service = VIPService(db_session)
         now = datetime.now(UTC)
 
-        ok, code, _ = service.admin_reduce_subscription_time(
-            sample_subscription.id, 999001
-        )
+        ok, code, _ = service.admin_reduce_subscription_time(sample_subscription.id, 999001)
         assert ok is False and code == "invalid_args"
 
         ok, code, _ = service.admin_reduce_subscription_time(
@@ -1522,9 +1508,7 @@ class TestSubscriberAdminVIPService:
         )
         assert ok is False and code == "invalid_args"
 
-        ok, code, _ = service.admin_reduce_subscription_time(
-            sample_subscription.id, 999001, days=0
-        )
+        ok, code, _ = service.admin_reduce_subscription_time(sample_subscription.id, 999001, days=0)
         assert ok is False and code == "invalid_args"
 
         ok, code, _ = service.admin_reduce_subscription_time(
@@ -1536,9 +1520,7 @@ class TestSubscriberAdminVIPService:
         self, db_session, sample_subscription
     ):
         service = VIPService(db_session)
-        ok, code, _ = service.admin_reduce_subscription_time(
-            sample_subscription.id, 999001, days=3
-        )
+        ok, code, _ = service.admin_reduce_subscription_time(sample_subscription.id, 999001, days=3)
         assert ok is True
         assert code == "ok"
         db_session.refresh(sample_subscription)
@@ -1551,16 +1533,12 @@ class TestSubscriberAdminVIPService:
 
     def test_admin_reduce_subscription_time_rejects_not_found(self, db_session):
         service = VIPService(db_session)
-        ok, code, meta = service.admin_reduce_subscription_time(
-            999999, 999001, days=1
-        )
+        ok, code, meta = service.admin_reduce_subscription_time(999999, 999001, days=1)
         assert ok is False
         assert code == "not_found"
         assert meta == {}
 
-    def test_admin_reduce_subscription_time_rejects_inactive(
-        self, db_session, sample_subscription
-    ):
+    def test_admin_reduce_subscription_time_rejects_inactive(self, db_session, sample_subscription):
         service = VIPService(db_session)
         db_session.refresh(sample_subscription)
         old_end = sample_subscription.end_date
@@ -1585,9 +1563,7 @@ class TestSubscriberAdminVIPService:
         service = VIPService(db_session)
         db_session.refresh(sample_subscription)
         old_end = sample_subscription.end_date
-        old_end_aware = (
-            old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
-        )
+        old_end_aware = old_end.replace(tzinfo=UTC) if old_end.tzinfo is None else old_end
 
         ok, code, meta = service.admin_reduce_subscription_time(
             sample_subscription.id, 999001, new_end_date=old_end_aware
@@ -1643,7 +1619,6 @@ class TestSubscriberAdminVIPService:
         assert page_ids == [higher_id, lower_id]
 
 
-
 class TestGrantInternalVipAccess:
     """Internal VIP grant without Token: create + extend; token_id may be NULL; emits EVENT_VIP_ACTIVATED."""
 
@@ -1652,8 +1627,9 @@ class TestGrantInternalVipAccess:
     ):
         """Create path: new Subscription with token_id=None, tariff_id set, EVENT emitted."""
         service = VIPService(db_session)
-        with patch("services.vip_service.schedule_emit") as mock_emit, patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit") as mock_emit,
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             ok, sub, meta = await service.grant_internal_vip_access(
                 sample_user.telegram_id, sample_tariff.id
@@ -1692,8 +1668,9 @@ class TestGrantInternalVipAccess:
         original_end = existing.end_date
         original_id = existing.id
 
-        with patch("services.vip_service.schedule_emit") as mock_emit, patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit") as mock_emit,
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             ok, sub, meta = await service.grant_internal_vip_access(
                 sample_user.telegram_id, sample_tariff.id
@@ -1727,8 +1704,9 @@ class TestGrantInternalVipAccess:
         sample_vip_channel.is_active = False
         db_session.commit()
         service = VIPService(db_session)
-        with patch("services.vip_service.schedule_emit"), patch(
-            "services.vip_service.get_event_bus", return_value=MagicMock()
+        with (
+            patch("services.vip_service.schedule_emit"),
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
         ):
             ok, sub, meta = await service.grant_internal_vip_access(
                 sample_user.telegram_id, sample_tariff.id
@@ -1736,6 +1714,56 @@ class TestGrantInternalVipAccess:
         assert ok is False
         assert sub is None
         assert meta.get("error") == "no_vip_channel"
+
+
+@pytest.mark.unit
+class TestGrantInternalVipAccessWithInvite:
+    """Internal grant + invite wrapper used by missions/admin forward cutover."""
+
+    @pytest.mark.asyncio
+    async def test_with_invite_creates_sub_and_returns_voice(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        from utils.lucien_voice import LucienVoice
+
+        service = VIPService(db_session)
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+internal")
+        )
+        with (
+            patch("services.vip_service.schedule_emit"),
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
+        ):
+            ok, msg, meta = await service.grant_internal_vip_access_with_invite(
+                mock_bot, sample_user.telegram_id, sample_tariff.id
+            )
+        assert ok is True
+        assert meta.get("vip_activated") is True
+        assert meta.get("token_id") is None
+        assert meta.get("invite_link") == "https://t.me/+internal"
+        assert meta.get("subscription_id") is not None
+        sub = service.get_user_subscription(sample_user.telegram_id)
+        assert sub is not None
+        assert sub.token_id is None
+        assert msg == LucienVoice.vip_direct_access("https://t.me/+internal")
+
+    @pytest.mark.asyncio
+    async def test_with_invite_partial_on_invite_failure(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        service = VIPService(db_session)
+        mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
+        with (
+            patch("services.vip_service.schedule_emit"),
+            patch("services.vip_service.get_event_bus", return_value=MagicMock()),
+        ):
+            ok, msg, meta = await service.grant_internal_vip_access_with_invite(
+                mock_bot, sample_user.telegram_id, sample_tariff.id
+            )
+        assert ok is False
+        assert meta.get("vip_activated") is True
+        assert meta.get("invite_link") is None
+        assert service.is_user_vip(sample_user.telegram_id)
 
 
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions

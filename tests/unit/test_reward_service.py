@@ -251,11 +251,16 @@ class TestRewardServiceDelivery:
         mock_bot.send_message = AsyncMock(side_effect=[RuntimeError("send fail"), None])
         vip_svc = VIPService(db_session)
 
-        with patch.object(
-            vip_svc, "grant_vip_from_tariff", wraps=vip_svc.grant_vip_from_tariff
-        ) as grant_spy, patch.object(
-            vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
-        ) as resend_spy:
+        with (
+            patch.object(
+                vip_svc,
+                "grant_internal_vip_access_with_invite",
+                wraps=vip_svc.grant_internal_vip_access_with_invite,
+            ) as grant_spy,
+            patch.object(
+                vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
+            ) as resend_spy,
+        ):
             service.vip_service = vip_svc
             ok1, _ = await service.deliver_reward(
                 mock_bot,
@@ -281,9 +286,7 @@ class TestRewardServiceDelivery:
         assert mock_bot.send_message.await_count == 2
         grant_spy.assert_awaited_once()
         resend_spy.assert_awaited_once()
-        claim_final = service._get_mission_delivery_claim(
-            sample_user.id, mission.id, reward.id
-        )
+        claim_final = service._get_mission_delivery_claim(sample_user.id, mission.id, reward.id)
         assert claim_final.details is None
 
     @pytest.mark.asyncio
@@ -372,11 +375,14 @@ class TestRewardServiceDelivery:
         db_session.commit()
 
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
-        with patch.object(
-            vip_svc, "grant_vip_from_tariff", new_callable=AsyncMock
-        ) as grant_mock, patch.object(
-            vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
-        ) as resend_spy:
+        with (
+            patch.object(
+                vip_svc, "grant_internal_vip_access_with_invite", new_callable=AsyncMock
+            ) as grant_mock,
+            patch.object(
+                vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
+            ) as resend_spy,
+        ):
             service.vip_service = vip_svc
             ok, _ = await service.deliver_reward(
                 mock_bot,
@@ -421,11 +427,16 @@ class TestRewardServiceDelivery:
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
         mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
 
-        with patch.object(
-            vip_svc, "grant_vip_from_tariff", wraps=vip_svc.grant_vip_from_tariff
-        ) as grant_spy, patch.object(
-            vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
-        ) as resend_spy:
+        with (
+            patch.object(
+                vip_svc,
+                "grant_internal_vip_access_with_invite",
+                wraps=vip_svc.grant_internal_vip_access_with_invite,
+            ) as grant_spy,
+            patch.object(
+                vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
+            ) as resend_spy,
+        ):
             service.vip_service = vip_svc
             ok1, _ = await service.deliver_reward(
                 mock_bot,
@@ -453,9 +464,7 @@ class TestRewardServiceDelivery:
         assert ok2 is True
         grant_spy.assert_awaited_once()
         resend_spy.assert_awaited_once()
-        claim_final = service._get_mission_delivery_claim(
-            sample_user.id, mission.id, reward.id
-        )
+        claim_final = service._get_mission_delivery_claim(sample_user.id, mission.id, reward.id)
         assert claim_final.details is None
 
     @pytest.mark.asyncio
@@ -491,9 +500,7 @@ class TestRewardServiceDelivery:
             mission_id=mission.id,
             history_claimed=True,
         )
-        service.release_mission_delivery_claim(
-            sample_user.id, mission.id, sample_reward_besitos.id
-        )
+        service.release_mission_delivery_claim(sample_user.id, mission.id, sample_reward_besitos.id)
         await service.deliver_reward(
             mock_bot,
             sample_user.id,
@@ -659,14 +666,16 @@ class TestRewardServiceDelivery:
         assert "VIP" in msg
         mock_bot.send_message.assert_called_once()
         call_args = mock_bot.send_message.call_args
-        assert "El Diván" in call_args.kwargs["text"] or "círculo íntimo" in call_args.kwargs["text"]
+        assert (
+            "El Diván" in call_args.kwargs["text"] or "círculo íntimo" in call_args.kwargs["text"]
+        )
         assert call_args.kwargs.get("reply_markup") is not None
 
     @pytest.mark.asyncio
     async def test_deliver_reward_vip_extends_existing_subscription(
         self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
-        """Misión VIP extiende suscripción existente vía grant_vip_from_tariff."""
+        """Misión VIP extiende suscripción existente vía grant_internal_vip_access_with_invite."""
         from services.vip_service import VIPService
 
         vip_svc = VIPService(db_session)
@@ -758,12 +767,8 @@ class TestRewardServiceHistory:
             since_completed_at=progress.completed_at,
             frequency=MissionFrequency.ONE_TIME,
         )
-        claim = service._get_mission_delivery_claim(
-            sample_user.id, mission.id, reward.id
-        )
-        claim.delivered_at = datetime.now(UTC) - timedelta(
-            seconds=_DELIVERY_CLAIM_TTL_SECONDS + 5
-        )
+        claim = service._get_mission_delivery_claim(sample_user.id, mission.id, reward.id)
+        claim.delivered_at = datetime.now(UTC) - timedelta(seconds=_DELIVERY_CLAIM_TTL_SECONDS + 5)
         db_session.commit()
 
         resumed = service.try_claim_mission_delivery(

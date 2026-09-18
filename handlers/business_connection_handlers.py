@@ -1,4 +1,5 @@
 """Handler de business_connection (Fase 6 link)."""
+
 import logging
 
 from aiogram import Router

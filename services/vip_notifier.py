@@ -195,9 +195,7 @@ async def on_vip_activation_failed_admin_notify(payload: dict) -> None:
             username = user.username if user else None
             first_name = user.first_name if user else None
         token_code = payload.get("token_code") if isinstance(payload, dict) else None
-        text = build_activation_failure_text(
-            int(user_id), username, first_name, reason, token_code
-        )
+        text = build_activation_failure_text(int(user_id), username, first_name, reason, token_code)
         await _notify_admins(_get_bot(), text)
         logger.info(
             f"vip_notifier | on_vip_activation_failed_admin_notify | user_id={user_id} | "
