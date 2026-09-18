@@ -1643,6 +1643,101 @@ class TestSubscriberAdminVIPService:
         assert page_ids == [higher_id, lower_id]
 
 
+
+class TestGrantInternalVipAccess:
+    """Internal VIP grant without Token: create + extend; token_id may be NULL; emits EVENT_VIP_ACTIVATED."""
+
+    async def test_grant_internal_vip_access_creates_sub_without_token(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """Create path: new Subscription with token_id=None, tariff_id set, EVENT emitted."""
+        service = VIPService(db_session)
+        with patch("services.vip_service.schedule_emit") as mock_emit, patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            ok, sub, meta = await service.grant_internal_vip_access(
+                sample_user.telegram_id, sample_tariff.id
+            )
+
+        assert ok is True
+        assert sub is not None
+        assert sub.token_id is None
+        assert sub.tariff_id == sample_tariff.id
+        assert sub.is_active is True
+        assert sub.channel_id == sample_vip_channel.id
+        assert meta.get("subscription_id") == sub.id
+        assert meta.get("tariff_id") == sample_tariff.id
+        assert mock_emit.called
+        db_session.refresh(sub)
+        assert sub.token_id is None
+        assert service.is_user_vip(sample_user.telegram_id) is True
+
+    async def test_grant_internal_vip_access_extends_existing_without_token(
+        self, db_session, sample_user, sample_vip_channel, sample_tariff
+    ):
+        """Extend path: existing active sub (token_id already None) gains duration; token_id stays None."""
+        service = VIPService(db_session)
+        now = datetime.now(UTC)
+        existing = Subscription(
+            user_id=sample_user.telegram_id,
+            channel_id=sample_vip_channel.id,
+            token_id=None,
+            tariff_id=sample_tariff.id,
+            end_date=now + timedelta(days=10),
+            is_active=True,
+        )
+        db_session.add(existing)
+        db_session.commit()
+        db_session.refresh(existing)
+        original_end = existing.end_date
+        original_id = existing.id
+
+        with patch("services.vip_service.schedule_emit") as mock_emit, patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            ok, sub, meta = await service.grant_internal_vip_access(
+                sample_user.telegram_id, sample_tariff.id
+            )
+
+        assert ok is True
+        assert sub is not None
+        assert sub.id == original_id
+        assert sub.token_id is None
+        assert sub.tariff_id == sample_tariff.id
+        db_session.refresh(existing)
+        assert existing.end_date > original_end
+        assert mock_emit.called
+        assert meta.get("subscription_id") == original_id
+
+    async def test_grant_internal_vip_access_rejects_missing_tariff(
+        self, db_session, sample_user, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        ok, sub, meta = await service.grant_internal_vip_access(
+            sample_user.telegram_id, tariff_id=999999
+        )
+        assert ok is False
+        assert sub is None
+        assert meta.get("error") == "tariff_not_found"
+
+    async def test_grant_internal_vip_access_rejects_no_vip_channel(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel
+    ):
+        """Create path fails cleanly when no active VIP channel."""
+        sample_vip_channel.is_active = False
+        db_session.commit()
+        service = VIPService(db_session)
+        with patch("services.vip_service.schedule_emit"), patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            ok, sub, meta = await service.grant_internal_vip_access(
+                sample_user.telegram_id, sample_tariff.id
+            )
+        assert ok is False
+        assert sub is None
+        assert meta.get("error") == "no_vip_channel"
+
+
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
 # (has_other check + conditional ban + direct User state clear + send + commit/rollback per sub;
 #  unban on subscription reactivation via redeem_token_with_missions)
