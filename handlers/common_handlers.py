@@ -137,8 +137,15 @@ async def cmd_start(message: Message):
                 invite_link = await vip_service.create_vip_invite_link(
                     message.bot, user.id, allow_fallback=True
                 )
+                tariff_id = getattr(subscription, "tariff_id", None)
+                end_date = getattr(subscription, "end_date", None)
+                tariff = vip_service.get_tariff(tariff_id) if tariff_id else None
                 await message.answer(
-                    LucienVoice.vip_direct_access(invite_link),
+                    LucienVoice.vip_direct_access(
+                        invite_link,
+                        tariff_name=tariff.name if tariff else None,
+                        expiration_date=end_date,
+                    ),
                     reply_markup=vip_access_keyboard(),
                     parse_mode="HTML",
                 )

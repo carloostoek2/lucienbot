@@ -636,7 +636,15 @@ class VIPService:
             "token_id": token.id,
             "token_code": token.token_code,
         }
-        return True, LucienVoice.vip_direct_access(invite_link), metadata
+        return (
+            True,
+            LucienVoice.vip_direct_access(
+                invite_link,
+                tariff_name=tariff.name,
+                expiration_date=subscription.end_date,
+            ),
+            metadata,
+        )
 
     async def grant_internal_vip_access(
         self, user_id: int, tariff_id: int
@@ -789,7 +797,11 @@ class VIPService:
 
         return (
             True,
-            LucienVoice.vip_direct_access(invite_link),
+            LucienVoice.vip_direct_access(
+                invite_link,
+                tariff_name=tariff.name,
+                expiration_date=subscription.end_date,
+            ),
             {
                 **base_meta,
                 "invite_link": invite_link,
