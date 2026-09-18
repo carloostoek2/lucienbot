@@ -481,12 +481,14 @@ class RewardService:
     async def _mark_vip_partial_grant(
         self, claim: UserRewardHistory | None, metadata: dict
     ) -> None:
-        """Persist token: marker so retry resends instead of re-granting."""
+        """Persist token:/grant marker so retry resends instead of re-granting."""
         if not claim:
             return
-        token_id = metadata.get("token_id")
-        if token_id is not None:
-            claim.details = f"{_CLAIM_TOKEN_PREFIX}{token_id}"
+        marker_id = metadata.get("token_id")
+        if marker_id is None:
+            marker_id = metadata.get("subscription_id")
+        if marker_id is not None:
+            claim.details = f"{_CLAIM_TOKEN_PREFIX}{marker_id}"
             self.db.commit()
 
     async def _mark_vip_delivery_sent(
@@ -494,8 +496,10 @@ class RewardService:
     ) -> None:
         if not claim:
             return
-        token_id = metadata.get("token_id")
-        claim.details = f"{_CLAIM_SENT_PREFIX}vip_activated:{token_id}"
+        marker_id = metadata.get("token_id")
+        if marker_id is None:
+            marker_id = metadata.get("subscription_id", "internal")
+        claim.details = f"{_CLAIM_SENT_PREFIX}vip_activated:{marker_id}"
         self.db.commit()
 
     async def _send_vip_access_message(self, bot, user_id: int, message: str) -> None:
@@ -542,7 +546,7 @@ class RewardService:
             await self._mark_vip_delivery_sent(claim, {"token_id": "resend"})
             return True, received_msg
 
-        ok, msg, metadata = await self.vip_service.grant_vip_from_tariff(
+        ok, msg, metadata = await self.vip_service.grant_internal_vip_access_with_invite(
             bot, user_id, reward.tariff_id
         )
         if not ok:

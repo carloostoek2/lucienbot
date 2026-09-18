@@ -746,6 +746,51 @@ class VIPService:
         )
         return True, subscription, {"subscription_id": subscription.id, "tariff_id": tariff_id}
 
+
+    async def grant_internal_vip_access_with_invite(
+        self, bot, user_id: int, tariff_id: int
+    ) -> tuple[bool, str, dict]:
+        """
+        Grant/extend VIP without Token, then create invite + LucienVoice.vip_direct_access.
+        For internal callers (missions/rewards, admin forward). Sales/token redeem stays on
+        grant_vip_from_tariff. Emits EVENT_VIP_ACTIVATED via grant_internal_vip_access.
+        """
+        tariff = self.get_tariff(tariff_id)
+        if not tariff:
+            return False, LucienVoice.reward_tariff_not_found(), {}
+
+        ok, subscription, meta = await self.grant_internal_vip_access(user_id, tariff_id)
+        if not ok or subscription is None:
+            err = meta.get("error")
+            if err == "no_vip_channel":
+                return False, LucienVoice.reward_vip_activation_failed(), {}
+            if err == "tariff_not_found":
+                return False, LucienVoice.reward_tariff_not_found(), {}
+            return False, LucienVoice.reward_vip_activation_failed(), {}
+
+        invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
+        base_meta = {
+            "vip_activated": True,
+            "subscription_id": subscription.id,
+            "tariff_name": tariff.name,
+            "tariff_id": tariff_id,
+            "token_id": None,
+        }
+        if not invite_link:
+            logger.error(
+                f"vip_service | grant_internal_vip_access_with_invite | invite_failed | "
+                f"user_id={user_id} | tariff_id={tariff_id}"
+            )
+            return False, LucienVoice.reward_vip_invite_failed(), {
+                **base_meta,
+                "invite_link": None,
+            }
+
+        return True, LucienVoice.vip_direct_access(invite_link), {
+            **base_meta,
+            "invite_link": invite_link,
+        }
+
     async def grant_internal_vip_access_for_subscription(
         self, subscription_id: int, tariff_id: int
     ) -> tuple[bool, Subscription | None, dict]:

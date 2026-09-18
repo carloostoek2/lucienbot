@@ -322,7 +322,7 @@ async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_di
     cb.bot.get_me = AsyncMock(return_value=MagicMock(username="lucienbot"))
 
     mock_svc = _mock_vip_ctx(mock_get_service)
-    mock_svc.grant_vip_from_tariff = AsyncMock(
+    mock_svc.grant_internal_vip_access_with_invite = AsyncMock(
         return_value=(
             True,
             "🎩 <b>Lucien:</b> Acceso VIP...",
@@ -338,7 +338,7 @@ async def test_confirm_forward_vip_activation_calls_exactly_1_grant_and_sends_di
     await fsm.set_state(AdminForwardStates.vip_confirming)
     await confirm_forward_vip_activation(cb, fsm)
 
-    mock_svc.grant_vip_from_tariff.assert_called_once_with(cb.bot, 424242, 1)
+    mock_svc.grant_internal_vip_access_with_invite.assert_called_once_with(cb.bot, 424242, 1)
     cb.bot.send_message.assert_called_once()
     call = cb.bot.send_message.call_args
     assert call.kwargs.get("chat_id") == 424242
@@ -413,7 +413,7 @@ async def test_confirm_forward_vip_dm_fail_shares_invite_not_token(
     )
 
     mock_svc = _mock_vip_ctx(mock_get_service)
-    mock_svc.grant_vip_from_tariff = AsyncMock(
+    mock_svc.grant_internal_vip_access_with_invite = AsyncMock(
         return_value=(
             True,
             "🎩 <b>Lucien:</b> Acceso VIP...",

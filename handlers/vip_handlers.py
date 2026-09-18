@@ -965,7 +965,7 @@ async def confirm_forward_vip_activation(callback: CallbackQuery, state: FSMCont
         return
     ok, access_msg, meta = False, "", {}
     with get_service(VIPService) as vip_service:
-        ok, access_msg, meta = await vip_service.grant_vip_from_tariff(
+        ok, access_msg, meta = await vip_service.grant_internal_vip_access_with_invite(
             callback.bot, target_user_id, tariff_id
         )
     await notify_forward_vip_result(

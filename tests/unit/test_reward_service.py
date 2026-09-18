@@ -252,7 +252,7 @@ class TestRewardServiceDelivery:
         vip_svc = VIPService(db_session)
 
         with patch.object(
-            vip_svc, "grant_vip_from_tariff", wraps=vip_svc.grant_vip_from_tariff
+            vip_svc, "grant_internal_vip_access_with_invite", wraps=vip_svc.grant_internal_vip_access_with_invite
         ) as grant_spy, patch.object(
             vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
         ) as resend_spy:
@@ -373,7 +373,7 @@ class TestRewardServiceDelivery:
 
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="lucien_bot"))
         with patch.object(
-            vip_svc, "grant_vip_from_tariff", new_callable=AsyncMock
+            vip_svc, "grant_internal_vip_access_with_invite", new_callable=AsyncMock
         ) as grant_mock, patch.object(
             vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
         ) as resend_spy:
@@ -422,7 +422,7 @@ class TestRewardServiceDelivery:
         mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
 
         with patch.object(
-            vip_svc, "grant_vip_from_tariff", wraps=vip_svc.grant_vip_from_tariff
+            vip_svc, "grant_internal_vip_access_with_invite", wraps=vip_svc.grant_internal_vip_access_with_invite
         ) as grant_spy, patch.object(
             vip_svc, "resend_vip_invite_for_user", wraps=vip_svc.resend_vip_invite_for_user
         ) as resend_spy:
@@ -666,7 +666,7 @@ class TestRewardServiceDelivery:
     async def test_deliver_reward_vip_extends_existing_subscription(
         self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
-        """Misión VIP extiende suscripción existente vía grant_vip_from_tariff."""
+        """Misión VIP extiende suscripción existente vía grant_internal_vip_access_with_invite."""
         from services.vip_service import VIPService
 
         vip_svc = VIPService(db_session)

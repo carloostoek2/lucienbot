@@ -1738,6 +1738,55 @@ class TestGrantInternalVipAccess:
         assert meta.get("error") == "no_vip_channel"
 
 
+
+@pytest.mark.unit
+class TestGrantInternalVipAccessWithInvite:
+    """Internal grant + invite wrapper used by missions/admin forward cutover."""
+
+    @pytest.mark.asyncio
+    async def test_with_invite_creates_sub_and_returns_voice(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        from utils.lucien_voice import LucienVoice
+
+        service = VIPService(db_session)
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+internal")
+        )
+        with patch("services.vip_service.schedule_emit"), patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            ok, msg, meta = await service.grant_internal_vip_access_with_invite(
+                mock_bot, sample_user.telegram_id, sample_tariff.id
+            )
+        assert ok is True
+        assert meta.get("vip_activated") is True
+        assert meta.get("token_id") is None
+        assert meta.get("invite_link") == "https://t.me/+internal"
+        assert meta.get("subscription_id") is not None
+        sub = service.get_user_subscription(sample_user.telegram_id)
+        assert sub is not None
+        assert sub.token_id is None
+        assert msg == LucienVoice.vip_direct_access("https://t.me/+internal")
+
+    @pytest.mark.asyncio
+    async def test_with_invite_partial_on_invite_failure(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        service = VIPService(db_session)
+        mock_bot.create_chat_invite_link = AsyncMock(side_effect=Exception("TG fail"))
+        with patch("services.vip_service.schedule_emit"), patch(
+            "services.vip_service.get_event_bus", return_value=MagicMock()
+        ):
+            ok, msg, meta = await service.grant_internal_vip_access_with_invite(
+                mock_bot, sample_user.telegram_id, sample_tariff.id
+            )
+        assert ok is False
+        assert meta.get("vip_activated") is True
+        assert meta.get("invite_link") is None
+        assert service.is_user_vip(sample_user.telegram_id)
+
+
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions
 # (has_other check + conditional ban + direct User state clear + send + commit/rollback per sub;
 #  unban on subscription reactivation via redeem_token_with_missions)
