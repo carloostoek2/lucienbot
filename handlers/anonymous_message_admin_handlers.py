@@ -21,6 +21,7 @@ from keyboards.callback_data import (
     AnonViewCallback,
 )
 from keyboards.inline_keyboards import admin_menu_keyboard, back_keyboard
+from models.models import AnonymousMessageStatus
 from services.anonymous_message_service import AnonymousMessageService
 from utils.admin import is_admin
 
@@ -235,9 +236,10 @@ async def view_anonymous_message(callback: CallbackQuery, callback_data: AnonVie
             return
 
         # Marcar como leído si estaba sin leer
-        if message.status.value == "unread":
+        if message.status == AnonymousMessageStatus.UNREAD:
             anon_service.mark_as_read(message_id, admin_id)
-            message.status.value = "read"  # Actualizar para mostrar correctamente
+            # Enum members are immutable; assign a new status (same pattern as the service)
+            message.status = AnonymousMessageStatus.READ
 
         status_emoji = {
             "unread": "🔴 No leído",

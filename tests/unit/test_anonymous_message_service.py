@@ -317,3 +317,48 @@ class TestSendPaidAnonymousMessage:
         assert message is None
         assert db_session.query(AnonymousMessage).filter_by(sender_id=saved_tg).count() == 0
         assert db_session.query(BesitoTransaction).filter_by(user_id=saved_tg).count() == 0
+
+
+class TestMarkAsReadAndReply:
+    def test_mark_as_read_sets_status_and_metadata(self, db_session, sample_user, sample_admin):
+        msg = AnonymousMessage(
+            sender_id=sample_user.telegram_id,
+            content="hola diana",
+            status=AnonymousMessageStatus.UNREAD,
+        )
+        db_session.add(msg)
+        db_session.commit()
+        db_session.refresh(msg)
+
+        service = AnonymousMessageService(db_session)
+        assert service.mark_as_read(msg.id, sample_admin.telegram_id) is True
+
+        db_session.refresh(msg)
+        assert msg.status == AnonymousMessageStatus.READ
+        assert msg.read_by == sample_admin.telegram_id
+        assert msg.read_at is not None
+
+    def test_mark_as_read_missing_message_returns_false(self, db_session, sample_admin):
+        service = AnonymousMessageService(db_session)
+        assert service.mark_as_read(999999, sample_admin.telegram_id) is False
+
+    def test_reply_to_message_sets_replied_status(self, db_session, sample_user, sample_admin):
+        msg = AnonymousMessage(
+            sender_id=sample_user.telegram_id,
+            content="necesito ayuda",
+            status=AnonymousMessageStatus.UNREAD,
+        )
+        db_session.add(msg)
+        db_session.commit()
+        db_session.refresh(msg)
+
+        service = AnonymousMessageService(db_session)
+        assert service.reply_to_message(msg.id, sample_admin.telegram_id, "te leo") is True
+
+        db_session.refresh(msg)
+        assert msg.status == AnonymousMessageStatus.REPLIED
+        assert msg.admin_reply == "te leo"
+        assert msg.replied_at is not None
+        assert msg.read_at is not None
+        assert msg.read_by == sample_admin.telegram_id
+
