@@ -61,6 +61,8 @@ async def game_menu(callback: CallbackQuery):
         f"<i>{data['remaining_trivia']} de {data['limit_trivia']} disponibles</i>\n\n"
         f"{data['footer']}"
     )
+    if not data.get("is_vip"):
+        text = f"{text}\n\n<i>{LucienVoice.free_game_menu_vip_tip()}</i>"
 
     await callback.message.edit_text(
         text, reply_markup=game_menu_keyboard(special_button=special_button)
