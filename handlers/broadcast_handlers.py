@@ -6,6 +6,7 @@ Flujo conversacional completo para enviar mensajes con reacciones.
 
 from __future__ import annotations
 
+import html
 import logging
 from typing import TYPE_CHECKING
 
@@ -28,8 +29,11 @@ from keyboards.inline_keyboards import (
 )
 from services import get_service
 from services.broadcast.text_format import (
+    BROADCAST_PREVIEW_MAX_LENGTH,
+    build_broadcast_preview_snippet,
     extract_message_text_and_entities,
     resolve_broadcast_text_to_html,
+    strip_broadcast_html_to_plain_text,
 )
 from services.broadcast_service import BroadcastService
 from services.channel_service import ChannelService
@@ -152,7 +156,7 @@ async def notify_broadcast_send_success(
 ✅ <b>Broadcast enviado exitosamente.</b>
 
 📊 <b>Detalles:</b>
-   • Canal: {data.get("channel_name")}
+   • Canal: {html.escape(str(data.get("channel_name")))}
    • Mensaje ID: <code>{message_id}</code>
    • Reacciones: {"Sí" if selected_emojis else "No"}
 
@@ -191,24 +195,30 @@ def build_broadcast_preview_text(data: dict, extra_button_info: str = "❌") -> 
     has_attachment = data.get("has_attachment", False)
     has_reactions = len(data.get("selected_emojis", [])) > 0
     is_protected = data.get("is_protected", False)
+    channel_name = html.escape(str(data.get("channel_name", "Desconocido")))
+    attachment_info = (
+        "✅ " + html.escape(str(data.get("attachment_type") or "")) if has_attachment else "❌"
+    )
+    snippet = build_broadcast_preview_snippet(preview_text)
+    truncation_mark = "..." if len(preview_text) > BROADCAST_PREVIEW_MAX_LENGTH else ""
 
     return f"""🎩 <b>Lucien:</b>
 
 <i>Así se verá su mensaje en el canal...</i>
 
 📋 <b>Resumen:</b>
-   • Canal: {data.get("channel_name", "Desconocido")}
+   • Canal: {channel_name}
    • Texto: {"✅" if preview_text else "❌"}
-   • Adjunto: {"✅ " + data.get("attachment_type", "") if has_attachment else "❌"}
+   • Adjunto: {attachment_info}
    • Reacciones: {"✅" if has_reactions else "❌"}
-   • Botón extra: {extra_button_info}
+   • Botón extra: {html.escape(extra_button_info)}
    • Protección: {"🔒 Sí" if is_protected else "❌ No"}
 
 ---
 
 <b>Preview del mensaje:</b>
 
-{preview_text[:500]}{"..." if len(preview_text) > 500 else ""}
+{snippet}{truncation_mark}
 
 ---
 
@@ -1022,6 +1032,15 @@ async def show_broadcast_preview(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         if "message is not modified" in str(e).lower():
             pass
+        elif "can't parse entities" in str(e).lower():
+            # Red de seguridad: un HTML irreconocible nunca debe bloquear el wizard.
+            logger.error(
+                f"broadcast_handlers | show_broadcast_preview | parse_failed | "
+                f"channel={data.get('channel_id')} | error={e}"
+            )
+            await callback.message.edit_text(
+                strip_broadcast_html_to_plain_text(info_text), reply_markup=keyboard
+            )
         else:
             raise
     await state.set_state(BroadcastStates.confirming)
