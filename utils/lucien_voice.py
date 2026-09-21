@@ -166,15 +166,44 @@ Las puertas de <b>{safe}</b> están abiertas. Entre con intención: el vestíbul
 
     @staticmethod
     def free_entry_welcome(channel_name: str) -> str:
-        """Mensaje de bienvenida cuando se aprueba el acceso al canal free"""
+        """Mensaje de bienvenida Free→VIP (sin cifras; CTA a jugar/tienda)."""
         safe = LucienVoice._safe_channel_name(channel_name)
         return f"""🎩 <b>Lucien:</b>
 
-<i>Diana ha decidido abrirle las puertas de <b>{safe}</b>.
-Su curiosidad no ha pasado... desapercibida.</i>
+Diana ha decidido abrirle las puertas de <b>{safe}</b>. Su curiosidad no ha pasado… desapercibida.
 
-Bienvenido al vestíbulo. Explore, observe, y recuerde:
-todo lo que aquí sucede es un reflejo de los deseos de Diana."""
+Bienvenido al vestíbulo. El umbral se cruza jugando: gane 💋 en minijuegos o en la tienda.
+
+En El Diván (VIP): más dados y trivia al día, racha con bonus ×2, y lo que Diana reserva a los selectos."""
+
+    @staticmethod
+    def free_game_menu_vip_tip() -> str:
+        """Tip con números bajo el menú de minijuegos para usuarios Free."""
+        return (
+            "En el vestíbulo: dados 10 · trivia 5 · tope 💋 10/día.\n"
+            "En El Diván: dados 20 · trivia 10 · tope 15/día · racha ×2.\n"
+            "Los 💋 abren “Mes a Su Lado”."
+        )
+
+    @staticmethod
+    def free_welcome_games_button() -> str:
+        return "🎮 Minijuegos"
+
+    @staticmethod
+    def free_welcome_shop_button() -> str:
+        return "🛒 Tienda"
+
+    @staticmethod
+    def free_welcome_mes_button() -> str:
+        return "👑 Mes a Su Lado"
+
+    @staticmethod
+    def store_soft_bridge_vip_cta() -> str:
+        """CTA suave Free→VIP en tienda / tip post-besitos."""
+        return (
+            "Un mes a su lado no se compra con prisa: se gana con 💋.\n"
+            "“Mes a Su Lado” (2500 💋) abre El Diván — invite de un solo uso, 7 días."
+        )
 
     # ==================== VIP ACCESS (SIMPLIFIED) ====================
 
@@ -1469,6 +1498,7 @@ El producto se agregó a su mochila. ¿Desea ver otros productos?"""
 
     @staticmethod
     def store_menu_intro(balance: int) -> str:
+        bridge = LucienVoice.store_soft_bridge_vip_cta()
         return f"""🎩 <b>Lucien:</b>
 
 Bienvenido a la Tienda de Lucien.
@@ -1476,6 +1506,8 @@ Bienvenido a la Tienda de Lucien.
 Productos seleccionados por Diana.
 
 💋 <b>Sus besitos:</b> {balance}
+
+{bridge}
 
 ¿Qué desea ver?"""
 
@@ -1683,7 +1715,8 @@ Seleccione un nivel para administrar."""
         if tier_lock_message:
             text += f"\n\n🔒 {html.escape(tier_lock_message)}"
         if balance < price:
-            text += f"\n\nNecesita más besitos para comprar este producto."
+            text += "\n\nNecesita más besitos para comprar este producto."
+            text += LucienVoice.store_earn_besitos_tips()
         return text
 
     @staticmethod
@@ -2079,7 +2112,11 @@ Estado: {status}{input_block}"""
 
     @staticmethod
     def store_earn_besitos_tips() -> str:
-        return "\n\nPuede ganar besitos con el regalo diario, reacciones, misiones o minijuegos."
+        tip = LucienVoice.store_soft_bridge_vip_cta()
+        return (
+            "\n\nPuede ganar besitos con el regalo diario, reacciones, misiones o minijuegos.\n\n"
+            f"{tip}"
+        )
 
     @staticmethod
     def store_confirm_purchase_prompt() -> str:

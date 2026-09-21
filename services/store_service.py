@@ -216,6 +216,14 @@ class StoreService:
         db = self._get_db()
         return db.query(StoreProduct).filter(StoreProduct.id == product_id).first()
 
+    def get_product_by_name(self, name: str, active_only: bool = True) -> StoreProduct | None:
+        """Lookup exacto por nombre (p.ej. Mes a Su Lado)."""
+        db = self._get_db()
+        query = db.query(StoreProduct).filter(StoreProduct.name == name)
+        if active_only:
+            query = query.filter(StoreProduct.is_active)
+        return query.first()
+
     def get_all_products(self, active_only: bool = True) -> list[StoreProduct]:
         """Obtiene todos los productos"""
         db = self._get_db()

@@ -727,6 +727,33 @@ def social_links_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def free_entry_welcome_keyboard(*, include_mes: bool = True) -> InlineKeyboardMarkup:
+    """Post-welcome Free: minijuegos + tienda (+ Mes a Su Lado) + social links."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=LucienVoice.free_welcome_games_button(),
+                callback_data="game_menu",
+            ),
+            InlineKeyboardButton(
+                text=LucienVoice.free_welcome_shop_button(),
+                callback_data="shop",
+            ),
+        ],
+    ]
+    if include_mes:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=LucienVoice.free_welcome_mes_button(),
+                    callback_data="shop_mes_a_su_lado",
+                )
+            ]
+        )
+    buttons.extend(social_links_keyboard().inline_keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def vip_access_keyboard() -> InlineKeyboardMarkup:
     """Botón Volver al menú para acceso VIP directo"""
     buttons = [[InlineKeyboardButton(text="🔙 Volver al menú", callback_data="back_to_main")]]

@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from keyboards.inline_keyboards import social_links_keyboard
+from keyboards.inline_keyboards import free_entry_welcome_keyboard
 from models.database import Base
 from models.models import Channel, ChannelType, PendingRequest, User, UserRole
 from services import scheduler_service
@@ -117,7 +117,7 @@ class TestFreeEntryFlow:
             chat_id=sample_user.telegram_id,
             text=message,
             parse_mode="HTML",
-            reply_markup=social_links_keyboard(),
+            reply_markup=free_entry_welcome_keyboard(),
         )
 
         calls = [str(call) for call in mock_bot.send_message.call_args_list]
@@ -366,16 +366,16 @@ class TestSchedulerPendingRequestsJob:
             verify_db.close()
 
             # Admin approve_all MUST perform real Telegram grant + welcome
-            assert mock_bot.approve_chat_join_request.called, (
-                "admin approve_all_pending_now must call approve_chat_join_request"
-            )
+            assert (
+                mock_bot.approve_chat_join_request.called
+            ), "admin approve_all_pending_now must call approve_chat_join_request"
             approve_call = mock_bot.approve_chat_join_request.call_args
             assert approve_call.kwargs["chat_id"] == channel_tg_id
             assert approve_call.kwargs["user_id"] == user_tg
 
-            assert mock_bot.send_message.called, (
-                "admin approve_all_pending_now must send welcome message"
-            )
+            assert (
+                mock_bot.send_message.called
+            ), "admin approve_all_pending_now must send welcome message"
             send_call = mock_bot.send_message.call_args
             assert send_call.kwargs["chat_id"] == user_tg
             assert invite_link in send_call.kwargs["text"]
@@ -786,12 +786,12 @@ class TestSchedulerPendingRequestsJob:
             ready = svc.get_ready_to_approve()
             ready_ids = [r.id for r in ready]
 
-            assert req_inact.id in ready_ids, (
-                "get_ready currently surfaces inactive channel pendings"
-            )
-            assert req_vip.id in ready_ids, (
-                "get_ready currently surfaces VIP channel pendings (no type guard)"
-            )
+            assert (
+                req_inact.id in ready_ids
+            ), "get_ready currently surfaces inactive channel pendings"
+            assert (
+                req_vip.id in ready_ids
+            ), "get_ready currently surfaces VIP channel pendings (no type guard)"
 
             # Job would skip the inactive one (sibling pilot asserts), but list includes it.
             # This pilot locks the "includes" contract so future guard in svc would make it fail
@@ -891,9 +891,7 @@ class TestSchedulerFreeWelcomeJob:
             engine.dispose()
 
     @pytest.mark.asyncio
-    async def test_send_free_welcome_job_sends_custom_approval_message(
-        self, tmp_path, mock_bot
-    ):
+    async def test_send_free_welcome_job_sends_custom_approval_message(self, tmp_path, mock_bot):
         """Custom approval_message from BD appears in ritual job send_message payload."""
         engine, TestSession = self._create_engine_and_session(tmp_path)
         db = TestSession()

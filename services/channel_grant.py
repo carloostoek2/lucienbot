@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from sqlalchemy.orm import Session
 
-from keyboards.inline_keyboards import social_links_keyboard
+from keyboards.inline_keyboards import free_entry_welcome_keyboard
 from models.models import Channel, PendingRequest
 from utils.lucien_voice import LucienVoice
 
@@ -105,7 +105,7 @@ async def _send_welcome_after_grant(bot, request: PendingRequest, channel: Chann
             chat_id=dm_chat_id,
             text=message,
             parse_mode="HTML",
-            reply_markup=social_links_keyboard(),
+            reply_markup=free_entry_welcome_keyboard(),
         )
         logger.info(
             f"channel_grant | welcome_sent | user_id={request.user_id} | "

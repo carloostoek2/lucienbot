@@ -10,7 +10,7 @@ from aiogram import Router
 from aiogram.filters import JOIN_TRANSITION, LEAVE_TRANSITION, ChatMemberUpdatedFilter
 from aiogram.types import ChatJoinRequest, ChatMemberUpdated
 
-from keyboards.inline_keyboards import social_links_keyboard
+from keyboards.inline_keyboards import free_entry_welcome_keyboard
 from services.channel_grant import build_welcome_payload
 from services.channel_service import ChannelService
 from services.scheduler_service import get_scheduler
@@ -168,7 +168,7 @@ async def handle_member_join(event: ChatMemberUpdated):
                     chat_id=user.id,
                     text=message,
                     parse_mode="HTML",
-                    reply_markup=social_links_keyboard(),
+                    reply_markup=free_entry_welcome_keyboard(),
                 )
 
                 logger.info(f"Mensaje de bienvenida enviado a user={user.id}")

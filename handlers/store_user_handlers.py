@@ -400,6 +400,28 @@ async def store_category_products(callback: CallbackQuery, callback_data: StoreC
     await callback.answer()
 
 
+MES_A_SU_LADO_PRODUCT_NAME = "Mes a Su Lado"
+
+
+@router.callback_query(F.data == "shop_mes_a_su_lado", lambda cb: not is_admin(cb.from_user.id))
+async def shop_mes_a_su_lado(callback: CallbackQuery):
+    """Deep-link Free welcome → producto VIP_GRANT Mes a Su Lado (fallback: tienda)."""
+    with get_service(StoreService) as store_service:
+        product = store_service.get_product_by_name(MES_A_SU_LADO_PRODUCT_NAME)
+        if product:
+            ctx = store_service.get_product_detail_context(product.id, callback.from_user.id)
+        else:
+            ctx = None
+    if not ctx:
+        await shop_menu(callback)
+        return
+    can_preview = ctx.get("can_preview", False)
+    text, buttons = _product_detail_card_and_buttons(ctx, include_preview=can_preview)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+
 @router.callback_query(ProductDetailCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
 async def product_detail(callback: CallbackQuery, callback_data: ProductDetailCallback):
     """Muestra detalle de un producto sin preview automatico"""
