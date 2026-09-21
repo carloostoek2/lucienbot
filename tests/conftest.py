@@ -57,6 +57,26 @@ from models.models import (
 # ==================== DATABASE FIXTURES ====================
 
 
+@pytest.fixture(scope="session", autouse=True)
+def prepare_module_db_schema():
+    """
+    Prepara el esquema del engine real de la app (``models.database.engine``).
+
+    Los tests que usan ``get_service(...)`` sin inyectar sesión trabajan contra ese
+    engine, no contra el engine en memoria del fixture ``engine``; sin tablas fallan
+    con ``no such table``. En CI esto lo cubría el paso "Prepare CI database" del
+    workflow, así que ``pytest tests/`` fallaba en local hasta prepararlo a mano.
+
+    ``create_all`` solo crea las tablas que falten (idempotente, no altera ni borra
+    nada) y se omite si el engine no es SQLite, para no tocar una base real.
+    """
+    from models.database import engine as app_engine
+
+    if app_engine.dialect.name == "sqlite":
+        Base.metadata.create_all(app_engine)
+    yield
+
+
 @pytest.fixture(scope="session")
 def engine():
     """Crea un engine de SQLite en memoria para tests."""
