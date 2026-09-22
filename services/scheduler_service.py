@@ -38,6 +38,9 @@ from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
+# Delay del mensaje ritual Free (one-shot schedule_free_welcome). Fuente unica para runtime + tests.
+FREE_RITUAL_DELAY_SECONDS = 30
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Bot lazily-created para evitar errores de pickling con APScheduler.
 # aiogram.Bot contiene SSLContext que no es serializable.
@@ -76,7 +79,7 @@ async def _run_backup_job():
 
 
 async def _send_free_welcome_job(user_id: int, channel_id: int, user_chat_id: int | None = None):
-    """Envía el mensaje ritual de entrada al canal Free tras 30s de espera.
+    """Envía el mensaje ritual de entrada al canal Free tras FREE_RITUAL_DELAY_SECONDS.
 
     Job handler de módulo para evitar errores de serialización con APScheduler.
     """
@@ -526,13 +529,13 @@ class SchedulerService:
         logger.info("Scheduler started (APScheduler + SQLAlchemyJobStore)")
 
     def schedule_free_welcome(self, user_id: int, channel_id: int, user_chat_id: int | None = None):
-        """Programa el mensaje ritual de entrada con 30s de delay.
+        """Programa el mensaje ritual de entrada con FREE_RITUAL_DELAY_SECONDS de delay.
 
-        Usa DateTrigger para un job one-shot que se ejecuta 30 segundos
+        Usa DateTrigger para un job one-shot que se ejecuta tras el delay compartido
         después de la solicitud de unión al canal Free.
         """
         job_id = f"free_welcome_{user_id}_{channel_id}"
-        run_date = datetime.now(UTC) + timedelta(seconds=30)
+        run_date = datetime.now(UTC) + timedelta(seconds=FREE_RITUAL_DELAY_SECONDS)
         self._scheduler.add_job(
             _send_free_welcome_job,
             trigger=DateTrigger(run_date=run_date),
