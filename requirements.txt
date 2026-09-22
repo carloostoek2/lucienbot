@@ -15,6 +15,10 @@ alembic==1.12.1
 # PostgreSQL (para producción en Railway)
 psycopg2-binary==2.9.9
 
+# Driver Postgres alternativo (Python puro), solo para dev donde psycopg2-binary
+# no compila (p.ej. Termux/Android). scripts/free_entry_preview.py lo usa como fallback.
+# pg8000==1.31.5
+
 # ==================== UTILIDADES ====================
 # Variables de entorno
 python-dotenv==1.0.1
