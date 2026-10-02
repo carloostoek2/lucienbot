@@ -42,7 +42,7 @@ Ninguno.
 - [x] **Atomicidad/EventBus/get_service protegidos:** emits post-commit (post-credit best effort); `EVENT_VIP_KICKED` nuevo sin mutar listeners; listener `on_vip_kicked` "MUST NOT mutate" (solo lee payload y envía best-effort). `get_service` no aplica (upsert es staticmethod sin sesión propia — sanción explícita del ítem).
 - [x] **Flag OFF = idéntico:** guard interno en handler (`if not bot_config.FEATURE_LINK_ENABLED: return`), early-return en notifier (`if not self._enabled or self._chat_id is None: return`), listener no-op. EXCEPCIÓN: medium #1 (`LINK_CHAT_ID` vacío crashea al import).
 - [x] **Contrato payload `[LINK]`:** `channel_name` desde `channel.channel_name` (Channel model lo tiene, NO `.name`); `username` con "@" agregado en UN solo punto (notifier: `f"@{raw_username}"`, los emisores pasan raw `user.username`); `ts` int unix (`int(datetime.now(UTC).timestamp())`).
-- [x] **Sin voseo:** `.env.example` y logs nuevos en español neutro / formato módulo.
+- [x] `.env.example` y logs nuevos en español neutro / formato módulo.
 - [x] **Scope del PLAN respetado:** 14 archivos, todos A1-A5. Sin scope creep en los commits del ítem.
 - [x] **Tests reflejan contratos:** `tests/unit/test_link_notifier.py` cubre flag OFF no envía, payload exacto `[LINK]`, `@` en username, swallow de errores, `event_id` fresco, fetch de bc id. 6 passed (verificado). `mock_bot` y `db_session` fixtures existen.
 
