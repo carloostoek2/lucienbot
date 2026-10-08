@@ -2,14 +2,13 @@
 Tests unitarios para BackupService (credentials fix para pg_dump).
 """
 
+import logging
 import subprocess
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-sys.path.insert(0, "/data/data/com.termux/files/home/repos/lucien_bot")
-
+from config.settings import bot_config
 from services.backup_service import BackupService
 
 
@@ -135,7 +134,71 @@ class TestBackupServiceCredentials:
         service = BackupService(backup_dir=str(tmp_path))
         expected = str(tmp_path / "lucien_20260101_120000.db")
         Path(expected).touch()
-        with patch.object(service, "_backup_sqlite", return_value=expected):
+        # shutil.which fijado: el contrato no debe depender de si la máquina
+        # tiene el cliente sqlite3 instalado.
+        with (
+            patch("services.backup_service.shutil.which", return_value="/usr/bin/sqlite3"),
+            patch.object(service, "_backup_sqlite", return_value=expected),
+        ):
             result = await service.daily_backup()
         assert result == expected
         assert Path(result).exists()
+
+
+@pytest.mark.unit
+class TestBackupServiceMissingClient:
+    """El backup se OMITE (no falla) cuando el cliente no está instalado en la imagen.
+
+    En producción los respaldos los cubre la plataforma y el dump local no sería
+    durable en un contenedor efímero: un ERROR diario por binario ausente era ruido
+    que ocultaba fallos reales.
+    """
+
+    @pytest.mark.asyncio
+    async def test_daily_backup_skips_when_pg_dump_missing(self, tmp_path, caplog):
+        """Sin pg_dump: no invoca subprocess y avisa con warning claro."""
+        service = BackupService(backup_dir=str(tmp_path))
+        with (
+            patch.object(bot_config, "DATABASE_URL", "postgresql://u:p@h:5432/db"),
+            patch("services.backup_service.shutil.which", return_value=None),
+            patch.object(subprocess, "run") as run_mock,
+            caplog.at_level(logging.WARNING),
+        ):
+            result = await service.daily_backup()
+
+        assert result is None
+        run_mock.assert_not_called()
+        assert "pg_dump" in caplog.text
+        assert "omitido" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_daily_backup_skips_when_sqlite3_missing(self, tmp_path, caplog):
+        """Sin sqlite3: no invoca subprocess y avisa con warning claro."""
+        service = BackupService(backup_dir=str(tmp_path))
+        with (
+            patch.object(bot_config, "DATABASE_URL", "sqlite:///./lucien_bot.db"),
+            patch("services.backup_service.shutil.which", return_value=None),
+            patch.object(subprocess, "run") as run_mock,
+            caplog.at_level(logging.WARNING),
+        ):
+            result = await service.daily_backup()
+
+        assert result is None
+        run_mock.assert_not_called()
+        assert "sqlite3" in caplog.text
+        assert "omitido" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_daily_backup_runs_when_client_available(self, tmp_path):
+        """Con el cliente presente el flujo no se corta: delega en el dump real."""
+        service = BackupService(backup_dir=str(tmp_path))
+        expected = str(tmp_path / "lucien_20260101_120000.sql")
+        with (
+            patch.object(bot_config, "DATABASE_URL", "postgresql://u:p@h:5432/db"),
+            patch("services.backup_service.shutil.which", return_value="/usr/bin/pg_dump"),
+            patch.object(service, "_backup_postgresql", return_value=expected) as dump_mock,
+        ):
+            result = await service.daily_backup()
+
+        assert result == expected
+        dump_mock.assert_awaited_once()

@@ -38,6 +38,29 @@ from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
+
+def _create_jobstore_engine(db_url: str):
+    """Crea el engine exclusivo del job store de APScheduler.
+
+    SQLAlchemyJobStore(url=...) construye su propio engine sin pool_pre_ping, así
+    que un restart de la base (p. ej. al aplicar cambios en el servicio Postgres)
+    deja conexiones SSL muertas en el pool y el scheduler falla al leer los jobs
+    pendientes hasta que el pool se recicla por su cuenta. Con pool_pre_ping el
+    engine descarta esas conexiones antes de entregarlas.
+
+    Es intencional que sea un engine propio y no el de models.database: el
+    job store dispone su engine en shutdown(), y compartirlo cerraría el pool
+    que usa el resto de la aplicación.
+    """
+    from sqlalchemy import create_engine
+
+    pool_kwargs = {}
+    if "postgresql" in db_url:
+        pool_kwargs = {"pool_pre_ping": True, "pool_recycle": 1800}
+    elif "sqlite" in db_url:
+        pool_kwargs = {"connect_args": {"check_same_thread": False}}
+    return create_engine(db_url, **pool_kwargs)
+
 # Delay del mensaje ritual Free (one-shot schedule_free_welcome). Fuente unica para runtime + tests.
 FREE_RITUAL_DELAY_SECONDS = 30
 
@@ -444,7 +467,9 @@ class SchedulerService:
         self.running = False
         self._scheduler = None
 
-        jobstores = {"default": SQLAlchemyJobStore(url=bot_config.DATABASE_URL)}
+        jobstores = {
+            "default": SQLAlchemyJobStore(engine=_create_jobstore_engine(bot_config.DATABASE_URL))
+        }
         executors = {"default": AsyncIOExecutor()}
         job_defaults = {
             "coalesce": True,

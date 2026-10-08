@@ -208,3 +208,51 @@ class TestNurtureSchedulerGold:
                 scheduler.remove_nurture_jobs(12345, step_ids=None)
                 # should remove the two nurture_ for user
                 assert mock_remove.call_count == 2
+
+
+@pytest.mark.unit
+class TestJobstoreEngine:
+    """El job store de APScheduler usa su propio engine: debe tolerar restarts de la BD.
+
+    Bug observado en producción: al aplicar cambios en el servicio Postgres, el
+    scheduler logueó "(psycopg2.OperationalError) SSL connection has been closed
+    unexpectedly" al leer los jobs pendientes, porque SQLAlchemyJobStore(url=...)
+    construye un engine sin pool_pre_ping y reutilizaba conexiones ya muertas.
+    """
+
+    def test_postgres_enables_pool_pre_ping_and_recycle(self):
+        from services.scheduler_service import _create_jobstore_engine
+
+        engine = _create_jobstore_engine("postgresql://u:p@h:5432/db")
+        try:
+            assert engine.pool._pre_ping is True
+            assert engine.pool._recycle == 1800
+        finally:
+            engine.dispose()
+
+    def test_sqlite_engine_is_usable_across_threads(self):
+        from services.scheduler_service import _create_jobstore_engine
+
+        engine = _create_jobstore_engine("sqlite:///./tmp_jobstore_probe.db")
+        try:
+            assert engine.url.database == "./tmp_jobstore_probe.db"
+            with engine.connect() as conn:
+                assert conn.exec_driver_sql("SELECT 1").scalar() == 1
+        finally:
+            engine.dispose()
+
+    def test_scheduler_builds_jobstore_with_its_own_engine(self):
+        from apscheduler.jobstores.memory import MemoryJobStore
+
+        mock_bot = AsyncMock()
+        mock_bot.token = "test_token"
+        # SQLAlchemyJobStore se importa dentro de __init__, así que se parchea en su
+        # módulo de origen (donde se resuelve el nombre). Se devuelve un job store real
+        # porque AsyncIOScheduler valida el tipo de la instancia.
+        with patch(
+            "apscheduler.jobstores.sqlalchemy.SQLAlchemyJobStore",
+            return_value=MemoryJobStore(),
+        ) as store_cls:
+            SchedulerService(mock_bot)
+        assert "engine" in store_cls.call_args.kwargs
+        assert "url" not in store_cls.call_args.kwargs

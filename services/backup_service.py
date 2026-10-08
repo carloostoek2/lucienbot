@@ -7,6 +7,7 @@ Soporta SQLite (desarrollo) y PostgreSQL (produccion en Railway).
 
 import logging
 import os
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,21 @@ class BackupService:
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(exist_ok=True)
 
+    def _skip_missing_client(self, binary: str) -> bool:
+        """True si el cliente requerido no está instalado (backup omitido, no fallido).
+
+        En producción los respaldos los cubre la plataforma; el dump local no
+        sería durable en un contenedor efímero. Se registra una vez por corrida
+        como warning claro en lugar de un error diario repetido.
+        """
+        if shutil.which(binary):
+            return False
+        logger.warning(
+            f"backup_service | daily_backup | omitido: {binary} no está instalado en "
+            "esta imagen -- usar los respaldos de la plataforma o instalar el cliente"
+        )
+        return True
+
     async def daily_backup(self) -> str | None:
         """
         Ejecuta un backup de la base de datos.
@@ -32,15 +48,19 @@ class BackupService:
         Guarda en backups/lucien_YYYYMMDD_HHMMSS.[sql|db]
 
         Returns:
-            Ruta del archivo de backup, o None si falla.
+            Ruta del archivo de backup, o None si falla o se omite.
         """
         db_url = bot_config.DATABASE_URL
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         try:
             if "postgresql" in db_url or "postgres" in db_url:
+                if self._skip_missing_client("pg_dump"):
+                    return None
                 return await self._backup_postgresql(db_url, timestamp)
             else:
+                if self._skip_missing_client("sqlite3"):
+                    return None
                 return await self._backup_sqlite(db_url, timestamp)
         except Exception as e:
             logger.error(f"Backup failed: {e}")
