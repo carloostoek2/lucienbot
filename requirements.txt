@@ -52,6 +52,9 @@ redis==5.0.1
 # watchdog==4.0.0
 
 # ==================== TESTING ====================
-pytest>=8.2.0
-pytest-asyncio==0.23.5
+# Par fijado: pytest-asyncio <0.24 rompe con pytest 8.4
+# (AttributeError: 'FixtureDef' object has no attribute 'unittest' en el setup
+# de cualquier fixture async). No usar rangos aquí para no reintroducirlo.
+pytest==8.4.2
+pytest-asyncio==0.24.0
 pytest-cov==5.0.0
