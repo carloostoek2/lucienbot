@@ -21,6 +21,7 @@ from keyboards.callback_data import (
 )
 from keyboards.inline_keyboards import (
     back_keyboard,
+    confirmation_keyboard,
     forward_action_keyboard,
     forward_cancel_keyboard,
     forward_confirm_keyboard,
