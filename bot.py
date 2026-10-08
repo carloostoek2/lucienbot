@@ -131,7 +131,14 @@ def create_storage():
     redis_client = None
     if redis_url:
         try:
-            redis_client = Redis.from_url(redis_url)
+            # socket_connect_timeout acota el arranque cuando Redis no responde.
+            redis_client = Redis.from_url(
+                redis_url, socket_connect_timeout=5, socket_timeout=5
+            )
+            # from_url es lazy: sin este ping un REDIS_URL inválido no se detecta
+            # aquí, el fallback documentado nunca ocurre y el fallo aparece en el
+            # primer uso del FSM, en medio de un wizard del usuario.
+            redis_client.ping()
             storage = RedisStorage(
                 redis=redis_client,
                 key_builder=DefaultKeyBuilder(with_bot_id=True),
