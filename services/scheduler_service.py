@@ -61,6 +61,7 @@ def _create_jobstore_engine(db_url: str):
         pool_kwargs = {"connect_args": {"check_same_thread": False}}
     return create_engine(db_url, **pool_kwargs)
 
+
 # Delay del mensaje ritual Free (one-shot schedule_free_welcome). Fuente unica para runtime + tests.
 FREE_RITUAL_DELAY_SECONDS = 30
 

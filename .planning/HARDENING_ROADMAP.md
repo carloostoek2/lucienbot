@@ -28,7 +28,7 @@ Living hoja de ruta for telegram-bot-hardener work. Protects 3 critical systems 
 
 - `credit_besitos(commit=False)` REACTION atomicity — **DEFER** (`decisions.md`; high blast radius)
 - Prod fix `tracking_failed` retry/repair — feature behavior, evaluate separately
-- Fix del audit e2e `test_no_hardcoded_spanish_in_services` (mover el copy del regalo diario a `LucienVoice`, reubicar la etiqueta del libro mayor de mensajes anónimos y afinar los falsos positivos de códigos internos / enums) — **toca gamificación + un test-guardia**: tratar con el protocolo completo, no como limpieza colateral
+- Fix del audit e2e `test_no_hardcoded_spanish_in_services` (mover el copy del regalo diario a `LucienVoice`, reubicar la etiqueta del libro mayor de mensajes anónimos y afinar los falsos positivos de códigos internos / enums) — **toca gamificación + un test-guardia**: tratar con el protocolo completo, no como limpieza colateral. No bloquea CI (está bajo `tests/e2e`, que CI ignora)
 
 ### Pool close phrase (verbatim)
 
@@ -158,7 +158,7 @@ Detail for each pool: [HISTORY](./HARDENING_ROADMAP_HISTORY.md) §4 + per-item `
 
 | Gap | Priority | Notes |
 |-----|----------|-------|
-| CI rojo: audit `test_lucien_voice` (`test_no_hardcoded_spanish_in_services`) | **High** | 9 hallazgos bajo GNU grep: 6 de copy en `daily_gift_service` + etiqueta de ledger anónimo + 2 falsos positivos (códigos internos / enums). Ver **Out of current pool**. Detectado 2026-10-09 |
+| Audit `test_lucien_voice` (`test_no_hardcoded_spanish_in_services`) | Med | **No bloquea CI** (CI corre con `--ignore=tests/e2e`). Rojo en local bajo GNU grep: 6 hallazgos de copy en `daily_gift_service` + etiqueta de ledger anónimo + 2 falsos positivos (códigos internos / enums). Ver **Out of current pool**. Detectado 2026-10-09 |
 | Reaction 3B extract-only (`check_and_register_reaction` ≤50) | Med | Optional week3; no tx change |
 | Residual admin long-funcs if resurfaced | Low | Most wizards closed (7–9, 34, 35) |
 | FSM restart with **real Redis** (beyond Memory sim) | Med | Pool 35 used Memory fallback |
