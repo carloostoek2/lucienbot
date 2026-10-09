@@ -369,7 +369,7 @@ _(Ajustar si este pool es independiente del anterior — documentador decide seg
 **Preguntas abiertas para el revisor:**
 
 1. ¿Confirmamos status `"rejected"` (sin migración) vs reutilizar `"cancelled"` para rechazo admin?
-2. ¿Paginación de pendientes a 8 por página es adecuada o preferís otro límite?
+2. ¿Paginación de pendientes a 8 por página es adecuada o prefieres otro límite?
 3. ¿El pool se ejecuta como un solo tirón (3 fases) o prefieres parar y revisar tras Fase 1?
 
 ---

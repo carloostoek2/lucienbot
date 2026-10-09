@@ -91,4 +91,4 @@ python3 -m pytest tests/unit/ -q --tb=line -p no:cov --override-ini="addopts="
 
 ## Ready for chain
 
-Handoff a gsd-planner con scope tight (A1-A5), las 3 correcciones R1/R2/R3 resueltas, y el test list de arriba. Contrato de seguridad: flag OFF = cero comportamiento nuevo; los 3 hooks emiten SOLO en ban real (no `deactivated_only`/`channel_inactive`/`not_found`); notifier best-effort "MUST NOT break kick flow"; handlers 1 service, funciones ≤50 líneas, logging `módulo | acción | user_id | resultado`, sin voseo en textos nuevos.
+Handoff a gsd-planner con scope tight (A1-A5), las 3 correcciones R1/R2/R3 resueltas, y el test list de arriba. Contrato de seguridad: flag OFF = cero comportamiento nuevo; los 3 hooks emiten SOLO en ban real (no `deactivated_only`/`channel_inactive`/`not_found`); notifier best-effort "MUST NOT break kick flow"; handlers 1 service, funciones ≤50 líneas, logging `módulo | acción | user_id | resultado`.
