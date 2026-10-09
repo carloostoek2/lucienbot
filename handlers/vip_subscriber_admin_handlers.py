@@ -77,16 +77,6 @@ def format_subscriber_display_name(sub) -> str:
     return f"ID:{sub.user_id}"
 
 
-def compute_days_remaining(end_date) -> int:
-    """Función pura (sin estado ni side-effects)."""
-    if end_date is None:
-        return 0
-    now = datetime.now(UTC)
-    if end_date.tzinfo is None:
-        end_date = end_date.replace(tzinfo=UTC)
-    return max(0, (end_date - now).days)
-
-
 def build_subscriber_list_text(subs: list, page: int, total_count: int) -> str:
     """Función pura (sin estado ni side-effects)."""
     if total_count == 0:

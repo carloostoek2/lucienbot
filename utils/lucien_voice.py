@@ -29,14 +29,15 @@ class LucienVoice:
     # ==================== SALUDOS ====================
 
     @staticmethod
-    def greeting(user_name: str | None = None) -> str:
-        """Saludo principal para usuarios"""
+    def greeting(user_name: str | None = None, vip_seal: str | None = None) -> str:
+        """Saludo principal para usuarios (vip_seal: bloque de suscripción opcional)."""
         name_part = f", {user_name}," if user_name else ""
+        seal_block = f"\n\n{vip_seal}" if vip_seal else ""
         return f"""🎩 <b>Lucien:</b>
 
 <i>Ah{name_part} ha llegado al vestíbulo de Diana.
 Puedo ver que su curiosidad lo ha traído hasta aquí...
-lo cual, debo admitir, no me sorprende en absoluto.</i>
+lo cual, debo admitir, no me sorprende en absoluto.</i>{seal_block}
 
 ¿En qué puedo asistirle hoy?"""
 
@@ -222,25 +223,71 @@ Si desea explorar este camino, contacte a Diana directamente.
 <i>Diana observa con interés su curiosidad...</i>"""
 
     @staticmethod
+    def vip_menu_seal(
+        tariff_name: str | None, expiration_date: datetime, days_remaining: int
+    ) -> str:
+        """Bloque de suscripción para las cabeceras de menú (principal y El Diván).
+
+        Copy directo (decidido 2026-10): tarifa, vencimiento y días restantes siempre visibles.
+        """
+        exp_date_str = expiration_date.strftime("%d/%m/%Y")
+        if tariff_name:
+            head = f"💎 Su suscripción: <b>{html.escape(str(tariff_name))}</b>"
+        else:
+            head = "💎 Su suscripción"
+        return f"{head}\nVálida hasta: {exp_date_str} · Días restantes: {days_remaining}"
+
+    @staticmethod
+    def vip_menu_seal_from_status(vip_status: dict | None) -> str | None:
+        """Sello de suscripción para cabeceras a partir del estado VIP (None si no aplica)."""
+        if not vip_status or not vip_status.get("is_vip") or vip_status.get("expiry") is None:
+            return None
+        return LucienVoice.vip_menu_seal(
+            vip_status.get("tariff_name"),
+            vip_status["expiry"],
+            vip_status.get("days_remaining", 0),
+        )
+
+    @staticmethod
     def vip_direct_access(
-        invite_link: str = None,
+        invite_link: str | None = None,
         tariff_name: str | None = None,
         expiration_date: datetime | None = None,
+        days_remaining: int | None = None,
+        is_extension: bool = False,
     ) -> str:
-        """Mensaje con enlace directo al canal VIP (Copywriter Free→VIP hook).
+        """Mensaje de acceso al canal VIP con los términos de la suscripción.
 
-        When tariff_name + expiration_date are provided, includes activation seal copy
-        (vip_activated + vip_direct_access combined). Invite link is 1-member / 7 days
-        from vip_service.create_vip_invite_link.
+        Copy directo (decidido 2026-10): nombre de la tarifa, vencimiento y días restantes.
+        is_extension=True abre distinto cuando se sumó tiempo a una suscripción vigente.
+        Invite link: 1 uso / 7 días (vip_service.create_vip_invite_link).
+        Sin términos (p. ej. reenvío genérico) degrada a la bienvenida simple.
         """
-        lines = ["🎩 <b>Lucien:</b>", "", "<i>Bienvenido a El Diván.</i>"]
-        if tariff_name and expiration_date is not None:
-            safe_tariff = html.escape(str(tariff_name))
-            exp_date_str = expiration_date.strftime("%d/%m/%Y")
-            lines.append(f"<b>{safe_tariff}</b> queda sellada hasta {exp_date_str}.")
+        lines = ["🎩 <b>Lucien:</b>", ""]
+        has_terms = (
+            bool(tariff_name) and expiration_date is not None and days_remaining is not None
+        )
+        if has_terms:
+            opening = (
+                "Su tiempo en El Diván ha sido extendido."
+                if is_extension
+                else "Bienvenido a El Diván."
+            )
+            lines.extend(
+                [
+                    f"<i>{opening}</i>",
+                    "",
+                    f"Su suscripción: <b>{html.escape(str(tariff_name))}</b>",
+                    f"Válida hasta: {expiration_date.strftime('%d/%m/%Y')}",
+                    f"Días restantes: {days_remaining}",
+                ]
+            )
+        else:
+            lines.append("<i>Bienvenido a El Diván.</i>")
         if invite_link:
             lines.append("")
-            lines.append(f"🔗 <b>Su enlace</b> (un solo uso, 7 días): {invite_link}")
+            lines.append("🔗 <b>Su enlace de activación</b> (expira en 7 días)")
+            lines.append(invite_link)
         lines.append("")
         lines.append("<i>Aquí los secretos pesan más. Diana lo espera entre los selectos.</i>")
         return "\n".join(lines)

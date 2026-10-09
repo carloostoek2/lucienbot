@@ -129,6 +129,7 @@ async def cmd_start(message: Message):
 
         # Verificar si es token de acceso VIP
         if args:
+            was_vip = vip_service.is_user_vip(user.id)
             subscription = await vip_service.redeem_token_with_missions(
                 args, user.id, bot=message.bot
             )
@@ -137,14 +138,9 @@ async def cmd_start(message: Message):
                 invite_link = await vip_service.create_vip_invite_link(
                     message.bot, user.id, allow_fallback=True
                 )
-                tariff_id = getattr(subscription, "tariff_id", None)
-                end_date = getattr(subscription, "end_date", None)
-                tariff = vip_service.get_tariff(tariff_id) if tariff_id else None
                 await message.answer(
-                    LucienVoice.vip_direct_access(
-                        invite_link,
-                        tariff_name=tariff.name if tariff else None,
-                        expiration_date=end_date,
+                    vip_service.build_vip_access_message(
+                        subscription, invite_link, is_extension=was_vip
                     ),
                     reply_markup=vip_access_keyboard(),
                     parse_mode="HTML",
@@ -176,12 +172,14 @@ async def cmd_start(message: Message):
                 LucienVoice.admin_greeting(), reply_markup=admin_menu_keyboard(), parse_mode="HTML"
             )
         else:
-            # Verificar si es VIP
-            is_vip = vip_service.is_user_vip(user.id)
+            # Verificar si es VIP y mostrar su tiempo restante en la cabecera
+            vip_status = vip_service.get_vip_menu_status(user.id)
 
             await message.answer(
-                LucienVoice.greeting(user.first_name),
-                reply_markup=main_menu_keyboard(is_vip),
+                LucienVoice.greeting(
+                    user.first_name, vip_seal=LucienVoice.vip_menu_seal_from_status(vip_status)
+                ),
+                reply_markup=main_menu_keyboard(vip_status["is_vip"]),
                 parse_mode="HTML",
             )
     finally:
@@ -234,11 +232,13 @@ async def back_to_main(callback: CallbackQuery):
     # Verificar si es VIP (solo para visitantes)
     vip_service = VIPService()
     try:
-        is_vip = vip_service.is_user_vip(user.id)
+        vip_status = vip_service.get_vip_menu_status(user.id)
 
         await callback.message.edit_text(
-            LucienVoice.greeting(user.first_name),
-            reply_markup=main_menu_keyboard(is_vip),
+            LucienVoice.greeting(
+                user.first_name, vip_seal=LucienVoice.vip_menu_seal_from_status(vip_status)
+            ),
+            reply_markup=main_menu_keyboard(vip_status["is_vip"]),
             parse_mode="HTML",
         )
     finally:

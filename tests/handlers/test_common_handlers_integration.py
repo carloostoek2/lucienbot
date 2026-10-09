@@ -5,8 +5,10 @@ Verifica interacciones reales con BD:
 - cmd_start: creación de usuarios, manejo de deep links, tokens
 - back_to_main: menú contextual según estado VIP
 """
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
 pytestmark = [pytest.mark.integration]
 
@@ -144,14 +146,22 @@ class TestBackToMainIntegration:
     ):
         """VIP user: muestra menú con opciones VIP."""
         user = make_user()
-        mock_vip_svc.return_value.is_user_vip.return_value = True
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = {
+            "is_vip": True,
+            "tariff_name": "Mes a Su Lado",
+            "expiry": datetime(2026, 10, 31, tzinfo=UTC),
+            "days_remaining": 23,
+        }
         cb = make_callback(data="back_to_main", user=user)
 
         from handlers.common_handlers import back_to_main
         await back_to_main(cb)
 
-        mock_vip_svc.return_value.is_user_vip.assert_called_once()
+        mock_vip_svc.return_value.get_vip_menu_status.assert_called_once()
         cb.message.edit_text.assert_called_once()
+        text = cb.message.edit_text.call_args[0][0]
+        assert "Su suscripción: <b>Mes a Su Lado</b>" in text
+        assert "Días restantes: 23" in text
 
     @patch("handlers.common_handlers.VIPService")
     async def test_non_vip_user_receives_standard_menu(
@@ -159,10 +169,17 @@ class TestBackToMainIntegration:
     ):
         """Non-VIP user: menú estándar."""
         user = make_user()
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = {
+            "is_vip": False,
+            "tariff_name": None,
+            "expiry": None,
+            "days_remaining": 0,
+        }
         cb = make_callback(data="back_to_main", user=user)
 
         from handlers.common_handlers import back_to_main
         await back_to_main(cb)
 
-        mock_vip_svc.return_value.is_user_vip.assert_called_once()
+        mock_vip_svc.return_value.get_vip_menu_status.assert_called_once()
+        text = cb.message.edit_text.call_args[0][0]
+        assert "Su suscripción" not in text

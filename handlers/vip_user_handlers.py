@@ -26,6 +26,7 @@ from services.anonymous_message_service import ANONYMOUS_MESSAGE_COST, Anonymous
 from services.promotion_service import PromotionService
 from services.vip_service import VIPService
 from utils.admin import is_admin
+from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -74,8 +75,8 @@ async def vip_area_menu(callback: CallbackQuery):
     # Verificar que sigue siendo VIP
     vip_service = VIPService()
     try:
-        is_vip = vip_service.is_user_vip(user.id)
-        if not is_vip:
+        vip_status = vip_service.get_vip_menu_status(user.id)
+        if not vip_status["is_vip"]:
             await callback.message.edit_text(
                 "🎩 <b>Lucien:</b>\n\n"
                 "<i>El Diván es solo para los privilegiados...</i>\n\n"
@@ -86,13 +87,20 @@ async def vip_area_menu(callback: CallbackQuery):
             await callback.answer()
             return
 
-        await callback.message.edit_text(
+        text = (
             "🎩 <b>Lucien:</b>\n\n"
             "<i>Bienvenido a El Diván, donde los privilegiados "
             "tienen acceso a experiencias únicas...</i>\n\n"
             "💎 <b>El Diván</b>\n\n"
             "Aquí encontrará funciones reservadas solo para quienes "
-            "han sido admitidos en la intimidad de Diana.",
+            "han sido admitidos en la intimidad de Diana."
+        )
+        seal = LucienVoice.vip_menu_seal_from_status(vip_status)
+        if seal:
+            text = f"{text}\n\n{seal}"
+
+        await callback.message.edit_text(
+            text,
             reply_markup=vip_area_keyboard(),
             parse_mode="HTML",
         )

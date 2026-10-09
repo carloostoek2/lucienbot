@@ -39,6 +39,20 @@ def _ensure_aware(dt):
     return dt
 
 
+def _compute_days_remaining(end_date: datetime | None, now: datetime | None = None) -> int:
+    """Días de acceso restantes (redondeo hacia arriba; 0 si ya venció).
+
+    Función pura (sin estado ni side-effects). El redondeo hacia arriba evita que
+    una suscripción de 30 días recién activada muestre "29" o que el último día
+    con acceso muestre "0".
+    """
+    if end_date is None:
+        return 0
+    reference = _ensure_aware(now) if now is not None else datetime.now(UTC)
+    remaining_seconds = (_ensure_aware(end_date) - reference).total_seconds()
+    return max(0, math.ceil(remaining_seconds / 86400))
+
+
 def _is_valid_reduce_args(days: int | None, new_end_date: datetime | None) -> bool:
     """XOR days/new_end_date with days>=1. Función pura (sin estado ni side-effects)."""
     if (days is None) == (new_end_date is None):
@@ -444,6 +458,26 @@ class VIPService:
             query = query.filter(Subscription.channel_id == channel_id)
         return query.first()
 
+    def get_vip_menu_status(self, user_id: int) -> dict:
+        """Resumen VIP para las cabeceras de menú (principal y El Diván).
+
+        Una sola consulta devuelve is_vip/tariff_name/expiry/days_remaining.
+        """
+        subscription = self.get_user_subscription(user_id)
+        if subscription is None:
+            return {
+                "is_vip": False,
+                "tariff_name": None,
+                "expiry": None,
+                "days_remaining": 0,
+            }
+        return {
+            "is_vip": True,
+            "tariff_name": self._resolve_subscription_tariff_name(subscription),
+            "expiry": subscription.end_date,
+            "days_remaining": _compute_days_remaining(subscription.end_date),
+        }
+
     def get_active_subscriptions(self, channel_id: int = None) -> list[Subscription]:
         """Obtiene todas las suscripciones activas (no expiradas)"""
         db = self._get_db()
@@ -596,6 +630,25 @@ class VIPService:
                 return vip_channel.invite_link
             return None
 
+    def _resolve_subscription_tariff_name(self, subscription: Subscription) -> str | None:
+        """Nombre de la tarifa de la suscripción (directa o vía token)."""
+        tariff = subscription.tariff
+        if tariff is None and subscription.token is not None:
+            tariff = subscription.token.tariff
+        return tariff.name if tariff else None
+
+    def build_vip_access_message(
+        self, subscription: Subscription, invite_link: str | None, is_extension: bool = False
+    ) -> str:
+        """Compone el mensaje claro de acceso VIP (activación o extensión) vía LucienVoice."""
+        return LucienVoice.vip_direct_access(
+            invite_link,
+            tariff_name=self._resolve_subscription_tariff_name(subscription),
+            expiration_date=subscription.end_date,
+            days_remaining=_compute_days_remaining(subscription.end_date),
+            is_extension=is_extension,
+        )
+
     async def grant_vip_from_tariff(
         self, bot, user_id: int, tariff_id: int
     ) -> tuple[bool, str, dict]:
@@ -604,6 +657,7 @@ class VIPService:
         if not tariff:
             return False, LucienVoice.reward_tariff_not_found(), {}
 
+        was_vip = self.is_user_vip(user_id)
         token = self.generate_token(tariff_id)
         subscription = await self.redeem_token_with_missions(token.token_code, user_id, bot=bot)
         if not subscription:
@@ -638,11 +692,7 @@ class VIPService:
         }
         return (
             True,
-            LucienVoice.vip_direct_access(
-                invite_link,
-                tariff_name=tariff.name,
-                expiration_date=subscription.end_date,
-            ),
+            self.build_vip_access_message(subscription, invite_link, is_extension=was_vip),
             metadata,
         )
 
@@ -764,6 +814,7 @@ class VIPService:
         if not tariff:
             return False, LucienVoice.reward_tariff_not_found(), {}
 
+        was_vip = self.is_user_vip(user_id)
         ok, subscription, meta = await self.grant_internal_vip_access(user_id, tariff_id)
         if not ok or subscription is None:
             err = meta.get("error")
@@ -786,27 +837,11 @@ class VIPService:
                 f"vip_service | grant_internal_vip_access_with_invite | invite_failed | "
                 f"user_id={user_id} | tariff_id={tariff_id}"
             )
-            return (
-                False,
-                LucienVoice.reward_vip_invite_failed(),
-                {
-                    **base_meta,
-                    "invite_link": None,
-                },
-            )
+            return False, LucienVoice.reward_vip_invite_failed(), {**base_meta, "invite_link": None}
 
-        return (
-            True,
-            LucienVoice.vip_direct_access(
-                invite_link,
-                tariff_name=tariff.name,
-                expiration_date=subscription.end_date,
-            ),
-            {
-                **base_meta,
-                "invite_link": invite_link,
-            },
-        )
+        base_meta["invite_link"] = invite_link
+        message = self.build_vip_access_message(subscription, invite_link, is_extension=was_vip)
+        return True, message, base_meta
 
     async def grant_internal_vip_access_for_subscription(
         self, subscription_id: int, tariff_id: int
@@ -868,12 +903,13 @@ class VIPService:
 
     async def resend_vip_invite_for_user(self, bot, user_id: int) -> tuple[bool, str, str | None]:
         """Regenera enlace VIP si el usuario tiene suscripción activa."""
-        if not self.is_user_vip(user_id):
+        subscription = self.get_user_subscription(user_id)
+        if not subscription:
             return False, LucienVoice.reward_vip_not_configured(), None
         invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
         if not invite_link:
             return False, LucienVoice.reward_vip_invite_failed(), None
-        return True, LucienVoice.vip_direct_access(invite_link), invite_link
+        return True, self.build_vip_access_message(subscription, invite_link), invite_link
 
     def reattach_active_subscription_to_channel(self, user_id: int, channel_db_id: int) -> bool:
         """Mueve la suscripción activa al canal dado. No toca fechas ni is_active."""
@@ -925,8 +961,7 @@ class VIPService:
     def _reintegration_meta_from_subscription(self, subscription: Subscription) -> dict:
         """Arma metadatos de reintegración. No muta la suscripción."""
         end_date = _ensure_aware(subscription.end_date)
-        now = datetime.now(UTC)
-        days = max(0, (end_date - now).days) if end_date else 0
+        days = _compute_days_remaining(subscription.end_date)
         expiry = end_date.strftime("%d/%m/%Y") if end_date else "—"
         return {
             "reason": "ok",
@@ -1117,7 +1152,7 @@ class VIPService:
         else:
             display_name = f"ID:{sub.user_id}"
 
-        days_remaining = max(0, (end_date - now).days)
+        days_remaining = _compute_days_remaining(end_date)
         snapshot = {
             "subscription_id": sub.id,
             "user_id": sub.user_id,

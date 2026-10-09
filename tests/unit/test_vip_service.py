@@ -848,7 +848,10 @@ class TestVIPServiceInviteLinks:
         assert metadata["vip_activated"] is True
         assert metadata["invite_link"] == "https://t.me/+grant"
         assert service.is_user_vip(sample_user.telegram_id)
-        assert "El Diván" in msg and "un solo uso" in msg
+        assert "Bienvenido a El Diván." in msg
+        assert f"Su suscripción: <b>{sample_tariff.name}</b>" in msg
+        assert "Días restantes:" in msg
+        assert "🔗 <b>Su enlace de activación</b> (expira en 7 días)" in msg
 
     @pytest.mark.asyncio
     async def test_resend_vip_invite_requires_active_subscription(
@@ -870,7 +873,9 @@ class TestVIPServiceInviteLinks:
         )
         assert ok2 is True
         assert link2 == "https://t.me/+resend"
-        assert "El Diván" in msg2 and "un solo uso" in msg2
+        assert f"Su suscripción: <b>{sample_tariff.name}</b>" in msg2
+        assert "Días restantes:" in msg2
+        assert "🔗 <b>Su enlace de activación</b> (expira en 7 días)" in msg2
 
     @pytest.mark.asyncio
     async def test_prepare_reintegration_denied_does_not_create_invite(
@@ -1724,8 +1729,6 @@ class TestGrantInternalVipAccessWithInvite:
     async def test_with_invite_creates_sub_and_returns_voice(
         self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
     ):
-        from utils.lucien_voice import LucienVoice
-
         service = VIPService(db_session)
         mock_bot.create_chat_invite_link = AsyncMock(
             return_value=MagicMock(invite_link="https://t.me/+internal")
@@ -1745,11 +1748,35 @@ class TestGrantInternalVipAccessWithInvite:
         sub = service.get_user_subscription(sample_user.telegram_id)
         assert sub is not None
         assert sub.token_id is None
-        assert msg == LucienVoice.vip_direct_access(
-            "https://t.me/+internal",
-            tariff_name=sample_tariff.name,
-            expiration_date=sub.end_date,
+        assert "Bienvenido a El Diván." in msg
+        assert f"Su suscripción: <b>{sample_tariff.name}</b>" in msg
+        assert f"Válida hasta: {sub.end_date.strftime('%d/%m/%Y')}" in msg
+        assert "Días restantes:" in msg
+        assert "🔗 <b>Su enlace de activación</b> (expira en 7 días)" in msg
+        assert msg.rstrip().endswith("Diana lo espera entre los selectos.</i>")
+
+    @pytest.mark.asyncio
+    async def test_extension_real_abre_con_copy_de_extension(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel, mock_bot
+    ):
+        """Grant interno a un VIP vigente: el mensaje real abre 'extendido', no 'Bienvenido'."""
+        service = VIPService(db_session)
+        token = service.generate_token(sample_tariff.id)
+        service.redeem_token(token.token_code, sample_user.telegram_id)
+        assert service.is_user_vip(sample_user.telegram_id)
+
+        mock_bot.create_chat_invite_link = AsyncMock(
+            return_value=MagicMock(invite_link="https://t.me/+ext")
         )
+
+        ok, msg, meta = await service.grant_internal_vip_access_with_invite(
+            mock_bot, sample_user.telegram_id, sample_tariff.id
+        )
+
+        assert ok is True
+        assert "Su tiempo en El Diván ha sido extendido." in msg
+        assert "Bienvenido a El Diván." not in msg
+        assert f"Su suscripción: <b>{sample_tariff.name}</b>" in msg
 
     @pytest.mark.asyncio
     async def test_with_invite_partial_on_invite_failure(
@@ -1768,6 +1795,93 @@ class TestGrantInternalVipAccessWithInvite:
         assert meta.get("vip_activated") is True
         assert meta.get("invite_link") is None
         assert service.is_user_vip(sample_user.telegram_id)
+
+
+@pytest.mark.unit
+class TestVipMenuStatusAndAccessMessage:
+    """Cabecera de menú con días restantes + mensaje de acceso claro (decisión 2026-10)."""
+
+    def test_compute_days_remaining_es_puro_y_redondea_arriba(self):
+        from services.vip_service import _compute_days_remaining
+
+        now = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
+        assert _compute_days_remaining(None, now) == 0
+        assert _compute_days_remaining(now, now) == 0
+        assert _compute_days_remaining(now - timedelta(hours=1), now) == 0
+        assert _compute_days_remaining(now + timedelta(days=3), now) == 3
+        assert _compute_days_remaining(now + timedelta(days=3, hours=1), now) == 4
+        assert _compute_days_remaining(now + timedelta(hours=1), now) == 1  # último día, no 0
+        # naive (SQLite) se normaliza a UTC
+        naive = (now + timedelta(days=7)).replace(tzinfo=None)
+        assert _compute_days_remaining(naive, now) == 7
+
+    def test_get_vip_menu_status_sin_suscripcion(self, db_session, sample_user):
+        service = VIPService(db_session)
+
+        status = service.get_vip_menu_status(sample_user.telegram_id)
+
+        assert status == {
+            "is_vip": False,
+            "tariff_name": None,
+            "expiry": None,
+            "days_remaining": 0,
+        }
+
+    def test_get_vip_menu_status_con_suscripcion(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        token = service.generate_token(sample_tariff.id)
+        service.redeem_token(token.token_code, sample_user.telegram_id)
+
+        status = service.get_vip_menu_status(sample_user.telegram_id)
+
+        assert status["is_vip"] is True
+        assert status["tariff_name"] == sample_tariff.name
+        assert status["expiry"] is not None
+        assert status["days_remaining"] == sample_tariff.duration_days
+
+    def test_get_vip_menu_status_ignora_fila_vencida_activa(
+        self, db_session, sample_user, sample_vip_channel
+    ):
+        """Fila con end_date pasado e is_active=True (scheduler atrasado) no debe aportar sello."""
+        from utils.lucien_voice import LucienVoice
+
+        service = VIPService(db_session)
+        db_session.add(
+            Subscription(
+                user_id=sample_user.telegram_id,
+                channel_id=sample_vip_channel.id,
+                tariff_id=None,
+                is_active=True,
+                end_date=datetime.now(UTC) - timedelta(days=1),
+            )
+        )
+        db_session.commit()
+
+        status = service.get_vip_menu_status(sample_user.telegram_id)
+
+        assert status["is_vip"] is False
+        assert status["days_remaining"] == 0
+        assert LucienVoice.vip_menu_seal_from_status(status) is None
+
+    def test_build_vip_access_message_extension_abre_distinto(
+        self, db_session, sample_user, sample_tariff, sample_vip_channel
+    ):
+        service = VIPService(db_session)
+        token = service.generate_token(sample_tariff.id)
+        subscription = service.redeem_token(token.token_code, sample_user.telegram_id)
+
+        activation = service.build_vip_access_message(subscription, "https://t.me/+a")
+        extension = service.build_vip_access_message(
+            subscription, "https://t.me/+a", is_extension=True
+        )
+
+        assert "Bienvenido a El Diván." in activation
+        assert "Su tiempo en El Diván ha sido extendido." in extension
+        for text in (activation, extension):
+            assert f"Su suscripción: <b>{sample_tariff.name}</b>" in text
+            assert "Días restantes:" in text
 
 
 # Note on extraction decision (per rules + refactor rec): scheduler's _process_expired_subscriptions

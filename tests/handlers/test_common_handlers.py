@@ -11,11 +11,22 @@ Cubre:
 """
 
 import logging
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 pytestmark = [pytest.mark.unit]
+
+
+def _vip_status(is_vip: bool = False, tariff_name=None, expiry=None, days_remaining: int = 0):
+    """Estado VIP simulado para las cabeceras de menú (shape de get_vip_menu_status)."""
+    return {
+        "is_vip": is_vip,
+        "tariff_name": tariff_name,
+        "expiry": expiry,
+        "days_remaining": days_remaining,
+    }
 
 
 class TestCmdStart:
@@ -41,7 +52,7 @@ class TestCmdStart:
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         msg = make_message(text="/start", user=user)
 
         from handlers.common_handlers import cmd_start
@@ -61,7 +72,7 @@ class TestCmdStart:
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         mock_ms = _mock_mission_catchup.return_value.__enter__.return_value
         mock_ms.deliver_pending_rewards = AsyncMock(side_effect=RuntimeError("catchup boom"))
         msg = make_message(text="/start", user=user)
@@ -82,7 +93,7 @@ class TestCmdStart:
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         mock_ms = _mock_mission_catchup.return_value.__enter__.return_value
         mock_ms.deliver_pending_rewards = AsyncMock(return_value=1)
         msg = make_message(text="/start", user=user)
@@ -103,7 +114,7 @@ class TestCmdStart:
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         msg = make_message(text="/start", user=user)
 
         from handlers.common_handlers import cmd_start
@@ -235,6 +246,49 @@ class TestCmdStart:
 
         mock_vip_svc.return_value.create_vip_invite_link.assert_awaited_once()
         msg.answer.assert_called_once()
+
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_token_valido_con_vip_previo_marca_extension(
+        self, mock_user_svc, mock_vip_svc, make_message, make_user
+    ):
+        """Token canjeado por quien YA era VIP: is_extension=True y estado previo ANTES de canjear.
+
+        Si el orden se invierte (consultar VIP después del canje), toda activación
+        se reportaría como extensión.
+        """
+        user = make_user()
+        mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
+            role=MagicMock(value="user")
+        )
+        order = []
+
+        def _is_vip(*args, **kwargs):
+            order.append("is_user_vip")
+            return True
+
+        mock_vip_svc.return_value.is_user_vip.side_effect = _is_vip
+        subscription = MagicMock(id=1)
+
+        async def _redeem(*args, **kwargs):
+            order.append("redeem")
+            return subscription
+
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(side_effect=_redeem)
+        mock_vip_svc.return_value.create_vip_invite_link = AsyncMock(
+            return_value="https://t.me/+custom"
+        )
+        mock_vip_svc.return_value.build_vip_access_message.return_value = "acceso"
+        msg = make_message(text="/start TOKEN123", user=user)
+
+        from handlers.common_handlers import cmd_start
+
+        await cmd_start(msg)
+
+        mock_vip_svc.return_value.build_vip_access_message.assert_called_once_with(
+            subscription, "https://t.me/+custom", is_extension=True
+        )
+        assert order == ["is_user_vip", "redeem"]
 
     @patch("services.vip_notifier.notify_reintegration_attempt", new_callable=AsyncMock)
     @patch("handlers.common_handlers.VIPService", autospec=True)
@@ -375,7 +429,7 @@ class TestCmdStart:
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
-        mock_vip_svc.return_value.is_user_vip.return_value = True
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(True)
         msg = make_message(text="/start", user=user)
 
         from handlers.common_handlers import cmd_start
@@ -383,6 +437,29 @@ class TestCmdStart:
         await cmd_start(msg)
 
         msg.answer.assert_called_once()
+
+    @patch("handlers.common_handlers.VIPService", autospec=True)
+    @patch("handlers.common_handlers.UserService", autospec=True)
+    async def test_vip_menu_incluye_sello_de_suscripcion(
+        self, mock_user_svc, mock_vip_svc, make_message, make_user
+    ):
+        """VIP: la cabecera del menú principal muestra tarifa, vencimiento y días restantes."""
+        user = make_user()
+        mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
+            role=MagicMock(value="user")
+        )
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(
+            True, "Mes a Su Lado", datetime(2026, 10, 31, tzinfo=UTC), 23
+        )
+        msg = make_message(text="/start", user=user)
+
+        from handlers.common_handlers import cmd_start
+
+        await cmd_start(msg)
+
+        text = msg.answer.call_args[0][0]
+        assert "Su suscripción: <b>Mes a Su Lado</b>" in text
+        assert "Válida hasta: 31/10/2026 · Días restantes: 23" in text
 
     @patch("utils.admin._is_admin_in_db", return_value=True)
     @patch("utils.admin.bot_config")
@@ -445,7 +522,7 @@ class TestCmdStart:
         mock_user_svc.return_value.get_or_create_user.return_value = MagicMock(
             role=MagicMock(value="user")
         )
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         msg = make_message(text="/start", user=user)
 
         from handlers.common_handlers import cmd_start
@@ -499,20 +576,20 @@ class TestBackToMain:
     @patch("handlers.common_handlers.VIPService", autospec=True)
     async def test_checks_vip_status(self, mock_vip_svc, make_callback):
         """Verifica VIP status y muestra menú."""
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         cb = make_callback(data="back_to_main")
 
         from handlers.common_handlers import back_to_main
 
         await back_to_main(cb)
 
-        mock_vip_svc.return_value.is_user_vip.assert_called_once()
+        mock_vip_svc.return_value.get_vip_menu_status.assert_called_once()
         cb.message.edit_text.assert_called_once()
 
     @patch("handlers.common_handlers.VIPService", autospec=True)
     async def test_callback_answer_fails_gracefully(self, mock_vip_svc, make_callback):
         """Si callback.answer() falla por expirado, no debe romper."""
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         cb = make_callback(data="back_to_main")
         cb.answer.side_effect = Exception("expired")
 
@@ -525,7 +602,7 @@ class TestBackToMain:
     @patch("handlers.common_handlers.VIPService", autospec=True)
     async def test_closes_service(self, mock_vip_svc, make_callback):
         """Servicio se cierra después de usar."""
-        mock_vip_svc.return_value.is_user_vip.return_value = False
+        mock_vip_svc.return_value.get_vip_menu_status.return_value = _vip_status(False)
         cb = make_callback(data="back_to_main")
 
         from handlers.common_handlers import back_to_main
