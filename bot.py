@@ -117,7 +117,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_storage():
+async def create_storage():
     """
     Create FSM storage based on environment.
 
@@ -133,10 +133,10 @@ def create_storage():
         try:
             # socket_connect_timeout acota el arranque cuando Redis no responde.
             redis_client = Redis.from_url(redis_url, socket_connect_timeout=5, socket_timeout=5)
-            # from_url es lazy: sin este ping un REDIS_URL inválido no se detecta
-            # aquí, el fallback documentado nunca ocurre y el fallo aparece en el
-            # primer uso del FSM, en medio de un wizard del usuario.
-            redis_client.ping()
+            # from_url es lazy y el cliente es async: sin await el ping no comprueba
+            # nada (solo emite RuntimeWarning), el fallback documentado nunca ocurre y
+            # el fallo aparece en el primer uso del FSM, en medio de un wizard.
+            await redis_client.ping()
             storage = RedisStorage(
                 redis=redis_client,
                 key_builder=DefaultKeyBuilder(with_bot_id=True),
@@ -341,7 +341,7 @@ async def main():
 
     # Crear bot y dispatcher
     bot = Bot(token=bot_config.TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    storage, redis_client = create_storage()
+    storage, redis_client = await create_storage()
     dp = Dispatcher(storage=storage)
 
     # Redis backing for middlewares (pool35 Item 1/35): shared client from create_storage when REDIS_URL; exact fallback when None (in-mem parity); registration order preserved: Error → Idemp (cb) → Throttle (cb/msg). Guarantees skip before credit on dupe CB across instances.
