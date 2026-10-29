@@ -22,10 +22,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from keyboards.inline_keyboards import social_links_keyboard
 from models.database import SessionLocal
 from services.backup_service import BackupService
-from services.event_bus import EVENT_VIP_KICKED, get_event_bus, schedule_emit
-from services.link_notifier import build_vip_kicked_payload
 from services.channel_grant import build_approval_payload, grant_pending_request
 from services.channel_service import ChannelService
+from services.event_bus import EVENT_VIP_KICKED, get_event_bus, schedule_emit
+from services.link_notifier import build_vip_kicked_payload
 from services.package_service import PackageService
 from services.streak_scheduler_bridge import activate_streak_promotion, deactivate_streak_promotion
 from services.vip_service import VIPService
@@ -506,11 +506,13 @@ class SchedulerService:
             name="Send VIP expiry reminders",
             replace_existing=True,
         )
+        # Cada 10 min (antes cada 6 h): con VIP de 1 día un sweep de 6 h daba hasta
+        # ~30 h de acceso. El sweep es idempotente y barato (solo activas vencidas),
+        # sobrevive reinicios y maneja extensiones sin jobs por suscripción.
         self._scheduler.add_job(
             _process_expired_subscriptions,
             trigger="cron",
-            hour="0,6,12,18",
-            minute=5,
+            minute="*/10",
             id="expire_subscriptions",
             name="Process expired VIP subscriptions",
             replace_existing=True,

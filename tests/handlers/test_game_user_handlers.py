@@ -279,31 +279,56 @@ class TestStreakProtection:
 
     @patch("handlers.game_user_handlers.get_service")
     async def test_handle_streak_retire(self, mock_get_service, make_callback):
+        from keyboards.callback_data import StreakRetireCallback
+
         mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
-        session = MagicMock()
-        session.codes_delivered = '["CODE1"]'
-        mock_svc.get_active_session.return_value = session
+        mock_svc.retire_with_payout.return_value = {"status": "paid", "besitos": 15, "codes": 1}
         mock_get_service.return_value.__enter__.return_value = mock_svc
-        cb = make_callback(data="streak_retire:1")
-        # handler takes only callback (StreakRetireCallback used by router filter only)
+        cb = make_callback(data="streak_retire:abc")
 
         from handlers.game_user_handlers import handle_streak_retire
 
-        await handle_streak_retire(cb)
+        await handle_streak_retire(cb, StreakRetireCallback(session_id="abc"))
 
-        cb.message.edit_text.assert_called_once()
+        mock_svc.retire_with_payout.assert_called_once_with(cb.from_user.id, "abc")
+        text = cb.message.edit_text.call_args.args[0]
+        assert "Sabia decisión. 15 💋 ya están en su cuenta." in text
         cb.answer.assert_called_once()
 
     @patch("handlers.game_user_handlers.get_service")
-    async def test_handle_streak_continue(self, mock_get_service, make_callback):
+    async def test_handle_streak_retire_unavailable_alerts(self, mock_get_service, make_callback):
+        from keyboards.callback_data import StreakRetireCallback
+
         mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
+        mock_svc.retire_with_payout.return_value = {
+            "status": "unavailable",
+            "besitos": 0,
+            "codes": 0,
+        }
         mock_get_service.return_value.__enter__.return_value = mock_svc
-        cb = make_callback(data="streak_continue:1")
+        cb = make_callback(data="streak_retire:abc")
+
+        from handlers.game_user_handlers import handle_streak_retire
+
+        await handle_streak_retire(cb, StreakRetireCallback(session_id="abc"))
+
+        cb.message.edit_text.assert_not_called()
+        assert cb.answer.call_args.kwargs.get("show_alert") is True
+
+    @patch("handlers.game_user_handlers.get_service")
+    async def test_handle_streak_continue(self, mock_get_service, make_callback):
+        from keyboards.callback_data import StreakContinueCallback
+
+        mock_svc = create_autospec(StreakPromotionService, spec_set=True, instance=True)
+        mock_svc.set_risk_mode.return_value = True
+        mock_get_service.return_value.__enter__.return_value = mock_svc
+        cb = make_callback(data="streak_continue:abc")
 
         from handlers.game_user_handlers import handle_streak_continue
 
-        await handle_streak_continue(cb)
+        await handle_streak_continue(cb, StreakContinueCallback(session_id="abc"))
 
+        mock_svc.set_risk_mode.assert_called_once_with(cb.from_user.id, "abc")
         cb.message.edit_text.assert_called_once()
         cb.answer.assert_called_once()
 

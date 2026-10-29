@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from config.economy_limits import clamp, validate
 from models.database import SessionLocal
 from models.models import TriviaConfig
 
@@ -28,6 +29,9 @@ DEFAULTS = {
     "trivia_besitos_daily_vip": 15,
     "trivia_besitos_weekly_free": 30,
     "trivia_besitos_weekly_vip": 40,
+    # Racha de trivia en modo riesgo (pago en besitos)
+    "streak_retire_besitos": 15,
+    "streak_complete_besitos": 30,
 }
 
 
@@ -58,18 +62,16 @@ class TriviaConfigService:
             db.commit()
             db.refresh(config)
             logger.info("TriviaConfig creada con valores por defecto")
+        # Recorte en lectura (topes de config/economy_limits.py): un valor fuera de
+        # rango escrito por script/SQL nunca llega al juego.
         return {
-            "dice_limit_free": config.dice_limit_free,
-            "dice_limit_vip": config.dice_limit_vip,
-            "trivia_limit_free": config.trivia_limit_free,
-            "trivia_limit_vip": config.trivia_limit_vip,
-            "trivia_vip_limit": config.trivia_vip_limit,
-            "trivia_simple_limit_free": config.trivia_simple_limit_free,
-            "trivia_simple_limit_vip": config.trivia_simple_limit_vip,
-            "trivia_besitos_daily_free": config.trivia_besitos_daily_free,
-            "trivia_besitos_daily_vip": config.trivia_besitos_daily_vip,
-            "trivia_besitos_weekly_free": config.trivia_besitos_weekly_free,
-            "trivia_besitos_weekly_vip": config.trivia_besitos_weekly_vip,
+            key: clamp(
+                key,
+                getattr(config, key, None)
+                if getattr(config, key, None) is not None
+                else DEFAULTS[key],
+            )
+            for key in DEFAULTS
         }
 
     def update_config(self, admin_id: int, **kwargs) -> dict:
@@ -82,7 +84,12 @@ class TriviaConfigService:
 
         valid_fields = set(DEFAULTS.keys())
         for key, value in kwargs.items():
-            if key in valid_fields and isinstance(value, int) and value >= 0:
+            if key not in valid_fields:
+                continue
+            # Antes ignoraba en silencio los inválidos y el admin creía que guardó.
+            validate(key, value)  # EconomyLimitError con el rango permitido
+        for key, value in kwargs.items():
+            if key in valid_fields:
                 setattr(config, key, value)
 
         config.updated_by = admin_id

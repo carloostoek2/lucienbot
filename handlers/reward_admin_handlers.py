@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from config.economy_limits import EconomyLimitError, range_text, validate
 from keyboards.callback_data import (
     RewardAdminDetailCallback,
     RewardDeleteCallback,
@@ -447,8 +448,13 @@ async def process_besito_amount(message: Message, state: FSMContext):
     """Procesa cantidad de besitos"""
     try:
         amount = int(message.text.strip())
-        if amount < 1:
-            raise ValueError("Debe ser mayor a 0")
+        validate("mission_reward_besitos", amount)
+    except EconomyLimitError:
+        await message.answer(
+            "🎩 Lucien:\n\nEse monto excede lo que Diana permite. "
+            f"Indique un valor entre {range_text('mission_reward_besitos')} besitos."
+        )
+        return
     except ValueError:
         await message.answer("Por favor indica un numero valido mayor a 0.")
         return

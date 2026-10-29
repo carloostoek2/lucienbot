@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from config.economy_limits import clamp, validate
 from keyboards.inline_keyboards import vip_access_keyboard
 from models.database import SessionLocal
 from models.models import (
@@ -95,10 +96,15 @@ def _is_fresh_delivery_claim(
     return _delivery_claim_age_seconds(delivered_at, now) < _DELIVERY_CLAIM_TTL_SECONDS
 
 
+def effective_reward_besitos(reward: Reward) -> int:
+    """Monto de besitos que realmente se acredita (recortado a los topes)."""
+    return clamp("mission_reward_besitos", reward.besito_amount)
+
+
 def get_reward_emoji(reward: Reward) -> tuple[str, str]:
     """Retorna (emoji, description) según tipo de recompensa. Función pura (sin estado ni side-effects)."""
     if reward.reward_type == RewardType.BESITOS:
-        return "💋", LucienVoice.reward_emoji_besitos(reward.besito_amount)
+        return "💋", LucienVoice.reward_emoji_besitos(effective_reward_besitos(reward))
     elif reward.reward_type == RewardType.PACKAGE:
         return "📦", LucienVoice.reward_emoji_package(reward.name)
     elif reward.reward_type == RewardType.VIP_ACCESS:
@@ -125,7 +131,12 @@ class RewardService:
     def create_reward_besitos(
         self, name: str, description: str, besito_amount: int, created_by: int = None
     ) -> Reward:
-        """Crea una recompensa de tipo besitos"""
+        """Crea una recompensa de tipo besitos.
+
+        Raises:
+            EconomyLimitError: monto fuera de ``LIMITS["mission_reward_besitos"]``.
+        """
+        validate("mission_reward_besitos", besito_amount)
         reward = Reward(
             name=name,
             description=description,
@@ -280,6 +291,8 @@ class RewardService:
         reward = self.get_reward(reward_id)
         if not reward:
             return False
+        if kwargs.get("besito_amount") is not None:
+            validate("mission_reward_besitos", kwargs["besito_amount"])
 
         allowed_fields = [
             "name",
@@ -417,14 +430,15 @@ class RewardService:
     ) -> tuple[bool, str]:
         """Entrega recompensa de besitos (local BesitoService on-demand with shared db for atomicity)."""
         besito_service = BesitoService(db=self.db)
+        amount = effective_reward_besitos(reward)
         if self._has_mission_besitos_credit(user_id, reward.id, mission_id=mission_id):
             balance = besito_service.get_balance(user_id)
-            return True, LucienVoice.reward_besitos_received(reward.besito_amount, balance)
+            return True, LucienVoice.reward_besitos_received(amount, balance)
 
         ref_id = self._besitos_credit_reference_id(user_id, reward.id, mission_id)
         success = besito_service.credit_besitos(
             user_id=user_id,
-            amount=reward.besito_amount,
+            amount=amount,
             source=TransactionSource.MISSION,
             description=f"{MISSION_REWARD_CREDIT_PREFIX}{reward.name}",
             reference_id=ref_id,
@@ -441,7 +455,7 @@ class RewardService:
             success = True
         if success:
             balance = besito_service.get_balance(user_id)
-            return True, LucienVoice.reward_besitos_received(reward.besito_amount, balance)
+            return True, LucienVoice.reward_besitos_received(amount, balance)
         return False, LucienVoice.reward_besitos_failed()
 
     async def _deliver_package(

@@ -39,6 +39,47 @@ def _ensure_aware(dt):
     return dt
 
 
+# Un grant de esta duración o menos es "VIP corto": el enlace vence con el acceso,
+# copy "Entre hoy…" y sin recordatorio de 24 h.
+SHORT_VIP_MAX_DAYS = 3
+# Margen mínimo para crear un enlace: si el acceso vence antes, no se crea.
+INVITE_MIN_REMAINING = timedelta(minutes=5)
+
+
+def _is_one_day_subscription(subscription: Subscription) -> bool:
+    """True si es un grant de 1 día sin más tiempo acumulado.
+
+    Requiere ambas cosas: la tarifa del último grant dura ≤1 día y el acceso total
+    (inicio→fin) dura menos de 2 días. Así un VIP de 30 días que suma 1 día sí recibe
+    el aviso de vencimiento.
+    """
+    tariff = subscription.tariff
+    if tariff is None or tariff.duration_days is None or tariff.duration_days > 1:
+        return False
+    start = _ensure_aware(subscription.start_date) if subscription.start_date else None
+    end = _ensure_aware(subscription.end_date) if subscription.end_date else None
+    if start is None or end is None:
+        return False
+    return end - start < timedelta(days=2)
+
+
+def vip_activated_payload(
+    user_id: int, subscription_id: int, tariff, *, is_extension: bool
+) -> dict:
+    """Payload de EVENT_VIP_ACTIVATED con la duración del grant (los 5 emisores).
+
+    ``granted_days`` es la duración de ESTE grant (no del total acumulado): nurture
+    solo enrola con grants de 7 días o más.
+    """
+    return {
+        "user_id": user_id,
+        "subscription_id": subscription_id,
+        "tariff_id": getattr(tariff, "id", None),
+        "granted_days": getattr(tariff, "duration_days", None),
+        "is_extension": is_extension,
+    }
+
+
 def _compute_days_remaining(end_date: datetime | None, now: datetime | None = None) -> int:
     """Días de acceso restantes (redondeo hacia arriba; 0 si ya venció).
 
@@ -340,7 +381,9 @@ class VIPService:
             schedule_emit(
                 get_event_bus().emit(
                     EVENT_VIP_ACTIVATED,
-                    {"user_id": user_id, "subscription_id": existing_subscription.id},
+                    vip_activated_payload(
+                        user_id, existing_subscription.id, tariff, is_extension=True
+                    ),
                 )
             )
             return existing_subscription
@@ -392,7 +435,8 @@ class VIPService:
         # Emit post-commit for nurture / content lifecycle (best effort via schedule_emit)
         schedule_emit(
             get_event_bus().emit(
-                EVENT_VIP_ACTIVATED, {"user_id": user_id, "subscription_id": subscription.id}
+                EVENT_VIP_ACTIVATED,
+                vip_activated_payload(user_id, subscription.id, tariff, is_extension=False),
             )
         )
 
@@ -503,7 +547,7 @@ class VIPService:
         now = datetime.now(UTC).replace(tzinfo=None)
         threshold = now + timedelta(hours=hours)
 
-        return (
+        rows = (
             db.query(Subscription)
             .filter(
                 Subscription.is_active,
@@ -513,6 +557,8 @@ class VIPService:
             )
             .all()
         )
+        # Grants de ≤1 día: el aviso "vence mañana" llegaría casi al recibir el acceso.
+        return [sub for sub in rows if not _is_one_day_subscription(sub)]
 
     def get_expired_subscriptions(self) -> list[Subscription]:
         """Obtiene suscripciones activas que ya vencieron"""
@@ -592,7 +638,10 @@ class VIPService:
             )
             return False
         try:
-            await bot.unban_chat_member(chat_id=channel.channel_id, user_id=user_id)
+            # only_if_banned=True: sin esto Telegram EXPULSA a un miembro actual.
+            await bot.unban_chat_member(
+                chat_id=channel.channel_id, user_id=user_id, only_if_banned=True
+            )
             logger.info(
                 f"vip_service | unban_user_from_vip_channel | user_id={user_id} | "
                 f"channel_id={channel.channel_id} | result=ok"
@@ -605,12 +654,51 @@ class VIPService:
             )
             return False
 
+    def invite_link_expiry(self, user_id: int, access_end: datetime | None = None):
+        """Vencimiento del enlace: ``min(now + 7 días, fin del acceso)``.
+
+        Si no se pasa ``access_end`` se usa la suscripción activa del usuario.
+        Retorna ``(expire_date, is_short)``; ``expire_date=None`` si el acceso ya
+        vence (o vence en menos de ``INVITE_MIN_REMAINING``): no hay que crear enlace.
+        """
+        now = datetime.now(UTC)
+        default_expiry = now + timedelta(days=self.INVITE_LINK_EXPIRATION_DAYS)
+        if access_end is None:
+            subscription = self.get_user_subscription(user_id)
+            access_end = subscription.end_date if subscription else None
+        access_end = _ensure_aware(access_end) if access_end is not None else None
+        if access_end is None:
+            return default_expiry, False
+        if access_end <= now + INVITE_MIN_REMAINING:
+            return None, True
+        if access_end < default_expiry:
+            return access_end, True
+        return default_expiry, False
+
     async def create_vip_invite_link(
-        self, bot, user_id: int, *, allow_fallback: bool = False
+        self,
+        bot,
+        user_id: int,
+        *,
+        allow_fallback: bool = False,
+        access_end: datetime | None = None,
     ) -> str | None:
-        """Genera enlace de invitación de un solo uso al canal VIP."""
+        """Genera enlace de invitación de un solo uso al canal VIP.
+
+        ``member_limit=1`` y ``expire_date = min(now+7d, fin del acceso)``: en un VIP
+        de 1 o 3 días el enlace vence junto con el acceso. Con el acceso ya vencido no
+        llama a la API (Telegram rechaza ``expire_date`` en el pasado) y retorna None.
+        El fallback al enlace permanente del canal solo aplica a accesos de 7+ días.
+        """
         vip_channel = self.get_vip_channel()
         if not vip_channel:
+            return None
+        expire_date, is_short = self.invite_link_expiry(user_id, access_end)
+        if expire_date is None:
+            logger.warning(
+                f"vip_service | create_vip_invite_link | user_id={user_id} | "
+                f"result=access_already_expired"
+            )
             return None
         try:
             invite_link_obj = await bot.create_chat_invite_link(
@@ -618,7 +706,7 @@ class VIPService:
                 name=f"VIP {user_id}",
                 creates_join_request=False,
                 member_limit=1,
-                expire_date=datetime.now(UTC) + timedelta(days=self.INVITE_LINK_EXPIRATION_DAYS),
+                expire_date=expire_date,
             )
             return invite_link_obj.invite_link
         except Exception as exc:
@@ -626,7 +714,7 @@ class VIPService:
                 f"vip_service | create_vip_invite_link | user_id={user_id} | "
                 f"channel_id={vip_channel.channel_id} | error={exc}"
             )
-            if allow_fallback:
+            if allow_fallback and not is_short:
                 return vip_channel.invite_link
             return None
 
@@ -638,15 +726,29 @@ class VIPService:
         return tariff.name if tariff else None
 
     def build_vip_access_message(
-        self, subscription: Subscription, invite_link: str | None, is_extension: bool = False
+        self,
+        subscription: Subscription,
+        invite_link: str | None,
+        is_extension: bool = False,
+        granted_days: int | None = None,
     ) -> str:
-        """Compone el mensaje claro de acceso VIP (activación o extensión) vía LucienVoice."""
+        """Compone el mensaje claro de acceso VIP (activación o extensión) vía LucienVoice.
+
+        ``granted_days`` (duración de este grant) elige el copy: VIP corto (≤3 días,
+        no extensión) usa la variante "Entre hoy…". El texto del enlace refleja su
+        vencimiento real (7 días o junto con el acceso).
+        """
+        _expire, link_is_short = self.invite_link_expiry(
+            subscription.user_id, subscription.end_date
+        )
         return LucienVoice.vip_direct_access(
             invite_link,
             tariff_name=self._resolve_subscription_tariff_name(subscription),
             expiration_date=subscription.end_date,
             days_remaining=_compute_days_remaining(subscription.end_date),
             is_extension=is_extension,
+            granted_days=granted_days,
+            link_expires_with_access=link_is_short,
         )
 
     async def grant_vip_from_tariff(
@@ -667,7 +769,9 @@ class VIPService:
             )
             return False, LucienVoice.reward_vip_activation_failed(), {}
 
-        invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
+        invite_link = await self.create_vip_invite_link(
+            bot, user_id, allow_fallback=False, access_end=subscription.end_date
+        )
         if not invite_link:
             logger.error(
                 f"vip_service | grant_vip_from_tariff | invite_failed | "
@@ -692,7 +796,12 @@ class VIPService:
         }
         return (
             True,
-            self.build_vip_access_message(subscription, invite_link, is_extension=was_vip),
+            self.build_vip_access_message(
+                subscription,
+                invite_link,
+                is_extension=was_vip,
+                granted_days=tariff.duration_days,
+            ),
             metadata,
         )
 
@@ -750,7 +859,9 @@ class VIPService:
             schedule_emit(
                 get_event_bus().emit(
                     EVENT_VIP_ACTIVATED,
-                    {"user_id": user_id, "subscription_id": existing_subscription.id},
+                    vip_activated_payload(
+                        user_id, existing_subscription.id, tariff, is_extension=True
+                    ),
                 )
             )
             return (
@@ -797,7 +908,8 @@ class VIPService:
         )
         schedule_emit(
             get_event_bus().emit(
-                EVENT_VIP_ACTIVATED, {"user_id": user_id, "subscription_id": subscription.id}
+                EVENT_VIP_ACTIVATED,
+                vip_activated_payload(user_id, subscription.id, tariff, is_extension=False),
             )
         )
         return True, subscription, {"subscription_id": subscription.id, "tariff_id": tariff_id}
@@ -824,7 +936,12 @@ class VIPService:
                 return False, LucienVoice.reward_tariff_not_found(), {}
             return False, LucienVoice.reward_vip_activation_failed(), {}
 
-        invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
+        if not was_vip:
+            # Los ex-VIP quedan baneados al expirar; sin unban el enlace no les sirve.
+            await self.unban_user_from_vip_channel(bot, user_id, subscription)
+        invite_link = await self.create_vip_invite_link(
+            bot, user_id, allow_fallback=False, access_end=subscription.end_date
+        )
         base_meta = {
             "vip_activated": True,
             "subscription_id": subscription.id,
@@ -840,7 +957,9 @@ class VIPService:
             return False, LucienVoice.reward_vip_invite_failed(), {**base_meta, "invite_link": None}
 
         base_meta["invite_link"] = invite_link
-        message = self.build_vip_access_message(subscription, invite_link, is_extension=was_vip)
+        message = self.build_vip_access_message(
+            subscription, invite_link, is_extension=was_vip, granted_days=tariff.duration_days
+        )
         return True, message, base_meta
 
     async def grant_internal_vip_access_for_subscription(
@@ -889,7 +1008,9 @@ class VIPService:
         schedule_emit(
             get_event_bus().emit(
                 EVENT_VIP_ACTIVATED,
-                {"user_id": subscription.user_id, "subscription_id": subscription.id},
+                vip_activated_payload(
+                    subscription.user_id, subscription.id, tariff, is_extension=True
+                ),
             )
         )
         return (
@@ -906,7 +1027,9 @@ class VIPService:
         subscription = self.get_user_subscription(user_id)
         if not subscription:
             return False, LucienVoice.reward_vip_not_configured(), None
-        invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
+        invite_link = await self.create_vip_invite_link(
+            bot, user_id, allow_fallback=False, access_end=subscription.end_date
+        )
         if not invite_link:
             return False, LucienVoice.reward_vip_invite_failed(), None
         return True, self.build_vip_access_message(subscription, invite_link), invite_link
@@ -984,7 +1107,9 @@ class VIPService:
         if not vip_channel:
             return False, LucienVoice.reward_vip_invite_failed(), {"reason": "no_channel"}
         self.reattach_active_subscription_to_channel(user_id, vip_channel.id)
-        invite_link = await self.create_vip_invite_link(bot, user_id, allow_fallback=False)
+        invite_link = await self.create_vip_invite_link(
+            bot, user_id, allow_fallback=False, access_end=subscription.end_date
+        )
         if not invite_link:
             logger.error(
                 f"vip_service | prepare_vip_reintegration_invite | user_id={user_id} | "

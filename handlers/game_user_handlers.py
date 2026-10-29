@@ -4,7 +4,6 @@ Handlers de Minijuegos - Lucien Bot
 Maneja los flujos de usuario para dados y trivia.
 """
 
-import json
 import logging
 
 from aiogram import Router
@@ -181,9 +180,22 @@ async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCall
             code = session_state["code"]
             await callback.message.edit_text(
                 LucienVoice.streak_risk_mode_offer(
-                    code["code"], code["discount_pct"], code["promotion_name"]
+                    code["code"],
+                    code["discount_pct"],
+                    code["promotion_name"],
+                    session_state["besitos_retiro"],
+                    session_state["besitos_completa"],
                 ),
-                reply_markup=risk_mode_keyboard(),
+                reply_markup=risk_mode_keyboard(
+                    session_state["session_id"], session_state["besitos_retiro"]
+                ),
+            )
+            await callback.answer()
+            return
+        elif session_state["action"] == "completed":
+            await callback.message.edit_text(
+                result["message"] + "\n\n" + LucienVoice.streak_completed(session_state["besitos"]),
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
@@ -196,8 +208,13 @@ async def trivia_answer(callback: CallbackQuery, callback_data: TriviaAnswerCall
             return
         elif session_state["action"] == "cancelled":
             code_count = session_state.get("codes_cancelled", 0)
+            closing = (
+                LucienVoice.streak_risk_failed()
+                if session_state.get("was_risk_mode")
+                else LucienVoice.streak_codes_cancelled(code_count)
+            )
             await callback.message.edit_text(
-                result["message"] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
+                result["message"] + "\n\n" + closing,
                 reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
@@ -283,9 +300,22 @@ async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAns
             code = session_state["code"]
             await callback.message.edit_text(
                 LucienVoice.streak_risk_mode_offer(
-                    code["code"], code["discount_pct"], code["promotion_name"]
+                    code["code"],
+                    code["discount_pct"],
+                    code["promotion_name"],
+                    session_state["besitos_retiro"],
+                    session_state["besitos_completa"],
                 ),
-                reply_markup=risk_mode_keyboard(),
+                reply_markup=risk_mode_keyboard(
+                    session_state["session_id"], session_state["besitos_retiro"]
+                ),
+            )
+            await callback.answer()
+            return
+        elif session_state["action"] == "completed":
+            await callback.message.edit_text(
+                result["message"] + "\n\n" + LucienVoice.streak_completed(session_state["besitos"]),
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
@@ -298,8 +328,13 @@ async def trivia_vip_answer(callback: CallbackQuery, callback_data: TriviaVipAns
             return
         elif session_state["action"] == "cancelled":
             code_count = session_state.get("codes_cancelled", 0)
+            closing = (
+                LucienVoice.streak_risk_failed()
+                if session_state.get("was_risk_mode")
+                else LucienVoice.streak_codes_cancelled(code_count)
+            )
             await callback.message.edit_text(
-                result["message"] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
+                result["message"] + "\n\n" + closing,
                 reply_markup=trivia_vip_result_keyboard(),
             )
             await callback.answer()
@@ -423,9 +458,22 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
             code = session_state["code"]
             await callback.message.edit_text(
                 LucienVoice.streak_risk_mode_offer(
-                    code["code"], code["discount_pct"], code["promotion_name"]
+                    code["code"],
+                    code["discount_pct"],
+                    code["promotion_name"],
+                    session_state["besitos_retiro"],
+                    session_state["besitos_completa"],
                 ),
-                reply_markup=risk_mode_keyboard(),
+                reply_markup=risk_mode_keyboard(
+                    session_state["session_id"], session_state["besitos_retiro"]
+                ),
+            )
+            await callback.answer()
+            return
+        elif session_state["action"] == "completed":
+            await callback.message.edit_text(
+                result["message"] + "\n\n" + LucienVoice.streak_completed(session_state["besitos"]),
+                reply_markup=game_menu_keyboard(),
             )
             await callback.answer()
             return
@@ -438,8 +486,13 @@ async def trivia_simple_answer(callback: CallbackQuery, callback_data: TriviaSim
             return
         elif session_state["action"] == "cancelled":
             code_count = session_state.get("codes_cancelled", 0)
+            closing = (
+                LucienVoice.streak_risk_failed()
+                if session_state.get("was_risk_mode")
+                else LucienVoice.streak_codes_cancelled(code_count)
+            )
             await callback.message.edit_text(
-                result["message"] + "\n\n" + LucienVoice.streak_codes_cancelled(code_count),
+                result["message"] + "\n\n" + closing,
                 reply_markup=trivia_simple_result_keyboard(),
             )
             await callback.answer()
@@ -515,33 +568,38 @@ async def _redirect_to_trivia(callback: CallbackQuery, game_type: str):
 
 
 @router.callback_query(StreakRetireCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
-async def handle_streak_retire(callback: CallbackQuery):
-    """Retirarse del modo arriesgo conservando codigos."""
+async def handle_streak_retire(callback: CallbackQuery, callback_data: StreakRetireCallback):
+    """Retirarse del modo arriesgo: paga el premio de retiro una vez por sesión."""
     user_id = callback.from_user.id
 
     with get_service(StreakPromotionService) as promo_svc:
-        session = promo_svc.get_active_session(user_id)
-        code_count = 0
-        if session:
-            codes = json.loads(session.codes_delivered or "[]")
-            code_count = len(codes)
-            promo_svc.close_session(user_id, retire=True)
+        outcome = promo_svc.retire_with_payout(user_id, callback_data.session_id)
 
-    await callback.message.edit_text(
-        LucienVoice.streak_retire_confirmed(code_count), reply_markup=game_menu_keyboard()
+    if outcome["status"] == "unavailable":
+        await callback.answer(LucienVoice.streak_retire_unavailable(), show_alert=True)
+    else:
+        await callback.message.edit_text(
+            LucienVoice.streak_retire_confirmed(outcome["besitos"], outcome["codes"]),
+            reply_markup=game_menu_keyboard(),
+        )
+        await callback.answer()
+    logger.info(
+        f"game_user_handlers | handle_streak_retire | user_id={user_id} | "
+        f"status={outcome['status']} | besitos={outcome['besitos']} | codes={outcome['codes']}"
     )
-    await callback.answer()
-    logger.info(f"game_user_handlers - handle_streak_retire - {user_id} - codes:{code_count}")
 
 
 @router.callback_query(StreakContinueCallback.filter(), lambda cb: not is_admin(cb.from_user.id))
-async def handle_streak_continue(callback: CallbackQuery):
+async def handle_streak_continue(callback: CallbackQuery, callback_data: StreakContinueCallback):
     """Continuar en modo arriesgo."""
     user_id = callback.from_user.id
 
     with get_service(StreakPromotionService) as promo_svc:
-        promo_svc.set_risk_mode(user_id)
+        activated = promo_svc.set_risk_mode(user_id, callback_data.session_id)
 
+    if not activated:
+        await callback.answer(LucienVoice.streak_retire_unavailable(), show_alert=True)
+        return
     await callback.message.edit_text(
         LucienVoice.streak_continue_confirmed(), reply_markup=game_menu_keyboard()
     )

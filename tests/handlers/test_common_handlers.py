@@ -286,7 +286,10 @@ class TestCmdStart:
         await cmd_start(msg)
 
         mock_vip_svc.return_value.build_vip_access_message.assert_called_once_with(
-            subscription, "https://t.me/+custom", is_extension=True
+            subscription,
+            "https://t.me/+custom",
+            is_extension=True,
+            granted_days=subscription.tariff.duration_days,
         )
         assert order == ["is_user_vip", "redeem"]
 
@@ -694,7 +697,7 @@ class TestVIPInviteLinkGenerationFase7:
 
         mock_vip = MagicMock()
         # Explicit truthy to guarantee if subscription: and if vip_channel: are taken so handler executes the create with member_limit=1
-        mock_vip.redeem_token_with_missions = AsyncMock(return_value=True)
+        mock_vip.redeem_token_with_missions = AsyncMock(return_value=MagicMock(id=1))
         mock_vip.create_vip_invite_link = AsyncMock(return_value="https://t.me/+DYNONELIMIT")
         mock_vip_cls.return_value = mock_vip
 
@@ -734,9 +737,7 @@ class TestVIPInviteLinkGenerationFase7:
         """Error path: create raises -> fallback to static channel invite_link used in answer."""
         mock_vip = MagicMock()
         mock_vip.redeem_token_with_missions = AsyncMock(return_value=MagicMock())
-        mock_vip.create_vip_invite_link = AsyncMock(
-            return_value="https://t.me/+STATICFALLBACK"
-        )
+        mock_vip.create_vip_invite_link = AsyncMock(return_value="https://t.me/+STATICFALLBACK")
         mock_vip_cls.return_value = mock_vip
 
         with patch("handlers.common_handlers.UserService"):

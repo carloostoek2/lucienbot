@@ -4,6 +4,7 @@ Handlers de Configuracion de Trivias - Lucien Bot
 Menu principal de Trivias y configuracion de limites de intentos.
 """
 
+import html
 import logging
 
 from aiogram import F, Router
@@ -11,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from config.economy_limits import EconomyLimitError, range_text
 from keyboards.callback_data import TriviaConfigFieldCallback
 from keyboards.inline_keyboards import back_keyboard, cancel_keyboard, trivia_admin_keyboard
 from services import TriviaConfigService, get_service
@@ -85,6 +87,18 @@ def _config_keyboard(config: dict) -> InlineKeyboardMarkup:
                 callback_data=TriviaConfigFieldCallback(field_key="besitos_weekly").pack(),
             )
         ],
+        [
+            InlineKeyboardButton(
+                text=f"Racha: retirarse {config['streak_retire_besitos']} 💋",
+                callback_data=TriviaConfigFieldCallback(field_key="streak_retire").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"Racha: completar {config['streak_complete_besitos']} 💋",
+                callback_data=TriviaConfigFieldCallback(field_key="streak_complete").pack(),
+            )
+        ],
         [InlineKeyboardButton(text="🔙 Volver a Trivias", callback_data="admin_trivia")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -112,6 +126,8 @@ FIELD_LABELS = {
         "trivia_besitos_weekly_vip",
         False,
     ),
+    "streak_retire": ("Racha: pago al retirarse", "streak_retire_besitos", None, True),
+    "streak_complete": ("Racha: pago al completar", "streak_complete_besitos", None, True),
 }
 
 
@@ -146,10 +162,11 @@ async def trivia_config_select_field(
         config = service.get_config()
 
     if vip_only:
+        unit = "besitos" if "besitos" in free_key else "intentos"
         text = (
             f"⚙️ <b>Configurar {label}</b>\n\n"
-            f"Límite actual: <b>{config[free_key]}</b> intentos\n\n"
-            f"Indique el nuevo límite (número entero, 0 o más):"
+            f"Valor actual: <b>{config[free_key]}</b> {unit}\n\n"
+            f"Indique el nuevo valor (número entero entre {range_text(free_key)}):"
         )
     else:
         unit = "besitos" if "besitos" in field_key else "intentos"
@@ -157,7 +174,8 @@ async def trivia_config_select_field(
             f"⚙️ <b>Configurar {label}</b>\n\n"
             f"Límite Free actual: <b>{config[free_key]}</b> {unit}\n"
             f"Límite VIP actual: <b>{config[vip_key]}</b> {unit}\n\n"
-            f"Indique los nuevos valores en formato: <b>free vip</b>\n"
+            f"Indique los nuevos valores en formato: <b>free vip</b> "
+            f"(cada uno entre {range_text(free_key)})\n"
             f"Ejemplo: <b>10 15</b>"
         )
 
@@ -197,8 +215,15 @@ async def trivia_config_process_value(message: Message, state: FSMContext):
         )
         return
 
-    with get_service(TriviaConfigService) as service:
-        service.update_config(admin_id=message.from_user.id, **kwargs)
+    try:
+        with get_service(TriviaConfigService) as service:
+            service.update_config(admin_id=message.from_user.id, **kwargs)
+    except EconomyLimitError as exc:
+        await message.answer(
+            f"🎩 Lucien:\n\nValor fuera de rango: {html.escape(str(exc))}. " f"Intente de nuevo...",
+            reply_markup=cancel_keyboard(),
+        )
+        return
 
     await state.clear()
     await message.answer(

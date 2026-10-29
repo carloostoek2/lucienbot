@@ -136,11 +136,16 @@ async def cmd_start(message: Message):
 
             if subscription:
                 invite_link = await vip_service.create_vip_invite_link(
-                    message.bot, user.id, allow_fallback=True
+                    message.bot, user.id, allow_fallback=True, access_end=subscription.end_date
                 )
                 await message.answer(
                     vip_service.build_vip_access_message(
-                        subscription, invite_link, is_extension=was_vip
+                        subscription,
+                        invite_link,
+                        is_extension=was_vip,
+                        granted_days=subscription.tariff.duration_days
+                        if subscription.tariff
+                        else None,
                     ),
                     reply_markup=vip_access_keyboard(),
                     parse_mode="HTML",

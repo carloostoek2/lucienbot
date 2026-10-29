@@ -5,6 +5,7 @@ Verifica interacciones reales con BD:
 - cmd_start: creación de usuarios, manejo de deep links, tokens
 - back_to_main: menú contextual según estado VIP
 """
+
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -39,6 +40,7 @@ class TestCmdStartIntegration:
         msg = make_message(text="/start", user=user)
 
         from handlers.common_handlers import cmd_start
+
         await cmd_start(msg)
 
         mock_user_svc.return_value.get_or_create_user.assert_called_once()
@@ -59,6 +61,7 @@ class TestCmdStartIntegration:
         msg = make_message(text="/start", user=user)
 
         from handlers.common_handlers import cmd_start
+
         await cmd_start(msg)
 
         mock_user_svc.return_value.get_or_create_user.assert_called_once()
@@ -78,22 +81,22 @@ class TestCmdStartIntegration:
         mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(
             channel_id=-100123, invite_link="https://t.me/+vip"
         )
-        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(
-            return_value=MagicMock(id=1)
-        )
+        subscription = MagicMock(id=1)
+        mock_vip_svc.return_value.redeem_token_with_missions = AsyncMock(return_value=subscription)
         mock_vip_svc.return_value.create_vip_invite_link = AsyncMock(
             return_value="https://t.me/+custom"
         )
         msg = make_message(text="/start ABC123", user=user)
 
         from handlers.common_handlers import cmd_start
+
         await cmd_start(msg)
 
         mock_vip_svc.return_value.redeem_token_with_missions.assert_awaited_once_with(
             "ABC123", user.id, bot=msg.bot
         )
         mock_vip_svc.return_value.create_vip_invite_link.assert_awaited_once_with(
-            msg.bot, user.id, allow_fallback=True
+            msg.bot, user.id, allow_fallback=True, access_end=subscription.end_date
         )
 
     @patch("handlers.common_handlers.VIPService")
@@ -103,14 +106,13 @@ class TestCmdStartIntegration:
     ):
         """Deep link free, usuario nuevo: se llama create_user."""
         user = make_user()
-        mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(
-            channel_id=-100123
-        )
+        mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(channel_id=-100123)
         mock_user_svc.return_value.get_user.return_value = None
         msg = make_message(text="/start free", user=user)
         msg.bot.get_chat_member.return_value = MagicMock(status="left")
 
         from handlers.common_handlers import cmd_start
+
         await cmd_start(msg)
 
         mock_user_svc.return_value.create_user.assert_called_once()
@@ -123,14 +125,13 @@ class TestCmdStartIntegration:
     ):
         """Deep link free, usuario existente: fluye a /start normal."""
         user = make_user()
-        mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(
-            channel_id=-100123
-        )
+        mock_vip_svc.return_value.get_vip_channel.return_value = MagicMock(channel_id=-100123)
         mock_user_svc.return_value.get_user.return_value = MagicMock(id=1)
         msg = make_message(text="/start free", user=user)
         msg.bot.get_chat_member.return_value = MagicMock(status="left")
 
         from handlers.common_handlers import cmd_start
+
         await cmd_start(msg)
 
         mock_user_svc.return_value.create_user.assert_not_called()
@@ -155,6 +156,7 @@ class TestBackToMainIntegration:
         cb = make_callback(data="back_to_main", user=user)
 
         from handlers.common_handlers import back_to_main
+
         await back_to_main(cb)
 
         mock_vip_svc.return_value.get_vip_menu_status.assert_called_once()
@@ -178,6 +180,7 @@ class TestBackToMainIntegration:
         cb = make_callback(data="back_to_main", user=user)
 
         from handlers.common_handlers import back_to_main
+
         await back_to_main(cb)
 
         mock_vip_svc.return_value.get_vip_menu_status.assert_called_once()
