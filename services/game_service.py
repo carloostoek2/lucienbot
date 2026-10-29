@@ -958,8 +958,10 @@ class GameService:
         session_state = None
         if not is_correct:
             session_state = self._build_streak_failure_state(user_id, previous_streak)
-        elif promo_code_info:
-            session_state = self._build_streak_claim_state(user_id, promo_code_info)
+        else:
+            session_state = self._build_streak_completion_state(user_id, new_streak)
+            if session_state is None and promo_code_info:
+                session_state = self._build_streak_claim_state(user_id, promo_code_info)
 
         logger.info(
             f"game_service - play_trivia - {user_id} - correct:{is_correct}, streak:{new_streak}, bonus:{streak_bonus}"
@@ -995,9 +997,15 @@ class GameService:
                 return None
             if session.protection_used:
                 # Already used protection -> cancel all codes, close session
+                was_risk_mode = bool(session.is_in_risk_mode)
                 cancelled = promo_service.cancel_session_codes(session.id)
                 promo_service.close_session(user_id, retire=False)
-                return {"action": "cancelled", "streak_reset_to": 0, "codes_cancelled": cancelled}
+                return {
+                    "action": "cancelled",
+                    "streak_reset_to": 0,
+                    "codes_cancelled": cancelled,
+                    "was_risk_mode": was_risk_mode,
+                }
             # Protection available -> check if user can afford
             cost = promo_service.calculate_protection_cost(streak)
             besito_service = BesitoService(self.db)
@@ -1020,6 +1028,19 @@ class GameService:
         finally:
             promo_service.close()
 
+    def _build_streak_completion_state(self, user_id: int, streak: int) -> dict | None:
+        """Racha completa en modo arriesgo → paga el premio (una vez por sesión)."""
+        from services.streak_promotion_service import StreakPromotionService
+
+        promo_service = StreakPromotionService(self.db)
+        try:
+            payout = promo_service.complete_with_payout(user_id, streak)
+        finally:
+            promo_service.close()
+        if not payout:
+            return None
+        return {"action": "completed", "besitos": payout["besitos"], "streak": streak}
+
     def _build_streak_claim_state(self, user_id: int, promo_code_info: dict) -> dict | None:
         """Construye session_state cuando el usuario alcanza un tier y reclama codigo."""
         from services.streak_promotion_service import StreakPromotionService
@@ -1031,10 +1052,13 @@ class GameService:
                 return None
             if session.is_in_risk_mode:
                 return {"action": "claimed_in_risk", "code": promo_code_info}
+            retire_besitos, complete_besitos = promo_service.streak_reward_amounts()
             return {
                 "action": "offer_retire",
                 "code": promo_code_info,
                 "session_id": session.id,
+                "besitos_retiro": retire_besitos,
+                "besitos_completa": complete_besitos,
             }
         finally:
             promo_service.close()
@@ -1379,8 +1403,10 @@ class GameService:
         session_state = None
         if not is_correct:
             session_state = self._build_streak_failure_state(user_id, previous_streak)
-        elif promo_code_info:
-            session_state = self._build_streak_claim_state(user_id, promo_code_info)
+        else:
+            session_state = self._build_streak_completion_state(user_id, new_streak)
+            if session_state is None and promo_code_info:
+                session_state = self._build_streak_claim_state(user_id, promo_code_info)
 
         logger.info(
             f"game_service - play_trivia_vip - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}"
@@ -1760,8 +1786,10 @@ class GameService:
         session_state = None
         if not is_correct:
             session_state = self._build_streak_failure_state(user_id, previous_streak)
-        elif promo_code_info:
-            session_state = self._build_streak_claim_state(user_id, promo_code_info)
+        else:
+            session_state = self._build_streak_completion_state(user_id, new_streak)
+            if session_state is None and promo_code_info:
+                session_state = self._build_streak_claim_state(user_id, promo_code_info)
 
         logger.info(
             f"game_service - play_trivia_simple - {user_id} - correct:{is_correct}, streak:{new_streak}, besitos:{besitos}, bonus:{streak_bonus}"

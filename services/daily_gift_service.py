@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from config.economy_limits import clamp, validate
 from models.database import SessionLocal
 from models.models import DailyGiftClaim, DailyGiftConfig, TransactionSource
 from services.besito_service import BesitoService
@@ -77,7 +78,12 @@ class DailyGiftService:
         return config
 
     def update_config(self, besito_amount: int, admin_id: int = None) -> DailyGiftConfig:
-        """Actualiza la configuración del regalo diario"""
+        """Actualiza la configuración del regalo diario.
+
+        Raises:
+            EconomyLimitError: si el monto está fuera de ``LIMITS["daily_gift_amount"]``.
+        """
+        validate("daily_gift_amount", besito_amount)
         config = self.get_config()
         config.besito_amount = besito_amount
         config.updated_by = admin_id
@@ -94,7 +100,7 @@ class DailyGiftService:
     def get_gift_amount(self) -> int:
         """Obtiene la cantidad de besitos del regalo diario"""
         config = self.get_config()
-        return config.besito_amount if config.is_active else 0
+        return clamp("daily_gift_amount", config.besito_amount) if config.is_active else 0
 
     def toggle_daily_gift(self) -> bool:
         """
@@ -178,7 +184,8 @@ class DailyGiftService:
             return False, None, message
 
         config = self.get_config()
-        amount = config.besito_amount
+        # Recorte en lectura: el mensaje usa el mismo monto que se acredita.
+        amount = clamp("daily_gift_amount", config.besito_amount)
 
         try:
             claim = DailyGiftClaim(user_id=user_id, besitos_received=amount)

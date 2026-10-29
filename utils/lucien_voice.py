@@ -9,6 +9,14 @@ import html
 from datetime import datetime
 
 
+# --- Copy de entrega VIP según duración (vip_direct_access) ---
+# PENDIENTE DE COPY (Copywriter): texto provisional para VIP corto (1 y 3 días).
+VIP_SHORT_DELIVERY_LINE = "Entre hoy: este acceso es breve y Diana no hace esperar a sus invitados."
+# PENDIENTE DE CONFIRMAR (Copywriter): cierre para 2 semanas y el mes (texto vigente).
+VIP_LONG_DELIVERY_LINE = "Aquí los secretos pesan más. Diana lo espera entre los selectos."
+VIP_LINK_EXPIRES_WITH_ACCESS = "vence junto con su acceso"
+
+
 class LucienVoice:
     """Clase para generar mensajes con la voz de Lucien"""
 
@@ -255,18 +263,20 @@ Si desea explorar este camino, contacte a Diana directamente.
         expiration_date: datetime | None = None,
         days_remaining: int | None = None,
         is_extension: bool = False,
+        granted_days: int | None = None,
+        link_expires_with_access: bool = False,
     ) -> str:
         """Mensaje de acceso al canal VIP con los términos de la suscripción.
 
         Copy directo (decidido 2026-10): nombre de la tarifa, vencimiento y días restantes.
         is_extension=True abre distinto cuando se sumó tiempo a una suscripción vigente.
-        Invite link: 1 uso / 7 días (vip_service.create_vip_invite_link).
+        Invite link: 1 uso; vence a los 7 días o junto con el acceso si este termina
+        antes (``link_expires_with_access``, vip_service.create_vip_invite_link).
+        VIP corto (``granted_days`` ≤ 3 y no extensión): cierre "Entre hoy…".
         Sin términos (p. ej. reenvío genérico) degrada a la bienvenida simple.
         """
         lines = ["🎩 <b>Lucien:</b>", ""]
-        has_terms = (
-            bool(tariff_name) and expiration_date is not None and days_remaining is not None
-        )
+        has_terms = bool(tariff_name) and expiration_date is not None and days_remaining is not None
         if has_terms:
             opening = (
                 "Su tiempo en El Diván ha sido extendido."
@@ -286,10 +296,14 @@ Si desea explorar este camino, contacte a Diana directamente.
             lines.append("<i>Bienvenido a El Diván.</i>")
         if invite_link:
             lines.append("")
-            lines.append("🔗 <b>Su enlace de activación</b> (expira en 7 días)")
+            if link_expires_with_access:
+                lines.append(f"🔗 <b>Su enlace de activación</b> ({VIP_LINK_EXPIRES_WITH_ACCESS})")
+            else:
+                lines.append("🔗 <b>Su enlace de activación</b> (expira en 7 días)")
             lines.append(invite_link)
         lines.append("")
-        lines.append("<i>Aquí los secretos pesan más. Diana lo espera entre los selectos.</i>")
+        is_short = not is_extension and granted_days is not None and granted_days <= 3
+        lines.append(f"<i>{VIP_SHORT_DELIVERY_LINE if is_short else VIP_LONG_DELIVERY_LINE}</i>")
         return "\n".join(lines)
 
     @staticmethod
@@ -3052,22 +3066,49 @@ Contacte a Diana para obtener acceso.""",
         )
 
     @staticmethod
-    def streak_risk_mode_offer(code_value: str, discount_pct: int, promotion_name: str) -> str:
-        """Ofrece elegir entre retirarse con el codigo actual o continuar."""
+    def streak_risk_mode_offer(
+        code_value: str,
+        discount_pct: int,
+        promotion_name: str,
+        besitos_retiro: int,
+        besitos_completa: int,
+    ) -> str:
+        """Ofrece retirarse ahora (besitos de retiro) o seguir hasta completar la racha."""
         return (
-            f"Ha alcanzado un nuevo nivel en <b>{promotion_name}</b>.\n\n"
+            f"Ha alcanzado un nuevo nivel en <b>{promotion_name}</b>.\n"
             f"Codigo obtenido: <code>{code_value}</code> ({discount_pct}% descuento)\n\n"
-            f"Puede retirarse y conservar este codigo, o continuar por un descuento mayor... "
-            f"pero si falla, perdera todos los codigos acumulados en esta sesion."
+            f"Lleva una buena racha. Puede retirarse ahora con {besitos_retiro} 💋, "
+            f"o seguir y llevarse {besitos_completa} 💋 si la completa. Usted decide."
         )
 
     @staticmethod
-    def streak_retire_confirmed(code_count: int) -> str:
-        """Usuario se retira conservando codigos."""
+    def streak_retire_confirmed(besitos_retiro: int, code_count: int = 0) -> str:
+        """Usuario se retira: premio acreditado y códigos conservados."""
+        text = f"Sabia decisión. {besitos_retiro} 💋 ya están en su cuenta."
+        if code_count:
+            text += f"\nConserva {code_count} codigo(s) de descuento."
+        return text
+
+    @staticmethod
+    def streak_retire_unavailable() -> str:
+        """Botón de retiro de una sesión ya cerrada o que siguió en modo arriesgo.
+
+        PENDIENTE DE COPY (Copywriter): texto provisional.
+        """
+        return "Esa decisión ya quedó atrás. Su racha siguió su curso."
+
+    @staticmethod
+    def streak_completed(besitos_completa: int) -> str:
+        """Racha completa en modo arriesgo."""
         return (
-            f"Sabia decision. Lucien ha cerrado su sesion.\n"
-            f"Conserva {code_count} codigo(s) de descuento. Visite el panel de Diana para mas informacion."
+            f"Racha completa. Diana toma nota de su constancia: "
+            f"{besitos_completa} 💋 a su cuenta."
         )
+
+    @staticmethod
+    def streak_risk_failed() -> str:
+        """La racha se cortó estando en modo arriesgo."""
+        return "Esta vez la racha se cortó. Mañana Diana vuelve a preguntar."
 
     @staticmethod
     def streak_continue_confirmed() -> str:

@@ -1263,6 +1263,7 @@ class TestSubscriberAdminVIPService:
         bot.unban_chat_member.assert_called_once_with(
             chat_id=sample_vip_channel.channel_id,
             user_id=sample_user.telegram_id,
+            only_if_banned=True,
         )
 
     async def test_unban_user_from_vip_channel_uses_subscription_channel(
@@ -1279,6 +1280,7 @@ class TestSubscriberAdminVIPService:
         bot.unban_chat_member.assert_called_once_with(
             chat_id=sample_vip_channel.channel_id,
             user_id=sample_user.telegram_id,
+            only_if_banned=True,
         )
 
     async def test_grant_internal_vip_access_for_subscription_targets_specific_sub(

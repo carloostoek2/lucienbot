@@ -240,6 +240,7 @@ class TransactionSource(enum.StrEnum):
     GAME = "GAME"  # Victoria en dados
     TRIVIA = "TRIVIA"  # Respuesta correcta en trivia
     STREAK_PROTECTION = "streak_protection"
+    STREAK_REWARD = "streak_reward"  # Premio del modo arriesgo (retiro o racha completa)
 
 
 class BesitoBalance(Base):
@@ -408,6 +409,9 @@ class TriviaConfig(Base):
     trivia_besitos_daily_vip = Column(Integer, default=15, nullable=False)
     trivia_besitos_weekly_free = Column(Integer, default=30, nullable=False)
     trivia_besitos_weekly_vip = Column(Integer, default=40, nullable=False)
+    # Racha de trivia en modo riesgo: pago en besitos (migración 20261029_streak_besitos)
+    streak_retire_besitos = Column(Integer, default=15, server_default="15", nullable=False)
+    streak_complete_besitos = Column(Integer, default=30, server_default="30", nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     updated_by = Column(BigInteger, nullable=True)
 
@@ -1646,5 +1650,10 @@ class StreakSession(Base):
     codes_delivered = Column(Text, nullable=True)  # JSON list of code IDs
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    # Premio en besitos del modo arriesgo: un único pago por sesión (retiro O completa).
+    retired_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    payout_besitos = Column(Integer, nullable=True)
+    payout_paid_at = Column(DateTime(timezone=True), nullable=True)
 
     codes = relationship("StreakPromotionCode", back_populates="session")

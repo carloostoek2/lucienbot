@@ -872,16 +872,19 @@ class DeleteButtonCallback(CallbackData, prefix="del_btn"):
 
 class ChangeButtonLabelCallback(CallbackData, prefix="ch_btn_label"):
     """Iniciar cambio de label de un botón (admin wizard)"""
+
     button_id: int
 
 
 class ChangeButtonUrlCallback(CallbackData, prefix="ch_btn_url"):
     """Iniciar cambio de url de un botón (admin wizard)"""
+
     button_id: int
 
 
 class ChangeButtonDescCallback(CallbackData, prefix="ch_btn_desc"):
     """Iniciar cambio de descripción de un botón (admin wizard)"""
+
     button_id: int
 
 
@@ -1090,15 +1093,19 @@ class StreakProtectDeclineCallback(CallbackData, prefix="streak_protect_decline"
 
 
 class StreakRetireCallback(CallbackData, prefix="streak_retire"):
-    """Retirarse del modo arriesgo conservando codigos actuales."""
+    """Retirarse del modo arriesgo conservando codigos actuales.
 
-    pass
+    session_id (uuid hex): el pago del retiro es por sesión; un botón viejo de otra
+    sesión no paga.
+    """
+
+    session_id: str
 
 
 class StreakContinueCallback(CallbackData, prefix="streak_continue"):
     """Continuar en modo arriesgo por el siguiente nivel."""
 
-    pass
+    session_id: str
 
 
 # ==================== BACKPACK ====================

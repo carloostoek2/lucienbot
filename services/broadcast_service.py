@@ -12,6 +12,7 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from config.economy_limits import clamp, validate
 from keyboards.broadcast_channel_markup import (
     build_channel_reaction_markup,
     calculate_emoji_counts_from_reactions,
@@ -57,7 +58,12 @@ class BroadcastService:
     def create_reaction_emoji(
         self, emoji: str, name: str = None, besito_value: int = 1
     ) -> ReactionEmoji:
-        """Crea un nuevo emoji de reacción"""
+        """Crea un nuevo emoji de reacción.
+
+        Raises:
+            EconomyLimitError: valor fuera de ``LIMITS["reaction_besito_value"]``.
+        """
+        validate("reaction_besito_value", besito_value)
         reaction = ReactionEmoji(
             emoji=emoji, name=name or emoji, besito_value=besito_value, is_active=True
         )
@@ -87,7 +93,12 @@ class BroadcastService:
         return query.all()
 
     def update_emoji_value(self, emoji_id: int, besito_value: int) -> bool:
-        """Actualiza el valor de besitos de un emoji"""
+        """Actualiza el valor de besitos de un emoji.
+
+        Raises:
+            EconomyLimitError: valor fuera de ``LIMITS["reaction_besito_value"]``.
+        """
+        validate("reaction_besito_value", besito_value)
         emoji = self.get_reaction_emoji(emoji_id)
         if emoji:
             emoji.besito_value = besito_value
@@ -350,7 +361,7 @@ class BroadcastService:
             logger.error(f"Emoji {emoji_id} no encontrado")
             return None
 
-        besito_value = emoji.besito_value
+        besito_value = clamp("reaction_besito_value", emoji.besito_value)
 
         try:
             # Crear la reacción
@@ -452,7 +463,7 @@ class BroadcastService:
                 f"broadcast_service | check_and_register_reaction | user_id={user_id} | broadcast_id={broadcast_id} | duplicate (pre-check)"
             )
             return self._reaction_failure(reason)
-        besito_value = emoji.besito_value
+        besito_value = clamp("reaction_besito_value", emoji.besito_value)
 
         try:
             # Crear la reacción - el UniqueConstraint en BD evitará duplicados (fallback para concurrencia)

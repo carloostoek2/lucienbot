@@ -69,13 +69,28 @@ class TestTriviaConfigGet:
         db_session.commit()
         row = db_session.query(TriviaConfig).first()
         row.dice_limit_free = 3
-        row.trivia_limit_vip = 99
+        row.trivia_limit_vip = 12
         db_session.commit()
 
         svc = TriviaConfigService(db_session)
         cfg = svc.get_config()
         assert cfg["dice_limit_free"] == 3
-        assert cfg["trivia_limit_vip"] == 99
+        assert cfg["trivia_limit_vip"] == 12
+
+    def test_get_config_clamps_out_of_range_db_values(self, db_session):
+        """Valores escritos por script/SQL por encima del tope se recortan en lectura."""
+        from config.economy_limits import LIMITS
+
+        db_session.add(TriviaConfig(**DEFAULTS))
+        db_session.commit()
+        row = db_session.query(TriviaConfig).first()
+        row.trivia_limit_vip = 99
+        row.trivia_besitos_daily_free = 10_000
+        db_session.commit()
+
+        cfg = TriviaConfigService(db_session).get_config()
+        assert cfg["trivia_limit_vip"] == LIMITS["trivia_limit_vip"].max
+        assert cfg["trivia_besitos_daily_free"] == LIMITS["trivia_besitos_daily_free"].max
 
 
 @pytest.mark.unit
@@ -106,43 +121,74 @@ class TestTriviaConfigUpdate:
         assert row.updated_by == sample_admin.telegram_id
         assert row.updated_at is not None
 
-    def test_update_ignores_invalid_keys_and_negative_and_non_int(self, db_session, sample_admin):
+    def test_update_ignores_unknown_keys(self, db_session, sample_admin):
         svc = TriviaConfigService(db_session)
         svc.get_config()
-
-        # mix valid + junk
         result = svc.update_config(
-            admin_id=sample_admin.telegram_id,
-            trivia_limit_free=8,
-            not_a_field=999,
-            dice_limit_free=-5,  # negative must be ignored
-            trivia_simple_limit_vip="bad",  # non-int ignored
-            trivia_besitos_daily_vip=20,
+            admin_id=sample_admin.telegram_id, trivia_limit_free=8, not_a_field=999
         )
-
         assert result["trivia_limit_free"] == 8
-        assert result["trivia_besitos_daily_vip"] == 20
-        # defaults or previous not changed for bads
-        assert (
-            result["dice_limit_free"] == DEFAULTS["dice_limit_free"]
-        )  # still default since neg ignored
+        assert "not_a_field" not in result
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"dice_limit_free": -5},
+            {"trivia_simple_limit_vip": "bad"},
+            {"trivia_besitos_daily_free": 10_000},
+            {"trivia_limit_vip": 26},
+            {"streak_retire_besitos": 0},
+            {"streak_complete_besitos": 101},
+        ],
+    )
+    def test_update_rejects_out_of_range_without_partial_writes(
+        self, db_session, sample_admin, kwargs
+    ):
+        """Fuera de rango: error con el rango (no se ignora en silencio) y nada se guarda."""
+        from config.economy_limits import EconomyLimitError
+
+        svc = TriviaConfigService(db_session)
+        svc.get_config()
+        with pytest.raises(EconomyLimitError) as exc:
+            svc.update_config(admin_id=sample_admin.telegram_id, trivia_limit_free=8, **kwargs)
+        assert "permitido" in str(exc.value)
         row = db_session.query(TriviaConfig).first()
-        assert row.trivia_limit_free == 8
-        assert row.dice_limit_free == DEFAULTS["dice_limit_free"]  # not -5
-        assert row.updated_by == sample_admin.telegram_id
+        assert row.trivia_limit_free == DEFAULTS["trivia_limit_free"]
+
+    def test_current_prod_values_are_valid(self, db_session, sample_admin):
+        """Los valores de prod al 2026-10-29 deben pasar los topes."""
+        prod = {
+            "dice_limit_free": 5,
+            "dice_limit_vip": 10,
+            "trivia_limit_free": 5,
+            "trivia_limit_vip": 8,
+            "trivia_simple_limit_free": 5,
+            "trivia_simple_limit_vip": 8,
+            "trivia_vip_limit": 5,
+            "trivia_besitos_daily_free": 10,
+            "trivia_besitos_daily_vip": 15,
+            "trivia_besitos_weekly_free": 50,
+            "trivia_besitos_weekly_vip": 70,
+            "streak_retire_besitos": 15,
+            "streak_complete_besitos": 30,
+        }
+        result = TriviaConfigService(db_session).update_config(
+            admin_id=sample_admin.telegram_id, **prod
+        )
+        for key, value in prod.items():
+            assert result[key] == value
 
     def test_update_creates_row_if_missing(self, db_session, sample_admin):
         # no prior config
         assert db_session.query(TriviaConfig).first() is None
 
         svc = TriviaConfigService(db_session)
-        result = svc.update_config(admin_id=sample_admin.telegram_id, trivia_limit_vip=42)
+        result = svc.update_config(admin_id=sample_admin.telegram_id, trivia_limit_vip=20)
 
-        assert result["trivia_limit_vip"] == 42
+        assert result["trivia_limit_vip"] == 20
         row = db_session.query(TriviaConfig).first()
         assert row is not None
-        assert row.trivia_limit_vip == 42
+        assert row.trivia_limit_vip == 20
         assert row.updated_by == sample_admin.telegram_id
 
 

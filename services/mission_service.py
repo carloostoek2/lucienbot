@@ -110,8 +110,10 @@ async def _send_mission_celebration_message(
         from services.besito_service import BesitoService
 
         balance = BesitoService(db=db).get_balance(user_id)
+        from services.reward_service import effective_reward_besitos
+
         text = LucienVoice.mission_reward_besitos_delivered(
-            safe_mission, reward.besito_amount, balance
+            safe_mission, effective_reward_besitos(reward), balance
         )
     elif reward.reward_type == RewardType.PACKAGE:
         text = LucienVoice.mission_reward_package_delivered(safe_mission, html.escape(reward.name))

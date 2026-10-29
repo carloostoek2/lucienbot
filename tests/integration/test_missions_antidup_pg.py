@@ -226,7 +226,63 @@ def _check_concurrent_first_progress_creates_one_row_and_one_payout(pg_engine):
         )
 
 
+def _check_streak_retire_concurrent_pays_once(pg_engine):
+    """PR B: doble clic simultáneo en "Retirarse" → un solo crédito STREAK_REWARD
+    (FOR UPDATE sobre la sesión; enum guardado por NOMBRE en PG)."""
+    _alembic("upgrade", "head")
+    from datetime import timedelta
+
+    from models.models import BesitoBalance, BesitoTransaction, TransactionSource, User, UserRole
+    from services.streak_promotion_service import StreakPromotionService
+
+    session_factory = sessionmaker(bind=pg_engine)
+    uid = 556
+    with session_factory() as db:
+        db.add(User(telegram_id=uid, username="streak", first_name="S", role=UserRole.USER))
+        db.add(BesitoBalance(user_id=uid, balance=0, total_earned=0, total_spent=0))
+        db.commit()
+        svc = StreakPromotionService(db)
+        promo = svc.create_promotion(
+            name="PG racha",
+            description="t",
+            levels=[{"consecutive_required": 2, "discount_pct": 10, "codes_available": 1}],
+            duration_mode="dates",
+            start_date=datetime.now(UTC),
+            end_date=datetime.now(UTC) + timedelta(days=1),
+        )
+        session_id = svc._get_or_create_session(uid, promo.id).id
+        db.commit()
+
+    barrier = threading.Barrier(2)
+    results: list[dict] = []
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            barrier.wait()
+            with session_factory() as db:
+                results.append(StreakPromotionService(db).retire_with_payout(uid, session_id.hex))
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+    assert not errors, errors
+    assert sorted(r["status"] for r in results) == ["already_paid", "paid"]
+    with pg_engine.connect() as conn:
+        stored = conn.execute(
+            sa.text("SELECT source::text, amount FROM besito_transactions WHERE user_id = :u"),
+            {"u": uid},
+        ).all()
+    assert stored == [("STREAK_REWARD", 15)]
+    assert TransactionSource.STREAK_REWARD.name == "STREAK_REWARD"
+
+
 def test_missions_antidup_on_postgres(pg_engine):
     """Un solo test (secuencial) para que xdist no reparta pasos que comparten la BD."""
     _check_migration_dedups_and_creates_constraints(pg_engine)
     _check_concurrent_first_progress_creates_one_row_and_one_payout(pg_engine)
+    _check_streak_retire_concurrent_pays_once(pg_engine)

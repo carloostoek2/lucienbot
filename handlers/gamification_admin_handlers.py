@@ -11,6 +11,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from config.economy_limits import EconomyLimitError, range_text
+from handlers.vip_handlers import (
+    notify_forward_besitos_result,
+    parse_positive_besito_amount,
+    parse_positive_telegram_user_id,
+)
 from keyboards.callback_data import (
     ChangeButtonDescCallback,
     ChangeButtonLabelCallback,
@@ -23,14 +29,9 @@ from keyboards.callback_data import (
     ToggleEmojiCallback,
 )
 from keyboards.inline_keyboards import back_keyboard, cancel_keyboard
-from handlers.vip_handlers import (
-    notify_forward_besitos_result,
-    parse_positive_besito_amount,
-    parse_positive_telegram_user_id,
-)
-from services.besito_service import BesitoService, MAX_ADMIN_BESITO_GRANT
-from services.broadcast_service import BroadcastService
 from services import get_service
+from services.besito_service import MAX_ADMIN_BESITO_GRANT, BesitoService
+from services.broadcast_service import BroadcastService
 from services.daily_gift_service import DailyGiftService
 from utils.admin import is_admin
 from utils.lucien_voice import LucienVoice
@@ -384,6 +385,13 @@ async def process_emoji_value(message: Message, state: FSMContext):
             reply_markup=back_keyboard("config_besitos"),
         )
 
+    except EconomyLimitError:
+        await message.answer(
+            f"🎩 Lucien:\n\nEse valor excede lo permitido. "
+            f"Indique un valor entre {range_text('reaction_besito_value')} besitos...",
+            reply_markup=cancel_keyboard(),
+        )
+        return
     except Exception as e:
         logger.error(f"Error creando emoji: {e}")
         await message.answer(
@@ -506,6 +514,13 @@ async def process_emoji_value_edit(message: Message, state: FSMContext):
     broadcast_service = BroadcastService()
     try:
         success = broadcast_service.update_emoji_value(emoji_id, value)
+    except EconomyLimitError:
+        await message.answer(
+            f"🎩 Lucien:\n\nEse valor excede lo permitido. "
+            f"Indique un valor entre {range_text('reaction_besito_value')} besitos...",
+            reply_markup=cancel_keyboard(),
+        )
+        return
     finally:
         broadcast_service.close()
 
@@ -997,7 +1012,15 @@ async def process_gift_amount(message: Message, state: FSMContext):
         return
 
     gift_service = DailyGiftService()
-    gift_service.update_config(amount, admin_id=message.from_user.id)
+    try:
+        gift_service.update_config(amount, admin_id=message.from_user.id)
+    except EconomyLimitError:
+        await message.answer(
+            f"🎩 Lucien:\n\nEse monto excede lo que Diana permite. "
+            f"Indique un valor entre {range_text('daily_gift_amount')} besitos...",
+            reply_markup=cancel_keyboard(),
+        )
+        return
 
     await message.answer(
         f"🎩 Lucien:\n\n"

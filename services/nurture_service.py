@@ -395,6 +395,26 @@ class NurtureService:
             f"nurture_service | remove_jobs_for_user_sequence | user_id={user_telegram_id} | seq_id={sequence_id} | result=jobs_removed"
         )
 
+    def resolve_granted_days(self, payload: dict) -> int | None:
+        """Duración del grant del evento VIP: payload ``granted_days`` o, si falta
+        (emisor viejo), ``Subscription.tariff`` → ``duration_days``. None = desconocido
+        (se enrola como antes)."""
+        days = payload.get("granted_days")
+        if isinstance(days, int):
+            return days
+        sub_id = payload.get("subscription_id")
+        if not sub_id:
+            return None
+        from models.models import Subscription
+
+        subscription = self.db.query(Subscription).filter(Subscription.id == sub_id).first()
+        if subscription is None:
+            return None
+        tariff = subscription.tariff
+        if tariff is None and subscription.token is not None:
+            tariff = subscription.token.tariff
+        return tariff.duration_days if tariff else None
+
     def pause_progress(self, user_telegram_id: int, sequence_id: int) -> bool:
         """Pausa progreso (no cancela jobs ya disparados, pero previene en handler)."""
         prog = self.get_progress(user_telegram_id, sequence_id)
@@ -407,6 +427,10 @@ class NurtureService:
             )
             return True
         return False
+
+
+# Nurture VIP solo para grants de 7 días o más (regla "por grant": 1+3+3 no suma).
+NURTURE_MIN_VIP_DAYS = 7
 
 
 # --- Cross-domain listener (registered centrally in bot.py, like besitos_awarded observers) ---
@@ -429,6 +453,15 @@ async def on_vip_activated(payload: dict) -> None:
         )  # inside to prevent circular init when services.__init__ imports us
 
         with get_service(NurtureService) as nurture_svc:
+            granted_days = nurture_svc.resolve_granted_days(payload)
+            if granted_days is not None and granted_days < NURTURE_MIN_VIP_DAYS:
+                # VIP corto: no se enrola ni se re-agendan pasos (evita "quemar" la
+                # secuencia con pasos que llegan cuando ya no es VIP).
+                logger.info(
+                    f"nurture_service | on_vip_activated | user_id={user_id} | "
+                    f"granted_days={granted_days} | result=skipped_short_grant"
+                )
+                return
             count = nurture_svc.start_sequences_for_user(int(user_id), audience_filter="vip")
         logger.info(
             f"nurture_service | on_vip_activated | user_id={user_id} | steps_scheduled={count} | result=handled"

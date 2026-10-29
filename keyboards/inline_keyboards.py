@@ -912,13 +912,19 @@ def protection_keyboard(protection_cost: int, streak: int, game_type: str) -> In
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def risk_mode_keyboard() -> InlineKeyboardMarkup:
-    """Teclado para modo arriesgo: continuar o retirarse."""
+def risk_mode_keyboard(session_id, besitos_retiro: int) -> InlineKeyboardMarkup:
+    """Teclado para modo arriesgo: continuar o retirarse (ligado a la sesión)."""
+    sid = session_id.hex if hasattr(session_id, "hex") else str(session_id)
     buttons = [
-        [InlineKeyboardButton(text="Continuar", callback_data=StreakContinueCallback().pack())],
         [
             InlineKeyboardButton(
-                text="Retirarse y conservar codigos", callback_data=StreakRetireCallback().pack()
+                text="Continuar", callback_data=StreakContinueCallback(session_id=sid).pack()
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"Retirarse con {besitos_retiro} 💋",
+                callback_data=StreakRetireCallback(session_id=sid).pack(),
             )
         ],
     ]

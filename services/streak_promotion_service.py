@@ -270,6 +270,9 @@ class StreakPromotionService:
             db.query(StreakSession)
             .filter(
                 StreakSession.user_id == user_id,
+                # Cerradas con premio (retiro/completa) no cuentan: sus códigos se
+                # conservan y no deben cancelarse como si fuera un timeout vencido.
+                StreakSession.payout_paid_at.is_(None),
             )
             .order_by(StreakSession.started_at.desc())
             .first()
@@ -393,15 +396,148 @@ class StreakPromotionService:
             f"user:{user_id} - session:{session.id} - retire:{retire}"
         )
 
-    def set_risk_mode(self, user_id: int) -> bool:
+    # ==================== PREMIO EN BESITOS (modo arriesgo) ====================
+
+    @staticmethod
+    def _is_open(session: StreakSession) -> bool:
+        """Sesión abierta: sin cierre o con timeout de protección aún vigente."""
+        if session.expires_at is None:
+            return True
+        now = datetime.now(UTC).replace(tzinfo=None)
+        expires = session.expires_at
+        if expires.tzinfo is not None:
+            expires = expires.astimezone(UTC).replace(tzinfo=None)
+        return expires > now
+
+    def _lock_session(self, user_id: int, session_id: uuid.UUID) -> StreakSession | None:
+        db = self._get_db()
+        return (
+            db.query(StreakSession)
+            .filter(StreakSession.id == session_id, StreakSession.user_id == user_id)
+            .with_for_update()
+            .first()
+        )
+
+    def streak_reward_amounts(self) -> tuple[int, int]:
+        from services.trivia_config_service import TriviaConfigService
+
+        config = TriviaConfigService(self._get_db()).get_config()
+        return config["streak_retire_besitos"], config["streak_complete_besitos"]
+
+    def final_level_required(self, promotion_id: int) -> int | None:
+        """Racha del último nivel de la promoción (define "completar")."""
+        from sqlalchemy import func as sa_func
+
+        db = self._get_db()
+        return (
+            db.query(sa_func.max(StreakPromotionLevel.consecutive_required))
+            .filter(StreakPromotionLevel.promotion_id == promotion_id)
+            .scalar()
+        )
+
+    def _pay_session(self, session: StreakSession, kind: str, amount: int) -> bool:
+        """Marca la sesión como pagada y acredita en la MISMA transacción.
+
+        credit_besitos hace commit (marca + crédito juntos) o rollback (ninguno).
+        El lock FOR UPDATE sobre la sesión serializa dobles clics/reintentos.
+        """
+        from models.models import TransactionSource
+        from services.besito_service import BesitoService
+
+        now = datetime.now(UTC)
+        session.payout_besitos = amount
+        session.payout_paid_at = now
+        if kind == "retire":
+            session.retired_at = now
+        else:
+            session.completed_at = now
+        session.expires_at = now.replace(tzinfo=None)  # cierra la sesión (conserva códigos)
+        ok = BesitoService(self._get_db()).credit_besitos(
+            user_id=session.user_id,
+            amount=amount,
+            source=TransactionSource.STREAK_REWARD,
+            description=f"Racha {kind} session={session.id}",
+        )
+        logger.info(
+            f"streak_promotion_service | pay_session | user_id={session.user_id} | "
+            f"session={session.id} | kind={kind} | amount={amount} | "
+            f"result={'paid' if ok else 'credit_failed'}"
+        )
+        return ok
+
+    def retire_with_payout(self, user_id: int, session_id: uuid.UUID | str) -> dict:
+        """Retiro desde la oferta: paga streak_retire_besitos una sola vez por sesión.
+
+        status: "paid" | "already_paid" | "unavailable" (sesión ajena, cerrada, ya en
+        modo arriesgo, o fallo al acreditar). Siempre deja la transacción cerrada
+        (commit/rollback): corrige el flush sin commit del retiro anterior.
+        """
+        db = self._get_db()
+        try:
+            sid = uuid.UUID(str(session_id))
+        except (ValueError, TypeError):
+            return {"status": "unavailable", "besitos": 0, "codes": 0}
+        # Leer montos ANTES del lock: get_config puede hacer commit (crea la fila) y
+        # un commit entre el FOR UPDATE y el pago soltaría el lock (doble pago).
+        amount, _complete = self.streak_reward_amounts()
+        session = self._lock_session(user_id, sid)
+        if session is None:
+            db.rollback()
+            return {"status": "unavailable", "besitos": 0, "codes": 0}
+        codes = len(json.loads(session.codes_delivered or "[]"))
+        if session.payout_paid_at is not None:
+            db.rollback()
+            return {
+                "status": "already_paid",
+                "besitos": session.payout_besitos or 0,
+                "codes": codes,
+            }
+        if session.is_in_risk_mode or not self._is_open(session):
+            db.rollback()
+            return {"status": "unavailable", "besitos": 0, "codes": codes}
+        if not self._pay_session(session, "retire", amount):
+            return {"status": "unavailable", "besitos": 0, "codes": codes}
+        return {"status": "paid", "besitos": amount, "codes": codes}
+
+    def complete_with_payout(self, user_id: int, streak: int) -> dict | None:
+        """Racha completa en modo arriesgo: paga streak_complete_besitos una vez.
+
+        "Completar" = estando en modo arriesgo, la racha alcanza el umbral del ÚLTIMO
+        nivel de la promoción de la sesión (max consecutive_required), haya o no
+        códigos disponibles en ese nivel. Devuelve {"besitos": n} o None.
+        """
+        db = self._get_db()
+        session = self.get_active_session(user_id)
+        if session is None or not session.is_in_risk_mode:
+            return None
+        final = self.final_level_required(session.promotion_id)
+        if final is None or streak < final:
+            return None
+        _retire, amount = self.streak_reward_amounts()  # antes del lock (ver retiro)
+        locked = self._lock_session(user_id, session.id)
+        if locked is None or locked.payout_paid_at is not None or not self._is_open(locked):
+            return None
+        if not self._pay_session(locked, "complete", amount):
+            db.rollback()
+            return None
+        return {"besitos": amount}
+
+    def set_risk_mode(self, user_id: int, session_id: uuid.UUID | str | None = None) -> bool:
         """Activa el modo arriesgo en la sesion activa del usuario.
         Los handlers delegan en este metodo en vez de llamar db.commit().
-        Retorna True si se activo, False si no hay sesion activa.
+        Retorna True si se activo, False si no hay sesion activa (o el botón es de
+        otra sesión).
         """
         db = self._get_db()
         session = self.get_active_session(user_id)
         if not session:
             return False
+        if session_id is not None:
+            try:
+                if uuid.UUID(str(session_id)) != session.id:
+                    return False
+            except (ValueError, TypeError):
+                return False
         session.is_in_risk_mode = True
         db.commit()
         logger.info(
