@@ -12,8 +12,8 @@ Create Date: 2026-10-29
   haber usado el bot en privado (regalo diario, juegos, órdenes, transacciones que no son
   de reacción/admin/misión, o un token VIP canjeado). Los de solo join-request quedan NULL
   hasta su próximo /start. last_activity_at y last_inactivity_reminder_at quedan NULL: el
-  job mide desde max(last_activity_at, activación del flag), así que nadie recibe nada
-  antes de 3 días después de encender el flag.
+  job solo considera actividad registrada en o después de la activación del flag, así que
+  los inactivos históricos nunca reciben el recordatorio.
 
 Idempotente (columnas/tabla/índice solo si faltan; el backfill solo toca NULL).
 """

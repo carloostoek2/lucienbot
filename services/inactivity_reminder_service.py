@@ -3,10 +3,12 @@
 Reglas:
 - Destinatarios: hicieron /start (``bot_started_at``), no bloquearon al bot, activos, no
   admin y sin VIP vigente. Los creados solo por join-request no tienen ``bot_started_at``.
-- Inactividad = ahora - max(last_activity_at, activación del flag). La activación se
-  guarda UNA vez en ``feature_activations`` la primera vez que el flag corre encendido y
-  nunca se recalcula, así que nadie recibe nada antes de 3 días después de encenderlo.
-- A los 3 días se manda uno. No se repite hasta que el usuario vuelva (actividad posterior
+- Solo usuarios con actividad REAL (no reacciones del canal) en o después de la
+  activación del flag: ``last_activity_at IS NOT NULL AND last_activity_at >= activado_en``.
+  La activación se guarda UNA vez en ``feature_activations`` la primera vez que el flag
+  corre encendido y nunca se recalcula. Los inactivos históricos (última actividad antes
+  de la activación, o NULL) NUNCA reciben nada, ningún día: no hay "ola" del día 3.
+- Inactividad = ahora - last_activity_at. A los 3 días se manda uno. No se repite hasta que el usuario vuelva (actividad posterior
   al recordatorio) y vuelva a pasar 3 días inactivo; además máximo 1 cada 7 días.
 - Solo de 10:00 a 21:00 America/Mexico_City (se revalida antes de cada envío).
 - Lotes de ``BATCH_SIZE`` con pausa entre envíos; claim por fila (UPDATE condicional)
@@ -127,8 +129,7 @@ def _admin_ids() -> list[int]:
 def find_candidates(db: Session, now: datetime, activated_at: datetime, limit: int) -> list[User]:
     now = _utc(now)
     cutoff = now - INACTIVITY
-    if _utc(activated_at) > cutoff:
-        return []  # aún no pasan 3 días desde que se encendió el flag
+    activated_at = _utc(activated_at)
     has_active_vip = exists().where(
         Subscription.user_id == User.telegram_id,
         Subscription.is_active.is_(True),
@@ -142,7 +143,11 @@ def find_candidates(db: Session, now: datetime, activated_at: datetime, limit: i
             User.is_active.is_(True),
             User.role != UserRole.ADMIN,
             ~has_active_vip,
-            or_(User.last_activity_at.is_(None), User.last_activity_at <= cutoff),
+            # Actividad real posterior a la activación (excluye inactivos históricos)
+            # y 3 días sin actividad desde entonces.
+            User.last_activity_at.is_not(None),
+            User.last_activity_at >= activated_at,
+            User.last_activity_at <= cutoff,
             or_(
                 User.last_inactivity_reminder_at.is_(None),
                 and_(

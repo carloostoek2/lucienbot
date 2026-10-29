@@ -3054,8 +3054,8 @@ Contacte a Diana para obtener acceso.""",
     def free_inactivity_reminder_alt() -> str:
         """Recordatorio alterno (siguientes ciclos, o sin regalo diario activo)."""
         return (
-            "Lucien le guarda el lugar. Cuando tenga un momento, hay una trivia nueva "
-            "y su regalo del día."
+            "Lucien le guarda el lugar. Cuando tenga un momento, la trivia y su regalo "
+            "del día siguen esperándole."
         )
 
     @staticmethod

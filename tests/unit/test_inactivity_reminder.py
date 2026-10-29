@@ -76,15 +76,26 @@ def _sent_to(bot):
     return [c.kwargs["chat_id"] for c in bot.send_message.await_args_list]
 
 
-# ---- 1) inactivo desde hace meses: nada el día de activación ni los 2 siguientes ----
-async def test_long_inactive_gets_nothing_until_three_days_after_activation(db):
-    _user(db, 1, last_activity=T0 - 120 * DAY)
+# ---- 1) inactivos históricos: NUNCA reciben nada, ningún día ----
+async def test_historical_inactive_users_never_get_reminder(db):
+    _user(db, 1, last_activity=T0 - 120 * DAY)  # última actividad antes de la activación
+    _user(db, 101, last_activity=T0 - timedelta(seconds=1))
+    _user(db, 102, last_activity=None)  # hizo /start pero sin actividad registrada
+    for day in range(31):
+        for hour in (10, 15, 20):
+            local = (T0 + day * DAY).astimezone(CDMX).replace(hour=hour, minute=30)
+            bot, _ = await _run(db, local.astimezone(UTC))
+            assert _sent_to(bot) == [], (day, hour)
+    assert db.get(FeatureActivation, svc.FEATURE_KEY) is not None
+
+
+async def test_activity_at_activation_counts_and_sends_at_three_days(db):
+    _user(db, 103, last_activity=T0)
     for offset in (timedelta(0), DAY, 2 * DAY, 3 * DAY - timedelta(hours=1)):
         bot, _ = await _run(db, T0 + offset)
         assert _sent_to(bot) == [], offset
-    assert db.get(FeatureActivation, svc.FEATURE_KEY) is not None
     bot, _ = await _run(db, T0 + 3 * DAY)
-    assert _sent_to(bot) == [1]
+    assert _sent_to(bot) == [103]
 
 
 async def test_activation_is_stored_once_and_never_recalculated(db):
@@ -114,7 +125,7 @@ async def test_inactive_after_activation_gets_exactly_one_at_three_days(db):
 
 # ---- 3) vuelve y se vuelve a ir: uno nuevo (respetando 1 por semana) ----
 async def test_returning_user_gets_new_reminder_after_new_inactivity(db):
-    user = _user(db, 3, last_activity=T0 - 30 * DAY)
+    user = _user(db, 3, last_activity=T0)
     await _run(db, T0)
     bot, _ = await _run(db, T0 + 3 * DAY)
     assert _sent_to(bot) == [3]
@@ -125,12 +136,15 @@ async def test_returning_user_gets_new_reminder_after_new_inactivity(db):
     assert _sent_to(bot) == []
     bot, _ = await _run(db, reminded_at + 7 * DAY)
     assert _sent_to(bot) == [3]
-    assert "Lucien le guarda el lugar" in bot.send_message.await_args.kwargs["text"]
+    assert bot.send_message.await_args.kwargs["text"] == (
+        "Lucien le guarda el lugar. Cuando tenga un momento, la trivia y su regalo "
+        "del día siguen esperándole."
+    )
 
 
 # ---- 4) VIP nunca ----
 async def test_vip_never_gets_reminder(db):
-    _user(db, 4, last_activity=T0 - 30 * DAY)
+    _user(db, 4, last_activity=T0)
     channel = Channel(channel_id=-100, channel_type=ChannelType.VIP, is_active=True)
     db.add(channel)
     db.commit()
@@ -148,7 +162,7 @@ async def test_vip_never_gets_reminder(db):
     [(9, 59, False), (10, 0, True), (20, 59, True), (21, 0, False), (2, 0, False)],
 )
 async def test_send_window_cdmx(db, hour, minute, sends):
-    _user(db, 5, last_activity=T0 - 30 * DAY)
+    _user(db, 5, last_activity=T0)
     await _run(db, T0)
     day4 = (T0 + 4 * DAY).astimezone(CDMX)
     now = day4.replace(hour=hour, minute=minute).astimezone(UTC)
@@ -157,8 +171,8 @@ async def test_send_window_cdmx(db, hour, minute, sends):
 
 
 async def test_window_closing_mid_batch_stops_sending(db):
-    _user(db, 51, last_activity=T0 - 30 * DAY)
-    _user(db, 52, last_activity=T0 - 30 * DAY)
+    _user(db, 51, last_activity=T0)
+    _user(db, 52, last_activity=T0)
     await _run(db, T0)
     start = (T0 + 4 * DAY).astimezone(CDMX).replace(hour=20, minute=59).astimezone(UTC)
     times = iter([start, start + timedelta(minutes=2)])
@@ -176,8 +190,8 @@ async def test_join_request_only_user_never_gets_reminder(db):
 
 
 async def test_admin_excluded(db):
-    _user(db, 7, last_activity=T0 - 30 * DAY, role=UserRole.ADMIN)
-    _user(db, 8, last_activity=T0 - 30 * DAY)
+    _user(db, 7, last_activity=T0, role=UserRole.ADMIN)
+    _user(db, 8, last_activity=T0)
     await _run(db, T0)
     with patch.object(svc.bot_config, "ADMIN_IDS", [8], create=True):
         bot, _ = await _run(db, T0 + 4 * DAY)
@@ -185,7 +199,7 @@ async def test_admin_excluded(db):
 
 
 async def test_flag_off_does_nothing_and_does_not_activate(db):
-    _user(db, 9, last_activity=T0 - 30 * DAY)
+    _user(db, 9, last_activity=T0)
     with patch.object(svc.bot_config, "FEATURE_FREE_INACTIVITY_REMINDER", False):
         bot, stats = await _run(db, T0 + 10 * DAY)
     assert stats["reason"] == "disabled"
@@ -194,7 +208,7 @@ async def test_flag_off_does_nothing_and_does_not_activate(db):
 
 
 async def test_blocked_user_is_marked_and_never_retried(db):
-    _user(db, 10, last_activity=T0 - 30 * DAY)
+    _user(db, 10, last_activity=T0)
     await _run(db, T0)
     bot = AsyncMock()
     bot.send_message.side_effect = TelegramForbiddenError(
@@ -214,7 +228,7 @@ async def test_blocked_user_is_marked_and_never_retried(db):
 
 
 async def test_claim_is_per_row_two_runs_send_once(db):
-    _user(db, 11, last_activity=T0 - 30 * DAY)
+    _user(db, 11, last_activity=T0)
     await _run(db, T0)
     now = T0 + 4 * DAY
     candidates = svc.find_candidates(db, now, T0, 10)
@@ -274,3 +288,41 @@ def test_private_game_gift_store_menu_count_as_activity():
     assert classify(_cb("private"), _fn("handlers.store_user_handlers", "shop_menu")) == "activity"
     assert classify(_cb("private"), _fn("handlers.mission_user_handlers", "x")) is None
     assert classify(_cb("group"), claim_daily_gift) is None
+
+
+# ---- Flag: apagado por defecto ----
+def _flag_in_fresh_interpreter(env_value):
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != "FEATURE_FREE_INACTIVITY_REMINDER"}
+    env.setdefault("BOT_TOKEN", "x")
+    if env_value is not None:
+        env["FEATURE_FREE_INACTIVITY_REMINDER"] = env_value
+    code = (
+        "import json\n"
+        "from config.settings import bot_config, BotConfig\n"
+        "from services.inactivity_reminder_service import is_enabled\n"
+        "print(json.dumps([BotConfig.FEATURE_FREE_INACTIVITY_REMINDER,"
+        " bot_config.FEATURE_FREE_INACTIVITY_REMINDER, is_enabled()]))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[2],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected"),
+    [(None, False), ("", False), ("0", False), ("true", False), ("1", True)],
+)
+def test_flag_defaults_off_and_only_1_enables(env_value, expected):
+    assert _flag_in_fresh_interpreter(env_value) == [expected, expected, expected]
