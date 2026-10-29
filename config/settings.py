@@ -26,6 +26,8 @@ class BotConfig:
     CREATOR_CONTACT_URL: str = os.getenv("CREATOR_CONTACT_URL", "")
     # Fase 6 link: emisor de avisos [LINK] hacia Diana (default off = comportamiento idéntico)
     FEATURE_LINK_ENABLED: bool = os.getenv("FEATURE_LINK_ENABLED") == "1"
+    # Recordatorio a Free inactivos (informe #6). Apagado por defecto.
+    FEATURE_FREE_INACTIVITY_REMINDER: bool = os.getenv("FEATURE_FREE_INACTIVITY_REMINDER") == "1"
     LINK_CHAT_ID: int = _parse_link_chat_id()
 
     def __post_init__(self):

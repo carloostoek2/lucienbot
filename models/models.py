@@ -74,11 +74,27 @@ class User(Base):
     vip_entry_status = Column(String(20), nullable=True)  # values: "pending_entry", "active"
     vip_entry_stage = Column(Integer, nullable=True)  # values: 1, 2, 3
 
+    # Recordatorio de inactividad Free (informe #6). bot_started_at: primer /start
+    # (join-request crea el usuario sin /start; created_at NO sirve). Nunca se pisa.
+    bot_started_at = Column(DateTime(timezone=True), nullable=True)
+    last_activity_at = Column(DateTime(timezone=True), nullable=True)
+    last_inactivity_reminder_at = Column(DateTime(timezone=True), nullable=True)
+    bot_blocked_at = Column(DateTime(timezone=True), nullable=True)
+
     # Relaciones
     subscriptions = relationship(
         "Subscription", back_populates="user", cascade="all, delete-orphan"
     )
     tokens_redeemed = relationship("Token", back_populates="redeemed_by")
+
+
+class FeatureActivation(Base):
+    """Momento en que un feature flag se encendió por PRIMERA vez (nunca se recalcula)."""
+
+    __tablename__ = "feature_activations"
+
+    key = Column(String(64), primary_key=True)
+    activated_at = Column(DateTime(timezone=True), nullable=False)
 
 
 class Channel(Base):

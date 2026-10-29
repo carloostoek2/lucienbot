@@ -71,6 +71,7 @@ from handlers import (
 
 # Health/observability (Item 11 spike) - optional endpoint starter (aiohttp + HEALTH_ENABLED)
 from health_server import start_health_http_server, stop_health_http_server
+from middlewares.activity import ActivityMiddleware
 from middlewares.error_handler import ErrorHandlerMiddleware
 from middlewares.idempotency import IdempotencyMiddleware
 from middlewares.rate_limiter import ThrottlingMiddleware
@@ -356,6 +357,9 @@ async def main():
     dp.callback_query.middleware(IdempotencyMiddleware(redis=redis_client))
     dp.callback_query.middleware(ThrottlingMiddleware(redis=redis_client))
     dp.message.middleware(ThrottlingMiddleware(redis=redis_client))
+    # Actividad para el recordatorio Free (#6): después del throttle, solo chat privado.
+    dp.message.middleware(ActivityMiddleware())
+    dp.callback_query.middleware(ActivityMiddleware())
 
     # Registrar routers
     dp.include_router(common_router)
