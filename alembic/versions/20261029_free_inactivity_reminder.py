@@ -44,7 +44,7 @@ _EVIDENCE = (
     ("orders", "SELECT user_id FROM orders"),
     (
         "besito_transactions",
-        "SELECT user_id FROM besito_transactions WHERE source IN "
+        "SELECT user_id FROM besito_transactions WHERE source::text IN "
         "('DAILY_GIFT', 'GAME', 'TRIVIA', 'PURCHASE', 'STREAK_PROTECTION')",
     ),
     ("tokens", "SELECT redeemed_by_id FROM tokens WHERE redeemed_by_id IS NOT NULL"),
