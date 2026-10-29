@@ -160,6 +160,21 @@ async def _process_pending_requests():
         db.close()
 
 
+async def _process_free_inactivity_reminders():
+    """Recordatorio a Free inactivos (#6). No hace nada con el flag apagado."""
+    from services.inactivity_reminder_service import is_enabled, run_inactivity_reminders
+
+    if not is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        await run_inactivity_reminders(db, _get_bot())
+    except Exception as exc:
+        logger.error(f"scheduler_service | free_inactivity_reminders | error={exc}")
+    finally:
+        db.close()
+
+
 async def _process_expiring_subscriptions():
     """Envía recordatorios de suscripciones por vencer (llamado por APScheduler)."""
     db = SessionLocal()
@@ -489,6 +504,18 @@ class SchedulerService:
         """Registra jobs y arranca el scheduler."""
         if self.running:
             return
+
+        # Recordatorio Free inactivo (#6): cada 30 min entre 10:00 y 20:59 hora local
+        # (scheduler en bot_config.TIMEZONE); el job revalida la ventana antes de cada envío.
+        self._scheduler.add_job(
+            _process_free_inactivity_reminders,
+            trigger="cron",
+            hour="10-20",
+            minute="7,37",
+            id="free_inactivity_reminders",
+            name="Free inactivity reminders",
+            replace_existing=True,
+        )
 
         self._scheduler.add_job(
             _process_pending_requests,

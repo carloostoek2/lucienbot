@@ -3040,6 +3040,24 @@ Contacte a Diana para obtener acceso.""",
         }
         return messages.get(reward_type, messages["rewards"])
 
+    # ==================== RECORDATORIO FREE INACTIVO (informe #6) ====================
+
+    @staticmethod
+    def free_inactivity_reminder(besitos_regalo: int) -> str:
+        """Recordatorio principal a Free con 3 días sin actividad."""
+        return (
+            "Hace unos días que no pasa por aquí. Su regalo diario sigue esperándole: "
+            f"{besitos_regalo} 💋 cuando quiera reclamarlo."
+        )
+
+    @staticmethod
+    def free_inactivity_reminder_alt() -> str:
+        """Recordatorio alterno (siguientes ciclos, o sin regalo diario activo)."""
+        return (
+            "Lucien le guarda el lugar. Cuando tenga un momento, hay una trivia nueva "
+            "y su regalo del día."
+        )
+
     @staticmethod
     def streak_protection_offer(cost: int, streak: int) -> str:
         """Ofrece proteccion de racha al fallar una pregunta."""
