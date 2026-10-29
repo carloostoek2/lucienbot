@@ -30,14 +30,26 @@ from models.models import (
 from services.besito_service import BesitoService
 from services.package_service import PackageService
 from services.vip_service import VIPService
+from utils.db_clock import as_aware_utc, db_now
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
 
 _DELIVERY_CLAIM_MARKER = "__delivery_claim__"
+# Paquete en envío: se marca ANTES de mandar. Si el proceso muere a mitad, la
+# reanudación NO reenvía (entrega como máximo una vez; hallazgo G4).
+_PACKAGE_SENDING_MARKER = "__package_sending__"
 _CLAIM_TOKEN_PREFIX = "token:"
 _CLAIM_SENT_PREFIX = "sent:"
-_DELIVERY_CLAIM_TTL_SECONDS = 60
+# Un claim en vuelo más joven que esto bloquea entregas concurrentes. Era 60 s:
+# una entrega lenta (FloodWait, VIP, paquete grande) quedaba "reanudable" mientras
+# seguía en curso. La edad se mide con el reloj de la BD.
+_DELIVERY_CLAIM_TTL_SECONDS = 600
+# Prefijo de la descripción de créditos de recompensa de misión. Lo usa el índice
+# único parcial uq_besito_tx_mission_reward_credit y separa estos créditos de los
+# logros de historia (source=MISSION, "Logro desbloqueado: ...", hallazgo G5).
+MISSION_REWARD_CREDIT_PREFIX = "Recompensa: "
+_IN_FLIGHT_MARKERS = (_DELIVERY_CLAIM_MARKER, _PACKAGE_SENDING_MARKER)
 
 
 def _finalized_delivery_clause():
@@ -45,7 +57,7 @@ def _finalized_delivery_clause():
     return or_(
         UserRewardHistory.details.is_(None),
         and_(
-            UserRewardHistory.details != _DELIVERY_CLAIM_MARKER,
+            UserRewardHistory.details.notin_(_IN_FLIGHT_MARKERS),
             ~UserRewardHistory.details.like(f"{_CLAIM_TOKEN_PREFIX}%"),
             ~UserRewardHistory.details.like(f"{_CLAIM_SENT_PREFIX}%"),
         ),
@@ -63,22 +75,24 @@ def _is_resumable_delivery_claim(details: str | None) -> bool:
     """True si el claim pendiente puede reanudarse (stale o VIP en vuelo)."""
     if not details:
         return False
-    if details == _DELIVERY_CLAIM_MARKER:
+    if details in _IN_FLIGHT_MARKERS:
         return True
     return details.startswith(_CLAIM_TOKEN_PREFIX) or details.startswith(_CLAIM_SENT_PREFIX)
 
 
-def _delivery_claim_age_seconds(delivered_at: datetime) -> float:
-    """Edad del claim en segundos (timezone-aware)."""
-    ref = delivered_at if delivered_at.tzinfo else delivered_at.replace(tzinfo=UTC)
-    return (datetime.now(UTC) - ref).total_seconds()
+def _delivery_claim_age_seconds(delivered_at: datetime, now: datetime | None = None) -> float:
+    """Edad del claim en segundos (timezone-aware). ``now`` debe venir de la BD."""
+    ref = as_aware_utc(delivered_at)
+    return (as_aware_utc(now or datetime.now(UTC)) - ref).total_seconds()
 
 
-def _is_fresh_delivery_claim(details: str | None, delivered_at: datetime) -> bool:
-    """True si __delivery_claim__ aún en vuelo (< TTL); bloquea entregas concurrentes."""
-    if details != _DELIVERY_CLAIM_MARKER:
+def _is_fresh_delivery_claim(
+    details: str | None, delivered_at: datetime, now: datetime | None = None
+) -> bool:
+    """True si el claim sigue en vuelo (< TTL); bloquea entregas concurrentes."""
+    if details not in _IN_FLIGHT_MARKERS:
         return False
-    return _delivery_claim_age_seconds(delivered_at) < _DELIVERY_CLAIM_TTL_SECONDS
+    return _delivery_claim_age_seconds(delivered_at, now) < _DELIVERY_CLAIM_TTL_SECONDS
 
 
 def get_reward_emoji(reward: Reward) -> tuple[str, str]:
@@ -377,7 +391,7 @@ class RewardService:
         mission_id: int | None = None,
     ) -> bool:
         """True si ya existe crédito MISSION para este ciclo/claim (evita doble acreditación)."""
-        from models.models import BesitoTransaction
+        from models.models import BesitoTransaction, TransactionType
 
         ref_id = self._besitos_credit_reference_id(user_id, reward_id, mission_id)
         return (
@@ -385,7 +399,10 @@ class RewardService:
             .filter(
                 BesitoTransaction.user_id == user_id,
                 BesitoTransaction.source == TransactionSource.MISSION,
+                BesitoTransaction.type == TransactionType.CREDIT,
                 BesitoTransaction.reference_id == ref_id,
+                # Solo créditos de recompensa (no logros de historia con el mismo id).
+                BesitoTransaction.description.like(f"{MISSION_REWARD_CREDIT_PREFIX}%"),
             )
             .first()
             is not None
@@ -409,9 +426,19 @@ class RewardService:
             user_id=user_id,
             amount=reward.besito_amount,
             source=TransactionSource.MISSION,
-            description=f"Recompensa: {reward.name}",
+            description=f"{MISSION_REWARD_CREDIT_PREFIX}{reward.name}",
             reference_id=ref_id,
         )
+        if not success and self._has_mission_besitos_credit(
+            user_id, reward.id, mission_id=mission_id
+        ):
+            # Otra entrega concurrente acreditó primero (el índice único rechazó
+            # este INSERT): ya está pagado, no es un fallo.
+            logger.info(
+                f"reward_service | _deliver_besitos | already_credited | user_id={user_id} | "
+                f"reward_id={reward.id} | ref={ref_id}"
+            )
+            success = True
         if success:
             balance = besito_service.get_balance(user_id)
             return True, LucienVoice.reward_besitos_received(reward.besito_amount, balance)
@@ -441,6 +468,20 @@ class RewardService:
             name = package.name if package else reward.name
             return True, LucienVoice.reward_emoji_package(name)[1]
 
+        claim = (
+            self._get_mission_delivery_claim(user_id, mission_id, reward.id) if mission_id else None
+        )
+        if claim is not None and claim.details == _PACKAGE_SENDING_MARKER:
+            # Un intento anterior empezó a enviar y no terminó (proceso caído):
+            # no se reenvía; se da por entregado (como máximo una vez).
+            logger.warning(
+                f"reward_service | _deliver_package | resume_without_resend | "
+                f"user_id={user_id} | mission_id={mission_id} | package_id={reward.package_id}"
+            )
+            package = self.package_service.get_package(reward.package_id)
+            name = package.name if package else reward.name
+            return True, LucienVoice.reward_emoji_package(name)[1]
+
         # Verificar disponibilidad
         package = self.package_service.get_package(reward.package_id)
         if not package:
@@ -451,6 +492,10 @@ class RewardService:
 
         if not package.decrement_reward_stock():
             return False, LucienVoice.reward_stock_depleted()
+
+        if claim is not None:
+            claim.details = _PACKAGE_SENDING_MARKER
+        self.db.commit()
 
         success, message = await self.package_service.deliver_package_to_user(
             bot=bot,
@@ -472,6 +517,8 @@ class RewardService:
 
             if package.reward_stock >= 0:
                 package.reward_stock += 1
+            if claim is not None and claim.details == _PACKAGE_SENDING_MARKER:
+                claim.details = _DELIVERY_CLAIM_MARKER  # fallo conocido: se puede liberar
             self.db.commit()
             return False, LucienVoice.reward_package_delivery_failed()
 
@@ -612,7 +659,8 @@ class RewardService:
             return False
         existing = self._get_mission_delivery_claim(user_id, mission_id, reward_id)
         if existing and _is_resumable_delivery_claim(existing.details):
-            if _is_fresh_delivery_claim(existing.details, existing.delivered_at):
+            if _is_fresh_delivery_claim(existing.details, existing.delivered_at, db_now(self.db)):
+                self.db.commit()  # libera el lock; otra entrega está en vuelo
                 return False
             return True
         self.db.add(
@@ -674,6 +722,36 @@ class RewardService:
             )
             return query.filter(UserRewardHistory.delivered_at >= ref).first() is not None
         return query.first() is not None
+
+    def get_last_finalized_mission_delivery_at(
+        self, user_id: int, mission_id: int
+    ) -> datetime | None:
+        """``delivered_at`` (reloj de BD) de la última entrega finalizada de la misión."""
+        row = (
+            self.db.query(UserRewardHistory.delivered_at)
+            .filter(
+                UserRewardHistory.user_id == user_id,
+                UserRewardHistory.mission_id == mission_id,
+                _finalized_delivery_clause(),
+            )
+            .order_by(desc(UserRewardHistory.delivered_at))
+            .first()
+        )
+        return row[0] if row else None
+
+    def has_inflight_mission_claim(self, user_id: int, mission_id: int) -> bool:
+        """True si hay un claim sin finalizar (en vuelo o VIP parcial) para la misión."""
+        return (
+            self.db.query(UserRewardHistory.id)
+            .filter(
+                UserRewardHistory.user_id == user_id,
+                UserRewardHistory.mission_id == mission_id,
+                UserRewardHistory.details.isnot(None),
+                ~_finalized_delivery_clause(),
+            )
+            .first()
+            is not None
+        )
 
     def log_reward_delivery(
         self, user_id: int, reward_id: int, mission_id: int = None, details: str = None

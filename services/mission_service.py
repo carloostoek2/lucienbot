@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from models.models import (
 )
 from services.reward_service import RewardService
 from utils.bot_runtime import resolve_delivery_bot
+from utils.db_clock import as_aware_utc, db_now
 from utils.lucien_voice import LucienVoice
 
 logger = logging.getLogger(__name__)
@@ -42,16 +43,18 @@ class MissionDeliveryResult(str, Enum):
     FAILED = "failed"
 
 
-def _prepare_recurring_cycle_reset(
-    progress: UserMissionProgress, mission: Mission
-) -> datetime | None:
-    """Captura completed_at previo y reinicia progreso RECURRING. Retorna previous_completed_at."""
-    previous_completed_at = progress.completed_at
+# Una completación sin entregar más vieja que esto no se paga en el catch-up:
+# se expira (progreso reiniciado). Evita ráfagas de pagos por backlog viejo, p.ej.
+# al reactivar una misión que estuvo apagada (hallazgo G8).
+PENDING_DELIVERY_MAX_AGE = timedelta(hours=48)
+
+
+def _reset_progress_cycle(progress: UserMissionProgress) -> None:
+    """Reinicia el ciclo de progreso (RECURRING reset o expiración de pendiente)."""
     progress.current_value = 0
     progress.is_completed = False
     progress.completed_at = None
     progress.last_reference_id = None
-    return previous_completed_at
 
 
 def _apply_progress_increment(
@@ -59,40 +62,43 @@ def _apply_progress_increment(
     mission: Mission,
     amount: int,
     reference_id: int | None,
-) -> tuple[datetime | None, bool]:
-    """Incrementa progreso; retorna (previous_completed_at, newly_completed)."""
+) -> bool:
+    """Incrementa progreso; retorna True si esta llamada completó la misión.
+
+    ``completed_at`` usa el reloj de la BD (``now()``), igual que
+    ``UserRewardHistory.delivered_at``, para que la comparación por ciclo no dependa
+    del desfase entre el reloj de la app y el de PostgreSQL (hallazgo G3).
+    """
     if reference_id is not None and progress.last_reference_id == reference_id:
         logger.debug(f"Mision {mission.id}: duplicado skipeado ref={reference_id}")
-        return None, False
+        return False
 
     progress.current_value += amount
     if reference_id is not None:
         progress.last_reference_id = reference_id
 
-    previous_completed_at = progress.completed_at
-    if progress.current_value >= mission.target_value:
+    if progress.current_value >= mission.target_value and not progress.is_completed:
         progress.is_completed = True
-        progress.completed_at = datetime.now(UTC)
-        return previous_completed_at, True
-    return previous_completed_at, False
+        progress.completed_at = func.now()
+        return True
+    return False
 
 
-def _recurring_cooldown_blocks(
-    mission: Mission,
-    previous_completed_at: datetime | None,
-    progress: UserMissionProgress,
-) -> bool:
-    """True si RECURRING está en cooldown y no debe entregarse aún."""
-    cooldown_ref = previous_completed_at or progress.last_updated
+def _cooldown_blocks(mission: Mission, last_delivered_at: datetime | None, now: datetime) -> bool:
+    """Función pura: True si una misión RECURRING con cooldown no puede pagar todavía.
+
+    El cooldown se mide desde la ÚLTIMA ENTREGA FINALIZADA de esa misión al usuario
+    (``UserRewardHistory.delivered_at``, reloj de BD) y aplica igual en el flujo
+    inmediato y en el catch-up: como máximo una recompensa por ventana de cooldown.
+    """
     if (
         mission.frequency != MissionFrequency.RECURRING
         or not mission.cooldown_hours
-        or not cooldown_ref
+        or last_delivered_at is None
     ):
         return False
-    ref = cooldown_ref if cooldown_ref.tzinfo else cooldown_ref.replace(tzinfo=UTC)
-    hours_since = (datetime.now(UTC) - ref).total_seconds() / 3600
-    return hours_since < mission.cooldown_hours
+    elapsed = as_aware_utc(now) - as_aware_utc(last_delivered_at)
+    return elapsed < timedelta(hours=mission.cooldown_hours)
 
 
 async def _send_mission_celebration_message(
@@ -227,30 +233,56 @@ class MissionService:
 
     # ==================== PROGRESO DE USUARIO ====================
 
+    def _progress_query(self, user_id: int, mission_id: int):
+        return (
+            self._get_db()
+            .query(UserMissionProgress)
+            .filter(
+                UserMissionProgress.user_id == user_id,
+                UserMissionProgress.mission_id == mission_id,
+            )
+        )
+
+    def _insert_progress_race_safe(
+        self, user_id: int, mission: Mission, *, lock: bool
+    ) -> UserMissionProgress:
+        """Inserta la fila de progreso en un SAVEPOINT.
+
+        Con ``uq_user_mission_progress`` la segunda inserción concurrente choca con
+        IntegrityError; se revierte solo el SAVEPOINT (no la sesión del caller) y se
+        relee la fila ganadora (con lock si se pidió).
+        """
+        db = self._get_db()
+        progress = UserMissionProgress(
+            user_id=user_id,
+            mission_id=mission.id,
+            target_value=mission.target_value,
+            current_value=0,
+            is_completed=False,
+        )
+        try:
+            with db.begin_nested():
+                db.add(progress)
+            return progress
+        except IntegrityError:
+            query = self._progress_query(user_id, mission.id)
+            if lock:
+                query = query.with_for_update()
+            existing = query.first()
+            if existing is None:
+                raise
+            return existing
+
     def get_or_create_progress(self, user_id: int, mission_id: int) -> UserMissionProgress:
-        """Obtiene o crea el progreso de un usuario en una mision"""
+        """Obtiene o crea el progreso de un usuario en una mision (seguro ante carreras)."""
         db = self._get_db()
         mission = self.get_mission(mission_id)
         if not mission:
             raise ValueError("Mision no encontrada")
 
-        progress = (
-            db.query(UserMissionProgress)
-            .filter(
-                UserMissionProgress.user_id == user_id, UserMissionProgress.mission_id == mission_id
-            )
-            .first()
-        )
-
+        progress = self._progress_query(user_id, mission_id).first()
         if not progress:
-            progress = UserMissionProgress(
-                user_id=user_id,
-                mission_id=mission_id,
-                target_value=mission.target_value,
-                current_value=0,
-                is_completed=False,
-            )
-            db.add(progress)
+            progress = self._insert_progress_race_safe(user_id, mission, lock=False)
             db.commit()
             db.refresh(progress)
             logger.info(f"Progreso creado: user={user_id}, mission={mission_id}")
@@ -258,48 +290,19 @@ class MissionService:
         return progress
 
     def _get_or_create_progress_locked(self, user_id: int, mission_id: int) -> UserMissionProgress:
-        """Obtiene o crea progreso con lock de fila para actualizaciones concurrentes."""
-        db = self._get_db()
+        """Obtiene o crea progreso con lock de fila (``FOR UPDATE``).
+
+        Con la UNIQUE(user_id, mission_id) el get-or-create es atómico: si dos
+        transacciones crean a la vez, una gana y la otra relee y bloquea esa fila.
+        """
         mission = self.get_mission(mission_id)
         if not mission:
             raise ValueError("Mision no encontrada")
 
-        progress = (
-            db.query(UserMissionProgress)
-            .filter(
-                UserMissionProgress.user_id == user_id,
-                UserMissionProgress.mission_id == mission_id,
-            )
-            .with_for_update()
-            .first()
-        )
+        progress = self._progress_query(user_id, mission_id).with_for_update().first()
         if progress:
             return progress
-
-        progress = UserMissionProgress(
-            user_id=user_id,
-            mission_id=mission_id,
-            target_value=mission.target_value,
-            current_value=0,
-            is_completed=False,
-        )
-        db.add(progress)
-        try:
-            db.flush()
-        except IntegrityError:
-            db.rollback()
-            progress = (
-                db.query(UserMissionProgress)
-                .filter(
-                    UserMissionProgress.user_id == user_id,
-                    UserMissionProgress.mission_id == mission_id,
-                )
-                .with_for_update()
-                .first()
-            )
-            if not progress:
-                raise
-        return progress
+        return self._insert_progress_race_safe(user_id, mission, lock=True)
 
     def calculate_user_daily_gift_streak(self, user_id: int) -> int:
         """Calcula la racha actual de regalo diario (días consecutivos hasta hoy)."""
@@ -461,51 +464,78 @@ class MissionService:
         self, user_id: int, mission_type: MissionType, amount: int = 1, reference_id: int = None
     ) -> list[UserMissionProgress]:
         """
-        Incrementa el progreso del usuario en todas las misiones del tipo especificado.
-        Retorna las misiones completadas.
+        Incrementa el progreso SIN entregar recompensas (API legada; producción usa
+        ``increment_progress_and_deliver``). Retorna las misiones completadas.
 
-        Args:
-            user_id: ID del usuario
-            mission_type: Tipo de misión
-            amount: Cantidad a incrementar
-            reference_id: ID de referencia (broadcast_id) para evitar duplicados
+        Aplica las mismas reglas que el flujo con entrega: duplicado por
+        ``reference_id`` antes de cualquier reset (G7), no reinicia un ciclo RECURRING
+        con recompensa pendiente (G9) ni durante el cooldown (G2).
         """
         db = self._get_db()
-        missions = self.get_missions_by_type(mission_type)
         completed = []
 
-        for mission in missions:
+        for mission in self.get_missions_by_type(mission_type):
             if not mission.is_available:
                 continue
-
             progress = self._get_or_create_progress_locked(user_id, mission.id)
-
-            if progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+            if not self._prepare_progress_for_increment(progress, mission, reference_id):
+                db.commit()
                 continue
-
-            if progress.is_completed and mission.frequency == MissionFrequency.RECURRING:
-                progress.current_value = 0
-                progress.is_completed = False
-                progress.completed_at = None
-                progress.last_reference_id = None
-
-            if reference_id is not None and progress.last_reference_id == reference_id:
-                logger.debug(f"Mision {mission.id}: duplicado skipeado ref={reference_id}")
-                continue
-
-            progress.current_value += amount
-            if reference_id is not None:
-                progress.last_reference_id = reference_id
-
-            if progress.current_value >= mission.target_value:
-                progress.is_completed = True
-                progress.completed_at = datetime.now(UTC)
+            if _apply_progress_increment(progress, mission, amount, reference_id):
                 completed.append(progress)
                 logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
-
             db.commit()
 
         return completed
+
+    def _prepare_progress_for_increment(
+        self,
+        progress: UserMissionProgress,
+        mission: Mission,
+        reference_id: int | None,
+    ) -> bool:
+        """Decide si el incremento cuenta. Puede reiniciar el ciclo RECURRING.
+
+        Retorna False (no cuenta) si:
+        - ONE_TIME ya completada;
+        - ``reference_id`` repetido (antes de cualquier reset);
+        - RECURRING completada cuya recompensa del ciclo aún no se entregó
+          (no se reinicia: el catch-up la entrega; evita perderla, G9);
+        - RECURRING dentro del cooldown desde su última entrega (G2): durante el
+          cooldown el progreso no avanza.
+        """
+        if progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+            return False
+        if reference_id is not None and progress.last_reference_id == reference_id:
+            logger.debug(f"Mision {mission.id}: duplicado skipeado ref={reference_id}")
+            return False
+        if progress.is_completed and mission.frequency == MissionFrequency.RECURRING:
+            if mission.reward_id:
+                reward_service = RewardService(self._get_db())
+                if not self._is_reward_delivered_for_progress(
+                    reward_service, progress.user_id, mission, progress
+                ):
+                    logger.info(
+                        f"mission_service | increment_skipped | user_id={progress.user_id} | "
+                        f"mission_id={mission.id} | reason=pending_delivery"
+                    )
+                    return False
+            if self._recurring_cooldown_active(progress.user_id, mission):
+                logger.info(
+                    f"mission_service | increment_skipped | user_id={progress.user_id} | "
+                    f"mission_id={mission.id} | reason=cooldown"
+                )
+                return False
+            _reset_progress_cycle(progress)
+        return True
+
+    def _recurring_cooldown_active(self, user_id: int, mission: Mission) -> bool:
+        """True si la última entrega finalizada está dentro del cooldown (reloj de BD)."""
+        if mission.frequency != MissionFrequency.RECURRING or not mission.cooldown_hours:
+            return False
+        db = self._get_db()
+        last = RewardService(db).get_last_finalized_mission_delivery_at(user_id, mission.id)
+        return _cooldown_blocks(mission, last, db_now(db))
 
     async def increment_progress_and_deliver(
         self,
@@ -540,32 +570,18 @@ class MissionService:
             return None
 
         progress = self._get_or_create_progress_locked(user_id, mission.id)
-        if progress.is_completed and mission.frequency == MissionFrequency.ONE_TIME:
+        if not self._prepare_progress_for_increment(progress, mission, reference_id):
+            db.commit()  # libera el lock FOR UPDATE
             return None
 
-        if reference_id is not None and progress.last_reference_id == reference_id:
-            logger.debug(f"Mision {mission.id}: duplicado skipeado ref={reference_id}")
-            return None
-
-        previous_completed_at = None
-        if progress.is_completed and mission.frequency == MissionFrequency.RECURRING:
-            previous_completed_at = _prepare_recurring_cycle_reset(progress, mission)
-
-        prev_at, newly_completed = _apply_progress_increment(
-            progress, mission, amount, reference_id
-        )
-        if previous_completed_at is None:
-            previous_completed_at = prev_at
-
+        newly_completed = _apply_progress_increment(progress, mission, amount, reference_id)
         if newly_completed:
             logger.info(f"Mision completada: user={user_id}, mission={mission.id}")
 
         db.commit()
 
         if newly_completed and mission.reward_id:
-            await self._deliver_mission_reward_if_allowed(
-                db, user_id, mission, previous_completed_at, progress, bot=bot
-            )
+            await self._deliver_mission_reward_if_allowed(db, user_id, mission, progress, bot=bot)
         return progress if newly_completed else None
 
     async def _send_celebration_if_delivered(
@@ -600,18 +616,14 @@ class MissionService:
         self,
         user_id: int,
         mission: Mission,
-        previous_completed_at: datetime | None,
         progress: UserMissionProgress,
         reward_service: RewardService,
-        *,
-        skip_cooldown: bool,
     ) -> MissionDeliveryResult | None:
-        """Valida cooldown e idempotencia antes de claim. None si puede continuar."""
-        if not skip_cooldown and _recurring_cooldown_blocks(
-            mission, previous_completed_at, progress
-        ):
-            self._log_delivery_attempt(user_id, mission, MissionDeliveryResult.COOLDOWN)
-            return MissionDeliveryResult.COOLDOWN
+        """Valida idempotencia y cooldown antes de claim. None si puede continuar.
+
+        El cooldown aplica también al catch-up (antes se saltaba con
+        ``skip_cooldown=True`` y no limitaba nada, hallazgo G2).
+        """
         if reward_service.has_mission_reward_been_delivered(
             user_id,
             mission.id,
@@ -620,6 +632,9 @@ class MissionService:
         ):
             self._log_delivery_attempt(user_id, mission, MissionDeliveryResult.ALREADY_DELIVERED)
             return MissionDeliveryResult.ALREADY_DELIVERED
+        if self._recurring_cooldown_active(user_id, mission):
+            self._log_delivery_attempt(user_id, mission, MissionDeliveryResult.COOLDOWN)
+            return MissionDeliveryResult.COOLDOWN
         return None
 
     async def _execute_mission_reward_delivery(
@@ -674,27 +689,17 @@ class MissionService:
         db: Session,
         user_id: int,
         mission: Mission,
-        previous_completed_at: datetime | None,
         progress: UserMissionProgress,
         bot=None,
-        *,
-        skip_cooldown: bool = False,
     ) -> MissionDeliveryResult:
-        """Entrega recompensa post-commit con claim atómico e idempotencia."""
+        """Entrega recompensa post-commit con claim atómico, idempotencia y cooldown."""
         delivery_bot = resolve_delivery_bot(bot)
         if delivery_bot is None:
             self._log_delivery_attempt(user_id, mission, MissionDeliveryResult.NO_BOT)
             return MissionDeliveryResult.NO_BOT
 
         reward_service = RewardService(db)
-        blocked = self._mission_reward_prechecks(
-            user_id,
-            mission,
-            previous_completed_at,
-            progress,
-            reward_service,
-            skip_cooldown=skip_cooldown,
-        )
+        blocked = self._mission_reward_prechecks(user_id, mission, progress, reward_service)
         if blocked is not None:
             return blocked
 
@@ -723,12 +728,7 @@ class MissionService:
                 completed_count += 1
                 if mission.reward_id:
                     await self._deliver_mission_reward_if_allowed(
-                        db,
-                        user_id,
-                        mission,
-                        progress.completed_at,
-                        progress,
-                        bot=bot,
+                        db, user_id, mission, progress, bot=bot
                     )
 
         total_done = await self.increment_progress_and_deliver(
@@ -753,33 +753,34 @@ class MissionService:
                 logger.info(f"Mision VIP completada: user={user_id}, mission={mission.id}")
                 if mission.reward_id:
                     await self._deliver_mission_reward_if_allowed(
-                        db,
-                        user_id,
-                        mission,
-                        progress.completed_at,
-                        progress,
-                        bot=bot,
+                        db, user_id, mission, progress, bot=bot
                     )
         return completed
 
     def get_users_with_pending_reward_deliveries(self) -> list[int]:
-        """Usuarios con misiones completadas sin entrega del ciclo actual."""
+        """Usuarios con misiones completadas sin entrega del ciclo actual.
+
+        Las completaciones más viejas que ``PENDING_DELIVERY_MAX_AGE`` se expiran
+        aquí (no se pagan) y no cuentan como pendientes.
+        """
         db = self._get_db()
         reward_service = RewardService(db)
+        now = db_now(db)
         user_ids: set[int] = set()
         rows = (
             db.query(UserMissionProgress).filter(UserMissionProgress.is_completed.is_(True)).all()
         )
         for progress in rows:
             mission = self.get_mission(progress.mission_id)
-            if not mission or not mission.reward_id or not mission.is_active:
-                continue
-            reward = reward_service.get_reward(mission.reward_id)
-            if not reward or not reward.is_active:
+            if not self._is_pending_delivery_candidate(
+                mission, reward_service, mission.reward_id if mission else None
+            ):
                 continue
             if self._is_reward_delivered_for_progress(
                 reward_service, progress.user_id, mission, progress
             ):
+                continue
+            if self._expire_if_stale(progress, mission, reward_service, now):
                 continue
             user_ids.add(progress.user_id)
         return sorted(user_ids)
@@ -793,10 +794,99 @@ class MissionService:
         reward = reward_service.get_reward(reward_id)
         return reward is not None and reward.is_active
 
+    def _expire_if_stale(
+        self,
+        progress: UserMissionProgress,
+        mission: Mission,
+        reward_service: RewardService,
+        now: datetime,
+        *,
+        max_age: timedelta | None = PENDING_DELIVERY_MAX_AGE,
+    ) -> bool:
+        """Expira (reinicia) una completación sin entregar demasiado vieja.
+
+        No toca filas con un claim en vuelo (p.ej. VIP ya otorgado con marker
+        ``token:``/``sent:``): esas se reanudan por el flujo normal.
+        ``max_age=None`` expira sin mirar la edad (usado al reactivar una misión).
+        """
+        if not progress.is_completed:
+            return False
+        if max_age is not None:
+            if progress.completed_at is None:
+                return False
+            if as_aware_utc(now) - as_aware_utc(progress.completed_at) <= max_age:
+                return False
+        if reward_service.has_inflight_mission_claim(progress.user_id, mission.id):
+            return False
+        completed_at = progress.completed_at
+        _reset_progress_cycle(progress)
+        self._get_db().commit()
+        logger.warning(
+            f"mission_service | pending_completion_expired | user_id={progress.user_id} | "
+            f"mission_id={mission.id} | completed_at={completed_at}"
+        )
+        return True
+
+    def count_pending_completions(self, mission_id: int) -> int:
+        """Dry-run: cuántas completaciones sin entregar pagaría hoy esta misión."""
+        db = self._get_db()
+        mission = self.get_mission(mission_id)
+        if not mission or not mission.reward_id:
+            return 0
+        reward_service = RewardService(db)
+        rows = (
+            db.query(UserMissionProgress)
+            .filter(
+                UserMissionProgress.mission_id == mission_id,
+                UserMissionProgress.is_completed.is_(True),
+            )
+            .all()
+        )
+        return sum(
+            1
+            for p in rows
+            if not self._is_reward_delivered_for_progress(reward_service, p.user_id, mission, p)
+        )
+
+    def expire_pending_completions(self, mission_id: int) -> int:
+        """Expira TODAS las completaciones sin entregar de una misión (al reactivarla).
+
+        Decisión: reactivar una misión no paga el backlog acumulado mientras estuvo
+        apagada; esos usuarios vuelven a empezar el ciclo. Retorna cuántas expiró.
+        """
+        db = self._get_db()
+        mission = self.get_mission(mission_id)
+        if not mission or not mission.reward_id:
+            return 0
+        reward_service = RewardService(db)
+        now = db_now(db)
+        rows = (
+            db.query(UserMissionProgress)
+            .filter(
+                UserMissionProgress.mission_id == mission_id,
+                UserMissionProgress.is_completed.is_(True),
+            )
+            .all()
+        )
+        expired = 0
+        for progress in rows:
+            if self._is_reward_delivered_for_progress(
+                reward_service, progress.user_id, mission, progress
+            ):
+                continue
+            if self._expire_if_stale(progress, mission, reward_service, now, max_age=None):
+                expired += 1
+        return expired
+
     async def deliver_pending_rewards(self, user_id: int, bot=None) -> int:
-        """Reintenta entregas pendientes. Retorna cantidad recién entregada (no ya-entregadas)."""
+        """Reintenta entregas pendientes. Retorna cantidad recién entregada (no ya-entregadas).
+
+        Respeta el cooldown y expira completaciones más viejas que
+        ``PENDING_DELIVERY_MAX_AGE`` en vez de pagarlas.
+        """
         db = self._get_db()
         reward_service = RewardService(db)
+        now = db_now(db)
         delivered = 0
         for progress in self.get_user_all_progress(user_id):
             if not progress.is_completed:
@@ -808,14 +898,10 @@ class MissionService:
                 continue
             if self._is_reward_delivered_for_progress(reward_service, user_id, mission, progress):
                 continue
+            if self._expire_if_stale(progress, mission, reward_service, now):
+                continue
             result = await self._deliver_mission_reward_if_allowed(
-                db,
-                user_id,
-                mission,
-                None,
-                progress,
-                bot=bot,
-                skip_cooldown=True,
+                db, user_id, mission, progress, bot=bot
             )
             if result == MissionDeliveryResult.NEWLY_DELIVERED:
                 delivered += 1
@@ -830,14 +916,13 @@ class MissionService:
         mission = self.get_mission(mission_id)
         if not progress or not mission or not progress.is_completed:
             return False
+        reward_service = RewardService(db)
+        if not self._is_reward_delivered_for_progress(
+            reward_service, user_id, mission, progress
+        ) and self._expire_if_stale(progress, mission, reward_service, db_now(db)):
+            return False
         result = await self._deliver_mission_reward_if_allowed(
-            db,
-            user_id,
-            mission,
-            None,
-            progress,
-            bot=bot,
-            skip_cooldown=True,
+            db, user_id, mission, progress, bot=bot
         )
         return result == MissionDeliveryResult.NEWLY_DELIVERED
 
@@ -858,13 +943,13 @@ class MissionService:
         if not mission:
             return None
 
-        progress = self.get_or_create_progress(user_id, mission_id)
+        progress = self._get_or_create_progress_locked(user_id, mission_id)
         progress.current_value = value
 
         if progress.current_value >= mission.target_value:
             if not progress.is_completed:
                 progress.is_completed = True
-                progress.completed_at = datetime.now(UTC)
+                progress.completed_at = func.now()  # reloj de BD (G3)
         else:
             progress.is_completed = False
             progress.completed_at = None
@@ -875,7 +960,11 @@ class MissionService:
     # ==================== ACTUALIZACION Y ELIMINACION ====================
 
     def update_mission(self, mission_id: int, **kwargs) -> bool:
-        """Actualiza una mision"""
+        """Actualiza una mision.
+
+        Al REACTIVAR (``is_active`` False → True) expira las completaciones sin
+        entregar acumuladas para que el siguiente catch-up no pague el backlog.
+        """
         db = self._get_db()
         mission = self.get_mission(mission_id)
         if not mission:
@@ -891,6 +980,7 @@ class MissionService:
             "end_date",
             "is_active",
         ]
+        reactivating = bool(kwargs.get("is_active")) and not mission.is_active
 
         for field, value in kwargs.items():
             if field in allowed_fields and hasattr(mission, field):
@@ -898,6 +988,12 @@ class MissionService:
 
         db.commit()
         logger.info(f"Mision {mission_id} actualizada")
+        if reactivating:
+            expired = self.expire_pending_completions(mission_id)
+            logger.warning(
+                f"mission_service | mission_reactivated | mission_id={mission_id} | "
+                f"stale_completions_expired={expired}"
+            )
         return True
 
     def delete_mission(self, mission_id: int) -> bool:
