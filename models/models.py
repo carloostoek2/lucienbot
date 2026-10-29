@@ -700,6 +700,9 @@ class UserMissionProgress(Base):
     """Progreso de cada usuario en las misiones"""
 
     __tablename__ = "user_mission_progress"
+    # Una sola fila por (usuario, misión): sin esto el get-or-create concurrente
+    # partía el progreso y permitía doble claim/entrega (migración 20261029).
+    __table_args__ = (UniqueConstraint("user_id", "mission_id", name="uq_user_mission_progress"),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)

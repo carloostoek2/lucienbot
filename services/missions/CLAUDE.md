@@ -96,7 +96,7 @@ Catch-up si falló o sin bot
 ## Entrega atómica e idempotencia
 
 - `RewardService.try_claim_mission_delivery()` — `FOR UPDATE` + claim en `UserRewardHistory` antes de side-effects
-- Claim fresco `__delivery_claim__` (<60s) bloquea invocaciones concurrentes; stale (>=60s) es resumible
+- Claim fresco (`__delivery_claim__` o `__package_sending__`, <600 s por reloj de BD) bloquea invocaciones concurrentes; stale es resumible. Un paquete marcado `__package_sending__` NO se reenvía al reanudar (como máximo una vez)
 - Estados VIP `token:`/`sent:` son resumibles; `sent:` reutiliza token sin reenviar mensaje
 - Filas finalizadas (`details=None`) permiten nuevo claim en ciclos RECURRING
 - Claims pendientes no cuentan como entregadas hasta `_finalize_delivery_claim`
@@ -105,9 +105,12 @@ Catch-up si falló o sin bot
 - VIP: reutiliza token; `sent:token:CODE` parseado antes de generar token nuevo
 - Paquete: no decrementa stock si historial finalizado del ciclo ya existe
 - `deliver_pending_rewards` retorna solo `NEWLY_DELIVERED`; filtra misión/recompensa inactivas
-- Catch-up (`deliver_pending_rewards*`): `skip_cooldown=True` — entrega ciclos pendientes sin esperar cooldown
-- Flujo automático (`increment_progress_and_deliver`): respeta cooldown vía `previous_completed_at`
-- `increment_progress_and_deliver` captura `previous_completed_at` ANTES del reset RECURRING
+- Cooldown RECURRING = desde la última entrega FINALIZADA (reloj de BD); aplica igual en flujo inmediato y catch-up. Durante el cooldown el progreso no avanza
+- RECURRING completada con recompensa pendiente NO se reinicia en un nuevo incremento (el catch-up la entrega)
+- Completaciones sin entregar > `PENDING_DELIVERY_MAX_AGE` (48 h) se EXPIRAN en el catch-up (no se pagan). Reactivar una misión (`update_mission(is_active=True)`) expira todo su backlog; `count_pending_completions` es el dry-run
+- `UNIQUE(user_id, mission_id)` en `user_mission_progress` (`uq_user_mission_progress`); get-or-create con SAVEPOINT + relectura
+- `completed_at` se escribe con `func.now()` (mismo reloj que `delivered_at`)
+- Créditos de recompensa: `description` empieza con `Recompensa: `; índice único parcial `uq_besito_tx_mission_reward_credit` (PG) sobre (user_id, reference_id) de créditos nuevos
 - `set_progress` preserva `completed_at` si ya estaba completada (RECURRING diario)
 
 ## Handlers — claim_mission_reward (safety net)

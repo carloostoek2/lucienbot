@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from models.models import MissionFrequency, MissionType, UserRewardHistory
+from models.models import Mission, MissionFrequency, MissionType, UserRewardHistory
 from services.besito_service import BesitoService
-from services.mission_service import MissionService, _recurring_cooldown_blocks
+from services.mission_service import MissionService, _cooldown_blocks
 from services.reward_service import RewardService
 
 
@@ -352,10 +352,15 @@ class TestMissionIncrement:
         # no re-deliver would be checked in side but here guard before
 
     @pytest.mark.asyncio
-    async def test_recurring_cooldown_blocks_before_hours_allows_after_and_resets_only_on_recomplete(
+    async def test_recurring_cooldown_limits_to_one_reward_per_window(
         self, db_session, sample_user, sample_reward_besitos
     ):
-        """DESIRED CONTRACT: for RECURRING: cooldown_blocks before cooldown_hours (no reset/deliver); allows after elapsed; reset only on re-complete of recurring (not ONE_TIME). Use explicit Mission+Progress setup, aware DT, .telegram_id. Enforce intended contract."""
+        """RECURRING target=1 con cooldown: 2 reacciones en la ventana = 1 recompensa.
+
+        El cooldown se mide desde la última entrega finalizada (reloj de BD). Durante la
+        ventana el progreso no avanza; pasada la ventana se reinicia y vuelve a pagar.
+        """
+        from models.models import BesitoTransaction, TransactionSource, UserRewardHistory
 
         service = MissionService(db_session)
         mission = service.create_mission(
@@ -368,39 +373,53 @@ class TestMissionIncrement:
         )
         mission.cooldown_hours = 2
         db_session.commit()
-        # simulate completed recently
-        progress = service.get_or_create_progress(sample_user.telegram_id, mission.id)
-        progress.is_completed = True
-        progress.current_value = 1
-        progress.completed_at = datetime.now(UTC) - timedelta(hours=1)
-        progress.last_updated = progress.completed_at
+        mock_bot = AsyncMock()
+        uid = sample_user.telegram_id
+
+        res1 = await service.increment_progress_and_deliver(
+            uid, MissionType.REACTION_COUNT, amount=1, bot=mock_bot, reference_id=7001
+        )
+        assert len(res1) == 1
+        res2 = await service.increment_progress_and_deliver(
+            uid, MissionType.REACTION_COUNT, amount=1, bot=mock_bot, reference_id=7002
+        )
+        assert res2 == []  # dentro del cooldown: no cuenta
+        assert await service.deliver_pending_rewards(uid, bot=mock_bot) == 0
+
+        def credits():
+            return (
+                db_session.query(BesitoTransaction)
+                .filter_by(user_id=uid, source=TransactionSource.MISSION)
+                .count()
+            )
+
+        assert credits() == 1
+
+        # Pasada la ventana: la última entrega queda 3 h atrás.
+        last = (
+            db_session.query(UserRewardHistory).filter_by(user_id=uid, mission_id=mission.id).one()
+        )
+        last.delivered_at = datetime.now(UTC) - timedelta(hours=3)
+        progress = service.get_user_progress(uid, mission.id)
+        progress.completed_at = datetime.now(UTC) - timedelta(hours=4)
         db_session.commit()
 
-        # Use pure for exact block check (strict, per sig mission, previous_completed_at, progress)
-        assert _recurring_cooldown_blocks(mission, progress.completed_at, progress) is True
-        mock_bot = AsyncMock()
-        res = await service.increment_progress_and_deliver(
-            sample_user.telegram_id,
-            MissionType.REACTION_COUNT,
-            amount=1,
-            bot=mock_bot,
-            reference_id=7001,
+        res3 = await service.increment_progress_and_deliver(
+            uid, MissionType.REACTION_COUNT, amount=1, bot=mock_bot, reference_id=7003
         )
-        assert len(res) == 1  # exact: progress returned; deliver blocked (verified by helper)
-        # fast forward
-        progress.completed_at = datetime.now(UTC) - timedelta(hours=3)
-        db_session.commit()
-        assert _recurring_cooldown_blocks(mission, progress.completed_at, progress) is False
-        res2 = await service.increment_progress_and_deliver(
-            sample_user.telegram_id,
-            MissionType.REACTION_COUNT,
-            amount=1,
-            bot=mock_bot,
-            reference_id=7002,
-        )
-        p2 = service.get_user_progress(sample_user.telegram_id, mission.id)
-        assert p2.is_completed is True
-        assert len(res2) == 1  # exact: allows after + reset only on recurring re-complete
+        assert len(res3) == 1
+        assert credits() == 2
+
+    def test_cooldown_blocks_pure(self):
+        """_cooldown_blocks: solo RECURRING con cooldown y entrega previa dentro de la ventana."""
+        now = datetime.now(UTC)
+        m = Mission(frequency=MissionFrequency.RECURRING, cooldown_hours=24)
+        assert _cooldown_blocks(m, now - timedelta(hours=1), now) is True
+        assert _cooldown_blocks(m, now - timedelta(hours=25), now) is False
+        assert _cooldown_blocks(m, None, now) is False
+        assert _cooldown_blocks(m, (now - timedelta(hours=1)).replace(tzinfo=None), now) is True
+        one_time = Mission(frequency=MissionFrequency.ONE_TIME, cooldown_hours=24)
+        assert _cooldown_blocks(one_time, now, now) is False
 
     def test_set_progress(self, db_session, sample_user, sample_mission):
         """Test establecer progreso a valor específico"""
@@ -445,10 +464,10 @@ class TestMissionIncrement:
         assert second.completed_at == original_completed_at
 
     @pytest.mark.asyncio
-    async def test_recurring_catchup_skips_cooldown_when_undelivered(
+    async def test_recurring_catchup_delivers_first_cycle_without_prior_delivery(
         self, db_session, sample_user, sample_reward_besitos, mock_bot
     ):
-        """Catch-up RECURRING entrega ciclo pendiente aunque completed_at esté en cooldown."""
+        """Catch-up entrega el primer ciclo pendiente: sin entrega previa no hay cooldown."""
         service = MissionService(db_session)
         mission = service.create_mission(
             name="Recurring Catchup",
@@ -467,6 +486,41 @@ class TestMissionIncrement:
 
         delivered = await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot)
         assert delivered == 1
+
+    @pytest.mark.asyncio
+    async def test_recurring_catchup_respects_cooldown_after_previous_delivery(
+        self, db_session, sample_user, sample_reward_besitos, mock_bot
+    ):
+        """Catch-up ya NO salta el cooldown: con una entrega hace 1 h no paga otro ciclo."""
+        from services.reward_service import RewardService
+
+        service = MissionService(db_session)
+        mission = service.create_mission(
+            name="Recurring Catchup CD",
+            description="cooldown en catch-up",
+            mission_type=MissionType.DAILY_GIFT_STREAK,
+            target_value=3,
+            frequency=MissionFrequency.RECURRING,
+            reward_id=sample_reward_besitos.id,
+        )
+        mission.cooldown_hours = 24
+        db_session.commit()
+        RewardService(db_session).log_reward_delivery(
+            sample_user.telegram_id, sample_reward_besitos.id, mission.id
+        )
+        from models.models import UserRewardHistory
+
+        hist = db_session.query(UserRewardHistory).filter_by(mission_id=mission.id).one()
+        hist.delivered_at = datetime.now(UTC) - timedelta(hours=1)
+        db_session.commit()
+
+        progress = service.set_progress(sample_user.telegram_id, mission.id, 3)
+        progress.completed_at = datetime.now(UTC) - timedelta(minutes=30)
+        db_session.commit()
+
+        assert await service.deliver_pending_rewards(sample_user.telegram_id, bot=mock_bot) == 0
+        # Sigue pendiente (no se pierde): se pagará cuando termine el cooldown.
+        assert service.get_user_progress(sample_user.telegram_id, mission.id).is_completed
 
     @pytest.mark.asyncio
     async def test_deliver_pending_rewards_skips_inactive_mission_or_reward(
