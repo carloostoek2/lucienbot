@@ -33,6 +33,8 @@ The application is configured exclusively via environment variables loaded from 
 - `SEED_PLACEHOLDER_STORY_NODE_ID`
 - `SEED_PLACEHOLDER_TARIFF_ID`
 
+**Variable solo del preview de Free ENTRY** (commit directo `7af19d4`): `scripts/free_entry_preview.py` imprime, sin escribir nada, los 4 mensajes del flujo Free ENTRY (silencio inicial, ritual +30 s, duplicada y bienvenida con link) reusando los builders de runtime contra la config de cualquier BD. Lee la URL de `DATABASE_URL_PREVIEW` (o de `--database-url` / `--var`) para no confundirla con la `DATABASE_URL` del bot, y avisa si `invite_link` está vacío o es inválido (el mensaje 4 saldría sin link). Usa `psycopg2` si está instalado y, si no, `pg8000` (comentado en `requirements.txt`, para entornos como Termux donde `psycopg2-binary` no compila).
+
 **Topes de economía** (`config/economy_limits.py`, PR #12): no son variables de entorno, sino rangos en código para los valores de economía que el admin puede editar (regalo diario, límites y besitos de trivia y dados, valor de reacción, recompensa de misión, pagos de racha). Se validan al guardar y se recortan al leer. Tabla de rangos en `docs/SPEC_economia_v2.md`.
 
 ## Config file format
@@ -85,6 +87,7 @@ from config.settings import bot_config, messages_config, rate_limit_config
   ```
 - `runtime.txt` — Simple version pin (used by some platforms): `python-3.11.8`
 - `Procfile` — Process declaration for compatibility: `worker: python bot.py`
+- `.env.prep.example` — Plantilla con placeholders vacíos y sin secretos (`BOT_TOKEN`, `ADMIN_IDS`, `DATABASE_URL`, `TIMEZONE`, `HEALTH_ENABLED`, `HEALTH_PORT=8082`, `REDIS_URL`, `FEATURE_LINK_ENABLED`, `LINK_CHAT_ID`, `LOG_LEVEL`, `VIP_CHANNEL_ID`, `FREE_CHANNEL_ID`, `CREATOR_CONTACT_URL`, `DEBUG`). La aplicación no la carga (commit directo `966a1b8`).
 
 ## Required vs optional settings
 
@@ -125,6 +128,7 @@ There are no environment-specific dotenv files (`.env.development`, `.env.produc
 - Runtime adaptation is driven by value inspection rather than `NODE_ENV`:
   - Database connection pool (models/database.py): if `"postgresql"` appears in `DATABASE_URL`, a production-sized pool (`pool_size=30`, `max_overflow=50`, etc.) is configured; SQLite uses `check_same_thread=False`.
   - FSM storage (bot.py:create_storage): Redis when `REDIS_URL` is truthy; MemoryStorage otherwise.
+    - Desde los commits directos `7ea274e` y `c4bec51`, `create_storage()` es async y hace `await redis_client.ping()` al arrancar (`socket_connect_timeout` y `socket_timeout` de 5 s). Si Redis no responde, cae de verdad a `MemoryStorage` con el warning `Redis connection failed (...) -- falling back to MemoryStorage`. Antes `Redis.from_url` no conectaba al construirse, el bot logueaba `RedisStorage` con la conexión rota y el fallo aparecía en el primer uso del FSM, en medio de un wizard.
 - Deployment platform configuration (Railway):
   - `railway.toml` sets `NIXPACKS_PYTHON_VERSION = "3.12"` during build.
   - The start command (`alembic upgrade head && python bot.py`) always runs migrations using the `DATABASE_URL` present at deploy time.
