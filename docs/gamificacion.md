@@ -184,6 +184,7 @@ Otras posibles: fees internos o features futuras.
 - Texto, attachment (photo/video/doc), ¿reacciones? (selecciona emojis activos), ¿protegido? (no reenviar).
 - Confirma → envía via bot.send_message (directo en handler) + registra BroadcastMessage en service.
 - Mensaje con teclado de reacciones (si has_reactions).
+- **Formato HTML del texto (PR #9):** el texto se manda con `parse_mode="HTML"`. Se conservan las etiquetas soportadas y se escapa todo lo demás (`<3`, `5 < 10`, `<br>`), con `escape_broadcast_html_outside_tags` en `services/broadcast/text_format.py`. El preview (paso 6) recorta sin partir etiquetas y cierra las que queden abiertas (`build_broadcast_preview_snippet`). Si Telegram rechaza el HTML de todos modos, el preview se reintenta en texto plano y queda un log de nivel ERROR. Antes, un recorte a ciegas a 500 caracteres formaba `<...` y Telegram rechazaba el preview, así que el broadcast no se enviaba.
 
 **Flujo usuario (gamification_user + broadcast handlers callbacks):**
 - Reacciona (ReactionCallback) → `BroadcastService.check_and_register_reaction` (atomic: insert reaction + local credit REACTION + commit).

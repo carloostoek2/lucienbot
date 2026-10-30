@@ -41,6 +41,7 @@ VIP token redemption, subscription expiration checks on startup, and daily gift 
 
 - **`get_service(service_class, db=None)`** (`services/__init__.py`): Context manager that instantiates a service (passing an optional existing session), yields it, and calls `service.close()` on exit. Enforces the "exactly one service per handler" rule and automatic resource cleanup.
 - **`InternalEventBus`** (`services/event_bus.py`): Minimal async pub/sub. `register(event, listener)` and `emit(event, payload)` (never raises to emitter; uses `gather(return_exceptions=True)`). Events: `EVENT_BESITOS_AWARDED`, `EVENT_VIP_ACTIVATED`. Listeners are best-effort and observational for cross-domain notification.
+  - Desde el PR #12, `EVENT_VIP_ACTIVATED` se emite con `vip_activated_payload(...)`: `{user_id, subscription_id, tariff_id, granted_days, is_extension}`. Nurture no enrola grants de menos de 7 días. Ver `docs/SPEC_economia_v2.md`.
 - **`LucienVoice`** (`utils/lucien_voice.py`): Static methods returning HTML-formatted strings. User-facing text in the Lucien voice originates here (some inline in handlers) (3rd person, elegant/mysterious tone, references to "Diana", "visitantes", "custodios").
 - **Domain Services** (e.g. `BesitoService`, `VIPService`, `StoreService`, `MissionService`, `ChannelService`, `StoryService`, `RewardService`, `PromotionService`, `AnalyticsService`, `HealthService` in `services/*.py` and subpackages): Encapsulate all business rules, balance arithmetic, token redemption, order processing, archetype calculation, etc. Each owns its DB session unless one is injected.
 - **`SchedulerService`** (`services/scheduler_service.py`): Wraps APScheduler with `SQLAlchemyJobStore` so jobs survive restarts; started centrally in `on_startup`.
@@ -48,6 +49,7 @@ VIP token redemption, subscription expiration checks on startup, and daily gift 
 - **SQLAlchemy Models + `get_db_session`** (`models/models.py`, `models/database.py`): Declarative `Base` entities (User, BesitoBalance/Transaction, Channel, Tariff, Token, Subscription, Package, StoreProduct, Mission, Reward, Order, StoryNode, etc.) and context manager that yields a session with automatic commit/rollback.
 - **Aiogram Routers** (`handlers/__init__.py` and per-file `router = Router()`): One router per functional area (common, admin, gamification, store, narrative, etc.). Exported and included in the top-level `Dispatcher`.
 - **Middlewares** (`middlewares/rate_limiter.py`, `middlewares/idempotency.py`, `middlewares/error_handler.py`): Aiogram middleware stack providing rate limiting (with admin bypass), callback deduplication, and centralized exception handling/logging.
+  - `middlewares/activity.py` (`ActivityMiddleware`, PR #13): se registra después del throttle en mensajes y callbacks. Solo en chat privado, actualiza `users.last_activity_at` (máximo una escritura cada 15 min por usuario) para el recordatorio a Free inactivos. Las reacciones del canal no cuentan. Ver `docs/SPEC_recordatorio_free_inactivos.md`.
 - **`BotConfig`** (`config/settings.py`): Dataclass loaded from environment (BOT_TOKEN, ADMIN_IDS, DATABASE_URL, TIMEZONE, etc.).
 
 ## Directory structure rationale

@@ -16,6 +16,7 @@ The application is configured exclusively via environment variables loaded from 
 | `REDIS_URL` | No | (none) | Redis connection URL (e.g. `redis://host:6379/0`). When present, FSM conversation state uses persistent `RedisStorage`; otherwise falls back to in-memory `MemoryStorage` (state lost on restart). |
 | `HEALTH_ENABLED` | No | (not set) | Set to `"1"` to start the optional lightweight HTTP health endpoint (`/health`) on a separate port. Requires the `aiohttp` package; gracefully skipped otherwise. |
 | `HEALTH_PORT` | No | `8080` | TCP port for the health HTTP server (only used when `HEALTH_ENABLED=1`). |
+| `FEATURE_FREE_INACTIVITY_REMINDER` | No | apagado | Recordatorio por DM a usuarios Free con 3 días sin actividad. Solo `"1"` lo enciende; cualquier otro valor (o ausente) lo deja apagado. La actividad se registra aunque esté apagado. Requiere reinicio. Ver `docs/SPEC_recordatorio_free_inactivos.md` (PR #13). |
 
 **Additional variables documented in `.env.example` but not referenced via `os.getenv` (or equivalent) in current application Python source at runtime** (may be legacy, planned, or for external platform use):
 
@@ -31,6 +32,8 @@ The application is configured exclusively via environment variables loaded from 
 - `SEED_PLACEHOLDER_PACKAGE_ID`
 - `SEED_PLACEHOLDER_STORY_NODE_ID`
 - `SEED_PLACEHOLDER_TARIFF_ID`
+
+**Topes de economía** (`config/economy_limits.py`, PR #12): no son variables de entorno, sino rangos en código para los valores de economía que el admin puede editar (regalo diario, límites y besitos de trivia y dados, valor de reacción, recompensa de misión, pagos de racha). Se validan al guardar y se recortan al leer. Tabla de rangos en `docs/SPEC_economia_v2.md`.
 
 ## Config file format
 
