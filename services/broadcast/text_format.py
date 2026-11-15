@@ -22,6 +22,10 @@ _TAG_NAME_RE = re.compile(r"</?([a-zA-Z-]+)")
 # Longitud máxima del fragmento de mensaje que se muestra en el preview del wizard.
 BROADCAST_PREVIEW_MAX_LENGTH = 500
 
+# Límites de Telegram (unidades UTF-16 tras interpretar las entidades).
+TELEGRAM_CAPTION_MAX_LENGTH = 1024
+TELEGRAM_MESSAGE_MAX_LENGTH = 4096
+
 
 def escape_broadcast_html_outside_tags(body: str) -> str:
     """
@@ -77,6 +81,20 @@ def strip_broadcast_html_to_plain_text(text: str) -> str:
     Función pura.
     """
     return html.unescape(re.sub(r"<[^>]+>", "", text))
+
+
+def measure_telegram_text_length(text: str | None) -> int:
+    """
+    Mide el largo visible de un texto HTML como lo cuenta Telegram.
+
+    Quita las etiquetas HTML y cuenta unidades UTF-16 (un emoji fuera del BMP
+    cuenta como 2), que es la unidad con la que Telegram aplica los límites de
+    1024 (caption de adjunto) y 4096 (mensaje de texto).
+
+    Función pura.
+    """
+    plain_text = strip_broadcast_html_to_plain_text(text or "")
+    return len(plain_text.encode("utf-16-le")) // 2
 
 
 def resolve_broadcast_text_to_html(

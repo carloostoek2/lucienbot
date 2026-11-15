@@ -6,6 +6,7 @@ from aiogram.types import MessageEntity
 
 from services.broadcast.text_format import (
     extract_message_text_and_entities,
+    measure_telegram_text_length,
     resolve_broadcast_text_to_html,
 )
 
@@ -105,6 +106,25 @@ class TestStripBroadcastHtmlToPlainText:
             strip_broadcast_html_to_plain_text("<b>Hola</b> &lt;mundo&gt; <i>x</i>")
             == "Hola <mundo> x"
         )
+
+
+class TestMeasureTelegramTextLength:
+    """Regresión del incidente 2026-11-15: caption de adjunto > 1024 rechazado por Telegram."""
+
+    def test_empty_and_none(self):
+        assert measure_telegram_text_length("") == 0
+        assert measure_telegram_text_length(None) == 0
+
+    def test_ignores_html_tags(self):
+        assert measure_telegram_text_length("<b>Hola</b>") == 4
+        assert measure_telegram_text_length("<b>Hola</b> &lt;mundo&gt;") == 12
+
+    def test_counts_astral_emoji_as_two_utf16_units(self):
+        assert measure_telegram_text_length("😀") == 2
+        assert measure_telegram_text_length("a😀") == 3
+
+    def test_counts_bmp_characters_as_one(self):
+        assert measure_telegram_text_length("ñ") == 1
 
 
 class TestExtractMessageTextAndEntities:

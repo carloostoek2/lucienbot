@@ -374,3 +374,47 @@ class TestValidateBroadcastContentForSend:
             )
             is None
         )
+
+    def test_rejects_caption_over_1024_with_attachment(self):
+        error = validate_broadcast_content_for_send(
+            {"text": "x" * 1025, "has_attachment": True, "attachment_file_id": "file_x"}
+        )
+        assert error is not None
+        assert "adjunto" in error
+        assert "1025" in error
+        assert "1024" in error
+
+    def test_allows_caption_at_1024_with_attachment(self):
+        assert (
+            validate_broadcast_content_for_send(
+                {
+                    "text": "<b>" + "x" * 1024 + "</b>",
+                    "has_attachment": True,
+                    "attachment_file_id": "file_x",
+                }
+            )
+            is None
+        )
+
+    def test_counts_emoji_as_two_units_for_caption(self):
+        assert (
+            validate_broadcast_content_for_send(
+                {"text": "😀" * 512, "has_attachment": True, "attachment_file_id": "file_x"}
+            )
+            is None
+        )
+        assert validate_broadcast_content_for_send(
+            {"text": "😀" * 513, "has_attachment": True, "attachment_file_id": "file_x"}
+        )
+
+    def test_rejects_text_only_over_4096(self):
+        error = validate_broadcast_content_for_send({"text": "x" * 4097, "has_attachment": False})
+        assert error is not None
+        assert "4097" in error
+        assert "4096" in error
+
+    def test_allows_text_only_at_4096(self):
+        assert (
+            validate_broadcast_content_for_send({"text": "x" * 4096, "has_attachment": False})
+            is None
+        )

@@ -30,8 +30,11 @@ from keyboards.inline_keyboards import (
 from services import get_service
 from services.broadcast.text_format import (
     BROADCAST_PREVIEW_MAX_LENGTH,
+    TELEGRAM_CAPTION_MAX_LENGTH,
+    TELEGRAM_MESSAGE_MAX_LENGTH,
     build_broadcast_preview_snippet,
     extract_message_text_and_entities,
+    measure_telegram_text_length,
     resolve_broadcast_text_to_html,
     strip_broadcast_html_to_plain_text,
 )
@@ -47,14 +50,24 @@ router = Router()
 
 
 def validate_broadcast_content_for_send(data: dict) -> str | None:
-    """Valida que el broadcast tenga contenido enviable. Función pura. None si OK."""
-    text = (data.get("text") or "").strip()
+    """Valida contenido y largo antes de enviar. Función pura. None si OK."""
+    raw_text = data.get("text") or ""
     has_attachment = data.get("has_attachment", False)
     attachment_file_id = data.get("attachment_file_id")
-    if has_attachment and attachment_file_id:
-        return None
-    if not text:
+    sends_with_caption = bool(has_attachment and attachment_file_id)
+
+    if not raw_text.strip() and not sends_with_caption:
         return "Agregue texto al mensaje o adjunte una foto/archivo antes de enviar."
+
+    text_length = measure_telegram_text_length(raw_text)
+    max_length = TELEGRAM_CAPTION_MAX_LENGTH if sends_with_caption else TELEGRAM_MESSAGE_MAX_LENGTH
+    if text_length > max_length:
+        if sends_with_caption:
+            return (
+                f"El texto es demasiado largo para ir con un adjunto: {text_length} de "
+                f"{max_length} caracteres. Acórtelo o envíelo sin adjunto."
+            )
+        return f"El texto es demasiado largo: {text_length} de {max_length} caracteres. Acórtelo."
     return None
 
 
